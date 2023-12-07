@@ -1,4 +1,4 @@
-module github.com/anyongjin/gobanbot
+module github.com/anyongjin/banbot
 
 go 1.21.4
 

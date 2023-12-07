@@ -2,12 +2,12 @@ package strategy
 
 import (
 	"fmt"
-	"github.com/anyongjin/gobanbot/config"
-	"github.com/anyongjin/gobanbot/core"
-	"github.com/anyongjin/gobanbot/log"
-	"github.com/anyongjin/gobanbot/orm"
-	"github.com/anyongjin/gobanbot/symbols"
-	"github.com/anyongjin/gobanbot/utils"
+	"github.com/anyongjin/banbot/config"
+	"github.com/anyongjin/banbot/core"
+	"github.com/anyongjin/banbot/log"
+	"github.com/anyongjin/banbot/orm"
+	"github.com/anyongjin/banbot/symbols"
+	"github.com/anyongjin/banbot/utils"
 	"go.uber.org/zap"
 	"math"
 )

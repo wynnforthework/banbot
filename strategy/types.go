@@ -1,9 +1,9 @@
 package strategy
 
 import (
+	"github.com/anyongjin/banbot/orm"
+	"github.com/anyongjin/banbot/symbols"
 	ta "github.com/anyongjin/banta"
-	"github.com/anyongjin/gobanbot/orm"
-	"github.com/anyongjin/gobanbot/symbols"
 )
 
 type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64

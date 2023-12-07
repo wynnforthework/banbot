@@ -3,7 +3,7 @@ package log
 import (
 	"errors"
 	"fmt"
-	"github.com/anyongjin/gobanbot/cmd"
+	"github.com/anyongjin/banbot/cmd"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"

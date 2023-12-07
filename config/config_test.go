@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"github.com/anyongjin/gobanbot/cmd"
+	"github.com/anyongjin/banbot/cmd"
 	"gopkg.in/yaml.v3"
 	"testing"
 )

@@ -2,8 +2,8 @@ package orm
 
 import (
 	"context"
-	"github.com/anyongjin/gobanbot/config"
-	"github.com/anyongjin/gobanbot/log"
+	"github.com/anyongjin/banbot/config"
+	"github.com/anyongjin/banbot/log"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"os"

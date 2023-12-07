@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/anyongjin/gobanbot/cmd"
-	"github.com/anyongjin/gobanbot/log"
+	"github.com/anyongjin/banbot/cmd"
+	"github.com/anyongjin/banbot/log"
 	"gopkg.in/yaml.v3"
 	"os"
 )

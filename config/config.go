@@ -2,9 +2,9 @@ package config
 
 import (
 	"fmt"
-	"github.com/anyongjin/gobanbot/cmd"
-	"github.com/anyongjin/gobanbot/log"
-	"github.com/anyongjin/gobanbot/utils"
+	"github.com/anyongjin/banbot/cmd"
+	"github.com/anyongjin/banbot/log"
+	"github.com/anyongjin/banbot/utils"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"

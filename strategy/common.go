@@ -1,8 +1,8 @@
 package strategy
 
 import (
-	"github.com/anyongjin/gobanbot/config"
-	"github.com/anyongjin/gobanbot/log"
+	"github.com/anyongjin/banbot/config"
+	"github.com/anyongjin/banbot/log"
 	"github.com/pkujhd/goloader"
 	"go.uber.org/zap"
 	"os"
