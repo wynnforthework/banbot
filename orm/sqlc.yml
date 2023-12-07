@@ -1,0 +1,12 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "query.sql"
+    schema: "schema.sql"
+    database:
+      uri: postgresql://postgres:123@[host.docker.internal]:5432/bantd2
+    gen:
+      go:
+        package: "orm"
+        out: "."
+        sql_package: "pgx/v5"
