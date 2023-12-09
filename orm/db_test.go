@@ -21,8 +21,8 @@ func TestDb(t *testing.T) {
 		Market: "binance",
 	})
 	if err != nil {
-		fmt.Printf("list symbols fail: %s", err)
+		fmt.Printf("list products fail: %s", err)
 		return
 	}
-	fmt.Printf("loaded %d symbols", len(symbols))
+	fmt.Printf("loaded %d products", len(symbols))
 }

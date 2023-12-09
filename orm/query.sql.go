@@ -9,32 +9,75 @@ import (
 	"context"
 )
 
-const findTask = `-- name: FindTask :one
-select id, mode, stg_hash, create_at, start_at, stop_at, info from bottask
-where mode = $1
-and stg_hash = $2
-order by create_at desc
-limit 1
-`
-
-type FindTaskParams struct {
-	Mode    string
-	StgHash string
+type AddSymbolsParams struct {
+	Exchange string
+	Market   string
+	Symbol   string
 }
 
-func (q *Queries) FindTask(ctx context.Context, arg FindTaskParams) (Bottask, error) {
-	row := q.db.QueryRow(ctx, findTask, arg.Mode, arg.StgHash)
-	var i Bottask
+const addTask = `-- name: AddTask :one
+insert into bottask
+("mode", "name", "create_at", "start_at", "stop_at", "info")
+values ($1, $2, $3, $4, $5, $6)
+returning id, mode, name, create_at, start_at, stop_at, info
+`
+
+type AddTaskParams struct {
+	Mode     string
+	Name     string
+	CreateAt int64
+	StartAt  int64
+	StopAt   int64
+	Info     string
+}
+
+func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*BotTask, error) {
+	row := q.db.QueryRow(ctx, addTask,
+		arg.Mode,
+		arg.Name,
+		arg.CreateAt,
+		arg.StartAt,
+		arg.StopAt,
+		arg.Info,
+	)
+	var i BotTask
 	err := row.Scan(
 		&i.ID,
 		&i.Mode,
-		&i.StgHash,
+		&i.Name,
 		&i.CreateAt,
 		&i.StartAt,
 		&i.StopAt,
 		&i.Info,
 	)
-	return i, err
+	return &i, err
+}
+
+const findTask = `-- name: FindTask :one
+select id, mode, name, create_at, start_at, stop_at, info from bottask
+where mode = $1 and name = $2
+order by create_at desc
+limit 1
+`
+
+type FindTaskParams struct {
+	Mode string
+	Name string
+}
+
+func (q *Queries) FindTask(ctx context.Context, arg FindTaskParams) (*BotTask, error) {
+	row := q.db.QueryRow(ctx, findTask, arg.Mode, arg.Name)
+	var i BotTask
+	err := row.Scan(
+		&i.ID,
+		&i.Mode,
+		&i.Name,
+		&i.CreateAt,
+		&i.StartAt,
+		&i.StopAt,
+		&i.Info,
+	)
+	return &i, err
 }
 
 const getExOrders = `-- name: GetExOrders :many
@@ -42,15 +85,15 @@ select id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_
 where inout_id=$1
 `
 
-func (q *Queries) GetExOrders(ctx context.Context, inoutID int32) ([]Exorder, error) {
+func (q *Queries) GetExOrders(ctx context.Context, inoutID int32) ([]*ExOrder, error) {
 	rows, err := q.db.Query(ctx, getExOrders, inoutID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Exorder
+	items := []*ExOrder{}
 	for rows.Next() {
-		var i Exorder
+		var i ExOrder
 		if err := rows.Scan(
 			&i.ID,
 			&i.TaskID,
@@ -72,7 +115,7 @@ func (q *Queries) GetExOrders(ctx context.Context, inoutID int32) ([]Exorder, er
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, &i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -85,9 +128,9 @@ select id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price
 where id = $1
 `
 
-func (q *Queries) GetIOrder(ctx context.Context, id int64) (Iorder, error) {
+func (q *Queries) GetIOrder(ctx context.Context, id int64) (*IOrder, error) {
 	row := q.db.QueryRow(ctx, getIOrder, id)
-	var i Iorder
+	var i IOrder
 	err := row.Scan(
 		&i.ID,
 		&i.TaskID,
@@ -109,7 +152,7 @@ func (q *Queries) GetIOrder(ctx context.Context, id int64) (Iorder, error) {
 		&i.Profit,
 		&i.Info,
 	)
-	return i, err
+	return &i, err
 }
 
 const getKRange = `-- name: GetKRange :one
@@ -129,46 +172,46 @@ type GetKRangeRow struct {
 	Stop  int64
 }
 
-func (q *Queries) GetKRange(ctx context.Context, arg GetKRangeParams) (GetKRangeRow, error) {
+func (q *Queries) GetKRange(ctx context.Context, arg GetKRangeParams) (*GetKRangeRow, error) {
 	row := q.db.QueryRow(ctx, getKRange, arg.Sid, arg.Timeframe)
 	var i GetKRangeRow
 	err := row.Scan(&i.Start, &i.Stop)
-	return i, err
+	return &i, err
 }
 
 const getTask = `-- name: GetTask :one
-select id, mode, stg_hash, create_at, start_at, stop_at, info from bottask
+select id, mode, name, create_at, start_at, stop_at, info from bottask
 where id = $1
 `
 
-func (q *Queries) GetTask(ctx context.Context, id int64) (Bottask, error) {
+func (q *Queries) GetTask(ctx context.Context, id int64) (*BotTask, error) {
 	row := q.db.QueryRow(ctx, getTask, id)
-	var i Bottask
+	var i BotTask
 	err := row.Scan(
 		&i.ID,
 		&i.Mode,
-		&i.StgHash,
+		&i.Name,
 		&i.CreateAt,
 		&i.StartAt,
 		&i.StopAt,
 		&i.Info,
 	)
-	return i, err
+	return &i, err
 }
 
 const listKHoles = `-- name: ListKHoles :many
 select id, sid, timeframe, start, stop from khole
 `
 
-func (q *Queries) ListKHoles(ctx context.Context) ([]Khole, error) {
+func (q *Queries) ListKHoles(ctx context.Context) ([]*KHole, error) {
 	rows, err := q.db.Query(ctx, listKHoles)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Khole
+	items := []*KHole{}
 	for rows.Next() {
-		var i Khole
+		var i KHole
 		if err := rows.Scan(
 			&i.ID,
 			&i.Sid,
@@ -178,7 +221,7 @@ func (q *Queries) ListKHoles(ctx context.Context) ([]Khole, error) {
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, &i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -190,15 +233,15 @@ const listKInfos = `-- name: ListKInfos :many
 select sid, timeframe, start, stop from kinfo
 `
 
-func (q *Queries) ListKInfos(ctx context.Context) ([]Kinfo, error) {
+func (q *Queries) ListKInfos(ctx context.Context) ([]*KInfo, error) {
 	rows, err := q.db.Query(ctx, listKInfos)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Kinfo
+	items := []*KInfo{}
 	for rows.Next() {
-		var i Kinfo
+		var i KInfo
 		if err := rows.Scan(
 			&i.Sid,
 			&i.Timeframe,
@@ -207,7 +250,7 @@ func (q *Queries) ListKInfos(ctx context.Context) ([]Kinfo, error) {
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, &i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -216,7 +259,7 @@ func (q *Queries) ListKInfos(ctx context.Context) ([]Kinfo, error) {
 }
 
 const listSymbols = `-- name: ListSymbols :many
-select id, exchange, symbol, market, list_dt, delist_dt from symbol
+select id, exchange, symbol, market, list_ms, delist_ms from exsymbol
 where exchange = $1
 and market = $2
 order by id
@@ -227,26 +270,26 @@ type ListSymbolsParams struct {
 	Market   string
 }
 
-func (q *Queries) ListSymbols(ctx context.Context, arg ListSymbolsParams) ([]Symbol, error) {
+func (q *Queries) ListSymbols(ctx context.Context, arg ListSymbolsParams) ([]*ExSymbol, error) {
 	rows, err := q.db.Query(ctx, listSymbols, arg.Exchange, arg.Market)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Symbol
+	items := []*ExSymbol{}
 	for rows.Next() {
-		var i Symbol
+		var i ExSymbol
 		if err := rows.Scan(
 			&i.ID,
 			&i.Exchange,
 			&i.Symbol,
 			&i.Market,
-			&i.ListDt,
-			&i.DelistDt,
+			&i.ListMs,
+			&i.DelistMs,
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, &i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -273,7 +316,7 @@ func (q *Queries) ListTaskPairs(ctx context.Context, arg ListTaskPairsParams) ([
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	items := []string{}
 	for rows.Next() {
 		var symbol string
 		if err := rows.Scan(&symbol); err != nil {
@@ -288,23 +331,23 @@ func (q *Queries) ListTaskPairs(ctx context.Context, arg ListTaskPairsParams) ([
 }
 
 const listTasks = `-- name: ListTasks :many
-select id, mode, stg_hash, create_at, start_at, stop_at, info from bottask
+select id, mode, name, create_at, start_at, stop_at, info from bottask
 order by id
 `
 
-func (q *Queries) ListTasks(ctx context.Context) ([]Bottask, error) {
+func (q *Queries) ListTasks(ctx context.Context) ([]*BotTask, error) {
 	rows, err := q.db.Query(ctx, listTasks)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Bottask
+	items := []*BotTask{}
 	for rows.Next() {
-		var i Bottask
+		var i BotTask
 		if err := rows.Scan(
 			&i.ID,
 			&i.Mode,
-			&i.StgHash,
+			&i.Name,
 			&i.CreateAt,
 			&i.StartAt,
 			&i.StopAt,
@@ -312,7 +355,7 @@ func (q *Queries) ListTasks(ctx context.Context) ([]Bottask, error) {
 		); err != nil {
 			return nil, err
 		}
-		items = append(items, i)
+		items = append(items, &i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

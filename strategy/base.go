@@ -2,11 +2,11 @@ package strategy
 
 import (
 	"fmt"
+	"github.com/anyongjin/banbot/biz"
 	"github.com/anyongjin/banbot/config"
-	"github.com/anyongjin/banbot/core"
 	"github.com/anyongjin/banbot/log"
 	"github.com/anyongjin/banbot/orm"
-	"github.com/anyongjin/banbot/symbols"
+	"github.com/anyongjin/banbot/products"
 	"github.com/anyongjin/banbot/utils"
 	"go.uber.org/zap"
 	"math"
@@ -18,7 +18,7 @@ import (
 
 func (s *TradeStagy) GetStakeAmount() float64 {
 	if s.StakeAmount == 0 {
-		return config.Cfg.StakeAmount
+		return config.StakeAmount
 	}
 	return s.StakeAmount
 }
@@ -26,7 +26,7 @@ func (s *TradeStagy) GetStakeAmount() float64 {
 /*
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
-func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []symbols.TfScore) string {
+func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []products.TfScore) string {
 	if s.PickTimeFrame != nil {
 		return s.PickTimeFrame(exg, symbol, tfScores)
 	}
@@ -69,7 +69,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) error {
 		req.LegalCost = s.Stagy.GetStakeAmount() * req.CostRate
 	}
 	// 检查价格是否有效
-	curPrice := core.GetPrice(symbol)
+	curPrice := biz.GetPrice(symbol)
 	dirFlag := 1
 	if req.Short {
 		dirFlag = -1
@@ -246,7 +246,7 @@ func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) error {
 	if (spVal-curPrice)*odDirt >= 0 {
 		return s.CloseOrders(&ExitReq{Tag: "take", OrderID: od.Main.ID})
 	}
-	od.SetInfo(orm.OdStopLoss, spVal)
+	od.SetInfo(orm.OdInfoStopLoss, spVal)
 	return nil
 }
 

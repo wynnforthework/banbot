@@ -5,21 +5,35 @@ where id = $1;
 
 -- name: FindTask :one
 select * from bottask
-where mode = $1
-and stg_hash = $2
+where mode = $1 and name = $2
 order by create_at desc
 limit 1;
+
+-- name: AddTask :one
+insert into bottask
+("mode", "name", "create_at", "start_at", "stop_at", "info")
+values ($1, $2, $3, $4, $5, $6)
+returning *;
 
 -- name: ListTasks :many
 select * from bottask
 order by id;
 
 
+
+
 -- name: ListSymbols :many
-select * from symbol
+select * from exsymbol
 where exchange = $1
 and market = $2
 order by id;
+
+-- name: AddSymbols :copyfrom
+insert into exsymbol
+(exchange, market, symbol)
+values ($1, $2, $3);
+
+
 
 -- name: ListTaskPairs :many
 select symbol from iorder

@@ -6,17 +6,17 @@ package orm
 
 import ()
 
-type Bottask struct {
+type BotTask struct {
 	ID       int64
 	Mode     string
-	StgHash  string
+	Name     string
 	CreateAt int64
 	StartAt  int64
 	StopAt   int64
 	Info     string
 }
 
-type Exorder struct {
+type ExOrder struct {
 	ID        int64
 	TaskID    int32
 	InoutID   int32
@@ -36,11 +36,20 @@ type Exorder struct {
 	UpdateAt  int64
 }
 
-type Iorder struct {
+type ExSymbol struct {
+	ID       int64
+	Exchange string
+	Symbol   string
+	Market   string
+	ListMs   int64
+	DelistMs int64
+}
+
+type IOrder struct {
 	ID         int64
 	TaskID     int32
 	Symbol     string
-	Sid        int32
+	Sid        int64
 	Timeframe  string
 	Short      bool
 	Status     int16
@@ -58,69 +67,19 @@ type Iorder struct {
 	Info       string
 }
 
-type Khole struct {
+type KHole struct {
 	ID        int64
-	Sid       int32
-	Timeframe string
-	Start     int64
-	Stop      int64
-}
-
-type Kinfo struct {
 	Sid       int64
 	Timeframe string
 	Start     int64
 	Stop      int64
 }
 
-type Kline15m struct {
-	Sid    int32
-	Time   int64
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume float64
-}
-
-type Kline1d struct {
-	Sid    int32
-	Time   int64
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume float64
-}
-
-type Kline1h struct {
-	Sid    int32
-	Time   int64
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume float64
-}
-
-type Kline1m struct {
-	Sid    int32
-	Time   int64
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume float64
-}
-
-type Kline5m struct {
-	Sid    int32
-	Time   int64
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
-	Volume float64
+type KInfo struct {
+	Sid       int64
+	Timeframe string
+	Start     int64
+	Stop      int64
 }
 
 type KlineUn struct {
@@ -138,21 +97,12 @@ type KlineUn struct {
 type Overlay struct {
 	ID       int64
 	User     int32
-	Sid      int32
+	Sid      int64
 	StartMs  int64
 	StopMs   int64
 	TfMsecs  int32
 	UpdateAt int64
 	Data     string
-}
-
-type Symbol struct {
-	ID       int64
-	Exchange string
-	Symbol   string
-	Market   string
-	ListDt   int64
-	DelistDt int64
 }
 
 type User struct {

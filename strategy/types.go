@@ -2,12 +2,12 @@ package strategy
 
 import (
 	"github.com/anyongjin/banbot/orm"
-	"github.com/anyongjin/banbot/symbols"
+	"github.com/anyongjin/banbot/products"
 	ta "github.com/anyongjin/banta"
 )
 
 type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64
-type PickTimeFrameFunc func(exg string, symbol string, tfScores []symbols.TfScore) string
+type PickTimeFrameFunc func(exg string, symbol string, tfScores []products.TfScore) string
 
 type TradeStagy struct {
 	Name         string
@@ -21,7 +21,7 @@ type TradeStagy struct {
 
 	OnStartUp           func(s *StagyJob)
 	OnBar               func(s *StagyJob)
-	OnInfoBar           func(s *StagyJob)                     //其他依赖的bar数据
+	OnInfoBar           func(s *StagyJob, info *PairSub)      //其他依赖的bar数据
 	OnTrades            func(s *StagyJob, trades []*Trade)    // 逐笔交易数据
 	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) //自定义订单退出逻辑
 	GetDrawDownExitRate CalcDDExitRate                        // 计算跟踪止盈回撤退出的比率
@@ -41,7 +41,7 @@ type StagyJob struct {
 	Entrys        []*EnterReq
 	Exits         []*ExitReq
 	Orders        []*orm.InOutOrder
-	Symbol        *orm.Symbol       //当前运行的币种
+	Symbol        *orm.ExSymbol     //当前运行的币种
 	TimeFrame     string            //当前运行的时间周期
 	TPMaxs        map[int64]float64 // 订单最大盈利时价格
 	EnterNum      uint32            //记录已提交入场订单数量，避免访问数据库过于频繁
@@ -56,7 +56,7 @@ type StagyJob struct {
 	ExgTakeProfit bool              //是否允许交易所止盈
 	LongTPPrice   float64           //做多止盈价格
 	ShortTPPrice  float64           //做空止盈价格
-
+	More          interface{}       // 策略自定义的额外信息
 }
 
 type Trade struct {

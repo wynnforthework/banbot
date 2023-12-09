@@ -1,12 +1,13 @@
 package orm
 
 type InOutOrder struct {
-	Main  *Iorder
-	Enter *Exorder
-	Exit  *Exorder
+	Main  *IOrder
+	Enter *ExOrder
+	Exit  *ExOrder
 	Info  map[string]interface{}
 }
 
 const (
-	OdStopLoss = "StopLossPrice"
+	OdInfoStopLoss  = "StopLossPrice"
+	OdInfoLegalCost = "LegalCost"
 )

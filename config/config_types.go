@@ -5,65 +5,82 @@ import (
 	"sync"
 )
 
-const (
-	MinStakeAmount  = 10   // 最小开单金额
-	MaxFetchNum     = 1000 // 单次请求交易所最大返回K线数量
-	MaxDownParallel = 5    // 最大同时下载K线任务数
-	DefaultDateFmt  = "2006-01-02 15:04:05"
-)
-
-const (
-	RunModeProd     = "prod"
-	RunModeDryRun   = "dry_run"
-	RunModeBackTest = "backtest"
-	RunModeOther    = "other"
-)
-
-const (
-	RunEnvProd = "prod"
-	RunEnvTest = "test"
-)
-
-const (
-	BotStateRunning = 1
-	BotStateStopped = 2
-)
-
 var (
-	Cfg                 Config
+	config              Config
 	m                   sync.Mutex
-	run_mode            string
 	ErrExchangeNotFound = errors.New("exchange not found")
 	ErrDataDirInvalid   = errors.New("Env ban_data_dir is required")
+
+	Name            string
+	Env             string
+	Loaded          bool
+	Debug           bool
+	NoDB            bool
+	RunMode         string
+	Leverage        uint16
+	LimitVolSecs    int
+	MarketType      string
+	MaxMarketRate   float64
+	OdBookTtl       uint16
+	OrderType       string
+	PreFire         bool
+	MarginAddRate   float64
+	ChargeOnBomb    bool
+	AutoEditLimit   bool
+	TakeOverStgy    string
+	StakeAmount     float64
+	MinOpenRate     float64
+	MaxOpenOrders   uint16
+	WalletAmounts   *WalletAmountsConfig
+	DrawBalanceOver int
+	StakeCurrency   []string
+	FatalStop       *FatalStopConfig
+	FatalStopHours  int
+	TimeRange       *TimeTuple
+	WsStamp         *string
+	RunTimeframes   []string
+	KlineSource     string
+	WatchJobs       *WatchJobConfig
+	RunPolicy       []*RunPolicyConfig
+	Pairs           []string
+	PairMgr         *PairMgrConfig
+	PairFilters     []*CommonPairFilter
+	Exchange        *ExchangeConfig
+	DataDir         string
+	ExgDataMap      map[string]string
+	Database        *DatabaseConfig
+	SpiderAddr      string
+	APIServer       *APIServerConfig
+	RPCChannels     map[string]map[string]interface{}
+	Webhook         map[string]map[string]string
 )
 
 // Config 是根配置结构体
 type Config struct {
-	Name            string `yaml:"name"`
-	Env             string `yaml:"env"`
-	Loaded          bool
-	Debug           bool
-	RunMode         string                            `yaml:"run_mode"`
-	Leverage        uint16                            `yaml:"leverage"`
-	LimitVolSecs    int                               `yaml:"limit_vol_secs"`
-	MarketType      string                            `yaml:"market_type"`
-	MaxMarketRate   float64                           `yaml:"max_market_rate"`
-	OdBookTtl       uint16                            `yaml:"odbook_ttl"`
-	OrderType       string                            `yaml:"order_type"`
-	PreFire         bool                              `yaml:"prefire"`
-	MarginAddRate   float64                           `yaml:"margin_add_rate"`
-	ChargeOnBomb    bool                              `yaml:"charge_on_bomb"`
-	AutoEditLimit   bool                              `yaml:"auto_edit_limit"`
-	TakeOverStgy    string                            `yaml:"take_over_stgy"`
-	StakeAmount     float64                           `yaml:"stake_amount"`
-	MinOpenRate     float64                           `yaml:"min_open_rate"`
-	MaxOpenOrders   uint16                            `yaml:"max_open_orders"`
-	WalletAmounts   *WalletAmountsConfig              `yaml:"wallet_amounts"`
-	DrawBalanceOver int                               `yaml:"draw_balance_over"`
-	StakeCurrency   []string                          `yaml:"stake_currency"`
-	FatalStop       *FatalStopConfig                  `yaml:"fatal_stop"`
-	FatalStopHours  int                               `yaml:"fatal_stop_hours"`
-	TimeRange       string                            `yaml:"timerange"`
+	Name            string               `yaml:"name"`
+	Env             string               `yaml:"env"`
+	RunMode         string               `yaml:"run_mode"`
+	Leverage        uint16               `yaml:"leverage"`
+	LimitVolSecs    int                  `yaml:"limit_vol_secs"`
+	MarketType      string               `yaml:"market_type"`
+	MaxMarketRate   float64              `yaml:"max_market_rate"`
+	OdBookTtl       uint16               `yaml:"odbook_ttl"`
+	OrderType       string               `yaml:"order_type"`
+	PreFire         bool                 `yaml:"prefire"`
+	MarginAddRate   float64              `yaml:"margin_add_rate"`
+	ChargeOnBomb    bool                 `yaml:"charge_on_bomb"`
+	AutoEditLimit   bool                 `yaml:"auto_edit_limit"`
+	TakeOverStgy    string               `yaml:"take_over_stgy"`
+	StakeAmount     float64              `yaml:"stake_amount"`
+	MinOpenRate     float64              `yaml:"min_open_rate"`
+	MaxOpenOrders   uint16               `yaml:"max_open_orders"`
+	WalletAmounts   *WalletAmountsConfig `yaml:"wallet_amounts"`
+	DrawBalanceOver int                  `yaml:"draw_balance_over"`
+	StakeCurrency   []string             `yaml:"stake_currency"`
+	FatalStop       *FatalStopConfig     `yaml:"fatal_stop"`
+	FatalStopHours  int                  `yaml:"fatal_stop_hours"`
+	TimeRangeRaw    string               `yaml:"timerange"`
+	TimeRange       *TimeTuple
 	WsStamp         *string                           `yaml:"ws_stamp"`
 	RunTimeframes   []string                          `yaml:"run_timeframes"`
 	KlineSource     string                            `yaml:"kline_source"`
@@ -84,7 +101,7 @@ type Config struct {
 
 // WalletAmountsConfig 表示不同货币及其余额的映射
 // 键是货币代码，如 "USDT"，值是对应的余额
-type WalletAmountsConfig map[string]int
+type WalletAmountsConfig map[string]float64
 
 // FatalStopConfig 表示全局止损配置
 // 键是时间周期（以分钟为单位），值是对应的损失百分比
@@ -185,4 +202,9 @@ type ExgOptions struct {
 type ProxyConfig struct {
 	HTTP  string `yaml:"http"`
 	HTTPS string `yaml:"https"`
+}
+
+type TimeTuple struct {
+	Start int64
+	Stop  int64
 }

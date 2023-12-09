@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"github.com/anyongjin/banbot/btime"
 	"github.com/anyongjin/banbot/cmd"
+	"github.com/anyongjin/banbot/core"
 	"github.com/anyongjin/banbot/log"
 	"github.com/anyongjin/banbot/utils"
 	"github.com/mitchellh/mapstructure"
@@ -13,11 +15,19 @@ import (
 )
 
 func IsLiveMode(mode string) bool {
-	return mode == RunModeProd || mode == RunModeDryRun
+	return mode == core.RunModeProd || mode == core.RunModeDryRun
 }
 
 func LiveMode() bool {
-	return IsLiveMode(run_mode)
+	return IsLiveMode(RunMode)
+}
+
+/*
+ProdMode
+提交到交易所模式
+*/
+func ProdMode() bool {
+	return RunMode == core.RunModeProd
 }
 
 func GetDataDir() string {
@@ -25,8 +35,8 @@ func GetDataDir() string {
 	if dataDir != "" {
 		return dataDir
 	}
-	if Cfg.DataDir != "" {
-		return Cfg.DataDir
+	if config.DataDir != "" {
+		return config.DataDir
 	}
 	return ""
 }
@@ -42,27 +52,27 @@ func GetStagyDir() string {
 func GetRunEnv() string {
 	runEnv := os.Getenv("ban_run_env")
 	if runEnv == "" {
-		return RunEnvTest
-	} else if runEnv != RunEnvTest && runEnv != RunEnvProd {
+		return core.RunEnvTest
+	} else if runEnv != core.RunEnvTest && runEnv != core.RunEnvProd {
 		log.Error(fmt.Sprintf("invalid run env: %v", runEnv))
-		return RunEnvTest
+		return core.RunEnvTest
 	}
 	return runEnv
 }
 
-func LoadConfig(args *cmd.CmdArgs) (*Config, error) {
-	if Cfg.Loaded {
-		return &Cfg, nil
+func LoadConfig(args *cmd.CmdArgs) error {
+	if Loaded {
+		return nil
 	}
 	runEnv := GetRunEnv()
-	if runEnv != RunEnvProd {
+	if runEnv != core.RunEnvProd {
 		log.Info("Running in test, Please set `ban_run_env=prod` in production running")
 	}
 	var paths []string
 	if !args.NoDefault {
 		dataDir := GetDataDir()
 		if dataDir == "" {
-			return nil, ErrDataDirInvalid
+			return ErrDataDirInvalid
 		}
 		tryNames := []string{"config.yml", "config.local.yml"}
 		for _, name := range tryNames {
@@ -80,21 +90,72 @@ func LoadConfig(args *cmd.CmdArgs) (*Config, error) {
 		log.Info("Using ", zap.String("config", path))
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("Read %s Fail: %v", path, err)
+			return fmt.Errorf("Read %s Fail: %v", path, err)
 		}
 		var unpak map[interface{}]interface{}
 		err = yaml.Unmarshal(data, &unpak)
 		if err != nil {
-			return nil, fmt.Errorf("Unmarshal %s Fail: %v", path, err)
+			return fmt.Errorf("Unmarshal %s Fail: %v", path, err)
 		}
 		utils.DeepCopy(unpak, merged)
 	}
-	err := mapstructure.Decode(merged, &Cfg)
+	err := mapstructure.Decode(merged, &config)
 	if err != nil {
-		return nil, fmt.Errorf("decode Config Fail: %v", err)
+		return fmt.Errorf("decode Config Fail: %v", err)
 	}
-	Cfg.Loaded = true
-	Cfg.Debug = args.Debug
-	run_mode = Cfg.RunMode
-	return &Cfg, nil
+	apply(args)
+	return nil
+}
+
+func apply(args *cmd.CmdArgs) {
+	Loaded = true
+	Debug = args.Debug
+	NoDB = args.NoDb
+	if args.TimeRange != "" {
+		config.TimeRangeRaw = args.TimeRange
+	}
+	cutLen := len(config.TimeRangeRaw) / 2
+	config.TimeRange = &TimeTuple{
+		btime.ParseTimeMS(config.TimeRangeRaw[:cutLen]),
+		btime.ParseTimeMS(config.TimeRangeRaw[cutLen+1:]),
+	}
+	Name = config.Name
+	Env = config.Env
+	RunMode = config.RunMode
+	Leverage = config.Leverage
+	LimitVolSecs = config.LimitVolSecs
+	MarketType = config.MarketType
+	MaxMarketRate = config.MaxMarketRate
+	OdBookTtl = config.OdBookTtl
+	OrderType = config.OrderType
+	PreFire = config.PreFire
+	MarginAddRate = config.MarginAddRate
+	ChargeOnBomb = config.ChargeOnBomb
+	AutoEditLimit = config.AutoEditLimit
+	TakeOverStgy = config.TakeOverStgy
+	StakeAmount = config.StakeAmount
+	MinOpenRate = config.MinOpenRate
+	MaxOpenOrders = config.MaxOpenOrders
+	WalletAmounts = config.WalletAmounts
+	DrawBalanceOver = config.DrawBalanceOver
+	StakeCurrency = config.StakeCurrency
+	FatalStop = config.FatalStop
+	FatalStopHours = config.FatalStopHours
+	TimeRange = config.TimeRange
+	WsStamp = config.WsStamp
+	RunTimeframes = config.RunTimeframes
+	KlineSource = config.KlineSource
+	WatchJobs = config.WatchJobs
+	RunPolicy = config.RunPolicy
+	Pairs = config.Pairs
+	PairMgr = config.PairMgr
+	PairFilters = config.PairFilters
+	Exchange = config.Exchange
+	DataDir = config.DataDir
+	ExgDataMap = config.ExgDataMap
+	Database = config.Database
+	SpiderAddr = config.SpiderAddr
+	APIServer = config.APIServer
+	RPCChannels = config.RPCChannels
+	Webhook = config.Webhook
 }

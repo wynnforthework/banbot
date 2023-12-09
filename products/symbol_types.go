@@ -1,4 +1,4 @@
-package symbols
+package products
 
 import (
 	"time"

@@ -11,8 +11,8 @@ import (
 
 var (
 	pool   *pgxpool.Pool
-	TaskID int
-	Task   *Bottask
+	TaskID int64
+	Task   *BotTask
 )
 
 func Setup() {
@@ -20,7 +20,7 @@ func Setup() {
 		pool.Close()
 		pool = nil
 	}
-	dbCfg := config.Cfg.Database
+	dbCfg := config.Database
 	if dbCfg == nil {
 		log.Panic("database config is missing!")
 	}
