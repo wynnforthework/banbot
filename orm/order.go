@@ -1,7 +1,7 @@
 package orm
 
 import (
-	"github.com/anyongjin/banbot/utils"
+	"github.com/banbox/banbot/utils"
 	"strconv"
 	"strings"
 )

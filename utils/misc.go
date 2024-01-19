@@ -4,26 +4,12 @@ import (
 	"strings"
 )
 
-func DeepCopy(src, dst map[interface{}]interface{}) {
-	for k, v := range src {
-		if v, ok := v.(map[interface{}]interface{}); ok {
-			if bv, ok := dst[k]; ok {
-				if bv, ok := bv.(map[interface{}]interface{}); ok {
-					DeepCopy(v, bv)
-					continue
-				}
-			}
-		}
-		dst[k] = v
-	}
-}
-
 /*
 SplitSolid 字符串分割，忽略返回结果中的空字符串
 */
 func SplitSolid(text string, sep string) []string {
 	arr := strings.Split(text, sep)
-	result := []string{}
+	var result []string
 	for _, str := range arr {
 		if str != "" {
 			result = append(result, str)
@@ -44,4 +30,18 @@ func Check(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func UnionArr[T comparable](arrs ...[]T) []T {
+	hit := make(map[T]struct{})
+	for _, arr := range arrs {
+		for _, text := range arr {
+			hit[text] = struct{}{}
+		}
+	}
+	result := make([]T, 0, len(hit))
+	for key := range hit {
+		result = append(result, key)
+	}
+	return result
 }

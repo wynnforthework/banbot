@@ -5,3 +5,9 @@ type StgPairTf struct {
 	Pair      string
 	TimeFrame string
 }
+
+type DownRange struct {
+	Start   int64
+	End     int64
+	Reverse bool // 指示是否应该从后往前下载
+}

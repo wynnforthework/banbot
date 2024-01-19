@@ -9,6 +9,44 @@ import (
 	"context"
 )
 
+type AddKHolesParams struct {
+	Sid       int64
+	Timeframe string
+	Start     int64
+	Stop      int64
+}
+
+const addKInfo = `-- name: AddKInfo :one
+insert into kinfo
+("sid", "timeframe", "start", "stop")
+values ($1, $2, $3, $4)
+    returning sid, timeframe, start, stop
+`
+
+type AddKInfoParams struct {
+	Sid       int64
+	Timeframe string
+	Start     int64
+	Stop      int64
+}
+
+func (q *Queries) AddKInfo(ctx context.Context, arg AddKInfoParams) (*KInfo, error) {
+	row := q.db.QueryRow(ctx, addKInfo,
+		arg.Sid,
+		arg.Timeframe,
+		arg.Start,
+		arg.Stop,
+	)
+	var i KInfo
+	err := row.Scan(
+		&i.Sid,
+		&i.Timeframe,
+		&i.Start,
+		&i.Stop,
+	)
+	return &i, err
+}
+
 type AddSymbolsParams struct {
 	Exchange string
 	Market   string
@@ -155,56 +193,18 @@ func (q *Queries) GetIOrder(ctx context.Context, id int64) (*IOrder, error) {
 	return &i, err
 }
 
-const getKRange = `-- name: GetKRange :one
-select start, stop from kinfo
-where sid = $1
-and timeframe = $2
-limit 1
+const getKHoles = `-- name: GetKHoles :many
+select id, sid, timeframe, start, stop from khole
+where sid = $1 and timeframe = $2
 `
 
-type GetKRangeParams struct {
+type GetKHolesParams struct {
 	Sid       int64
 	Timeframe string
 }
 
-type GetKRangeRow struct {
-	Start int64
-	Stop  int64
-}
-
-func (q *Queries) GetKRange(ctx context.Context, arg GetKRangeParams) (*GetKRangeRow, error) {
-	row := q.db.QueryRow(ctx, getKRange, arg.Sid, arg.Timeframe)
-	var i GetKRangeRow
-	err := row.Scan(&i.Start, &i.Stop)
-	return &i, err
-}
-
-const getTask = `-- name: GetTask :one
-select id, mode, name, create_at, start_at, stop_at, info from bottask
-where id = $1
-`
-
-func (q *Queries) GetTask(ctx context.Context, id int64) (*BotTask, error) {
-	row := q.db.QueryRow(ctx, getTask, id)
-	var i BotTask
-	err := row.Scan(
-		&i.ID,
-		&i.Mode,
-		&i.Name,
-		&i.CreateAt,
-		&i.StartAt,
-		&i.StopAt,
-		&i.Info,
-	)
-	return &i, err
-}
-
-const listKHoles = `-- name: ListKHoles :many
-select id, sid, timeframe, start, stop from khole
-`
-
-func (q *Queries) ListKHoles(ctx context.Context) ([]*KHole, error) {
-	rows, err := q.db.Query(ctx, listKHoles)
+func (q *Queries) GetKHoles(ctx context.Context, arg GetKHolesParams) ([]*KHole, error) {
+	rows, err := q.db.Query(ctx, getKHoles, arg.Sid, arg.Timeframe)
 	if err != nil {
 		return nil, err
 	}
@@ -227,6 +227,26 @@ func (q *Queries) ListKHoles(ctx context.Context) ([]*KHole, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const getTask = `-- name: GetTask :one
+select id, mode, name, create_at, start_at, stop_at, info from bottask
+where id = $1
+`
+
+func (q *Queries) GetTask(ctx context.Context, id int64) (*BotTask, error) {
+	row := q.db.QueryRow(ctx, getTask, id)
+	var i BotTask
+	err := row.Scan(
+		&i.ID,
+		&i.Mode,
+		&i.Name,
+		&i.CreateAt,
+		&i.StartAt,
+		&i.StopAt,
+		&i.Info,
+	)
+	return &i, err
 }
 
 const listKInfos = `-- name: ListKInfos :many
@@ -259,19 +279,13 @@ func (q *Queries) ListKInfos(ctx context.Context) ([]*KInfo, error) {
 }
 
 const listSymbols = `-- name: ListSymbols :many
-select id, exchange, symbol, market, list_ms, delist_ms from exsymbol
+select id, exchange, market, symbol, list_ms, delist_ms from exsymbol
 where exchange = $1
-and market = $2
 order by id
 `
 
-type ListSymbolsParams struct {
-	Exchange string
-	Market   string
-}
-
-func (q *Queries) ListSymbols(ctx context.Context, arg ListSymbolsParams) ([]*ExSymbol, error) {
-	rows, err := q.db.Query(ctx, listSymbols, arg.Exchange, arg.Market)
+func (q *Queries) ListSymbols(ctx context.Context, exchange string) ([]*ExSymbol, error) {
+	rows, err := q.db.Query(ctx, listSymbols, exchange)
 	if err != nil {
 		return nil, err
 	}
@@ -282,8 +296,8 @@ func (q *Queries) ListSymbols(ctx context.Context, arg ListSymbolsParams) ([]*Ex
 		if err := rows.Scan(
 			&i.ID,
 			&i.Exchange,
-			&i.Symbol,
 			&i.Market,
+			&i.Symbol,
 			&i.ListMs,
 			&i.DelistMs,
 		); err != nil {
@@ -361,4 +375,58 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*BotTask, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const setKHole = `-- name: SetKHole :exec
+update khole set start = $2, stop = $3
+where id = $1
+`
+
+type SetKHoleParams struct {
+	ID    int64
+	Start int64
+	Stop  int64
+}
+
+func (q *Queries) SetKHole(ctx context.Context, arg SetKHoleParams) error {
+	_, err := q.db.Exec(ctx, setKHole, arg.ID, arg.Start, arg.Stop)
+	return err
+}
+
+const setKInfo = `-- name: SetKInfo :exec
+update kinfo set start = $3, stop = $4
+where sid = $1 and timeframe = $2
+`
+
+type SetKInfoParams struct {
+	Sid       int64
+	Timeframe string
+	Start     int64
+	Stop      int64
+}
+
+func (q *Queries) SetKInfo(ctx context.Context, arg SetKInfoParams) error {
+	_, err := q.db.Exec(ctx, setKInfo,
+		arg.Sid,
+		arg.Timeframe,
+		arg.Start,
+		arg.Stop,
+	)
+	return err
+}
+
+const setListMS = `-- name: SetListMS :exec
+update exsymbol set list_ms = $2, delist_ms = $3
+where id = $1
+`
+
+type SetListMSParams struct {
+	ID       int64
+	ListMs   int64
+	DelistMs int64
+}
+
+func (q *Queries) SetListMS(ctx context.Context, arg SetListMSParams) error {
+	_, err := q.db.Exec(ctx, setListMS, arg.ID, arg.ListMs, arg.DelistMs)
+	return err
 }

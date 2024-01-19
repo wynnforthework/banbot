@@ -1,7 +1,7 @@
-package cmd
+package config
 
 import (
-	"github.com/anyongjin/banbot/utils"
+	"github.com/banbox/banbot/utils"
 )
 
 func (this *CmdArgs) Init() {

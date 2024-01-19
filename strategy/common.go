@@ -2,10 +2,10 @@ package strategy
 
 import (
 	"fmt"
-	"github.com/anyongjin/banbot/config"
-	"github.com/anyongjin/banbot/log"
-	"github.com/anyongjin/banbot/utils"
-	ta "github.com/anyongjin/banta"
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/log"
+	ta "github.com/banbox/banta"
 	"github.com/pkujhd/goloader"
 	"go.uber.org/zap"
 	"os"

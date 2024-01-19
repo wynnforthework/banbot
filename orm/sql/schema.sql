@@ -55,7 +55,7 @@ CREATE TABLE "public"."iorder"
     "id"          BIGSERIAL     NOT NULL PRIMARY KEY,
     "task_id"     int4          not null,
     "symbol"      varchar(50)   not null,
-    "sid"         int8          not null,
+    "sid"         int4          not null,
     "timeframe"   varchar(5)    not null,
     "short"       bool          not null,
     "status"      int2          not null,
@@ -84,7 +84,7 @@ DROP TABLE IF EXISTS "public"."khole";
 CREATE TABLE "public"."khole"
 (
     "id"        BIGSERIAL  NOT NULL PRIMARY KEY,
-    "sid"       int8       not null,
+    "sid"       int4       not null,
     "timeframe" varchar(5) not null,
     "start"     int8       not null,
     "stop"      int8       not null
@@ -99,11 +99,12 @@ ALTER TABLE "public"."khole"
 DROP TABLE IF EXISTS "public"."kinfo";
 CREATE TABLE "public"."kinfo"
 (
-    "sid"       BIGSERIAL  NOT NULL PRIMARY KEY,
+    "sid"       SERIAL  NOT NULL PRIMARY KEY,
     "timeframe" varchar(5) NOT NULL,
     "start"     int8       not null,
     "stop"      int8       not null
 );
+CREATE Unique INDEX "idx_kinfo_sid_tf" ON "public"."kinfo" USING btree ("sid", "timeframe");
 
 -- ----------------------------
 -- Table structure for kline_un
@@ -111,7 +112,7 @@ CREATE TABLE "public"."kinfo"
 DROP TABLE IF EXISTS "public"."kline_un";
 CREATE TABLE "public"."kline_un"
 (
-    "sid"       BIGSERIAL  NOT NULL PRIMARY KEY,
+    "sid"       SERIAL  NOT NULL PRIMARY KEY,
     "start_ms"  int8       NOT NULL,
     "stop_ms"   int8       NOT NULL,
     "timeframe" varchar(5) NOT NULL,
@@ -131,7 +132,7 @@ CREATE TABLE "public"."overlay"
 (
     "id"        BIGSERIAL NOT NULL PRIMARY KEY,
     "user"      int4      not null,
-    "sid"       int8      not null,
+    "sid"       int4      not null,
     "start_ms"  int8      not null,
     "stop_ms"   int8      not null,
     "tf_msecs"  int4      not null,
@@ -149,13 +150,14 @@ CREATE INDEX "ix_overlay_user" ON "public"."overlay" USING btree ("user");
 DROP TABLE IF EXISTS "public"."exsymbol";
 CREATE TABLE "public"."exsymbol"
 (
-    "id"        BIGSERIAL   NOT NULL PRIMARY KEY,
+    "id"        SERIAL   NOT NULL PRIMARY KEY,
     "exchange"  varchar(50) not null,
-    "symbol"    varchar(20) not null,
     "market"    varchar(20) not null,
+    "symbol"    varchar(20) not null,
     "list_ms"   int8      default 0  not null,
     "delist_ms" int8      default 0  not null
 );
+CREATE UNIQUE INDEX "ix_exsymbol_unique" ON "public"."exsymbol" ("exchange", "market", "symbol");
 
 
 -- ----------------------------
@@ -164,7 +166,7 @@ CREATE TABLE "public"."exsymbol"
 DROP TABLE IF EXISTS "public"."users";
 CREATE TABLE "public"."users"
 (
-    "id"              BIGSERIAL    NOT NULL PRIMARY KEY,
+    "id"              SERIAL    NOT NULL PRIMARY KEY,
     "user_name"       varchar(128) not null,
     "avatar"          varchar(256) not null,
     "mobile"          varchar(30)  not null,

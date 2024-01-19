@@ -37,10 +37,10 @@ type ExOrder struct {
 }
 
 type ExSymbol struct {
-	ID       int64
+	ID       int32
 	Exchange string
-	Symbol   string
 	Market   string
+	Symbol   string
 	ListMs   int64
 	DelistMs int64
 }
@@ -49,7 +49,7 @@ type IOrder struct {
 	ID         int64
 	TaskID     int32
 	Symbol     string
-	Sid        int64
+	Sid        int32
 	Timeframe  string
 	Short      bool
 	Status     int16
@@ -69,21 +69,21 @@ type IOrder struct {
 
 type KHole struct {
 	ID        int64
-	Sid       int64
+	Sid       int32
 	Timeframe string
 	Start     int64
 	Stop      int64
 }
 
 type KInfo struct {
-	Sid       int64
+	Sid       int32
 	Timeframe string
 	Start     int64
 	Stop      int64
 }
 
 type KlineUn struct {
-	Sid       int64
+	Sid       int32
 	StartMs   int64
 	StopMs    int64
 	Timeframe string
@@ -97,7 +97,7 @@ type KlineUn struct {
 type Overlay struct {
 	ID       int64
 	User     int32
-	Sid      int64
+	Sid      int32
 	StartMs  int64
 	StopMs   int64
 	TfMsecs  int32
@@ -106,7 +106,7 @@ type Overlay struct {
 }
 
 type User struct {
-	ID             int64
+	ID             int32
 	UserName       string
 	Avatar         string
 	Mobile         string

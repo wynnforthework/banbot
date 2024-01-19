@@ -25,7 +25,6 @@ order by id;
 -- name: ListSymbols :many
 select * from exsymbol
 where exchange = $1
-and market = $2
 order by id;
 
 -- name: AddSymbols :copyfrom
@@ -33,6 +32,9 @@ insert into exsymbol
 (exchange, market, symbol)
 values ($1, $2, $3);
 
+-- name: SetListMS :exec
+update exsymbol set list_ms = $2, delist_ms = $3
+where id = $1;
 
 
 -- name: ListTaskPairs :many
@@ -45,14 +47,36 @@ and enter_at <= $3;
 -- name: ListKInfos :many
 select * from kinfo;
 
--- name: GetKRange :one
-select start, stop from kinfo
-where sid = $1
-and timeframe = $2
-limit 1;
+-- name: SetKInfo :exec
+update kinfo set start = $3, stop = $4
+where sid = $1 and timeframe = $2;
 
--- name: ListKHoles :many
-select * from khole;
+-- name: AddKInfo :one
+insert into kinfo
+("sid", "timeframe", "start", "stop")
+values ($1, $2, $3, $4)
+    returning *;
+
+
+
+-- name: GetKHoles :many
+select * from khole
+where sid = $1 and timeframe = $2;
+
+-- name: SetKHole :exec
+update khole set start = $2, stop = $3
+where id = $1;
+
+-- name: DelKHoleRange :exec
+delete from khole
+where sid = $1 and timeframe=$2 and start >= $3 and stop <= $4;
+
+-- name: AddKHoles :copyfrom
+insert into khole
+("sid", "timeframe", "start", "stop")
+values ($1, $2, $3, $4);
+
+
 
 
 -- name: GetIOrder :one

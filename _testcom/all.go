@@ -1,7 +1,7 @@
 package testcom
 
 import (
-	ta "github.com/anyongjin/banta"
+	ta "github.com/banbox/banta"
 )
 
 var (

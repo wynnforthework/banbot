@@ -2,11 +2,12 @@ package orm
 
 import (
 	"context"
-	"github.com/anyongjin/banbot/config"
-	"github.com/anyongjin/banbot/log"
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/core"
+	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.uber.org/zap"
-	"os"
 )
 
 var (
@@ -15,19 +16,49 @@ var (
 	Task   *BotTask
 )
 
-func Setup() {
+func Setup() *errs.Error {
 	if pool != nil {
 		pool.Close()
 		pool = nil
 	}
 	dbCfg := config.Database
 	if dbCfg == nil {
-		log.Panic("database config is missing!")
+		return errs.NewMsg(core.ErrBadConfig, "database config is missing!")
 	}
 	dbPool, err := pgxpool.New(context.Background(), dbCfg.Url)
 	if err != nil {
-		log.Error("Unable to create connection pool", zap.Error(err))
-		os.Exit(1)
+		return errs.New(core.ErrDbConnFail, err)
 	}
 	pool = dbPool
+	row := pool.QueryRow(context.Background(), "show timezone;")
+	var tz string
+	err = row.Scan(&tz)
+	if err != nil {
+		return errs.New(core.ErrDbReadFail, err)
+	}
+	log.Info("connect db ok")
+	return nil
+}
+
+func Conn(ctx context.Context) (*Queries, *pgxpool.Conn, *errs.Error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return nil, nil, errs.New(core.ErrDbConnFail, err)
+	}
+	return New(conn), conn, nil
+}
+
+func (q *Queries) NewTx(ctx context.Context) (pgx.Tx, *Queries, *errs.Error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, nil, errs.New(core.ErrDbConnFail, err)
+	}
+	nq := q.WithTx(tx)
+	return tx, nq, nil
 }

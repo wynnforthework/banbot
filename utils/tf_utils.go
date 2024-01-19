@@ -2,7 +2,8 @@ package utils
 
 import (
 	"errors"
-	"github.com/anyongjin/banbot/core"
+	"github.com/banbox/banbot/core"
+	"github.com/banbox/banexg"
 	"strconv"
 )
 
@@ -34,17 +35,17 @@ func parseTimeFrame(timeframe string) (int, error) {
 	var scale int
 	switch unit {
 	case 'y', 'Y':
-		scale = 60 * 60 * 24 * 365
+		scale = core.SecsYear
 	case 'M':
-		scale = 60 * 60 * 24 * 30
+		scale = core.SecsMon
 	case 'w', 'W':
-		scale = 60 * 60 * 24 * 7
+		scale = core.SecsWeek
 	case 'd', 'D':
-		scale = 60 * 60 * 24
+		scale = core.SecsDay
 	case 'h', 'H':
-		scale = 60 * 60
+		scale = core.SecsHour
 	case 'm':
-		scale = 60
+		scale = core.SecsMin
 	case 's', 'S':
 		scale = 1
 	default:
@@ -112,14 +113,14 @@ func AlignTfSecs(timeSecs int64, tfSecs int) int64 {
 AlignTfMSecs
 将给定的13位毫秒级时间戳，转为指定时间周期下，的头部开始时间戳
 */
-func AlignTfMSecs(timeMSecs int64, tfMSecs int) int64 {
+func AlignTfMSecs(timeMSecs int64, tfMSecs int64) int64 {
 	if timeMSecs < 1000000000000 {
 		panic("13 digit timestamp is require for AlignTfMSecs")
 	}
 	if tfMSecs < 1000 {
 		panic("milliseconds tfMSecs is require for AlignTfMSecs")
 	}
-	return AlignTfSecs(timeMSecs/int64(1000), tfMSecs/1000) * int64(1000)
+	return AlignTfSecs(timeMSecs/int64(1000), int(tfMSecs/1000)) * int64(1000)
 }
 
 /*
@@ -150,4 +151,47 @@ func SecsToTF(tfSecs int) string {
 		secsTfMap[tfSecs] = timeFrame
 	}
 	return timeFrame
+}
+
+/*
+BuildOHLCV
+从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
+arr: 子OHLC列表。
+toTFSecs: 指定要构建的时间粒度，单位：秒
+preFire: 提前触发构建完成的比率；
+resOHLCV: 已有的待更新数组
+fromTFSecs: 传入的arr子数组间隔，未提供时计算
+*/
+func BuildOHLCV(arr []*banexg.Kline, toTFSecs int, preFire float64, resOHLCV []*banexg.Kline, fromTFMSecs int64) ([]*banexg.Kline, bool) {
+	tfMSecs := int64(toTFSecs * 1000)
+	offsetMS := int64(float64(tfMSecs) * preFire)
+	var prevKline *banexg.Kline
+	if resOHLCV == nil {
+		resOHLCV = make([]*banexg.Kline, 0)
+	} else if len(resOHLCV) > 0 {
+		prevKline = resOHLCV[len(resOHLCV)-1]
+	}
+	rawMS := make([]int64, 0, len(arr))
+	for _, bar := range arr {
+		rawMS = append(rawMS, bar.Time)
+		bar.Time = AlignTfMSecs(bar.Time+offsetMS, tfMSecs)
+		if prevKline == nil || bar.Time >= prevKline.Time+tfMSecs {
+			resOHLCV = append(resOHLCV, bar)
+			prevKline = bar
+		} else {
+			prevKline.High = max(prevKline.High, bar.High)
+			prevKline.Low = min(prevKline.Low, bar.Low)
+			prevKline.Close = bar.Close
+		}
+	}
+	lastFinished := false
+	if fromTFMSecs == 0 && len(rawMS) >= 2 {
+		// 至少有2个，判断最后一个bar是否结束：假定arr中每个bar间隔相等，最后一个bar+间隔属于下一个规划区间，则认为最后一个bar结束
+		fromTFMSecs = rawMS[len(rawMS)-1] - rawMS[len(rawMS)-2]
+	}
+	if fromTFMSecs > 0 {
+		finishMS := AlignTfMSecs(rawMS[len(rawMS)-1]+fromTFMSecs+offsetMS, tfMSecs)
+		lastFinished = finishMS > resOHLCV[len(resOHLCV)-1].Time
+	}
+	return resOHLCV, lastFinished
 }

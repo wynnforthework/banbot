@@ -2,7 +2,7 @@ package btime
 
 import (
 	"fmt"
-	"github.com/anyongjin/banbot/config"
+	"github.com/banbox/banbot/core"
 	"strconv"
 	"time"
 	"unicode"
@@ -34,7 +34,7 @@ Time
 获取当前10位秒级时间戳
 */
 func Time() float64 {
-	if config.LiveMode() {
+	if core.LiveMode() {
 		return UTCTime()
 	} else {
 		if CurTimeMS == 0 {
@@ -49,7 +49,7 @@ TimeMS
 获取当前13位毫秒时间戳
 */
 func TimeMS() int64 {
-	if config.LiveMode() {
+	if core.LiveMode() {
 		return UTCStamp()
 	} else {
 		if CurTimeMS == 0 {
@@ -67,7 +67,7 @@ func MSToTime(timeMSecs int64) *time.Time {
 }
 
 func Now() *time.Time {
-	if !config.LiveMode() {
+	if !core.LiveMode() {
 		if CurTimeMS == 0 {
 			CurTimeMS = UTCStamp()
 		}

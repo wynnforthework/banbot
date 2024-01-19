@@ -2,12 +2,12 @@ package strategy
 
 import (
 	"fmt"
-	"github.com/anyongjin/banbot/biz"
-	"github.com/anyongjin/banbot/config"
-	"github.com/anyongjin/banbot/log"
-	"github.com/anyongjin/banbot/orm"
-	"github.com/anyongjin/banbot/products"
-	"github.com/anyongjin/banbot/utils"
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/goods"
+	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"math"
 )
@@ -26,7 +26,7 @@ func (s *TradeStagy) GetStakeAmount() float64 {
 /*
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
-func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []products.TfScore) string {
+func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []goods.TfScore) string {
 	if s.PickTimeFrame != nil {
 		return s.PickTimeFrame(exg, symbol, tfScores)
 	}
@@ -43,7 +43,7 @@ func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []product
  */
 
 func (s *StagyJob) OpenOrder(req *EnterReq) error {
-	isLiveMode := config.LiveMode()
+	isLiveMode := core.LiveMode()
 	symbol := s.Symbol.Symbol
 	var dirType = "long"
 	if req.Short {
@@ -69,7 +69,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) error {
 		req.LegalCost = s.Stagy.GetStakeAmount() * req.CostRate
 	}
 	// 检查价格是否有效
-	curPrice := biz.GetPrice(symbol)
+	curPrice := core.GetPrice(symbol)
 	dirFlag := 1
 	if req.Short {
 		dirFlag = -1

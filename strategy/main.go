@@ -2,11 +2,11 @@ package strategy
 
 import (
 	"fmt"
-	"github.com/anyongjin/banbot/config"
-	"github.com/anyongjin/banbot/core"
-	"github.com/anyongjin/banbot/log"
-	"github.com/anyongjin/banbot/products"
-	"github.com/anyongjin/banbot/utils"
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/goods"
+	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +15,7 @@ LoadStagyJobs 加载策略和交易对
 
 	返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
 */
-func LoadStagyJobs(pairs []string, tfScores map[string][]products.TfScore) {
+func LoadStagyJobs(pairs []string, tfScores map[string][]goods.TfScore) {
 	if len(pairs) == 0 || len(tfScores) == 0 {
 		panic("`pairs` and `tfScores` are required for LoadStagyJobs")
 	}
@@ -42,7 +42,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]products.TfScore) {
 			}
 			scores, ok := tfScores[pair]
 			if !ok {
-				scores = make([]products.TfScore, 0)
+				scores = make([]goods.TfScore, 0)
 			}
 			tf := stagy.pickTimeFrame(exgName, pair, scores)
 			if tf == "" {

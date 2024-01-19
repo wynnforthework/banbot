@@ -1,18 +1,18 @@
-package cmd
+package config
 
-type ArrStringFlag []string
+type ArrString []string
 
-func (i *ArrStringFlag) String() string {
+func (i *ArrString) String() string {
 	return "my string representation"
 }
 
-func (i *ArrStringFlag) Set(value string) error {
+func (i *ArrString) Set(value string) error {
 	*i = append(*i, value)
 	return nil
 }
 
 type CmdArgs struct {
-	Configs       ArrStringFlag
+	Configs       ArrString
 	Logfile       string
 	DataDir       string
 	NoDb          bool
@@ -28,7 +28,7 @@ type CmdArgs struct {
 	Action        string
 	RawTables     string
 	Tables        []string
-	StrategyDirs  ArrStringFlag
+	StrategyDirs  ArrString
 	Force         bool
 	WithSpider    bool
 	Medium        string

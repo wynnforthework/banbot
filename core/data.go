@@ -1,21 +1,23 @@
 package core
 
-import "github.com/anyongjin/banbot/strategy"
+var (
+	BotName     string                     // 当前机器人名称
+	RunMode     string                     // prod/dry_run/backtest
+	RunEnv      string                     //prod/test
+	StartAt     uint64                     // 启动时间，13位时间戳
+	IsWarmUp    bool                       //是否当前处于预热状态
+	TFSecs      = make(map[string]int)     // 所有涉及的时间周期
+	ExgName     string                     // 交易所名称
+	Market      string                     //当前市场
+	StgPairTfs  = make([]*StgPairTf, 0, 5) //策略、标的、周期
+	Pairs       = make(map[string]bool)    //全局所有的标的
+	ForbidPairs = make(map[string]bool)    // 禁止交易的币种
+	BookPairs   = make(map[string]bool)    //监听交易对的币种
+
+)
 
 var (
-	BotName         string                                    // 当前机器人名称
-	StartAt         uint64                                    // 启动时间，13位时间戳
-	IsWarmUp        bool                                      //是否当前处于预热状态
-	TFSecs          = make(map[string]int)                    // 所有涉及的时间周期
-	ExgName         string                                    // 交易所名称
-	Market          string                                    //当前市场
-	StgPairTfs      = make([]*StgPairTf, 0, 5)                //策略、标的、周期
-	Pairs           = make(map[string]bool)                   //全局所有的标的
-	PairTFStags     = make(map[string][]*strategy.TradeStagy) //所有的订阅任务
-	InfoPairTFStags = make(map[string][]*strategy.TradeStagy) //额外的订阅任务
-	ForbidPairs     = make(map[string]bool)                   // 禁止交易的币种
-	BookPairs       = make(map[string]bool)                   //监听交易对的币种
-
+	DownOHLCVParallel = 3
 )
 
 const (
@@ -25,6 +27,10 @@ const (
 	SecsWeek = SecsDay * 7
 	SecsMon  = SecsDay * 30
 	SecsYear = SecsDay * 365
+)
+
+const (
+	MSMinStamp = 157766400000 // 1975-01-01T00:00:00.000Z
 )
 
 const (
@@ -49,4 +55,10 @@ const (
 const (
 	BotStateRunning = 1
 	BotStateStopped = 2
+)
+
+var (
+	barPrices = make(map[string]float64) //# 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
+	prices    = make(map[string]float64) //交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
+
 )

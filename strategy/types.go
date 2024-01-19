@@ -1,13 +1,13 @@
 package strategy
 
 import (
-	"github.com/anyongjin/banbot/orm"
-	"github.com/anyongjin/banbot/products"
-	ta "github.com/anyongjin/banta"
+	"github.com/banbox/banbot/goods"
+	"github.com/banbox/banbot/orm"
+	ta "github.com/banbox/banta"
 )
 
 type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64
-type PickTimeFrameFunc func(exg string, symbol string, tfScores []products.TfScore) string
+type PickTimeFrameFunc func(exg string, symbol string, tfScores []goods.TfScore) string
 
 type TradeStagy struct {
 	Name         string

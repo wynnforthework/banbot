@@ -17,12 +17,10 @@ func TestDb(t *testing.T) {
 	}
 	defer conn.Close(ctx)
 	sess := New(conn)
-	symbols, err := sess.ListSymbols(ctx, ListSymbolsParams{
-		Market: "binance",
-	})
+	symbols, err := sess.ListSymbols(ctx, "binance")
 	if err != nil {
-		fmt.Printf("list products fail: %s", err)
+		fmt.Printf("list goods fail: %s", err)
 		return
 	}
-	fmt.Printf("loaded %d products", len(symbols))
+	fmt.Printf("loaded %d goods", len(symbols))
 }

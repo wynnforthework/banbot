@@ -2,10 +2,10 @@ package strategy
 
 import (
 	"fmt"
-	testcom "github.com/anyongjin/banbot/_testcom"
-	"github.com/anyongjin/banbot/orm"
-	"github.com/anyongjin/banbot/utils"
-	ta "github.com/anyongjin/banta"
+	testcom "github.com/banbox/banbot/_testcom"
+	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/utils"
+	ta "github.com/banbox/banta"
 	"testing"
 )
 

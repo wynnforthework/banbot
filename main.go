@@ -3,9 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/anyongjin/banbot/cmd"
-	"github.com/anyongjin/banbot/log"
-	"gopkg.in/yaml.v3"
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banexg/errs"
 	"os"
 )
 
@@ -20,43 +19,59 @@ var subHelp = map[string]string{
 
 const VERSION = "0.1.1"
 
+type FuncEntry = func() *errs.Error
+
 func main() {
 	if len(os.Args) < 2 {
 		printAndExit()
 	}
 	cmdName := os.Args[1]
-	var args cmd.CmdArgs
+	var args config.CmdArgs
 
 	var sub = flag.NewFlagSet(cmdName, flag.ExitOnError)
+	var options []string
+	var entry FuncEntry
+
 	switch cmdName {
 	case "trade":
-		bindSubFlags(&args, sub, []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"})
+		options = []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"}
+		entry = RunTrade
 	case "backtest":
-		bindSubFlags(&args, sub, []string{"timerange", "stake_amount", "pairs", "stg_dir"})
+		options = []string{"timerange", "stake_amount", "pairs", "stg_dir"}
+		entry = RunBackTest
 	case "down_data":
-		bindSubFlags(&args, sub, []string{"timerange", "pairs", "timeframes", "medium"})
+		options = []string{"timerange", "pairs", "timeframes", "medium"}
+		entry = RunDownData
 	case "down_ws":
 		break
 	case "dbcmd":
-		bindSubFlags(&args, sub, []string{"action", "tables", "force"})
+		options = []string{"action", "tables", "force"}
+		entry = RunDbCmd
 	case "spider":
+		entry = RunSpider
 		break
 	default:
 		printAndExit()
 	}
+	bindSubFlags(&args, sub, options...)
 
 	err := sub.Parse(os.Args[2:])
-	args.Init()
 	if err != nil {
 		fmt.Printf("Error: %v", err)
 		printAndExit()
 	}
-	log.SetupByArgs(&args)
-	data, err := yaml.Marshal(args)
-	fmt.Println("result: \n", string(data))
+	args.Init()
+	err2 := config.LoadConfig(&args)
+	if err2 != nil {
+		panic(err2)
+	}
+	err2 = entry()
+	if err2 != nil {
+		panic(err2)
+	}
 }
 
-func bindSubFlags(args *cmd.CmdArgs, cmd *flag.FlagSet, opts []string) {
+func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 	cmd.Var(&args.Configs, "config", "config path to use, Multiple -config options may be used")
 	cmd.StringVar(&args.Logfile, "logfile", "", "Log to the file specified")
 	cmd.StringVar(&args.DataDir, "datadir", "", "Path to data dir.")

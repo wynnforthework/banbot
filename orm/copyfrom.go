@@ -9,6 +9,41 @@ import (
 	"context"
 )
 
+// iteratorForAddKHoles implements pgx.CopyFromSource.
+type iteratorForAddKHoles struct {
+	rows                 []AddKHolesParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForAddKHoles) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForAddKHoles) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].Sid,
+		r.rows[0].Timeframe,
+		r.rows[0].Start,
+		r.rows[0].Stop,
+	}, nil
+}
+
+func (r iteratorForAddKHoles) Err() error {
+	return nil
+}
+
+func (q *Queries) AddKHoles(ctx context.Context, arg []AddKHolesParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"khole"}, []string{"sid", "timeframe", "start", "stop"}, &iteratorForAddKHoles{rows: arg})
+}
+
 // iteratorForAddSymbols implements pgx.CopyFromSource.
 type iteratorForAddSymbols struct {
 	rows                 []AddSymbolsParams

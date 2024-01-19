@@ -1,9 +1,5 @@
 package biz
 
-import (
-	"errors"
-)
-
 type ItemWallet struct {
 	Coin          string             // 币代码，非交易对
 	Available     float64            //可用余额
@@ -19,7 +15,3 @@ type Wallets struct {
 	MarginAddRate float64 //出现亏损时，在亏损百分比后追加保证金
 	MinOpenRate   float64 //钱包余额不足单笔开单金额时，超过此比例即允许开小单
 }
-
-var (
-	ErrAccountBomb = errors.New("Account Bomb")
-)
