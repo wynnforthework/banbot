@@ -62,8 +62,9 @@ TFToSecs
 */
 func TFToSecs(timeFrame string) int {
 	secs, ok := tfSecsMap[timeFrame]
+	var err error
 	if !ok {
-		secs, err := parseTimeFrame(timeFrame)
+		secs, err = parseTimeFrame(timeFrame)
 		if err != nil {
 			panic(err)
 		}

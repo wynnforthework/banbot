@@ -15,6 +15,7 @@ CREATE TABLE "public"."kline_1m"
     "volume" float8    not null
 );
 CREATE INDEX "kline_1m_sid" ON "public"."kline_1m" USING btree ("sid");
+CREATE UNIQUE INDEX "kline_1m_sid_time" ON "public"."kline_1m" ("sid", "time");
 SELECT create_hypertable('kline_1m', by_range('time', 5184000000));
 ALTER TABLE "public"."kline_1m"
     SET (
@@ -39,6 +40,7 @@ CREATE TABLE "public"."kline_5m"
     "volume" float8    not null
 );
 CREATE INDEX "kline_5m_sid" ON "public"."kline_5m" USING btree ("sid");
+CREATE UNIQUE INDEX "kline_5m_sid_time" ON "public"."kline_5m" ("sid", "time");
 SELECT create_hypertable('kline_5m', by_range('time', 7776000000));
 ALTER TABLE "public"."kline_5m"
     SET (
@@ -63,6 +65,7 @@ CREATE TABLE "public"."kline_15m"
     "volume" float8    not null
 );
 CREATE INDEX "kline_15m_sid" ON "public"."kline_15m" USING btree ("sid");
+CREATE UNIQUE INDEX "kline_15m_sid_time" ON "public"."kline_15m" ("sid", "time");
 SELECT create_hypertable('kline_15m', by_range('time', 31536000000));
 ALTER TABLE "public"."kline_15m"
     SET (
@@ -87,6 +90,7 @@ CREATE TABLE "public"."kline_1h"
     "volume" float8    not null
 );
 CREATE INDEX "kline_1h_sid" ON "public"."kline_1h" USING btree ("sid");
+CREATE UNIQUE INDEX "kline_1h_sid_time" ON "public"."kline_1h" ("sid", "time");
 SELECT create_hypertable('kline_1h', by_range('time', 63072000000));
 ALTER TABLE "public"."kline_1h"
     SET (
@@ -111,6 +115,7 @@ CREATE TABLE "public"."kline_1d"
     "volume" float8    not null
 );
 CREATE INDEX "kline_1d_sid" ON "public"."kline_1d" USING btree ("sid");
+CREATE UNIQUE INDEX "kline_1d_sid_time" ON "public"."kline_1d" ("sid", "time");
 SELECT create_hypertable('kline_1d', by_range('time', 94608000000));
 ALTER TABLE "public"."kline_1d"
     SET (

@@ -99,7 +99,7 @@ ALTER TABLE "public"."khole"
 DROP TABLE IF EXISTS "public"."kinfo";
 CREATE TABLE "public"."kinfo"
 (
-    "sid"       SERIAL  NOT NULL PRIMARY KEY,
+    "sid"       int4       NOT NULL ,
     "timeframe" varchar(5) NOT NULL,
     "start"     int8       not null,
     "stop"      int8       not null
@@ -112,7 +112,7 @@ CREATE Unique INDEX "idx_kinfo_sid_tf" ON "public"."kinfo" USING btree ("sid", "
 DROP TABLE IF EXISTS "public"."kline_un";
 CREATE TABLE "public"."kline_un"
 (
-    "sid"       SERIAL  NOT NULL PRIMARY KEY,
+    "sid"       int4       NOT NULL ,
     "start_ms"  int8       NOT NULL,
     "stop_ms"   int8       NOT NULL,
     "timeframe" varchar(5) NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE "public"."kline_un"
     "close"     float8     not null,
     "volume"    float8     not null
 );
-CREATE INDEX "kline_un_sid_tf_idx" ON "public"."kline_un" USING btree ("sid", "timeframe");
+CREATE unique INDEX "kline_un_sid_tf_idx" ON "public"."kline_un" USING btree ("sid", "timeframe");
 
 -- ----------------------------
 -- Table structure for overlay

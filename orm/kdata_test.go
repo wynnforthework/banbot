@@ -2,6 +2,7 @@ package orm
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banexg"
 	"testing"
@@ -29,8 +30,8 @@ func TestAutoFetchOhlcv(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	start := int64(1705578300000)
-	stop := int64(1705578600000)
+	stop := btime.TimeMS()
+	start := int64(0)
 	klines, err := AutoFetchOHLCV(exchange, exs, "1m", start, stop, 1000, false)
 	if err != nil {
 		panic(err)

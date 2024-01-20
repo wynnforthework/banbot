@@ -83,10 +83,7 @@ order by time`, sid, startMs, finishEndMS)
 	if len(klines) == 0 && maxEndMs-endMs > tfMSecs {
 		return q.QueryOHLCV(sid, timeframe, endMs, maxEndMs, limit, withUnFinish)
 	} else if withUnFinish && len(klines) > 0 && klines[len(klines)-1].Time+tfMSecs == unFinishMS {
-		unbar, _, err_ := getUnFinish(q, sid, timeframe, unFinishMS, unFinishMS+tfMSecs, "query")
-		if err_ != nil {
-			return nil, errs.New(core.ErrDbReadFail, err_)
-		}
+		unbar, _, _ := getUnFinish(q, sid, timeframe, unFinishMS, unFinishMS+tfMSecs, "query")
 		if unbar != nil {
 			klines = append(klines, unbar)
 		}
@@ -202,13 +199,13 @@ func mapToKlines(rows pgx.Rows, err_ error) ([]*banexg.Kline, error) {
 }
 
 func getSubTf(timeFrame string) (string, string) {
-	tfSecs := int64(utils.TFToSecs(timeFrame))
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	for i := len(aggList) - 1; i >= 0; i-- {
 		agg := aggList[i]
-		if agg.Secs >= tfSecs {
+		if agg.MSecs >= tfMSecs {
 			continue
 		}
-		if tfSecs%agg.Secs == 0 {
+		if tfMSecs%agg.MSecs == 0 {
 			return agg.TimeFrame, agg.Table
 		}
 	}
@@ -219,6 +216,7 @@ func getSubTf(timeFrame string) (string, string) {
 getUnFinish
 查询给定周期的未完成bar。给定周期可以是保存的周期1m,5m,15m,1h,1d；也可以是聚合周期如4h,3d
 此方法两种用途：query用户查询最新数据（可能是聚合周期）；calc从子周期更新大周期的未完成bar（不可能是聚合周期）
+返回的错误表示数据不存在
 */
 func getUnFinish(sess *Queries, sid int32, timeFrame string, startMS, endMS int64, mode string) (*banexg.Kline, int64, error) {
 	if mode != "calc" && mode != "query" {
@@ -293,13 +291,15 @@ func calcUnFinish(sess *Queries, sid int32, timeFrame, subTF string, startMS, en
 	merged, _ := utils.BuildOHLCV(arr, toTfSecs, 0, nil, fromTfMSecs)
 	out := merged[0]
 	return &KlineUn{
-		StartMs: startMS,
-		Open:    out.Open,
-		High:    out.High,
-		Low:     out.Low,
-		Close:   out.Close,
-		Volume:  out.Volume,
-		StopMs:  endMS,
+		Sid:       sid,
+		StartMs:   startMS,
+		Open:      out.Open,
+		High:      out.High,
+		Low:       out.Low,
+		Close:     out.Close,
+		Volume:    out.Volume,
+		StopMs:    endMS,
+		Timeframe: timeFrame,
 	}, nil
 }
 
@@ -372,7 +372,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		return err
 	}
 	_, err_ = sess.db.Exec(ctx, `insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, timeframe) 
-values ($1, $2, $3, $4, $5, $6)`, sub.Sid, sub.StartMs, sub.StopMs, sub.Open, sub.High, sub.Low,
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, sub.Sid, sub.StartMs, sub.StopMs, sub.Open, sub.High, sub.Low,
 		sub.Close, sub.Volume, sub.Timeframe)
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
@@ -455,8 +455,9 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	if realStart == 0 || realEnd == 0 {
 		return nil
 	}
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	realStart = min(realStart, startMS)
-	realEnd = max(realEnd, endMS)
+	realEnd = max(realEnd+tfMSecs, endMS)
 	oldStart, _ := q.GetKlineRange(sid, timeFrame)
 	if oldStart == 0 {
 		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: int64(sid), Timeframe: timeFrame, Start: realStart, Stop: realEnd})
@@ -562,13 +563,12 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 }
 
 func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
-	tfSecs := utils.TFToSecs(timeFrame)
-	tfMSecs := int64(tfSecs * 1000)
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	aggTfs := map[string]bool{timeFrame: true}
 	aggJobs := make([]*KlineAgg, 0)
 	curMS := btime.TimeMS()
 	for _, item := range aggList {
-		if item.Secs <= int64(tfSecs) {
+		if item.MSecs <= tfMSecs {
 			//跳过过小维度；跳过无关的连续聚合
 			continue
 		}
@@ -576,9 +576,9 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 			aggTfs[item.TimeFrame] = true
 			aggJobs = append(aggJobs, item)
 		}
-		endAlignMS := utils.AlignTfMSecs(endMS, tfMSecs)
-		unBarStartMs := utils.AlignTfMSecs(curMS, item.Secs*1000)
-		if endAlignMS >= unBarStartMs {
+		endAlignMS := utils.AlignTfMSecs(endMS, item.MSecs)
+		unBarStartMs := utils.AlignTfMSecs(curMS, item.MSecs)
+		if endAlignMS >= unBarStartMs && endMS > endAlignMS {
 			// 仅当数据涉及当前周期未完成bar时，才尝试更新；仅传入相关的bar，提高效率
 			err := updateUnFinish(q, item, sid, timeFrame, startMS, endMS)
 			if err != nil {
@@ -599,7 +599,7 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 }
 
 func (q *Queries) refreshAgg(item *KlineAgg, sid int32, orgStartMS, orgEndMS int64, aggFrom string) *errs.Error {
-	tfMSecs := item.Secs * 1000
+	tfMSecs := item.MSecs
 	startMS := utils.AlignTfMSecs(orgStartMS, tfMSecs)
 	endMS := utils.AlignTfMSecs(orgEndMS, tfMSecs)
 	if startMS == endMS && endMS < orgStartMS {
@@ -619,11 +619,12 @@ func (q *Queries) refreshAgg(item *KlineAgg, sid int32, orgStartMS, orgEndMS int
 	if aggFrom == "" {
 		aggFrom = item.AggFrom
 	}
+	tblName := "kline_" + aggFrom
 	sql := fmt.Sprintf(`
 select sid,"time"/%d*%d as atime,%s
 from %s where sid=%d and time>=%v and time<%v
 GROUP BY sid, 2 
-ORDER BY sid, 2`, tfMSecs, tfMSecs, aggFields, aggFrom, sid, aggStart, endMS)
+ORDER BY sid, 2`, tfMSecs, tfMSecs, aggFields, tblName, sid, aggStart, endMS)
 	finalSql := fmt.Sprintf(`
 insert into %s (sid, time, open, high, low, close, volume)
 %s %s`, item.Table, sql, klineInsConflict)
@@ -645,17 +646,17 @@ insert into %s (sid, time, open, high, low, close, volume)
 }
 
 func NewKlineAgg(TimeFrame, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention string) *KlineAgg {
-	secs := utils.TFToSecs(TimeFrame)
-	return &KlineAgg{TimeFrame, int64(secs), Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention}
+	msecs := int64(utils.TFToSecs(TimeFrame) * 1000)
+	return &KlineAgg{TimeFrame, msecs, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention}
 }
 
 func (a *KlineAgg) HasFinish(startMs, endMs int64) bool {
-	startAlign := startMs / 1000 / a.Secs * a.Secs
-	endAlign := endMs / 1000 / a.Secs * a.Secs
+	startAlign := utils.AlignTfMSecs(startMs, a.MSecs)
+	endAlign := utils.AlignTfMSecs(endMs, a.MSecs)
 	// 没有出现新的完成的bar数据，无需更新
 	// 前2个相等，说明：插入的数据所属bar尚未完成。
 	// start_align < start_ms说明：插入的数据不是所属bar的第一个数据
-	return !(startAlign == endAlign && endAlign < startMs/1000)
+	return !(startAlign == endAlign && endAlign < startMs)
 }
 
 /*

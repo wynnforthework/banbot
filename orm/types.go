@@ -9,7 +9,7 @@ type InOutOrder struct {
 
 type KlineAgg struct {
 	TimeFrame string
-	Secs      int64
+	MSecs     int64
 	Table     string
 	AggFrom   string
 	AggStart  string
