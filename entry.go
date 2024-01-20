@@ -1,10 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg/errs"
 )
@@ -14,13 +14,10 @@ func RunBackTest() *errs.Error {
 	if err != nil {
 		return err
 	}
-	ctx := context.Background()
-	sess, conn, err := orm.Conn(ctx)
+	err = orm.InitTask()
 	if err != nil {
 		return err
 	}
-	defer conn.Release()
-	orm.InitTask(sess)
 	exchange, err := exg.Get()
 	if err != nil {
 		return err
@@ -31,6 +28,10 @@ func RunBackTest() *errs.Error {
 		return err
 	}
 	err = orm.InitListDates()
+	if err != nil {
+		return err
+	}
+	err = goods.RefreshPairList(nil)
 	if err != nil {
 		return err
 	}

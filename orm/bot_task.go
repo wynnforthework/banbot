@@ -5,14 +5,14 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 )
 
-func InitTask(sess *Queries) {
+func InitTask() *errs.Error {
 	if Task != nil {
-		return
+		return nil
 	}
 	isLiveMode := core.LiveMode()
 	if config.NoDB {
@@ -23,30 +23,38 @@ func InitTask(sess *Queries) {
 			StartAt: config.TimeRange.StartMS, StopAt: config.TimeRange.EndMS}
 		TaskID = -1
 		log.Info("init task ok", zap.Int64("id", TaskID))
-		return
+		return nil
 	}
 	ctx := context.Background()
-	var err error
+	var err_ error
 	var task *BotTask
-	task, err = sess.FindTask(ctx, FindTaskParams{
+	sess, conn, err_ := Conn(ctx)
+	if err_ != nil {
+		return errs.New(core.ErrDbConnFail, err_)
+	}
+	defer conn.Release()
+	task, err_ = sess.FindTask(ctx, FindTaskParams{
 		Mode: core.RunMode,
 		Name: config.Name,
 	})
-	if err != nil || !isLiveMode {
+	if err_ != nil || !isLiveMode {
 		startAt := btime.UTCStamp()
 		if !isLiveMode {
 			startAt = config.TimeRange.StartMS
 		}
-		task, err = sess.AddTask(ctx, AddTaskParams{
+		task, err_ = sess.AddTask(ctx, AddTaskParams{
 			Mode:     core.RunMode,
 			Name:     config.Name,
 			CreateAt: btime.UTCStamp(),
 			StartAt:  startAt,
 			StopAt:   0,
 		})
-		utils.Check(err)
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
 	}
 	Task = task
 	TaskID = Task.ID
 	log.Info("init task ok", zap.Int64("id", TaskID))
+	return nil
 }

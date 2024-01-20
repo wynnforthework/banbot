@@ -5,7 +5,7 @@ go 1.21.4
 replace github.com/banbox/banexg => ../banexg
 
 require (
-	github.com/banbox/banexg v0.1.1
+	github.com/banbox/banexg v0.1.2
 	github.com/banbox/banta v0.1.1
 	github.com/jackc/pgx/v5 v5.5.0
 	github.com/mitchellh/mapstructure v1.5.0

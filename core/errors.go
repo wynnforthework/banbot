@@ -15,4 +15,5 @@ const (
 	ErrCacheErr
 	ErrInvalidTF
 	ErrInvalidSymbol
+	ErrRunTime
 )

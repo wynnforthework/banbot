@@ -5,6 +5,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
+	"github.com/banbox/banexg/bex"
 	"github.com/banbox/banexg/errs"
 	"strconv"
 )
@@ -57,7 +58,7 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	if contractType != "" {
 		options[banexg.OptContractType] = contractType
 	}
-	return banexg.New(name, &options)
+	return bex.New(name, &options)
 }
 
 func Get() (banexg.BanExchange, *errs.Error) {

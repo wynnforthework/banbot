@@ -47,7 +47,7 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 			startMS = config.TimeRange.StartMS
 		}
 		limit := f.BackPeriod
-		callBack := func(symbol string, klines []*banexg.Kline) {
+		callBack := func(symbol string, _ string, klines []*banexg.Kline) {
 			if len(klines) == 0 {
 				symbolVols = append(symbolVols, SymbolVol{symbol, 0})
 			} else {
@@ -235,7 +235,7 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, cb func(string
 		return nil, err
 	}
 	var res []string
-	handle := func(pair string, arr []*banexg.Kline) {
+	handle := func(pair string, _ string, arr []*banexg.Kline) {
 		if cb(pair, arr) {
 			res = append(res, pair)
 		}

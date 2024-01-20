@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"slices"
 )
 
 /*
@@ -53,15 +54,18 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]goods.TfScore) {
 			holdNum += 1
 			tfs[tf] = true
 			jobKey := fmt.Sprintf("%s_%s", pair, tf)
-			items, ok := core.PairTFStags[jobKey]
+			items, ok := PairTFStags[jobKey]
 			if !ok {
 				items = make([]*TradeStagy, 0)
 			}
-			core.PairTFStags[jobKey] = append(items, stagy)
+			PairTFStags[jobKey] = append(items, stagy)
 			core.StgPairTfs = append(core.StgPairTfs, &core.StgPairTf{Stagy: pol.Name, Pair: pair, TimeFrame: tf})
 		}
 	}
 	for tf, _ := range tfs {
-		core.TFSecs[tf] = utils.TFToSecs(tf)
+		core.TFSecs = append(core.TFSecs, &core.TFSecTuple{TF: tf, Secs: utils.TFToSecs(tf)})
 	}
+	slices.SortFunc(core.TFSecs, func(a, b *core.TFSecTuple) int {
+		return a.Secs - b.Secs
+	})
 }

@@ -7,12 +7,14 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
-	"github.com/banbox/banexg/base"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/dgraph-io/ristretto"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
+	"gonum.org/v1/gonum/floats"
+	"math"
 	"time"
 )
 
@@ -94,7 +96,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	var pairs []string
 	var allowFilter = false
 	var err *errs.Error
-	var tickersMap map[string]*base.Ticker
+	var tickersMap map[string]*banexg.Ticker
 	if !core.LiveMode() && len(config.Pairs) > 0 {
 		pairs = config.Pairs
 	} else {
@@ -116,7 +118,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 				expires := time.Second * 3600
 				cache.SetWithTTL("tickers", tickersMap, 1, expires)
 			} else {
-				tickersMap, _ = tikCache.(map[string]*base.Ticker)
+				tickersMap, _ = tikCache.(map[string]*banexg.Ticker)
 			}
 		}
 		pairs, err = pairProducer.GenSymbols(tickersMap)
@@ -126,7 +128,6 @@ func RefreshPairList(addPairs []string) *errs.Error {
 		log.Info("gen symbols", zap.String("from", pairProducer.GetName()),
 			zap.Int("num", len(pairs)))
 	}
-	pairs = utils.UnionArr(pairs, addPairs, config.GetExgConfig().WhitePairs)
 	err = orm.EnsureCurSymbols(pairs)
 	if err != nil {
 		return err
@@ -143,6 +144,108 @@ func RefreshPairList(addPairs []string) *errs.Error {
 			log.Info("left symbols", zap.String("after", flt.GetName()), zap.Int("num", len(pairs)))
 		}
 	}
+	adds := utils.UnionArr(addPairs, config.GetExgConfig().WhitePairs)
+	if len(adds) > 0 {
+		err = orm.EnsureCurSymbols(adds)
+		if err != nil {
+			return err
+		}
+		pairs = utils.UnionArr(pairs, adds)
+	}
+
+	core.Pairs = make(map[string]bool)
+	for _, p := range pairs {
+		core.Pairs[p] = true
+	}
 	// 计算交易对各维度K线质量分数
+	exchange, err := exg.Get()
+	if err != nil {
+		return err
+	}
+	return calcPairTfScales(exchange, pairs)
+}
+
+func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
+	if len(core.TFSecs) == 0 {
+		return errs.NewMsg(core.ErrRunTime, "TFSecs should be loaded before calcPairTfScales")
+	}
+	wsModeTf := ""
+	for _, v := range core.TFSecs {
+		if v.Secs <= 60 {
+			wsModeTf = v.TF
+			break
+		}
+	}
+	if wsModeTf != "" {
+		core.PairTfScores = make(map[string][]*core.TfScore)
+		for _, pair := range pairs {
+			core.PairTfScores[pair] = []*core.TfScore{{wsModeTf, 1.0}}
+		}
+		return nil
+	}
+	handle := func(pair, timeFrame string, arr []*banexg.Kline) {
+		items, ok := core.PairTfScores[pair]
+		if !ok {
+			items = make([]*core.TfScore, 0, len(core.TFSecs))
+		}
+		pipChg, err := exchange.PriceOnePip(pair)
+		if err != nil {
+			log.Error("PriceOnePip fail", zap.String("pair", pair), zap.Float64("pip", pipChg))
+			return
+		}
+		score := float64(1)
+		if len(arr) > 0 && pipChg > 0 {
+			score = calcKlineScore(arr, pipChg)
+		}
+		items = append(items, &core.TfScore{TF: timeFrame, Score: score})
+		core.PairTfScores[pair] = items
+	}
+	backNum := 300
+	for _, t := range core.TFSecs {
+		err := orm.FastBulkOHLCV(exchange, pairs, t.TF, 0, 0, backNum, handle)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+/*
+calcKlineScore
+计算K线质量。用于淘汰变动太小，波动不足的交易对；或计算交易对的最佳周期。阈值取0.8较合适
+
+	价格变动：四价相同-1分；bar变动=最小变动单位-1分；70%权重
+	平均跳空占比：30%权重
+
+	改进点：目前无法量化横盘频繁密集震动。
+*/
+func calcKlineScore(arr []*banexg.Kline, pipChg float64) float64 {
+	totalLen := len(arr)
+	finScore := float64(len(arr))
+	jumpRates := make([]float64, 0)
+	var pBar *banexg.Kline
+	for _, bar := range arr {
+		chgRate := (bar.High - bar.Low) / pipChg
+		if chgRate == 0 || chgRate == 1 {
+			finScore -= 1
+		} else if chgRate == 2 {
+			finScore -= 0.3
+		}
+		if pBar != nil {
+			nerMaxChg := max(pBar.High, bar.High) - min(pBar.Low, bar.Low)
+			rate := float64(0)
+			if nerMaxChg != 0 {
+				rate = math.Abs(pBar.Close-bar.Close) / nerMaxChg
+			}
+			jumpRates = append(jumpRates, rate)
+		}
+		pBar = bar
+	}
+	chgScore := finScore / float64(totalLen)
+	if len(jumpRates) == 0 {
+		return chgScore
+	}
+	// 取平方，扩大分数差距
+	jRateScore := math.Pow(1-floats.Sum(jumpRates)/float64(len(jumpRates)), 2)
+	return chgScore*0.7 + jRateScore*0.3
 }

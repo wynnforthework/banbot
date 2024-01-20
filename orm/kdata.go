@@ -204,7 +204,7 @@ FastBulkOHLCV
 	适用于币种较多，且需要的开始结束时间一致，且大部分已下载的情况。
 */
 func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame string,
-	startMS, endMS int64, limit int, handler func(string, []*banexg.Kline)) *errs.Error {
+	startMS, endMS int64, limit int, handler func(string, string, []*banexg.Kline)) *errs.Error {
 	startMS, endMS = parseDownArgs(timeFrame, startMS, endMS, limit, false)
 	downTF, err := GetDownTF(timeFrame)
 	if err != nil {
@@ -262,7 +262,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 			if !ok {
 				return
 			}
-			handler(symbol, klines)
+			handler(symbol, timeFrame, klines)
 		}
 		return sess.QueryOHLCVBatch(sidArr, timeFrame, startMS, endMS, limit, bulkHandler)
 	}
@@ -272,7 +272,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		if err != nil {
 			return err
 		}
-		handler(symbol, kline)
+		handler(symbol, timeFrame, kline)
 	}
 	return nil
 }
