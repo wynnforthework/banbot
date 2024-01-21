@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
@@ -26,13 +25,13 @@ func (s *TradeStagy) GetStakeAmount() float64 {
 /*
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
-func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []goods.TfScore) string {
+func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []*core.TfScore) string {
 	if s.PickTimeFrame != nil {
 		return s.PickTimeFrame(exg, symbol, tfScores)
 	}
 	for _, tfs := range tfScores {
 		if tfs.Score >= s.MinTfScore {
-			return tfs.TimeFrame
+			return tfs.TF
 		}
 	}
 	return ""

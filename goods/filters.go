@@ -188,12 +188,12 @@ func (f *PriceFilter) validatePrice(symbol string, price float64) bool {
 		}
 	}
 
-	if f.MinPrice > 0 && price < f.MinPrice {
+	if f.Min > 0 && price < f.Min {
 		log.Info("PriceFilter drop, price too small", zap.String("pair", symbol), zap.Float64("price", price))
 		return false
 	}
 
-	if f.MaxPrice > price {
+	if f.Max > price {
 		log.Info("PriceFilter drop, price too big", zap.String("pair", symbol), zap.Float64("price", price))
 		return false
 	}

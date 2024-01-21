@@ -3,9 +3,11 @@ package main
 import (
 	"fmt"
 	"github.com/banbox/banbot/biz"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banexg/errs"
 )
 
@@ -32,6 +34,10 @@ func RunBackTest() *errs.Error {
 		return err
 	}
 	err = goods.RefreshPairList(nil)
+	if err != nil {
+		return err
+	}
+	err = strategy.LoadStagyJobs(core.Pairs, core.PairTfScores)
 	if err != nil {
 		return err
 	}

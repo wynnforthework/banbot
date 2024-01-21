@@ -5,11 +5,6 @@ import (
 	"github.com/banbox/banexg/errs"
 )
 
-type TfScore struct {
-	TimeFrame string
-	Score     float64
-}
-
 type IFilter interface {
 	GetName() string
 	IsEnable() bool
@@ -41,16 +36,16 @@ type VolumePairFilter struct {
 /*
 PriceFilter 价格过滤器配置结构体
 Precision: 0.001，按价格精度过滤交易对，默认要求价格变动最小单位是0.1%
-MinPrice: 最低价格
-MaxPrice: 最高价格
+Min: 最低价格
+Max: 最高价格
 MaxUnitValue: 最大允许的单位价格变动对应的价值(针对定价货币，一般是USDT)。
 */
 type PriceFilter struct {
 	BaseFilter
 	MaxUnitValue float64 `yaml:"max_unit_value" mapstructure:"max_unit_value,omitempty"`
 	Precision    float64 `yaml:"precision" mapstructure:"precision,omitempty"`
-	MinPrice     float64 `yaml:"min_price" mapstructure:"min_price,omitempty"`
-	MaxPrice     float64 `yaml:"max_price" mapstructure:"max_price,omitempty"`
+	Min          float64 `yaml:"min" mapstructure:"min,omitempty"`
+	Max          float64 `yaml:"max" mapstructure:"max,omitempty"`
 }
 
 // RateOfChangeFilter 结构体用于表示波动性过滤器的配置信息

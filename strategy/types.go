@@ -1,13 +1,13 @@
 package strategy
 
 import (
-	"github.com/banbox/banbot/goods"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
 	ta "github.com/banbox/banta"
 )
 
 type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64
-type PickTimeFrameFunc func(exg string, symbol string, tfScores []goods.TfScore) string
+type PickTimeFrameFunc func(exg string, symbol string, tfScores []*core.TfScore) string
 
 type TradeStagy struct {
 	Name         string
@@ -17,6 +17,7 @@ type TradeStagy struct {
 	WatchBook    bool
 	DrawDownExit bool
 	StakeAmount  float64
+	AllowTFs     []string // 允许运行的时间周期，不提供时使用全局配置
 	PairInfos    []*PairSub
 
 	OnStartUp           func(s *StagyJob)

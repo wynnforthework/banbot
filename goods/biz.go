@@ -153,9 +153,11 @@ func RefreshPairList(addPairs []string) *errs.Error {
 		pairs = utils.UnionArr(pairs, adds)
 	}
 
-	core.Pairs = make(map[string]bool)
+	core.Pairs = nil
+	core.PairsMap = make(map[string]bool)
 	for _, p := range pairs {
-		core.Pairs[p] = true
+		core.Pairs = append(core.Pairs, p)
+		core.PairsMap[p] = true
 	}
 	// 计算交易对各维度K线质量分数
 	exchange, err := exg.Get()
@@ -166,13 +168,15 @@ func RefreshPairList(addPairs []string) *errs.Error {
 }
 
 func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
-	if len(core.TFSecs) == 0 {
-		return errs.NewMsg(core.ErrRunTime, "TFSecs should be loaded before calcPairTfScales")
+	allowTfs := config.AllAllowTFs()
+	if len(allowTfs) == 0 {
+		return errs.NewMsg(core.ErrBadConfig, "run_timeframes is required in config")
 	}
 	wsModeTf := ""
-	for _, v := range core.TFSecs {
-		if v.Secs <= 60 {
-			wsModeTf = v.TF
+	for _, v := range allowTfs {
+		tfSecs := utils.TFToSecs(v)
+		if tfSecs <= 60 {
+			wsModeTf = v
 			break
 		}
 	}
@@ -186,7 +190,7 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
 	handle := func(pair, timeFrame string, arr []*banexg.Kline) {
 		items, ok := core.PairTfScores[pair]
 		if !ok {
-			items = make([]*core.TfScore, 0, len(core.TFSecs))
+			items = make([]*core.TfScore, 0, len(allowTfs))
 		}
 		pipChg, err := exchange.PriceOnePip(pair)
 		if err != nil {
@@ -201,8 +205,8 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
 		core.PairTfScores[pair] = items
 	}
 	backNum := 300
-	for _, t := range core.TFSecs {
-		err := orm.FastBulkOHLCV(exchange, pairs, t.TF, 0, 0, backNum, handle)
+	for _, tf := range allowTfs {
+		err := orm.FastBulkOHLCV(exchange, pairs, tf, 0, 0, backNum, handle)
 		if err != nil {
 			return err
 		}

@@ -6,11 +6,12 @@ var (
 	RunEnv       string                        //prod/test
 	StartAt      uint64                        // 启动时间，13位时间戳
 	IsWarmUp     bool                          //是否当前处于预热状态
-	TFSecs       = make([]*TFSecTuple, 0)      // 所有涉及的时间周期
+	TFSecs       []*TFSecTuple                 // 所有涉及的时间周期
 	ExgName      string                        // 交易所名称
 	Market       string                        //当前市场
-	StgPairTfs   = make([]*StgPairTf, 0, 5)    //策略、标的、周期
-	Pairs        = make(map[string]bool)       //全局所有的标的
+	StgPairTfs   []*StgPairTf                  //策略、标的、周期
+	Pairs        []string                      //全局所有的标的
+	PairsMap     = make(map[string]bool)       //全局所有的标的
 	PairTfScores = make(map[string][]*TfScore) // tf scores for pairs
 	ForbidPairs  = make(map[string]bool)       // 禁止交易的币种
 	BookPairs    = make(map[string]bool)       //监听交易对的币种
