@@ -15,5 +15,18 @@ const (
 	ErrCacheErr
 	ErrInvalidTF
 	ErrInvalidSymbol
+	ErrInvalidAddr
 	ErrRunTime
+	ErrMarshalFail
+	ErrCompressFail
+	ErrDeCompressFail
+	ErrTimeout
+
+	ErrNetWriteFail
+	ErrNetReadFail
+
+	ErrNetUnknown
+	ErrNetTimeout
+	ErrNetTemporary
+	ErrNetConnect
 )
