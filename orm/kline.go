@@ -212,6 +212,15 @@ func getSubTf(timeFrame string) (string, string) {
 	return "", ""
 }
 
+func (q *Queries) PurgeKlineUn() *errs.Error {
+	sql := "delete from kline_un"
+	_, err_ := q.db.Exec(context.Background(), sql)
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	return nil
+}
+
 /*
 getUnFinish
 查询给定周期的未完成bar。给定周期可以是保存的周期1m,5m,15m,1h,1d；也可以是聚合周期如4h,3d
@@ -414,10 +423,22 @@ func (r iterForAddKLines) Err() error {
 	return nil
 }
 
-func (q *Queries) InsertKLines(tblName string, arg []*KlineSid) (int64, error) {
+func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
+	tblName := "kline_" + timeFrame
+	var adds = make([]*KlineSid, len(arr))
+	for i, v := range arr {
+		adds[i] = &KlineSid{
+			Kline: *v,
+			Sid:   sid,
+		}
+	}
 	ctx := context.Background()
 	cols := []string{"sid", "time", "open", "high", "low", "close", "volume"}
-	return q.db.CopyFrom(ctx, []string{tblName}, cols, &iterForAddKLines{rows: arg})
+	num, err_ := q.db.CopyFrom(ctx, []string{tblName}, cols, &iterForAddKLines{rows: adds})
+	if err_ != nil {
+		return 0, errs.New(core.ErrDbExecFail, err_)
+	}
+	return num, nil
 }
 
 /*

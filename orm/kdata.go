@@ -82,7 +82,7 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	return nil
 }
 
-func DownOHLCV2Db(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64) *errs.Error {
+func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64) (int, *errs.Error) {
 	startMS = exs.GetValidStart(startMS)
 	chanDown := make(chan core.DownRange, 10)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,7 +94,7 @@ func DownOHLCV2Db(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 	} else if oldStart <= startMS && endMS <= oldEnd {
 		// 完全处于已下载的区间，无需下载
 		close(chanDown)
-		return nil
+		return 0, nil
 	} else if startMS < oldStart && endMS > oldEnd {
 		// 范围超过已下载区间前后范围
 		chanDown <- core.DownRange{Start: startMS, End: oldStart, Reverse: true}
@@ -111,6 +111,7 @@ func DownOHLCV2Db(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 	var wg sync.WaitGroup
 	wg.Add(2)
 	var err *errs.Error
+	saveNum := 0
 
 	// 启动一个goroutine下载K线，写入到chanDown
 	go func() {
@@ -138,7 +139,7 @@ func DownOHLCV2Db(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 	// 启动一个goroutine将K线保存到数据库
 	go func() {
 		defer wg.Done()
-		tblName := "kline_" + timeFrame
+		var num int64
 		for {
 			select {
 			case <-ctx.Done():
@@ -147,19 +148,13 @@ func DownOHLCV2Db(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 				if !ok {
 					return
 				}
-				var adds = make([]*KlineSid, len(batch))
-				for i, v := range batch {
-					adds[i] = &KlineSid{
-						Kline: *v,
-						Sid:   exs.ID,
-					}
-				}
-				_, err_ := sess.InsertKLines(tblName, adds)
-				if err_ != nil {
-					log.Error("insert kline fail", zap.Error(err_))
-					err = errs.New(core.ErrDbExecFail, err_)
+				num, err = sess.InsertKLines(timeFrame, exs.ID, batch)
+				if err != nil {
+					log.Error("insert kline fail", zap.Error(err))
 					cancel()
 					return
+				} else {
+					saveNum += int(num)
 				}
 			}
 		}
@@ -167,9 +162,10 @@ func DownOHLCV2Db(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 
 	wg.Wait()
 	if err != nil {
-		return err
+		return saveNum, err
 	}
-	return sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS)
+	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS)
+	return saveNum, err
 }
 
 /*
@@ -190,7 +186,7 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 		return nil, err
 	}
 	defer conn.Release()
-	err = DownOHLCV2Db(sess, exchange, exs, downTF, startMS, endMS)
+	_, err = DownOHLCV2DB(sess, exchange, exs, downTF, startMS, endMS)
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +238,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		sidMap[exs.ID] = symbol
 		go func(exs_ *ExSymbol) {
 			defer wg.Done()
-			retErr = DownOHLCV2Db(sess, exchange, exs_, downTF, startMS, endMS)
+			_, retErr = DownOHLCV2DB(sess, exchange, exs_, downTF, startMS, endMS)
 			// 完成一个任务，从chan弹出一个
 			<-guard
 		}(exs)

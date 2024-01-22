@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/banbox/banbot/biz"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
@@ -59,5 +61,9 @@ func RunDbCmd() *errs.Error {
 }
 
 func RunSpider() *errs.Error {
-	return nil
+	err := biz.SetupComs()
+	if err != nil {
+		return err
+	}
+	return data.RunSpider(config.SpiderAddr)
 }

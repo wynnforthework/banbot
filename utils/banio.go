@@ -39,14 +39,15 @@ type IBanConn interface {
 }
 
 type BanConn struct {
-	Conn      net.Conn          // 原始的socket连接
-	Tags      map[string]bool   // 消息订阅列表
-	Remote    string            // 远端名称
-	Listens   map[string]ConnCB // 消息处理函数
-	ReadyMS   int64             // 连接就绪的时间戳
-	Ready     bool
-	m         sync.Mutex
-	DoConnect func(conn *BanConn) // 重新连接函数，未提供不尝试重新连接
+	Conn       net.Conn          // 原始的socket连接
+	Tags       map[string]bool   // 消息订阅列表
+	Remote     string            // 远端名称
+	Listens    map[string]ConnCB // 消息处理函数
+	RefreshMS  int64             // 连接就绪的时间戳
+	Ready      bool
+	m          sync.Mutex
+	DoConnect  func(conn *BanConn) // 重新连接函数，未提供不尝试重新连接
+	ReInitConn func()              // 重新连接成功后初始化回调函数
 }
 
 type IOMsg struct {
@@ -188,16 +189,50 @@ func (c *BanConn) connect(lock bool) {
 	if lock {
 		c.m.Lock()
 		defer c.m.Unlock()
-		if btime.TimeMS()-c.ReadyMS < 2000 {
+		if c.Ready && btime.TimeMS()-c.RefreshMS < 2000 {
 			// 连接已经刷新，跳过本次重试
 			return
 		}
 	}
 	c.Ready = false
+	if c.Conn != nil {
+		_ = c.Conn.Close()
+		c.Conn = nil
+	}
 	time.Sleep(time.Second * 3)
 	c.DoConnect(c)
-	c.ReadyMS = btime.TimeMS()
-	c.Ready = true
+	c.RefreshMS = btime.TimeMS()
+	if c.Conn != nil {
+		if c.ReInitConn != nil {
+			c.ReInitConn()
+		}
+		c.Ready = true
+	}
+}
+
+func (c *BanConn) initListens() {
+	c.Listens["subscribe"] = func(s string, data interface{}) {
+		var tags = make([]string, 0)
+		if DecodeMsgData(data, &tags, "subscribe") {
+			c.Subscribe(tags...)
+		}
+	}
+	c.Listens["unsubscribe"] = func(s string, data interface{}) {
+		var tags = make([]string, 0)
+		if DecodeMsgData(data, &tags, "unsubscribe") {
+			c.UnSubscribe(tags...)
+		}
+	}
+}
+
+func DecodeMsgData(input interface{}, out interface{}, name string) bool {
+	err_ := mapstructure.Decode(input, out)
+	if err_ != nil {
+		msgText, _ := sonic.MarshalString(input)
+		log.Error(name+" receive invalid", zap.String("msg", msgText))
+		return false
+	}
+	return true
 }
 
 func compress(data []byte) ([]byte, *errs.Error) {
@@ -273,11 +308,12 @@ func getErrType(err error) (int, string) {
 }
 
 type ServerIO struct {
-	Addr    string
-	Name    string
-	Conns   []IBanConn
-	Data    map[string]interface{} // 缓存的数据，可供远程端访问
-	DataExp map[string]int64       // 缓存数据的过期时间戳，13位
+	Addr     string
+	Name     string
+	Conns    []IBanConn
+	Data     map[string]interface{} // 缓存的数据，可供远程端访问
+	DataExp  map[string]int64       // 缓存数据的过期时间戳，13位
+	InitConn func(*BanConn)
 }
 
 var (
@@ -385,14 +421,14 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	return nil
 }
 
-func (s *ServerIO) WrapConn(conn net.Conn) IBanConn {
+func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 	res := &BanConn{
-		Conn:    conn,
-		Tags:    map[string]bool{},
-		Listens: map[string]ConnCB{},
-		ReadyMS: btime.TimeMS(),
-		Ready:   true,
-		Remote:  conn.RemoteAddr().String(),
+		Conn:      conn,
+		Tags:      map[string]bool{},
+		Listens:   map[string]ConnCB{},
+		RefreshMS: btime.TimeMS(),
+		Ready:     true,
+		Remote:    conn.RemoteAddr().String(),
 	}
 	res.Listens["onGetVal"] = func(action string, data interface{}) {
 		key := fmt.Sprintf("%v", data)
@@ -407,13 +443,13 @@ func (s *ServerIO) WrapConn(conn net.Conn) IBanConn {
 	}
 	res.Listens["onSetVal"] = func(action string, data interface{}) {
 		var args KeyValExpire
-		err := mapstructure.Decode(data, &args)
-		if err != nil {
-			text, _ := sonic.MarshalString(data)
-			log.Error("invalid data for onSetVal", zap.String("type", fmt.Sprintf("%t", data)), zap.String("val", text))
-			return
+		if DecodeMsgData(data, &args, "onSetVal") {
+			s.SetVal(&args)
 		}
-		s.SetVal(&args)
+	}
+	res.initListens()
+	if s.InitConn != nil {
+		s.InitConn(res)
 	}
 	return res
 }
@@ -432,28 +468,36 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 	res := &ClientIO{
 		Addr: addr,
 		BanConn: BanConn{
-			Conn:    conn,
-			Tags:    map[string]bool{},
-			Remote:  conn.RemoteAddr().String(),
-			Listens: map[string]ConnCB{},
-			ReadyMS: btime.TimeMS(),
-			Ready:   true,
+			Conn:      conn,
+			Tags:      map[string]bool{},
+			Remote:    conn.RemoteAddr().String(),
+			Listens:   map[string]ConnCB{},
+			RefreshMS: btime.TimeMS(),
+			Ready:     true,
 		},
 		waits: map[string]chan interface{}{},
 	}
 	res.Listens["onGetValRes"] = func(_ string, data interface{}) {
 		var val IOKeyVal
-		err_ = mapstructure.Decode(data, &val)
-		if err_ != nil {
-			text, _ := sonic.MarshalString(data)
-			log.Error("onGetValRes get invalid", zap.String("data", text))
+		if DecodeMsgData(data, &val, "onGetValRes") {
+			out, ok := res.waits[val.Key]
+			if !ok {
+				return
+			}
+			out <- val.Val
+		}
+	}
+	res.DoConnect = func(c *BanConn) {
+		for {
+			cn, err_ := net.Dial("tcp", addr)
+			if err_ != nil {
+				log.Error("connect fail, sleep 10s and retry..", zap.String("addr", addr))
+				time.Sleep(time.Second * 10)
+				continue
+			}
+			c.Conn = cn
 			return
 		}
-		out, ok := res.waits[val.Key]
-		if !ok {
-			return
-		}
-		out <- val.Val
 	}
 	banClient = res
 	return res, nil
