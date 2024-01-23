@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/exg"
@@ -58,7 +59,7 @@ type SaveKline struct {
 	SkipFirst bool
 }
 
-func saveInit(save *SaveKline) *errs.Error {
+func saveInit(sess *orm.Queries, save *SaveKline) *errs.Error {
 	initSids[save.Sid] = true
 	if save.SkipFirst {
 		save.Arr = save.Arr[1:]
@@ -69,11 +70,8 @@ func saveInit(save *SaveKline) *errs.Error {
 	exs := orm.GetSymbolByID(save.Sid)
 	tfMSecs := int64(utils.TFToSecs(save.TimeFrame) * 1000)
 	fetchEndMS := save.Arr[0].Time
-	sess, conn, err := orm.Conn(nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
+
+	var err *errs.Error
 	_, endMS := sess.GetKlineRange(save.Sid, save.TimeFrame)
 	if endMS == 0 || fetchEndMS <= endMS {
 		// 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
@@ -111,9 +109,12 @@ func saveInit(save *SaveKline) *errs.Error {
 		}
 	}
 	_, err = sess.InsertKLinesAuto(save.TimeFrame, save.Sid, save.Arr)
+	if err != nil {
+		return err
+	}
 	log.Info("first fetch ok", zap.String("pair", exs.Symbol), zap.Int64("s", endMS),
 		zap.Int64("e", fetchEndMS))
-	return err
+	return nil
 }
 
 func consumeWriteQ(workNum int) {
@@ -122,23 +123,18 @@ func consumeWriteQ(workNum int) {
 	for save := range writeQ {
 		guard <- struct{}{}
 		go func(job *SaveKline) {
-			sess, conn, err := orm.Conn(nil)
-			if err != nil {
-				log.Error("consumeWriteQ:get db sess fail", zap.Error(err))
-				<-guard
-				return
+			ctx := context.Background()
+			sess, conn, err := orm.Conn(ctx)
+			if err == nil {
+				defer conn.Release()
+				if _, ok := initSids[job.Sid]; !ok {
+					err = saveInit(sess, job)
+				} else {
+					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, job.Arr)
+				}
 			}
-			defer conn.Release()
-			if _, ok := initSids[job.Sid]; !ok {
-				err = saveInit(job)
-				if err != nil {
-					log.Error("save kline init fail", zap.Int32("sid", job.Sid), zap.Error(err))
-				}
-			} else {
-				_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, job.Arr)
-				if err != nil {
-					log.Error("insert kline fail", zap.Int32("sid", job.Sid), zap.Error(err))
-				}
+			if err != nil {
+				log.Error("consumeWriteQ: fail", zap.Int32("sid", job.Sid), zap.Error(err))
 			}
 			<-guard
 		}(&save)
@@ -366,7 +362,9 @@ func (m *Miner) watchKLines(pairs []string) {
 				finishes = append([]*banexg.Kline{state.PrevBar}, finishes...)
 			}
 		}
-		state.PrevBar = last
+		if state.PrevBar == nil || last.Time >= state.PrevBar.Time {
+			state.PrevBar = last
+		}
 		if len(finishes) > 0 {
 			// 有已完成的k线
 			err_ = m.spider.Broadcast(&utils.IOMsg{
@@ -433,11 +431,11 @@ func RunSpider(addr string) *errs.Error {
 	if err != nil {
 		return err
 	}
-	defer conn.Release()
 	err = sess.PurgeKlineUn()
 	if err != nil {
 		return err
 	}
+	conn.Release()
 	return spider.RunForever()
 }
 

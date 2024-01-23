@@ -82,6 +82,10 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	return nil
 }
 
+/*
+DownOHLCV2DB
+下载K线到数据库，应在事务中调用此方法，否则查询更新相关数据会有错误
+*/
 func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64) (int, *errs.Error) {
 	startMS = exs.GetValidStart(startMS)
 	chanDown := make(chan core.DownRange, 10)
@@ -164,7 +168,7 @@ func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 	if err != nil {
 		return saveNum, err
 	}
-	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS)
+	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS, nil)
 	return saveNum, err
 }
 
@@ -207,8 +211,6 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		return err
 	}
 	guard := make(chan struct{}, core.DownOHLCVParallel)
-	var wg sync.WaitGroup
-	defer wg.Wait()
 	exgName := exchange.GetID()
 	var market *banexg.Market
 	var exs *ExSymbol
@@ -219,6 +221,8 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		return err
 	}
 	defer conn.Release()
+	var wg sync.WaitGroup
+	defer wg.Wait()
 	for _, symbol := range symbols {
 		market, err = exchange.GetMarket(symbol)
 		if err != nil {
@@ -243,6 +247,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 			<-guard
 		}(exs)
 	}
+	wg.Wait()
 	if retErr != nil {
 		return retErr
 	}

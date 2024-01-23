@@ -52,7 +52,7 @@ func TestFetchOhlcvs(t *testing.T) {
 	}
 	pair := "BTC/USDT:USDT"
 	curMS := btime.TimeMS()
-	limit := 17
+	limit := 127
 	start := curMS - int64(limit)*60000
 	arr, err := exchange.FetchOHLCV(pair, "1m", start, limit, nil)
 	if err != nil {

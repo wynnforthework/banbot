@@ -25,7 +25,22 @@ func Setup() *errs.Error {
 	if dbCfg == nil {
 		return errs.NewMsg(core.ErrBadConfig, "database config is missing!")
 	}
-	dbPool, err := pgxpool.New(context.Background(), dbCfg.Url)
+	poolCfg, err_ := pgxpool.ParseConfig(dbCfg.Url)
+	if err_ != nil {
+		return errs.New(core.ErrBadConfig, err_)
+	}
+	//poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+	//	log.Info(fmt.Sprintf("get conn: %v", conn))
+	//	return true
+	//}
+	//poolCfg.AfterRelease = func(conn *pgx.Conn) bool {
+	//	log.Info(fmt.Sprintf("del conn: %v", conn))
+	//	return true
+	//}
+	//poolCfg.BeforeClose = func(conn *pgx.Conn) {
+	//	log.Info(fmt.Sprintf("close conn: %v", conn))
+	//}
+	dbPool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
 	if err != nil {
 		return errs.New(core.ErrDbConnFail, err)
 	}
@@ -51,7 +66,32 @@ func Conn(ctx context.Context) (*Queries, *pgxpool.Conn, *errs.Error) {
 	return New(conn), conn, nil
 }
 
-func (q *Queries) NewTx(ctx context.Context) (pgx.Tx, *Queries, *errs.Error) {
+type Tx struct {
+	tx     pgx.Tx
+	closed bool
+}
+
+func (t *Tx) Close(ctx context.Context, commit bool) *errs.Error {
+	if t.closed {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var err error
+	if commit {
+		err = t.tx.Commit(ctx)
+	} else {
+		err = t.tx.Rollback(ctx)
+	}
+	t.closed = true
+	if err != nil {
+		return errs.New(core.ErrDbExecFail, err)
+	}
+	return nil
+}
+
+func (q *Queries) NewTx(ctx context.Context) (*Tx, *Queries, *errs.Error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -60,7 +100,7 @@ func (q *Queries) NewTx(ctx context.Context) (pgx.Tx, *Queries, *errs.Error) {
 		return nil, nil, errs.New(core.ErrDbConnFail, err)
 	}
 	nq := q.WithTx(tx)
-	return tx, nq, nil
+	return &Tx{tx: tx}, nq, nil
 }
 
 func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {

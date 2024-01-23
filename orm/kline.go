@@ -287,14 +287,7 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 calcUnFinish
 从子周期计算大周期的未完成bar
 */
-func calcUnFinish(sess *Queries, sid int32, timeFrame, subTF string, startMS, endMS int64) (*KlineUn, *errs.Error) {
-	arr, err := sess.QueryOHLCV(sid, subTF, startMS, endMS, 0, true)
-	if err != nil {
-		return nil, err
-	}
-	if len(arr) == 0 {
-		return nil, nil
-	}
+func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr []*banexg.Kline) *KlineUn {
 	toTfSecs := utils.TFToSecs(timeFrame)
 	fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
 	merged, _ := utils.BuildOHLCV(arr, toTfSecs, 0, nil, fromTfMSecs)
@@ -309,10 +302,10 @@ func calcUnFinish(sess *Queries, sid int32, timeFrame, subTF string, startMS, en
 		Volume:    out.Volume,
 		StopMs:    endMS,
 		Timeframe: timeFrame,
-	}, nil
+	}
 }
 
-func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, startMS, endMS int64) *errs.Error {
+func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, startMS, endMS int64, klines []*banexg.Kline) *errs.Error {
 	tfMSecs := int64(utils.TFToSecs(agg.TimeFrame) * 1000)
 	finished := endMS%tfMSecs == 0
 	whereSql := fmt.Sprintf("where sid=%v and timeframe='%v';", sid, agg.TimeFrame)
@@ -325,6 +318,11 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		}
 		return nil
 	}
+	if len(klines) == 0 {
+		log.Warn("skip unFinish for empty", zap.Int64("s", startMS), zap.Int64("e", endMS))
+		return nil
+	}
+	sub := calcUnFinish(sid, agg.TimeFrame, subTF, startMS, endMS, klines)
 	barStartMS := utils.AlignTfMSecs(startMS, tfMSecs)
 	barEndMS := utils.AlignTfMSecs(endMS, tfMSecs)
 	if barStartMS == barEndMS {
@@ -335,10 +333,6 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		err_ := row.Scan(&unBar.StartMs, &unBar.Open, &unBar.High, &unBar.Low, &unBar.Close, &unBar.Volume, &unBar.StopMs)
 		if err_ == nil && unBar.StopMs == startMS {
 			//当本次插入开始时间戳，和未完成bar结束时间戳完全匹配时，认为有效
-			sub, err := calcUnFinish(sess, sid, agg.TimeFrame, subTF, startMS, endMS)
-			if err != nil || sub == nil {
-				return err
-			}
 			unBar.High = max(unBar.High, sub.High)
 			unBar.Low = min(unBar.Low, sub.Low)
 			unBar.Close = sub.Close
@@ -357,10 +351,6 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
-	}
-	sub, err := calcUnFinish(sess, sid, agg.TimeFrame, subTF, barEndMS, barEndMS+tfMSecs)
-	if err != nil || sub == nil {
-		return err
 	}
 	_, err_ = sess.db.Exec(ctx, `insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, timeframe) 
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
@@ -430,6 +420,7 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 /*
 InsertKLinesAuto
 插入K线到数据库，同时调用UpdateKRange更新关联信息
+应该在事务中调用此方法，否则插入k线后立刻读取计算关联信息没有最新数据
 */
 func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
 	num, err := q.InsertKLines(timeFrame, sid, arr)
@@ -439,7 +430,7 @@ func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kl
 	startMS := arr[0].Time
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	endMS := arr[len(arr)-1].Time + tfMSecs
-	err = q.UpdateKRange(sid, timeFrame, startMS, endMS)
+	err = q.UpdateKRange(sid, timeFrame, startMS, endMS, arr)
 	return num, err
 }
 
@@ -449,7 +440,7 @@ UpdateKRange
 2. 搜索空洞，更新Khole
 3. 更新更大周期的连续聚合
 */
-func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
+func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64, klines []*banexg.Kline) *errs.Error {
 	// 更新有效区间范围
 	err := q.updateKLineRange(sid, timeFrame, startMS, endMS)
 	if err != nil {
@@ -461,7 +452,7 @@ func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64
 		return err
 	}
 	// 更新更大的超表
-	return q.updateBigHyper(sid, timeFrame, startMS, endMS)
+	return q.updateBigHyper(sid, timeFrame, startMS, endMS, klines)
 }
 
 func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
@@ -585,10 +576,11 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	return nil
 }
 
-func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
+func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int64, klines []*banexg.Kline) *errs.Error {
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	aggTfs := map[string]bool{timeFrame: true}
 	aggJobs := make([]*KlineAgg, 0)
+	unFinishJobs := make([]*KlineAgg, 0)
 	curMS := btime.TimeMS()
 	for _, item := range aggList {
 		if item.MSecs <= tfMSecs {
@@ -605,19 +597,30 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 		unBarStartMs := utils.AlignTfMSecs(curMS, item.MSecs)
 		if endAlignMS >= unBarStartMs && endMS >= endAlignMS {
 			// 仅当数据涉及当前周期未完成bar时，才尝试更新；仅传入相关的bar，提高效率
-			err := updateUnFinish(q, item, sid, timeFrame, startMS, endMS)
+			unFinishJobs = append(unFinishJobs, item)
+		}
+	}
+	if len(unFinishJobs) > 0 {
+		var err *errs.Error
+		if len(klines) == 0 {
+			klines, err = q.QueryOHLCV(sid, timeFrame, startMS, endMS, 0, true)
+			if err != nil {
+				return err
+			}
+		}
+		for _, item := range unFinishJobs {
+			err = updateUnFinish(q, item, sid, timeFrame, startMS, endMS, klines)
 			if err != nil {
 				return err
 			}
 		}
 	}
-	if len(aggJobs) == 0 {
-		return nil
-	}
-	for _, item := range aggJobs {
-		err := q.refreshAgg(item, sid, startMS, endMS, "")
-		if err != nil {
-			return err
+	if len(aggJobs) > 0 {
+		for _, item := range aggJobs {
+			err := q.refreshAgg(item, sid, startMS, endMS, "")
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
