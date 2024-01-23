@@ -32,7 +32,6 @@ type IBanConn interface {
 	Subscribe(tags ...string)
 	UnSubscribe(tags ...string)
 	GetRemote() string
-	IsReady() bool
 	IsClosed() bool
 	HasTag(tag string) bool
 	RunForever()
@@ -58,11 +57,8 @@ type IOMsg struct {
 func (c *BanConn) GetRemote() string {
 	return c.Remote
 }
-func (c *BanConn) IsReady() bool {
-	return c.Ready
-}
 func (c *BanConn) IsClosed() bool {
-	return c.Conn == nil
+	return c.Conn == nil || !c.Ready
 }
 func (c *BanConn) HasTag(tag string) bool {
 	_, ok := c.Tags[tag]
@@ -89,6 +85,7 @@ func (c *BanConn) Write(data []byte) *errs.Error {
 	binary.LittleEndian.PutUint32(lenBt, dataLen)
 	_, err_ := c.Conn.Write(lenBt)
 	if err_ != nil {
+		c.Ready = false
 		errCode, errType := getErrType(err_)
 		if c.DoConnect != nil && errCode == core.ErrNetConnect {
 			log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
@@ -99,6 +96,7 @@ func (c *BanConn) Write(data []byte) *errs.Error {
 	}
 	_, err_ = c.Conn.Write(data)
 	if err_ != nil {
+		c.Ready = false
 		return errs.New(core.ErrNetWriteFail, err_)
 	}
 	return nil
@@ -414,7 +412,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 		go func(c IBanConn) {
 			err := c.Write(compressed)
 			if err != nil {
-				log.Error("broadcast fail", zap.String("tag", msg.Action))
+				log.Error("broadcast fail", zap.String("tag", msg.Action), zap.Error(err))
 			}
 		}(conn)
 	}

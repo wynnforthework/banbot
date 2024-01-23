@@ -40,3 +40,25 @@ func TestAutoFetchOhlcv(t *testing.T) {
 		fmt.Printf("%v %f %f %f %f %f\n", k.Time, k.Open, k.High, k.Low, k.Close, k.Volume)
 	}
 }
+
+func TestFetchOhlcvs(t *testing.T) {
+	err := initApp()
+	if err != nil {
+		panic(err)
+	}
+	exchange, err := exg.Get()
+	if err != nil {
+		panic(err)
+	}
+	pair := "BTC/USDT:USDT"
+	curMS := btime.TimeMS()
+	limit := 17
+	start := curMS - int64(limit)*60000
+	arr, err := exchange.FetchOHLCV(pair, "1m", start, limit, nil)
+	if err != nil {
+		panic(err)
+	}
+	for _, k := range arr {
+		fmt.Printf("{%v,%f,%f,%f,%f,%f},\n", k.Time, k.Open, k.High, k.Low, k.Close, k.Volume)
+	}
+}

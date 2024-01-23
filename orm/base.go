@@ -62,3 +62,11 @@ func (q *Queries) NewTx(ctx context.Context) (pgx.Tx, *Queries, *errs.Error) {
 	nq := q.WithTx(tx)
 	return tx, nq, nil
 }
+
+func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {
+	_, err_ := q.db.Exec(context.Background(), sql, args...)
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	return nil
+}

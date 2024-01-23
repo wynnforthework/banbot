@@ -56,7 +56,7 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 	tfSecs := utils.TFToSecs(timeframe)
 	tfMSecs := int64(tfSecs * 1000)
 	maxEndMs := endMs
-	if limit > 0 {
+	if limit > 0 && startMs > 0 {
 		endMs = min(startMs+tfMSecs*int64(limit), endMs)
 	}
 	curMs := btime.TimeMS()
@@ -293,7 +293,7 @@ func calcUnFinish(sess *Queries, sid int32, timeFrame, subTF string, startMS, en
 		return nil, err
 	}
 	if len(arr) == 0 {
-		return nil, errs.NewMsg(core.ErrDbReadFail, "read sub ohlcv empty %v %v", sid, subTF)
+		return nil, nil
 	}
 	toTfSecs := utils.TFToSecs(timeFrame)
 	fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
@@ -336,7 +336,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		if err_ == nil && unBar.StopMs == startMS {
 			//当本次插入开始时间戳，和未完成bar结束时间戳完全匹配时，认为有效
 			sub, err := calcUnFinish(sess, sid, agg.TimeFrame, subTF, startMS, endMS)
-			if err != nil {
+			if err != nil || sub == nil {
 				return err
 			}
 			unBar.High = max(unBar.High, sub.High)
@@ -352,24 +352,6 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 			}
 			return nil
 		}
-		//		else if startMS%tfMSecs == 0 {
-		//			// 当插入的bar是第一个时，也认为有效。直接插入
-		//			_, err_ = sess.db.Exec(ctx, "delete "+fromWhere)
-		//			if err_ != nil {
-		//				return errs.New(core.ErrDbExecFail, err_)
-		//			}
-		//			sub, err := calcUnFinish(sess, sid, agg.TimeFrame, subTF, startMS, endMS)
-		//			if err != nil {
-		//				return err
-		//			}
-		//			_, err_ = sess.db.Exec(ctx, `insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, timeframe)
-		//values ($1, $2, $3, $4, $5, $6)`, sub.Sid, sub.StartMs, sub.StopMs, sub.Open, sub.High, sub.Low,
-		//				sub.Close, sub.Volume, sub.Timeframe)
-		//			if err_ != nil {
-		//				return errs.New(core.ErrDbExecFail, err_)
-		//			}
-		//			return nil
-		//		}
 	}
 	//当快速更新不可用时，从子周期归集
 	_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
@@ -377,11 +359,11 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		return errs.New(core.ErrDbExecFail, err_)
 	}
 	sub, err := calcUnFinish(sess, sid, agg.TimeFrame, subTF, barEndMS, barEndMS+tfMSecs)
-	if err != nil {
+	if err != nil || sub == nil {
 		return err
 	}
 	_, err_ = sess.db.Exec(ctx, `insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, timeframe) 
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, sub.Sid, sub.StartMs, sub.StopMs, sub.Open, sub.High, sub.Low,
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
 		sub.Close, sub.Volume, sub.Timeframe)
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
@@ -423,6 +405,10 @@ func (r iterForAddKLines) Err() error {
 	return nil
 }
 
+/*
+InsertKLines
+只批量插入K线，如需同时更新关联信息，请使用InsertKLinesAuto
+*/
 func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
 	tblName := "kline_" + timeFrame
 	var adds = make([]*KlineSid, len(arr))
@@ -439,6 +425,22 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 		return 0, errs.New(core.ErrDbExecFail, err_)
 	}
 	return num, nil
+}
+
+/*
+InsertKLinesAuto
+插入K线到数据库，同时调用UpdateKRange更新关联信息
+*/
+func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
+	num, err := q.InsertKLines(timeFrame, sid, arr)
+	if err != nil {
+		return num, err
+	}
+	startMS := arr[0].Time
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	endMS := arr[len(arr)-1].Time + tfMSecs
+	err = q.UpdateKRange(sid, timeFrame, startMS, endMS)
+	return num, err
 }
 
 /*
@@ -593,13 +595,15 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 			//跳过过小维度；跳过无关的连续聚合
 			continue
 		}
-		if _, ok := aggTfs[item.AggFrom]; ok && item.HasFinish(startMS, endMS) {
+		startAlignMS := utils.AlignTfMSecs(startMS, item.MSecs)
+		endAlignMS := utils.AlignTfMSecs(endMS, item.MSecs)
+		if _, ok := aggTfs[item.AggFrom]; ok && startAlignMS < endAlignMS {
+			// startAlign < endAlign说明：插入的数据所属bar刚好完成
 			aggTfs[item.TimeFrame] = true
 			aggJobs = append(aggJobs, item)
 		}
-		endAlignMS := utils.AlignTfMSecs(endMS, item.MSecs)
 		unBarStartMs := utils.AlignTfMSecs(curMS, item.MSecs)
-		if endAlignMS >= unBarStartMs && endMS > endAlignMS {
+		if endAlignMS >= unBarStartMs && endMS >= endAlignMS {
 			// 仅当数据涉及当前周期未完成bar时，才尝试更新；仅传入相关的bar，提高效率
 			err := updateUnFinish(q, item, sid, timeFrame, startMS, endMS)
 			if err != nil {
@@ -669,15 +673,6 @@ insert into %s (sid, time, open, high, low, close, volume)
 func NewKlineAgg(TimeFrame, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention string) *KlineAgg {
 	msecs := int64(utils.TFToSecs(TimeFrame) * 1000)
 	return &KlineAgg{TimeFrame, msecs, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention}
-}
-
-func (a *KlineAgg) HasFinish(startMs, endMs int64) bool {
-	startAlign := utils.AlignTfMSecs(startMs, a.MSecs)
-	endAlign := utils.AlignTfMSecs(endMs, a.MSecs)
-	// 没有出现新的完成的bar数据，无需更新
-	// 前2个相等，说明：插入的数据所属bar尚未完成。
-	// start_align < start_ms说明：插入的数据不是所属bar的第一个数据
-	return !(startAlign == endAlign && endAlign < startMs)
 }
 
 /*
