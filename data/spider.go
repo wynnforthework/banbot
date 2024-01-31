@@ -59,7 +59,7 @@ type SaveKline struct {
 	SkipFirst bool
 }
 
-func saveInit(sess *orm.Queries, save *SaveKline) *errs.Error {
+func fillPrevHole(sess *orm.Queries, save *SaveKline) *errs.Error {
 	initSids[save.Sid] = true
 	if save.SkipFirst {
 		save.Arr = save.Arr[1:]
@@ -75,8 +75,7 @@ func saveInit(sess *orm.Queries, save *SaveKline) *errs.Error {
 	_, endMS := sess.GetKlineRange(save.Sid, save.TimeFrame)
 	if endMS == 0 || fetchEndMS <= endMS {
 		// 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
-		_, err = sess.InsertKLinesAuto(save.TimeFrame, save.Sid, save.Arr)
-		return err
+		return nil
 	}
 	tryCount := 0
 	log.Info("start first fetch", zap.String("pair", exs.Symbol), zap.Int64("s", endMS), zap.Int64("e", fetchEndMS))
@@ -108,10 +107,6 @@ func saveInit(sess *orm.Queries, save *SaveKline) *errs.Error {
 			time.Sleep(time.Second * 2)
 		}
 	}
-	_, err = sess.InsertKLinesAuto(save.TimeFrame, save.Sid, save.Arr)
-	if err != nil {
-		return err
-	}
 	log.Info("first fetch ok", zap.String("pair", exs.Symbol), zap.Int64("s", endMS),
 		zap.Int64("e", fetchEndMS))
 	return nil
@@ -128,8 +123,9 @@ func consumeWriteQ(workNum int) {
 			if err == nil {
 				defer conn.Release()
 				if _, ok := initSids[job.Sid]; !ok {
-					err = saveInit(sess, job)
-				} else {
+					err = fillPrevHole(sess, job)
+				}
+				if err == nil {
 					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, job.Arr)
 				}
 			}
@@ -150,17 +146,18 @@ type FetchJob struct {
 }
 
 type Miner struct {
-	spider     *LiveSpider
-	ExgName    string
-	Market     string
-	exchange   banexg.BanExchange
-	Fetchs     map[string]*FetchJob
-	KlineReady bool
-	KlinePairs map[string]bool
-	TradeReady bool
-	TradePairs map[string]bool
-	BookReady  bool
-	BookPairs  map[string]bool
+	spider       *LiveSpider
+	ExgName      string
+	Market       string
+	exchange     banexg.BanExchange
+	Fetchs       map[string]*FetchJob
+	KlineReady   bool
+	KlinePairs   map[string]bool
+	TradeReady   bool
+	TradePairs   map[string]bool
+	BookReady    bool
+	BookPairs    map[string]bool
+	IsWatchPrice bool
 }
 
 type LiveSpider struct {
@@ -213,6 +210,10 @@ func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 		m.watchOdBooks(valids)
 	} else if jobType == "ohlcv" || jobType == "uohlcv" {
 		m.watchKLines(valids)
+	} else if jobType == "price" {
+		m.watchPrices()
+	} else if jobType == "trade" {
+		m.watchTrades(valids)
 	} else {
 		log.Error("unknown sub type", zap.String("val", jobType))
 	}
@@ -232,10 +233,81 @@ func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
 			jobs = append(jobs, [2]string{p, timeFrame})
 		}
 		return m.exchange.UnWatchOHLCVs(jobs, nil)
+	} else if jobType == "price" {
+		return m.exchange.UnWatchMarkPrices(nil, nil)
+	} else if jobType == "trade" {
+		return m.exchange.UnWatchTrades(pairs, nil)
 	} else {
 		log.Error("unknown unsub type", zap.String("val", jobType))
 	}
 	return nil
+}
+
+func (m *Miner) watchTrades(pairs []string) {
+	if len(pairs) == 0 {
+		return
+	}
+	for _, p := range pairs {
+		m.TradePairs[p] = true
+	}
+	allPairs := utils.KeysOfMap(m.TradePairs)
+	out, err := m.exchange.WatchTrades(allPairs, nil)
+	if err != nil {
+		log.Error("watch trades fail", zap.String("exg", m.ExgName), zap.Error(err))
+		return
+	}
+	if m.TradeReady {
+		return
+	}
+	m.TradeReady = true
+	log.Info("start watch trades", zap.String("exg", m.ExgName), zap.Int("num", len(m.TradePairs)))
+	prefix := fmt.Sprintf("trade_%s_%s_", m.ExgName, m.Market)
+
+	go func() {
+		defer func() {
+			m.TradeReady = false
+			log.Info("watch trades stopped", zap.String("exg", m.ExgName))
+		}()
+		for item := range out {
+			err = m.spider.Broadcast(&utils.IOMsg{
+				Action: prefix,
+				Data:   item,
+			})
+			if err != nil {
+				log.Error("broadCast trade fail", zap.String("key", prefix), zap.Error(err))
+			}
+		}
+	}()
+}
+
+func (m *Miner) watchPrices() {
+	if m.IsWatchPrice {
+		return
+	}
+	out, err := m.exchange.WatchMarkPrices(nil, nil)
+	if err != nil {
+		log.Error("watch prices fail", zap.String("exg", m.ExgName), zap.Error(err))
+		return
+	}
+	m.IsWatchPrice = true
+	log.Info("start watch prices", zap.String("exg", m.ExgName))
+	prefix := fmt.Sprintf("price_%s_%s_", m.ExgName, m.Market)
+
+	go func() {
+		defer func() {
+			m.IsWatchPrice = false
+			log.Info("watch prices stopped", zap.String("exg", m.ExgName))
+		}()
+		for item := range out {
+			err = m.spider.Broadcast(&utils.IOMsg{
+				Action: prefix,
+				Data:   item,
+			})
+			if err != nil {
+				log.Error("broadCast price fail", zap.String("key", prefix), zap.Error(err))
+			}
+		}
+	}()
 }
 
 func (m *Miner) watchOdBooks(pairs []string) {
@@ -268,7 +340,9 @@ func (m *Miner) watchOdBooks(pairs []string) {
 				Action: prefix + book.Symbol,
 				Data:   book,
 			})
-			log.Error("broadCase odBook fail", zap.String("pair", book.Symbol), zap.Error(err))
+			if err != nil {
+				log.Error("broadCast odBook fail", zap.String("pair", book.Symbol), zap.Error(err))
+			}
 		}
 	}()
 }
@@ -309,7 +383,7 @@ func (m *Miner) watchKLines(pairs []string) {
 	unPrefix := "u" + prefix
 	tfSecs := utils.TFToSecs(timeFrame)
 
-	// pair_tf to sid map
+	// pair_tf to state map
 	subStateMap := map[string]*SubKLineState{}
 	getState := func(key string) *SubKLineState {
 		if val, ok := subStateMap[key]; ok {
@@ -449,6 +523,10 @@ func (s *LiveSpider) getMiner(exgName, market string) *Miner {
 			panic(err)
 		}
 		miner.init()
+		err = miner.SubPairs("price")
+		if err != nil {
+			log.Error("sub prices fail", zap.Error(err))
+		}
 		s.miners[key] = miner
 		log.Info("start miner for", zap.String("e", exgName), zap.String("m", market))
 	}

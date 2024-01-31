@@ -32,3 +32,12 @@ EnvProd 是否使用正式网络
 func EnvProd() bool {
 	return RunEnv == RunEnvProd
 }
+
+/*
+SetPairMs
+更新bot端从爬虫收到的标的最新时间和等待间隔
+*/
+func SetPairMs(pair string, barMS, waitMS int64) {
+	PairCopiedMs[pair] = [2]int64{barMS, waitMS}
+	LastBarMs = max(LastBarMs, barMS)
+}

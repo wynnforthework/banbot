@@ -15,3 +15,10 @@ type NotifyKLines struct {
 	Interval int // 推送更新间隔, <= TFSecs
 	Arr      []*banexg.Kline
 }
+
+type KLineMsg struct {
+	NotifyKLines
+	ExgName string // 交易所名称
+	Market  string // 市场
+	Pair    string //币种
+}

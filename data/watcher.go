@@ -2,24 +2,40 @@ package data
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/bytedance/sonic"
 	"go.uber.org/zap"
+	"strings"
 )
 
 type KLineWatcher struct {
 	*utils.ClientIO
-	jobs     map[string]PairTFCache
-	initMsgs []*utils.IOMsg
+	jobs       map[string]PairTFCache
+	initMsgs   []*utils.IOMsg
+	OnKLineMsg func(msg *KLineMsg) // 收到爬虫K线消息
+	OnTrade    func(exgName, market string, trade *banexg.Trade)
 }
 
 type WatchJob struct {
 	Symbol    string
 	TimeFrame string
 	Since     int64
+}
+
+func (c *PairTFCache) getFinishes(ohlcvs []*banexg.Kline, lastFinish bool) []*banexg.Kline {
+	if len(ohlcvs) == 0 {
+		return ohlcvs
+	}
+	c.WaitBar = nil
+	if !lastFinish {
+		c.WaitBar = ohlcvs[len(ohlcvs)-1]
+		ohlcvs = ohlcvs[:len(ohlcvs)-1]
+	}
+	return ohlcvs
 }
 
 func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
@@ -33,7 +49,7 @@ func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
 	}
 	res.Listens["uohlcv"] = res.onSpiderBar
 	res.Listens["ohlcv"] = res.onSpiderBar
-	res.Listens["update_price"] = res.onPriceUpdate
+	res.Listens["price"] = res.onPriceUpdate
 	res.Listens["trade"] = res.onTrades
 	res.Listens["book"] = res.onBook
 	res.ReInitConn = func() {
@@ -106,18 +122,100 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 }
 
 func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
-	msgText, _ := sonic.MarshalString(data)
-	log.Info("receive ohlcv", zap.String("k", key), zap.String("t", msgText))
+	if w.OnKLineMsg == nil {
+		return
+	}
+	parts := strings.Split(key, "_")
+	msgType, exgName, market, pair := parts[0], parts[1], parts[2], parts[3]
+	job, ok := w.jobs[fmt.Sprintf("%s_%s", pair, msgType)]
+	if !ok {
+		// 未监听，忽略
+		return
+	}
+	var bars NotifyKLines
+	if !utils.DecodeMsgData(data, &bars, "onSpiderBar") {
+		return
+	}
+	if len(bars.Arr) == 0 {
+		return
+	}
+	// 更新收到的时间戳
+	lastBarMS := bars.Arr[len(bars.Arr)-1].Time
+	tfMSecs := int64(bars.TFSecs * 1000)
+	core.SetPairMs(pair, lastBarMS+tfMSecs, tfMSecs)
+	var msg = &KLineMsg{
+		NotifyKLines: bars,
+		ExgName:      exgName,
+		Market:       market,
+		Pair:         pair,
+	}
+	if msgType == "uohlcv" {
+		w.OnKLineMsg(msg)
+		return
+	}
+	// 归集更新指定的周期
+	var finishes []*banexg.Kline
+	if bars.TFSecs < job.TFSecs {
+		//和旧的bar_row合并更新，判断是否有完成的bar
+		var olds []*banexg.Kline
+		if job.WaitBar != nil {
+			olds = append(olds, job.WaitBar)
+		}
+		finishes = job.getFinishes(utils.BuildOHLCV(bars.Arr, job.TFSecs, 0, olds, tfMSecs))
+	} else {
+		finishes = bars.Arr
+	}
+	if len(finishes) > 0 {
+		msg.Arr = finishes
+		w.OnKLineMsg(msg)
+	}
 }
 
 func (w *KLineWatcher) onPriceUpdate(key string, data interface{}) {
-
+	parts := strings.Split(key, "_")
+	exgName, market := parts[1], parts[2]
+	if exgName != core.ExgName || market != core.Market {
+		return
+	}
+	var msg map[string]float64
+	if !utils.DecodeMsgData(data, &msg, "onPriceUpdate") {
+		return
+	}
+	for pair, price := range msg {
+		core.SetPrice(pair, price)
+	}
 }
 
 func (w *KLineWatcher) onTrades(key string, data interface{}) {
-
+	if w.OnTrade == nil {
+		return
+	}
+	parts := strings.Split(key, "_")
+	exgName, market := parts[1], parts[2]
+	var trade banexg.Trade
+	if !utils.DecodeMsgData(data, &trade, "onTrades") {
+		return
+	}
+	w.OnTrade(exgName, market, &trade)
 }
 
 func (w *KLineWatcher) onBook(key string, data interface{}) {
-
+	parts := strings.Split(key, "_")
+	msgType, exgName, market, pair := parts[0], parts[1], parts[2], parts[3]
+	if exgName != core.ExgName || market != core.Market {
+		return
+	}
+	_, ok := w.jobs[fmt.Sprintf("%s_%s", pair, msgType)]
+	if !ok {
+		// 未监听，忽略
+		return
+	}
+	var book banexg.OrderBook
+	if !utils.DecodeMsgData(data, &book, "onBook") {
+		return
+	}
+	if book.Symbol == "" {
+		return
+	}
+	core.OdBooks[pair] = &book
 }

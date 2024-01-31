@@ -291,7 +291,7 @@ func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr 
 	toTfSecs := utils.TFToSecs(timeFrame)
 	fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
 	merged, _ := utils.BuildOHLCV(arr, toTfSecs, 0, nil, fromTfMSecs)
-	out := merged[0]
+	out := merged[len(merged)-1]
 	return &KlineUn{
 		Sid:       sid,
 		StartMs:   startMS,
@@ -603,7 +603,10 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 	if len(unFinishJobs) > 0 {
 		var err *errs.Error
 		if len(klines) == 0 {
-			klines, err = q.QueryOHLCV(sid, timeFrame, startMS, endMS, 0, true)
+			// 取最大周期的对齐后第一个时间作为开始时间
+			msecs := unFinishJobs[len(unFinishJobs)-1].MSecs
+			startAlign := utils.AlignTfMSecs(startMS, msecs)
+			klines, err = q.QueryOHLCV(sid, timeFrame, startAlign, endMS, 0, true)
 			if err != nil {
 				return err
 			}
