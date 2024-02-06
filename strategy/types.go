@@ -3,6 +3,7 @@ package strategy
 import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banexg"
 	ta "github.com/banbox/banta"
 )
 
@@ -11,29 +12,29 @@ type PickTimeFrameFunc func(exg string, symbol string, tfScores []*core.TfScore)
 
 type TradeStagy struct {
 	Name         string
-	Version      uint16
-	WarmupNum    uint16
+	Version      int
+	WarmupNum    int
 	MinTfScore   float64
 	WatchBook    bool
 	DrawDownExit bool
 	StakeAmount  float64
 	AllowTFs     []string // 允许运行的时间周期，不提供时使用全局配置
-	PairInfos    []*PairSub
 
+	OnPairInfos         func(s *StagyJob) []*PairSub
 	OnStartUp           func(s *StagyJob)
 	OnBar               func(s *StagyJob)
-	OnInfoBar           func(s *StagyJob, info *PairSub)      //其他依赖的bar数据
-	OnTrades            func(s *StagyJob, trades []*Trade)    // 逐笔交易数据
-	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) //自定义订单退出逻辑
-	GetDrawDownExitRate CalcDDExitRate                        // 计算跟踪止盈回撤退出的比率
-	PickTimeFrame       PickTimeFrameFunc                     // 为指定币选择适合的交易周期
-	OnShutDown          func(s *StagyJob)                     // 机器人停止时回调
+	OnInfoBar           func(s *StagyJob, pair, tf string)             //其他依赖的bar数据
+	OnTrades            func(s *StagyJob, trades []*banexg.Trade)      // 逐笔交易数据
+	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) *ExitReq //自定义订单退出逻辑
+	GetDrawDownExitRate CalcDDExitRate                                 // 计算跟踪止盈回撤退出的比率
+	PickTimeFrame       PickTimeFrameFunc                              // 为指定币选择适合的交易周期
+	OnShutDown          func(s *StagyJob)                              // 机器人停止时回调
 }
 
 type PairSub struct {
 	Pair      string
 	TimeFrame string
-	WarmupNum uint16
+	WarmupNum int
 }
 
 type StagyJob struct {
@@ -45,8 +46,8 @@ type StagyJob struct {
 	Symbol        *orm.ExSymbol     //当前运行的币种
 	TimeFrame     string            //当前运行的时间周期
 	TPMaxs        map[int64]float64 // 订单最大盈利时价格
-	EnterNum      uint32            //记录已提交入场订单数量，避免访问数据库过于频繁
-	CheckMS       uint32            //上次处理信号的时间戳，13位毫秒
+	EnterNum      int               //记录已提交入场订单数量，避免访问数据库过于频繁
+	CheckMS       int64             //上次处理信号的时间戳，13位毫秒
 	OpenLong      bool              // 是否允许开多
 	OpenShort     bool              //是否允许开空
 	CloseLong     bool              //是否允许平多
@@ -60,15 +61,15 @@ type StagyJob struct {
 	More          interface{}       // 策略自定义的额外信息
 }
 
-type Trade struct {
-}
-
 /*
+EnterReq
 打开一个订单。默认开多。如需开空short=False
 */
 type EnterReq struct {
 	Tag        string  // 入场信号
 	Short      bool    // 是否做空
+	StgyName   string  // 策略名称
+	OrderType  string  // 订单类型
 	Limit      float64 //限价单入场价格，指定时订单将作为限价单提交
 	CostRate   float64 //开仓倍率、默认按配置1倍。用于计算LegalCost
 	LegalCost  float64 //花费法币金额。指定时忽略CostRate
@@ -79,15 +80,19 @@ type EnterReq struct {
 }
 
 /*
+ExitReq
 请求平仓
 */
 type ExitReq struct {
 	Tag        string  //退出信号
-	Short      bool    //是否平空，默认否
+	Dirt       string  // long/short/both
+	StgyName   string  // 策略名称
+	OrderType  string  // 订单类型
 	Limit      float64 //限价单退出价格，指定时订单将作为限价单提交
 	ExitRate   float64 //退出比率，默认100%即所有订单全部退出
 	Amount     float64 //要退出的标的数量。指定时ExitRate无效
 	EnterTag   string  //只退出入场信号为EnterTag的订单
 	OrderID    int64   //只退出指定订单
 	UnOpenOnly bool    //True时只退出尚未入场的订单
+	Force      bool    //是否强制退出
 }

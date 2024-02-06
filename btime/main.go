@@ -126,6 +126,28 @@ func dateToMS(layout, timeStr string) int64 {
 	return t.UnixMilli()
 }
 
+/*
+ToDateStr
+将时间戳转为时间字符串
+*/
+func ToDateStr(timestamp int64, format string) string {
+	var t time.Time
+	if timestamp > 1000000000000 {
+		// 13位毫秒时间戳
+		seconds := timestamp / 1000             // 秒
+		nanoseconds := (timestamp % 1000) * 1e6 // 毫秒转为纳秒
+		t = time.Unix(seconds, nanoseconds)
+	} else {
+		// 10位秒级时间戳
+		t = time.Unix(timestamp, 0)
+	}
+
+	if format == "" {
+		format = "2006-01-02 15:04:05"
+	}
+	return t.Format(format)
+}
+
 func CountDigit(text string) int {
 	count := 0
 	for _, c := range text {

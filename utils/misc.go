@@ -26,6 +26,24 @@ func KeysOfMap[M ~map[K]V, K comparable, V any](m M) []K {
 	return r
 }
 
+func ValsOfMap[M ~map[K]V, K comparable, V any](m M) []V {
+	r := make([]V, 0, len(m))
+	for _, v := range m {
+		r = append(r, v)
+	}
+	return r
+}
+
+func CutMap[M ~map[K]V, K comparable, V any](m M, keys ...K) M {
+	r := make(M)
+	for _, k := range keys {
+		if v, ok := m[k]; ok {
+			r[k] = v
+		}
+	}
+	return r
+}
+
 func Check(err error) {
 	if err != nil {
 		panic(err)
@@ -44,4 +62,12 @@ func UnionArr[T comparable](arrs ...[]T) []T {
 		result = append(result, key)
 	}
 	return result
+}
+
+func MapArr[T1, T2 any](arr []T1, doMap func(T1) T2) []T2 {
+	var res = make([]T2, len(arr))
+	for i, item := range arr {
+		res[i] = doMap(item)
+	}
+	return res
 }

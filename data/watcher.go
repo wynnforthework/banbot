@@ -121,6 +121,20 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 	return nil
 }
 
+func (w *KLineWatcher) UnWatchJobs(exgName, marketType, jobType string, pairs []string) *errs.Error {
+	prefixs := w.getPrefixs(exgName, marketType, jobType)
+	tags := make([]string, 0, len(prefixs)*len(pairs))
+	for _, pair := range pairs {
+		for _, prefix := range prefixs {
+			tags = append(tags, fmt.Sprintf("%s_%s", prefix, pair))
+		}
+		jobKey := fmt.Sprintf("%s_%s", pair, jobType)
+		delete(w.jobs, jobKey)
+		delete(core.PairCopiedMs, pair)
+	}
+	return w.WriteMsg(&utils.IOMsg{Action: "unsubscribe", Data: tags})
+}
+
 func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 	if w.OnKLineMsg == nil {
 		return

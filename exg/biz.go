@@ -7,7 +7,6 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/bex"
 	"github.com/banbox/banexg/errs"
-	"strconv"
 )
 
 func Setup() *errs.Error {
@@ -19,7 +18,7 @@ func Setup() *errs.Error {
 		return errs.NewMsg(core.ErrBadConfig, "exchange is required")
 	}
 	var err *errs.Error
-	DefExg, err = GetWith(exgCfg.Name, config.MarketType, config.ContractType)
+	DefExg, err = GetWith(exgCfg.Name, core.Market, core.ContractType)
 	return err
 }
 
@@ -66,12 +65,12 @@ func Get() (banexg.BanExchange, *errs.Error) {
 	if exgCfg == nil {
 		return nil, errs.NewMsg(core.ErrBadConfig, "exchange is required")
 	}
-	return GetWith(exgCfg.Name, config.MarketType, config.ContractType)
+	return GetWith(exgCfg.Name, core.Market, core.ContractType)
 }
 
 func GetWith(name, market, contractType string) (banexg.BanExchange, *errs.Error) {
 	if contractType == "" {
-		contractType = config.ContractType
+		contractType = core.ContractType
 	}
 	cacheKey := name + "@" + market + "@" + contractType
 	client, ok := exgMap[cacheKey]
@@ -88,7 +87,7 @@ func GetWith(name, market, contractType string) (banexg.BanExchange, *errs.Error
 	return client, err
 }
 
-func PrecCost(exchange banexg.BanExchange, symbol string, cost float64) (float64, *errs.Error) {
+func precNum(exchange banexg.BanExchange, symbol string, num float64, source string) (float64, *errs.Error) {
 	if exchange == nil {
 		if DefExg == nil {
 			return 0, errs.NewMsg(core.ErrExgNotInit, "exchange not loaded")
@@ -99,13 +98,29 @@ func PrecCost(exchange banexg.BanExchange, symbol string, cost float64) (float64
 	if err != nil {
 		return 0, err
 	}
-	text, err := exchange.PrecCost(market, cost)
-	if err != nil {
-		return 0, err
+	var res float64
+	if source == "cost" {
+		res, err = exchange.PrecCost(market, num)
+	} else if source == "price" {
+		res, err = exchange.PrecPrice(market, num)
+	} else if source == "amount" {
+		res, err = exchange.PrecAmount(market, num)
+	} else if source == "fee" {
+		res, err = exchange.PrecFee(market, num)
+	} else {
+		panic("invalid source to prec: " + source)
 	}
-	res, err2 := strconv.ParseFloat(text, 64)
-	if err2 != nil {
-		return 0, errs.New(errs.CodePrecDecFail, err2)
-	}
-	return res, nil
+	return res, err
+}
+
+func PrecCost(exchange banexg.BanExchange, symbol string, cost float64) (float64, *errs.Error) {
+	return precNum(exchange, symbol, cost, "cost")
+}
+
+func PrecPrice(exchange banexg.BanExchange, symbol string, price float64) (float64, *errs.Error) {
+	return precNum(exchange, symbol, price, "price")
+}
+
+func PrecAmount(exchange banexg.BanExchange, symbol string, amount float64) (float64, *errs.Error) {
+	return precNum(exchange, symbol, amount, "amount")
 }

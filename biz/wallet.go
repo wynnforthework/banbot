@@ -13,6 +13,48 @@ import (
 	"strings"
 )
 
+var (
+	Wallets *BanWallets
+)
+
+type ItemWallet struct {
+	Coin          string             // 币代码，非交易对
+	Available     float64            //可用余额
+	Pendings      map[string]float64 //买入卖出时锁定金额，键可以是订单id
+	Frozens       map[string]float64 //空单等长期冻结金额，键可以是订单id
+	UnrealizedPOL float64            //此币的公共未实现盈亏，合约用到，可抵扣其他订单保证金占用。每个bar重新计算
+	UsedUPol      float64            //已占用的未实现盈亏（用作其他订单的保证金）
+	Withdraw      float64            //从余额提现的，不会用于交易
+}
+
+type BanWallets struct {
+	Items         map[string]*ItemWallet
+	MarginAddRate float64 //出现亏损时，在亏损百分比后追加保证金
+	MinOpenRate   float64 //钱包余额不足单笔开单金额时，超过此比例即允许开小单
+}
+
+/*
+InitFakeWallets
+从配置文件初始化一个钱包对象
+*/
+func InitFakeWallets(symbols ...string) {
+	if Wallets == nil {
+		Wallets = &BanWallets{}
+	}
+	updates := make(map[string]float64)
+	if len(symbols) == 0 {
+		updates = config.WalletAmounts
+	} else {
+		for _, s := range symbols {
+			amount, ok := config.WalletAmounts[s]
+			if ok {
+				updates[s] = amount
+			}
+		}
+	}
+	Wallets.SetWallets(config.WalletAmounts)
+}
+
 func (iw *ItemWallet) Total(withUpol bool) float64 {
 	sumVal := iw.Available
 	for _, v := range iw.Pendings {
@@ -131,8 +173,8 @@ func (iw *ItemWallet) Reset() {
 	iw.Pendings = make(map[string]float64)
 }
 
-func (w *Wallets) SetWallets(data *config.WalletAmountsConfig) {
-	for k, v := range *data {
+func (w *BanWallets) SetWallets(data map[string]float64) {
+	for k, v := range data {
 		item, ok := w.Items[k]
 		if !ok {
 			item = &ItemWallet{Coin: k}
@@ -144,7 +186,7 @@ func (w *Wallets) SetWallets(data *config.WalletAmountsConfig) {
 	}
 }
 
-func (w *Wallets) Get(code string) *ItemWallet {
+func (w *BanWallets) Get(code string) *ItemWallet {
 	wallet, ok := w.Items[code]
 	if !ok {
 		wallet = &ItemWallet{Coin: code}
@@ -160,7 +202,7 @@ negative : 是否允许负数余额（空单用到）
 minRate: 最小开单倍率
 return: 实际扣除数量, errs.Error
 */
-func (w *Wallets) CostAva(odKey string, symbol string, amount float64, negative bool, minRate float64) (float64, *errs.Error) {
+func (w *BanWallets) CostAva(odKey string, symbol string, amount float64, negative bool, minRate float64) (float64, *errs.Error) {
 	wallet := w.Get(symbol)
 	srcAmount := wallet.Available
 	if minRate == 0 {
@@ -190,7 +232,7 @@ CostFrozen
 	从frozen中扣除，如果不够，从available扣除剩余部分
 	扣除后，添加到pending中
 */
-func (w *Wallets) CostFrozen(odKey string, symbol string, amount float64) float64 {
+func (w *BanWallets) CostFrozen(odKey string, symbol string, amount float64) float64 {
 	wallet, ok := w.Items[symbol]
 	if !ok {
 		return 0
@@ -226,7 +268,7 @@ func (w *Wallets) CostFrozen(odKey string, symbol string, amount float64) float6
 ConfirmPending
 从src中确认扣除，添加到tgt的余额中
 */
-func (w *Wallets) ConfirmPending(odKey string, srcKey string, srcAmount float64, tgtKey string, tgtAmount float64, toFrozen bool) bool {
+func (w *BanWallets) ConfirmPending(odKey string, srcKey string, srcAmount float64, tgtKey string, tgtAmount float64, toFrozen bool) bool {
 	src, srcExists := w.Items[srcKey]
 	if !srcExists {
 		return false
@@ -258,7 +300,7 @@ func (w *Wallets) ConfirmPending(odKey string, srcKey string, srcAmount float64,
 Cancel
 取消对币种的数量锁定(frozens/pendings)，重新加到available上
 */
-func (w *Wallets) Cancel(odKey string, symbol string, addAmount float64, fromPending bool) {
+func (w *BanWallets) Cancel(odKey string, symbol string, addAmount float64, fromPending bool) {
 	wallet, ok := w.Items[symbol]
 	if !ok {
 		return
@@ -293,16 +335,16 @@ EnterOd
 	如果余额不足，会发出异常
 	需要调用confirm_od_enter确认。也可调用cancel取消
 */
-func (wm *Wallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
+func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 	odKey := od.Key()
-	exs := orm.GetSymbolByID(od.Main.Sid)
+	exs := orm.GetSymbolByID(od.Sid)
 	if exs == nil {
-		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Main.Sid))
+		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
 	var legalCost float64
 
 	if od.Enter.Amount != 0 {
-		legalCost = od.Enter.Amount * core.GetPrice(od.Main.Symbol)
+		legalCost = od.Enter.Amount * core.GetPrice(od.Symbol)
 	} else {
 		legalCost = od.GetInfoFloat64(orm.OdInfoLegalCost)
 	}
@@ -311,7 +353,7 @@ func (wm *Wallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 	var quoteCost, quoteMargin float64
 
 	baseCode, quoteCode := exs.BaseQuote()
-	if isFuture || !od.Main.Short {
+	if isFuture || !od.Short {
 		// 期货合约，现货多单锁定quote
 		if legalCost < core.MinStakeAmount {
 			return 0, errs.NewMsg(core.ErrInvalidCost, fmt.Sprintf("margin cost must >= %v, cur: %.2f", core.MinStakeAmount, legalCost))
@@ -319,11 +361,11 @@ func (wm *Wallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 
 		if isFuture {
 			//期货合约，名义价值=保证金*杠杆
-			legalCost /= float64(od.Main.Leverage)
+			legalCost /= float64(od.Leverage)
 		}
 
-		quoteCost = wm.GetAmountByLegal(quoteCode, legalCost)
-		quoteCost, err := wm.CostAva(odKey, quoteCode, quoteCost, false, 0)
+		quoteCost = w.GetAmountByLegal(quoteCode, legalCost)
+		quoteCost, err := w.CostAva(odKey, quoteCode, quoteCost, false, 0)
 
 		if err != nil {
 			return 0, err
@@ -332,17 +374,17 @@ func (wm *Wallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 		// 计算名义数量
 		quoteMargin = quoteCost
 		if isFuture {
-			quoteMargin *= float64(od.Main.Leverage)
+			quoteMargin *= float64(od.Leverage)
 		}
 
-		od.Main.QuoteCost, err = exg.PrecCost(nil, od.Main.Symbol, quoteMargin)
+		od.QuoteCost, err = exg.PrecCost(nil, od.Symbol, quoteMargin)
 		if err != nil {
 			return 0, err
 		}
 	} else {
 		// 现货空单，锁定base，允许金额为负
-		baseCost := wm.GetAmountByLegal(baseCode, legalCost)
-		baseCost, err := wm.CostAva(odKey, baseCode, baseCost, true, 0)
+		baseCost := w.GetAmountByLegal(baseCode, legalCost)
+		baseCost, err := w.CostAva(odKey, baseCode, baseCost, true, 0)
 		if err != nil {
 			return 0, err
 		}
@@ -352,13 +394,13 @@ func (wm *Wallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 	return legalCost, nil
 }
 
-func (s *Wallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
+func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	if core.ProdMode() {
 		return
 	}
-	exs := orm.GetSymbolByID(od.Main.Sid)
+	exs := orm.GetSymbolByID(od.Sid)
 	if exs == nil {
-		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Main.Sid))
+		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
 	subOd := od.Enter
 	quoteAmount := enterPrice * subOd.Amount
@@ -367,48 +409,48 @@ func (s *Wallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	baseCode, quoteCode := exs.BaseQuote()
 	if exs.Market == "future" {
 		// 期货合约，只锁定定价币，不涉及base币的增加
-		quoteAmount /= float64(od.Main.Leverage)
+		quoteAmount /= float64(od.Leverage)
 		gotAmt := quoteAmount - curFee
-		s.ConfirmPending(od.Key(), quoteCode, quoteAmount, quoteCode, gotAmt, true)
-	} else if od.Main.Short {
+		w.ConfirmPending(od.Key(), quoteCode, quoteAmount, quoteCode, gotAmt, true)
+	} else if od.Short {
 		// 现货卖，手续费扣U
 		gotAmt := quoteAmount - curFee
-		s.ConfirmPending(od.Key(), baseCode, subOd.Amount, quoteCode, gotAmt, true)
+		w.ConfirmPending(od.Key(), baseCode, subOd.Amount, quoteCode, gotAmt, true)
 	} else {
 		// 现货买，手续费扣币
 		baseAmt := subOd.Amount - curFee
-		s.ConfirmPending(od.Key(), quoteCode, quoteAmount, baseCode, baseAmt, false)
+		w.ConfirmPending(od.Key(), quoteCode, quoteAmount, baseCode, baseAmt, false)
 	}
 }
-func (o *Wallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
+func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
 	if core.ProdMode() {
 		return
 	}
-	exs := orm.GetSymbolByID(od.Main.Sid)
+	exs := orm.GetSymbolByID(od.Sid)
 	if exs == nil {
-		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Main.Sid))
+		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
 	if exs.Market == "future" {
 		// 期货合约，不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
 		return
 	}
 	baseCode, quoteCode := exs.BaseQuote()
-	if od.Main.Short {
+	if od.Short {
 		// 现货空单，从quote的frozen卖，计算到quote的available，从base的pending未成交部分取消
-		o.Cancel(od.Key(), baseCode, 0, true)
+		w.Cancel(od.Key(), baseCode, 0, true)
 		// 这里不用预先扣除，价格可能为None
 	} else {
 		// 现货多单，从base的available卖，计算到quote的available，从quote的pending未成交部分取消
-		wallet := o.Get(baseCode)
+		wallet := w.Get(baseCode)
 
 		if wallet.Available > 0 && wallet.Available < baseAmount || math.Abs(wallet.Available/baseAmount-1) <= 0.01 {
 			baseAmount = wallet.Available
 			// 取消quote的pending未成交部分
-			o.Cancel(od.Key(), quoteCode, 0, true)
+			w.Cancel(od.Key(), quoteCode, 0, true)
 		}
 
 		if baseAmount > 0 {
-			_, err := o.CostAva(od.Key(), baseCode, baseAmount, false, 0.01)
+			_, err := w.CostAva(od.Key(), baseCode, baseAmount, false, 0.01)
 			if err != nil {
 				log.Error("exit order fail", zap.String("od", od.Key()))
 			}
@@ -416,13 +458,13 @@ func (o *Wallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
 	}
 }
 
-func (h *Wallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) *errs.Error {
+func (w *BanWallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) {
 	if core.ProdMode() {
-		return nil
+		return
 	}
-	exs := orm.GetSymbolByID(od.Main.Sid)
+	exs := orm.GetSymbolByID(od.Sid)
 	if exs == nil {
-		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Main.Sid))
+		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
 	subOd := od.Exit
 	curFee := subOd.Fee
@@ -431,29 +473,27 @@ func (h *Wallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) *errs.Err
 	if exs.Market == "future" {
 		//期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
 		//这里profit扣除了入场和出场手续费，前面入场手续费已扣过了，所以这里需要加入场手续费
-		h.Cancel(odKey, quoteCode, od.Main.Profit+od.Enter.Fee, false)
-	} else if od.Main.Short {
+		w.Cancel(odKey, quoteCode, od.Profit+od.Enter.Fee, false)
+	} else if od.Short {
 		//空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
 		orgAmount := od.Enter.Filled
 		if orgAmount > 0 {
 			//执行quote买入，中和base的欠债
-			h.CostFrozen(odKey, quoteCode, orgAmount*exitPrice)
+			w.CostFrozen(odKey, quoteCode, orgAmount*exitPrice)
 		}
 		if exitPrice < od.Enter.Price {
 			//空单，出场价低于入场价，有利润，将冻结的利润置为available
-			h.Cancel(odKey, quoteCode, 0, false)
+			w.Cancel(odKey, quoteCode, 0, false)
 		}
 		quoteAmount := exitPrice*orgAmount + curFee
-		h.ConfirmPending(odKey, quoteCode, quoteAmount, baseCode, orgAmount, false)
+		w.ConfirmPending(odKey, quoteCode, quoteAmount, baseCode, orgAmount, false)
 	} else {
 		//多单，从base的avaiable卖，兑换为quote的available
 		quoteAmount := exitPrice*subOd.Amount - curFee
-		h.ConfirmPending(odKey, baseCode, subOd.Amount, quoteCode, quoteAmount, false)
+		w.ConfirmPending(odKey, baseCode, subOd.Amount, quoteCode, quoteAmount, false)
 	}
-
-	return nil
 }
-func (w *Wallets) CutPart(srcKey string, tgtKey string, symbol string, rate float64) {
+func (w *BanWallets) CutPart(srcKey string, tgtKey string, symbol string, rate float64) {
 	item, exists := w.Items[symbol]
 	if !exists {
 		return
@@ -480,15 +520,15 @@ UpdateOds
 	保证金比率： (仓位名义价值 * 维持保证金率 - 维持保证金速算数) / (钱包余额 + 未实现盈亏)
 	钱包余额 = 初始净划入余额（含初始保证金） + 已实现盈亏 + 净资金费用 - 手续费
 */
-func (w *Wallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
+func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 	if len(odList) == 0 {
 		return nil
 	}
 
 	// 所有订单都是同一个定价币，提前获取此币的钱包
-	exs := orm.GetSymbolByID(odList[0].Main.Sid)
+	exs := orm.GetSymbolByID(odList[0].Sid)
 	if exs == nil {
-		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", odList[0].Main.Sid))
+		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", odList[0].Sid))
 	}
 	_, quoteCode := exs.BaseQuote()
 	wallet := w.Get(quoteCode)
@@ -496,7 +536,7 @@ func (w *Wallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 	// 计算是否爆仓
 	var totProfit float64
 	for _, od := range odList {
-		totProfit += od.Main.Profit
+		totProfit += od.Profit
 	}
 	wallet.UnrealizedPOL = totProfit
 	wallet.UsedUPol = 0
@@ -517,32 +557,32 @@ func (w *Wallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 		if od.Enter == nil || od.Enter.Filled == 0 {
 			continue
 		}
-		curPrice := core.GetPrice(od.Main.Symbol)
+		curPrice := core.GetPrice(od.Symbol)
 		// 计算名义价值
 		quoteValue := od.Enter.Filled * curPrice
 		// 计算当前所需保证金
-		curMargin := quoteValue / float64(od.Main.Leverage)
+		curMargin := quoteValue / float64(od.Leverage)
 		// 判断价格走势和开单方向是否相同
 		odDirt := 1.0
-		if od.Main.Short {
+		if od.Short {
 			odDirt = -1.0
 		}
 		odKey := od.Key()
 		isGood := (curPrice - od.Enter.Average) * odDirt
 		if isGood < 0 {
 			// 价格走势不同，产生亏损，判断是否自动补充保证金
-			if od.Main.Profit > 0 {
-				panic(fmt.Sprintf("od profit should < 0: %+v, profit: %f", od, od.Main.Profit))
+			if od.Profit > 0 {
+				panic(fmt.Sprintf("od profit should < 0: %+v, profit: %f", od, od.Profit))
 			}
 			// 计算维持保证金
-			minMargin := exchange.CalcMaintMargin(od.Main.Symbol, quoteValue) // 要求的最低保证金
-			if math.Abs(od.Main.Profit) >= (curMargin-minMargin)*w.MarginAddRate {
+			minMargin := exchange.CalcMaintMargin(od.Symbol, quoteValue) // 要求的最低保证金
+			if math.Abs(od.Profit) >= (curMargin-minMargin)*w.MarginAddRate {
 				// 当亏损达到初始保证金比例时，为此订单增加保证金避免强平
 				lossPct := w.MarginAddRate * 100
 				log.Debug("loss addMargin", zap.Float64("lossPct", lossPct),
-					zap.String("od", odKey), zap.Float64("profit", od.Main.Profit),
+					zap.String("od", odKey), zap.Float64("profit", od.Profit),
 					zap.Float64("margin", curMargin))
-				curMargin -= od.Main.Profit
+				curMargin -= od.Profit
 			}
 		}
 		// 价格走势和预期相同。所需保证金增长
@@ -554,11 +594,11 @@ func (w *Wallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 	return nil
 }
 
-func (wm *Wallets) GetAmountByLegal(symbol string, legalCost float64) float64 {
+func (w *BanWallets) GetAmountByLegal(symbol string, legalCost float64) float64 {
 	return legalCost / core.GetPrice(symbol)
 }
 
-func (w *Wallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols []string) ([]float64, []string, []float64) {
+func (w *BanWallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols []string) ([]float64, []string, []float64) {
 	var data map[string]*ItemWallet
 	if symbols != nil {
 		data = make(map[string]*ItemWallet)
@@ -590,7 +630,7 @@ func (w *Wallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols []st
 	return amounts, coins, prices
 }
 
-func (w *Wallets) calculateTotalLegal(valueExtractor func(*ItemWallet) float64, symbols []string) float64 {
+func (w *BanWallets) calculateTotalLegal(valueExtractor func(*ItemWallet) float64, symbols []string) float64 {
 	amounts, _, _ := w.calcLegal(valueExtractor, symbols)
 	total := 0.0
 	for _, amt := range amounts {
@@ -599,19 +639,19 @@ func (w *Wallets) calculateTotalLegal(valueExtractor func(*ItemWallet) float64, 
 	return total
 }
 
-func (w *Wallets) AvaLegal(symbols []string) float64 {
+func (w *BanWallets) AvaLegal(symbols []string) float64 {
 	return w.calculateTotalLegal(func(x *ItemWallet) float64 { return x.Available }, symbols)
 }
 
-func (w *Wallets) TotalLegal(symbols []string, withUPol bool) float64 {
+func (w *BanWallets) TotalLegal(symbols []string, withUPol bool) float64 {
 	return w.calculateTotalLegal(func(x *ItemWallet) float64 { return x.Total(withUPol) }, symbols)
 }
 
-func (w *Wallets) ProfitLegal(symbols []string) float64 {
+func (w *BanWallets) ProfitLegal(symbols []string) float64 {
 	return w.calculateTotalLegal(func(x *ItemWallet) float64 { return x.UnrealizedPOL }, symbols)
 }
 
-func (w *Wallets) GetWithdrawLegal(symbols []string) float64 {
+func (w *BanWallets) GetWithdrawLegal(symbols []string) float64 {
 	return w.calculateTotalLegal(func(x *ItemWallet) float64 { return x.Withdraw }, symbols)
 }
 
@@ -619,7 +659,7 @@ func (w *Wallets) GetWithdrawLegal(symbols []string) float64 {
 WithdrawLegal
 从余额提现，从而禁止一部分钱开单。
 */
-func (w *Wallets) WithdrawLegal(amount float64, symbols []string) {
+func (w *BanWallets) WithdrawLegal(amount float64, symbols []string) {
 	amounts, coins, prices := w.calcLegal(func(x *ItemWallet) float64 { return x.Available }, symbols)
 	total := 0.0
 	for _, amt := range amounts {
@@ -643,7 +683,7 @@ func (w *Wallets) WithdrawLegal(amount float64, symbols []string) {
 FiatValue
 返回给定币种的对法币价值。为空时返回所有币种
 */
-func (w *Wallets) FiatValue(withUpol bool, symbols ...string) float64 {
+func (w *BanWallets) FiatValue(withUpol bool, symbols ...string) float64 {
 	if len(symbols) == 0 {
 		for symbol := range w.Items {
 			symbols = append(symbols, symbol)

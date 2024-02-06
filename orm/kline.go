@@ -55,10 +55,8 @@ func init() {
 func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
 	tfSecs := utils.TFToSecs(timeframe)
 	tfMSecs := int64(tfSecs * 1000)
+	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, withUnFinish)
 	maxEndMs := endMs
-	if limit > 0 && startMs > 0 {
-		endMs = min(startMs+tfMSecs*int64(limit), endMs)
-	}
 	curMs := btime.TimeMS()
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
 	unFinishMS := utils.AlignTfMSecs(curMs, tfMSecs)
@@ -99,9 +97,7 @@ type KlineSid struct {
 func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs int64, limit int, handle func(int32, []*banexg.Kline)) *errs.Error {
 	tfSecs := utils.TFToSecs(timeframe)
 	tfMSecs := int64(tfSecs * 1000)
-	if limit > 0 {
-		endMs = min(startMs+tfMSecs*int64(limit), endMs)
-	}
+	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, false)
 	curMs := btime.TimeMS()
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
 	unFinishMS := utils.AlignTfMSecs(curMs, tfMSecs)
@@ -464,14 +460,19 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	var realStart, realEnd int64
 	err_ := row.Scan(&realStart, &realEnd)
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err_)
-	}
-	if realStart == 0 || realEnd == 0 {
+		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: int64(sid), Timeframe: timeFrame, Start: startMS, Stop: endMS})
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
 		return nil
 	}
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
-	realStart = min(realStart, startMS)
-	realEnd = max(realEnd+tfMSecs, endMS)
+	if realStart == 0 || realEnd == 0 {
+		realStart, realEnd = startMS, endMS
+	} else {
+		tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+		realStart = min(realStart, startMS)
+		realEnd = max(realEnd+tfMSecs, endMS)
+	}
 	oldStart, _ := q.GetKlineRange(sid, timeFrame)
 	if oldStart == 0 {
 		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: int64(sid), Timeframe: timeFrame, Start: realStart, Stop: realEnd})
@@ -716,6 +717,31 @@ func (q *Queries) GetKlineRange(sid int32, timeFrame string) (int64, int64) {
 	var start, stop int64
 	_ = row.Scan(&start, &stop)
 	return start, stop
+}
+
+func (q *Queries) GetKlineRanges(sidList []int32, timeFrame string) map[int32][2]int64 {
+	var texts = make([]string, len(sidList))
+	for i, sid := range sidList {
+		texts[i] = fmt.Sprintf("%v", sid)
+	}
+	sidText := strings.Join(texts, ", ")
+	sql := fmt.Sprintf("select sid,start,stop from kinfo where timeframe=$1 and sid in (%v)", sidText)
+	rows, err_ := q.db.Query(context.Background(), sql, timeFrame)
+	if err_ != nil {
+		return map[int32][2]int64{}
+	}
+	res := make(map[int32][2]int64)
+	defer rows.Close()
+	for rows.Next() {
+		var start, stop int64
+		var sid int32
+		err_ = rows.Scan(&sid, &start, &stop)
+		if err_ != nil {
+			continue
+		}
+		res[sid] = [2]int64{start, stop}
+	}
+	return res
 }
 
 func (q *Queries) DelKHoles(ids ...int) *errs.Error {

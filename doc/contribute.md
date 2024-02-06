@@ -13,8 +13,8 @@ exg
   config  core
 orm
   btime  config  utils  core  
-biz:
-  config, core, exg, orm
 strategy
   orm utils config core products 
+biz:
+  config, core, exg, orm, strategy
 ```

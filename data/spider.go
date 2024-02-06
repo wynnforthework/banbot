@@ -15,6 +15,19 @@ import (
 	"time"
 )
 
+type NotifyKLines struct {
+	TFSecs   int
+	Interval int // 推送更新间隔, <= TFSecs
+	Arr      []*banexg.Kline
+}
+
+type KLineMsg struct {
+	NotifyKLines
+	ExgName string // 交易所名称
+	Market  string // 市场
+	Pair    string //币种
+}
+
 /*
 getCheckInterval
 根据监听的交易对和时间帧。计算最小检查间隔。
@@ -86,7 +99,7 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) *errs.Error {
 	var saveNum int
 	for tryCount <= 5 {
 		tryCount += 1
-		saveNum, err = orm.DownOHLCV2DB(sess, exchange, exs, save.TimeFrame, endMS, fetchEndMS)
+		saveNum, err = sess.DownOHLCV2DB(exchange, exs, save.TimeFrame, endMS, fetchEndMS)
 		if err != nil {
 			return err
 		}
@@ -390,7 +403,7 @@ func (m *Miner) watchKLines(pairs []string) {
 			return val
 		}
 		pair := strings.Split(key, "_")[0]
-		exs, err := orm.GetSymbol(m.ExgName, m.Market, pair)
+		exs, err := orm.GetExSymbol(m.exchange, pair)
 		if err != nil {
 			log.Error("save kline fail", zap.String("key", key), zap.Error(err))
 			subStateMap[key] = nil

@@ -87,3 +87,57 @@ where id = $1;
 select * from exorder
 where inout_id=$1;
 
+-- name: AddIOrder :one
+insert into iorder ("task_id", "symbol", "sid", "timeframe", "short", "status",
+                    "enter_tag", "init_price", "quote_cost", "exit_tag", "leverage",
+                    "enter_at", "exit_at", "strategy", "stg_ver", "profit_rate", "profit", "info")
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    RETURNING id;
+
+-- name: SetIOrder :exec
+update iorder set
+      "task_id" = $1,
+      "symbol" = $2,
+      "sid" = $3,
+      "timeframe" = $4,
+      "short" = $5,
+      "status" = $6,
+      "enter_tag" = $7,
+      "init_price" = $8,
+      "quote_cost" = $9,
+      "exit_tag" = $10,
+      "leverage" = $11,
+      "enter_at" = $12,
+      "exit_at" = $13,
+      "strategy" = $14,
+      "stg_ver" = $15,
+      "profit_rate" = $16,
+      "profit" = $17,
+      "info" = $18
+    WHERE id = $19;
+
+-- name: AddExOrder :one
+insert into exorder ("task_id", "inout_id", "symbol", "enter", "order_type", "order_id", "side",
+                     "create_at", "price", "average", "amount", "filled", "status", "fee", "fee_type", "update_at")
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    RETURNING id;
+
+-- name: SetExOrder :exec
+update exorder set
+       "task_id" = $1,
+       "inout_id" = $2,
+       "symbol" = $3,
+       "enter" = $4,
+       "order_type" = $5,
+       "order_id" = $6,
+       "side" = $7,
+       "create_at" = $8,
+       "price" = $9,
+       "average" = $10,
+       "amount" = $11,
+       "filled" = $12,
+       "status" = $13,
+       "fee" = $14,
+       "fee_type" = $15,
+       "update_at" = $16
+    where id = $17;

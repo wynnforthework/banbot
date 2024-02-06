@@ -131,16 +131,13 @@ func (s *StagyJob) OpenOrder(req *EnterReq) error {
 }
 
 func (s *StagyJob) CloseOrders(req *ExitReq) error {
-	if req.Short && !s.CloseShort || !req.Short && !s.CloseLong {
-		var dirType = "long"
-		if req.Short {
-			dirType = "short"
-		}
+	dirtBoth := req.Dirt == core.OdDirtBoth
+	if !s.CloseShort && (dirtBoth || req.Dirt == core.OdDirtShort) || !s.CloseLong && (dirtBoth || req.Dirt == core.OdDirtLong) {
 		log.Warn("close order disabled",
 			zap.String("strategy", s.Stagy.Name),
 			zap.String("pair", s.Symbol.Symbol),
 			zap.String("tag", req.Tag),
-			zap.String("dir", dirType))
+			zap.String("dirt", req.Dirt))
 		return fmt.Errorf("close order disabled")
 	}
 	if req.Tag == "" {
@@ -162,15 +159,15 @@ func (s *StagyJob) CloseOrders(req *ExitReq) error {
 func (s *StagyJob) getMaxTp(od *orm.InOutOrder) (float64, float64, float64) {
 	entPrice := od.Enter.Average
 	if entPrice == 0 {
-		entPrice = od.Main.InitPrice
+		entPrice = od.InitPrice
 	}
-	exmPrice, ok := s.TPMaxs[od.Main.ID]
+	exmPrice, ok := s.TPMaxs[od.ID]
 	if !ok {
-		exmPrice = od.Main.InitPrice
+		exmPrice = od.InitPrice
 	}
 	var cmp func(float64, float64) float64
 	var price float64
-	if od.Main.Short {
+	if od.Short {
 		price = s.Env.Low.Get(0)
 		cmp = func(f float64, f2 float64) float64 {
 			return min(f, f2)
@@ -182,7 +179,7 @@ func (s *StagyJob) getMaxTp(od *orm.InOutOrder) (float64, float64, float64) {
 		}
 	}
 	exmPrice = cmp(exmPrice, price)
-	s.TPMaxs[od.Main.ID] = exmPrice
+	s.TPMaxs[od.ID] = exmPrice
 	maxTPVal := math.Abs(exmPrice - entPrice)
 	maxChg := maxTPVal / entPrice
 	if utils.EqualNearly(maxTPVal, 0.0) {
@@ -223,7 +220,7 @@ func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 		return 0
 	}
 	odDirt := 1.0
-	if od.Main.Short {
+	if od.Short {
 		odDirt = -1
 	}
 	return entPrice * (1 + exmChg*(1-stopRate)*odDirt)
@@ -239,11 +236,11 @@ func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) error {
 	}
 	curPrice := s.Env.Close.Get(0)
 	odDirt := 1.0
-	if od.Main.Short {
+	if od.Short {
 		odDirt = -1
 	}
 	if (spVal-curPrice)*odDirt >= 0 {
-		return s.CloseOrders(&ExitReq{Tag: "take", OrderID: od.Main.ID})
+		return s.CloseOrders(&ExitReq{Tag: "take", OrderID: od.ID})
 	}
 	od.SetInfo(orm.OdInfoStopLoss, spVal)
 	return nil
@@ -274,10 +271,10 @@ func (s *StagyJob) Position(side string, enterTag string) float64 {
 	var totalCost float64
 	isShort := side == "short"
 	for _, od := range s.Orders {
-		if enterTag != "" && od.Main.EnterTag != enterTag {
+		if enterTag != "" && od.EnterTag != enterTag {
 			continue
 		}
-		if side != "" && od.Main.Short != isShort {
+		if side != "" && od.Short != isShort {
 			continue
 		}
 		totalCost += od.EnterCost()

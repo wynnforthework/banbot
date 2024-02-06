@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -63,7 +64,8 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 			continue
 		}
 		lastEndMS := data[len(data)-1].Time
-		since = nextStart(data[0].Time, lastEndMS+tfMSecs)
+		curStart := min(since, data[0].Time)
+		since = nextStart(curStart, lastEndMS+tfMSecs)
 		if lastEndMS > maxBarEndMS {
 			endPos := len(data) - 1
 			for endPos >= 0 && data[endPos].Time > maxBarEndMS {
@@ -86,19 +88,25 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 DownOHLCV2DB
 下载K线到数据库，应在事务中调用此方法，否则查询更新相关数据会有错误
 */
-func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64) (int, *errs.Error) {
+func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64) (int, *errs.Error) {
 	startMS = exs.GetValidStart(startMS)
+	oldStart, oldEnd := q.GetKlineRange(exs.ID, timeFrame)
+	return downOHLCV2DBRange(exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd)
+}
+
+/*
+downOHLCV2DBRange
+此函数会用于多线程下载，一个数据库会话只能用于一个线程，所以不能传入Queries
+*/
+func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS, oldStart, oldEnd int64) (int, *errs.Error) {
+	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs {
+		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
+		return 0, nil
+	}
 	chanDown := make(chan core.DownRange, 10)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	oldStart, oldEnd := sess.GetKlineRange(exs.ID, timeFrame)
 	if oldStart == 0 {
 		// 数据不存在，下载全部区间
 		chanDown <- core.DownRange{Start: startMS, End: endMS}
-	} else if oldStart <= startMS && endMS <= oldEnd {
-		// 完全处于已下载的区间，无需下载
-		close(chanDown)
-		return 0, nil
 	} else if startMS < oldStart && endMS > oldEnd {
 		// 范围超过已下载区间前后范围
 		chanDown <- core.DownRange{Start: startMS, End: oldStart, Reverse: true}
@@ -116,11 +124,15 @@ func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 	wg.Add(2)
 	var err *errs.Error
 	saveNum := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	// 启动一个goroutine下载K线，写入到chanDown
 	go func() {
-		defer wg.Done()
-		defer close(chanKline)
+		defer func() {
+			wg.Done()
+			close(chanKline)
+		}()
 		for {
 			select {
 			case <-ctx.Done():
@@ -135,6 +147,7 @@ func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 				}
 				err = FetchApiOHLCV(ctx, exchange, exs.Symbol, timeFrame, start, stop, chanKline)
 				if err != nil {
+					log.Error("fetch ohlcv fail", zap.String("p", exs.Symbol), zap.Int64("st", start), zap.Error(err))
 					return
 				}
 			}
@@ -144,6 +157,13 @@ func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 	go func() {
 		defer wg.Done()
 		var num int64
+		sess, conn, err := Conn(nil)
+		if err != nil {
+			log.Error("get db sess fail to save klines", zap.Error(err))
+			cancel()
+			return
+		}
+		defer conn.Release()
 		for {
 			select {
 			case <-ctx.Done():
@@ -168,6 +188,11 @@ func DownOHLCV2DB(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, tim
 	if err != nil {
 		return saveNum, err
 	}
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return saveNum, err
+	}
+	defer conn.Release()
 	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS, nil)
 	return saveNum, err
 }
@@ -180,7 +205,8 @@ AutoFetchOHLCV
 */
 func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
 	limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
-	startMS, endMS = parseDownArgs(timeFrame, startMS, endMS, limit, withUnFinish)
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, withUnFinish)
 	downTF, err := GetDownTF(timeFrame)
 	if err != nil {
 		return nil, err
@@ -190,11 +216,61 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 		return nil, err
 	}
 	defer conn.Release()
-	_, err = DownOHLCV2DB(sess, exchange, exs, downTF, startMS, endMS)
+	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS)
 	if err != nil {
 		return nil, err
 	}
 	return sess.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+}
+
+/*
+BulkDownOHLCV
+批量同时下载K线
+*/
+func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, timeFrame string, startMS, endMS int64, limit int) *errs.Error {
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, false)
+	downTF, err := GetDownTF(timeFrame)
+	if err != nil {
+		return err
+	}
+	guard := make(chan struct{}, core.DownOHLCVParallel)
+	var retErr *errs.Error
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	var pBar = progressbar.Default(int64(len(exsList)))
+	defer pBar.Close()
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return err
+	}
+	sidList := utils.KeysOfMap(exsList)
+	kRanges := sess.GetKlineRanges(sidList, timeFrame)
+	conn.Release()
+	for _, exs := range exsList {
+		// 如果达到并发限制，这里会阻塞等待
+		guard <- struct{}{}
+		if retErr != nil {
+			// 下载出错，中断返回
+			break
+		}
+		wg.Add(1)
+		go func(exs_ *ExSymbol) {
+			defer func() {
+				// 完成一个任务，从chan弹出一个
+				<-guard
+				wg.Done()
+				_ = pBar.Add(1)
+			}()
+			var oldStart, oldEnd = int64(0), int64(0)
+			if krange, ok := kRanges[exs_.ID]; ok {
+				oldStart, oldEnd = krange[0], krange[1]
+			}
+			_, retErr = downOHLCV2DBRange(exchange, exs_, downTF, startMS, endMS, oldStart, oldEnd)
+		}(exs)
+	}
+	wg.Wait()
+	return retErr
 }
 
 /*
@@ -205,49 +281,15 @@ FastBulkOHLCV
 */
 func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame string,
 	startMS, endMS int64, limit int, handler func(string, string, []*banexg.Kline)) *errs.Error {
-	startMS, endMS = parseDownArgs(timeFrame, startMS, endMS, limit, false)
-	downTF, err := GetDownTF(timeFrame)
-	if err != nil {
-		return err
-	}
-	guard := make(chan struct{}, core.DownOHLCVParallel)
-	exgName := exchange.GetID()
-	var market *banexg.Market
-	var exs *ExSymbol
-	var retErr *errs.Error
-	sidMap := map[int32]string{}
-	sess, conn, err := Conn(nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	for _, symbol := range symbols {
-		market, err = exchange.GetMarket(symbol)
+	var exsMap = make(map[int32]*ExSymbol)
+	for _, pair := range symbols {
+		exs, err := GetExSymbol(exchange, pair)
 		if err != nil {
 			return err
 		}
-		exs, err = GetSymbol(exgName, market.Type, symbol)
-		if err != nil {
-			return err
-		}
-		// 如果达到并发限制，这里会阻塞等待
-		guard <- struct{}{}
-		if retErr != nil {
-			// 下载出错，中断返回
-			break
-		}
-		wg.Add(1)
-		sidMap[exs.ID] = symbol
-		go func(exs_ *ExSymbol) {
-			defer wg.Done()
-			_, retErr = DownOHLCV2DB(sess, exchange, exs_, downTF, startMS, endMS)
-			// 完成一个任务，从chan弹出一个
-			<-guard
-		}(exs)
+		exsMap[exs.ID] = exs
 	}
-	wg.Wait()
+	retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, limit)
 	if retErr != nil {
 		return retErr
 	}
@@ -256,30 +298,34 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	}
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	itemNum := (endMS - startMS) / tfMSecs
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
 	if itemNum < 1000 {
-		sidArr := utils.KeysOfMap(sidMap)
+		sidArr := utils.KeysOfMap(exsMap)
 		bulkHandler := func(sid int32, klines []*banexg.Kline) {
-			symbol, ok := sidMap[sid]
+			exs, ok := exsMap[sid]
 			if !ok {
 				return
 			}
-			handler(symbol, timeFrame, klines)
+			handler(exs.Symbol, timeFrame, klines)
 		}
 		return sess.QueryOHLCVBatch(sidArr, timeFrame, startMS, endMS, limit, bulkHandler)
 	}
 	// 单个数量过多，逐个查询
-	for sid, symbol := range sidMap {
+	for sid, exs := range exsMap {
 		kline, err := sess.QueryOHLCV(sid, timeFrame, startMS, endMS, limit, false)
 		if err != nil {
 			return err
 		}
-		handler(symbol, timeFrame, kline)
+		handler(exs.Symbol, timeFrame, kline)
 	}
 	return nil
 }
 
-func parseDownArgs(timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) (int64, int64) {
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+func parseDownArgs(tfMSecs int64, startMS, endMS int64, limit int, withUnFinish bool) (int64, int64) {
 	if startMS > 0 {
 		fixStartMS := utils.AlignTfMSecs(startMS, tfMSecs)
 		if startMS > fixStartMS {

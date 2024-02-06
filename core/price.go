@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/banbox/banexg"
 	"strings"
 )
 
@@ -31,4 +32,11 @@ func SetBarPrice(pair string, price float64) {
 
 func SetPrice(pair string, price float64) {
 	setDataPrice(prices, pair, price)
+}
+
+func IsMaker(pair, side string, price float64) bool {
+	curPrice := GetPrice(pair)
+	isBuy := side == banexg.OdSideBuy
+	isLow := price < curPrice
+	return isBuy == isLow
 }

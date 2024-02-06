@@ -27,10 +27,11 @@ func InitTask() *errs.Error {
 	}
 	ctx := context.Background()
 	var err_ error
+	var err *errs.Error
 	var task *BotTask
-	sess, conn, err_ := Conn(ctx)
-	if err_ != nil {
-		return errs.New(core.ErrDbConnFail, err_)
+	sess, conn, err := Conn(ctx)
+	if err != nil {
+		return err
 	}
 	defer conn.Release()
 	task, err_ = sess.FindTask(ctx, FindTaskParams{

@@ -77,3 +77,30 @@ func ConvertFloat64(i interface{}) float64 {
 		return 0
 	}
 }
+
+// 计算两个数的最大公约数（GCD）的函数，使用欧几里得算法
+func gcd(a, b int) int {
+	for b != 0 {
+		t := b
+		b = a % b
+		a = t
+	}
+	return a
+}
+
+/*
+GcdMultiple
+计算一个切片中所有元素的最大公约数
+*/
+func GcdInts(numbers []int) int {
+	if len(numbers) == 0 {
+		return 0 // 没有数时返回0
+	}
+
+	// 从第一个数字开始，逐个将其与后面的数字进行最大公约数计算
+	result := numbers[0]
+	for i := 1; i < len(numbers); i++ {
+		result = gcd(result, numbers[i])
+	}
+	return result
+}

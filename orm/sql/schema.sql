@@ -23,8 +23,8 @@ DROP TABLE IF EXISTS "public"."exorder";
 CREATE TABLE "public"."exorder"
 (
     "id"         BIGSERIAL    NOT NULL PRIMARY KEY,
-    "task_id"    int4         not null,
-    "inout_id"   int4         not null,
+    "task_id"    int8         not null,
+    "inout_id"   int8         not null,
     "symbol"     varchar(50)  not null,
     "enter"      bool         not null,
     "order_type" varchar(50)  not null,
@@ -53,7 +53,7 @@ DROP TABLE IF EXISTS "public"."iorder";
 CREATE TABLE "public"."iorder"
 (
     "id"          BIGSERIAL     NOT NULL PRIMARY KEY,
-    "task_id"     int4          not null,
+    "task_id"     int8          not null,
     "symbol"      varchar(50)   not null,
     "sid"         int4          not null,
     "timeframe"   varchar(5)    not null,

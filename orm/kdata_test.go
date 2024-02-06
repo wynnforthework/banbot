@@ -3,8 +3,8 @@ package orm
 import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
-	"github.com/banbox/banexg"
 	"testing"
 )
 
@@ -26,7 +26,7 @@ func TestAutoFetchOhlcv(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	exs, err := GetSymbol(exchange.GetID(), banexg.MarketLinear, "BTC/USDT:USDT")
+	exs, err := GetExSymbol(exchange, "BTC/USDT:USDT")
 	if err != nil {
 		panic(err)
 	}
@@ -60,5 +60,35 @@ func TestFetchOhlcvs(t *testing.T) {
 	}
 	for _, k := range arr {
 		fmt.Printf("{%v,%f,%f,%f,%f,%f},\n", k.Time, k.Open, k.High, k.Low, k.Close, k.Volume)
+	}
+}
+
+func TestBulkDownOHLCV(t *testing.T) {
+	err := initApp()
+	if err != nil {
+		panic(err)
+	}
+	exchange, err := exg.Get()
+	if err != nil {
+		panic(err)
+	}
+	_, err = exchange.LoadMarkets(false, nil)
+	if err != nil {
+		panic(err)
+	}
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Release()
+	err = sess.LoadExgSymbols(core.ExgName)
+	if err != nil {
+		panic(err)
+	}
+	exsMap := GetExSymbols(core.ExgName, core.Market)
+	startMS := int64(1696982400000)
+	err = BulkDownOHLCV(exchange, exsMap, "1d", startMS, 0, 1)
+	if err != nil {
+		panic(err)
 	}
 }

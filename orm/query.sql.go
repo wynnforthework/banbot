@@ -9,6 +9,111 @@ import (
 	"context"
 )
 
+const addExOrder = `-- name: AddExOrder :one
+insert into exorder ("task_id", "inout_id", "symbol", "enter", "order_type", "order_id", "side",
+                     "create_at", "price", "average", "amount", "filled", "status", "fee", "fee_type", "update_at")
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    RETURNING id
+`
+
+type AddExOrderParams struct {
+	TaskID    int32
+	InoutID   int32
+	Symbol    string
+	Enter     bool
+	OrderType string
+	OrderID   string
+	Side      string
+	CreateAt  int64
+	Price     float64
+	Average   float64
+	Amount    float64
+	Filled    float64
+	Status    int16
+	Fee       float64
+	FeeType   string
+	UpdateAt  int64
+}
+
+func (q *Queries) AddExOrder(ctx context.Context, arg AddExOrderParams) (int64, error) {
+	row := q.db.QueryRow(ctx, addExOrder,
+		arg.TaskID,
+		arg.InoutID,
+		arg.Symbol,
+		arg.Enter,
+		arg.OrderType,
+		arg.OrderID,
+		arg.Side,
+		arg.CreateAt,
+		arg.Price,
+		arg.Average,
+		arg.Amount,
+		arg.Filled,
+		arg.Status,
+		arg.Fee,
+		arg.FeeType,
+		arg.UpdateAt,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const addIOrder = `-- name: AddIOrder :one
+insert into iorder ("task_id", "symbol", "sid", "timeframe", "short", "status",
+                    "enter_tag", "init_price", "quote_cost", "exit_tag", "leverage",
+                    "enter_at", "exit_at", "strategy", "stg_ver", "profit_rate", "profit", "info")
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    RETURNING id
+`
+
+type AddIOrderParams struct {
+	TaskID     int32
+	Symbol     string
+	Sid        int64
+	Timeframe  string
+	Short      bool
+	Status     int16
+	EnterTag   string
+	InitPrice  float64
+	QuoteCost  float64
+	ExitTag    string
+	Leverage   int32
+	EnterAt    int64
+	ExitAt     int64
+	Strategy   string
+	StgVer     int32
+	ProfitRate float64
+	Profit     float64
+	Info       string
+}
+
+func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, error) {
+	row := q.db.QueryRow(ctx, addIOrder,
+		arg.TaskID,
+		arg.Symbol,
+		arg.Sid,
+		arg.Timeframe,
+		arg.Short,
+		arg.Status,
+		arg.EnterTag,
+		arg.InitPrice,
+		arg.QuoteCost,
+		arg.ExitTag,
+		arg.Leverage,
+		arg.EnterAt,
+		arg.ExitAt,
+		arg.Strategy,
+		arg.StgVer,
+		arg.ProfitRate,
+		arg.Profit,
+		arg.Info,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
 type AddKHolesParams struct {
 	Sid       int64
 	Timeframe string
@@ -89,6 +194,28 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*BotTask, err
 		&i.Info,
 	)
 	return &i, err
+}
+
+const delKHoleRange = `-- name: DelKHoleRange :exec
+delete from khole
+where sid = $1 and timeframe=$2 and start >= $3 and stop <= $4
+`
+
+type DelKHoleRangeParams struct {
+	Sid       int64
+	Timeframe string
+	Start     int64
+	Stop      int64
+}
+
+func (q *Queries) DelKHoleRange(ctx context.Context, arg DelKHoleRangeParams) error {
+	_, err := q.db.Exec(ctx, delKHoleRange,
+		arg.Sid,
+		arg.Timeframe,
+		arg.Start,
+		arg.Stop,
+	)
+	return err
 }
 
 const findTask = `-- name: FindTask :one
@@ -375,6 +502,140 @@ func (q *Queries) ListTasks(ctx context.Context) ([]*BotTask, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const setExOrder = `-- name: SetExOrder :exec
+update exorder set
+       "task_id" = $1,
+       "inout_id" = $2,
+       "symbol" = $3,
+       "enter" = $4,
+       "order_type" = $5,
+       "order_id" = $6,
+       "side" = $7,
+       "create_at" = $8,
+       "price" = $9,
+       "average" = $10,
+       "amount" = $11,
+       "filled" = $12,
+       "status" = $13,
+       "fee" = $14,
+       "fee_type" = $15,
+       "update_at" = $16
+    where id = $17
+`
+
+type SetExOrderParams struct {
+	TaskID    int32
+	InoutID   int32
+	Symbol    string
+	Enter     bool
+	OrderType string
+	OrderID   string
+	Side      string
+	CreateAt  int64
+	Price     float64
+	Average   float64
+	Amount    float64
+	Filled    float64
+	Status    int16
+	Fee       float64
+	FeeType   string
+	UpdateAt  int64
+	ID        int64
+}
+
+func (q *Queries) SetExOrder(ctx context.Context, arg SetExOrderParams) error {
+	_, err := q.db.Exec(ctx, setExOrder,
+		arg.TaskID,
+		arg.InoutID,
+		arg.Symbol,
+		arg.Enter,
+		arg.OrderType,
+		arg.OrderID,
+		arg.Side,
+		arg.CreateAt,
+		arg.Price,
+		arg.Average,
+		arg.Amount,
+		arg.Filled,
+		arg.Status,
+		arg.Fee,
+		arg.FeeType,
+		arg.UpdateAt,
+		arg.ID,
+	)
+	return err
+}
+
+const setIOrder = `-- name: SetIOrder :exec
+update iorder set
+      "task_id" = $1,
+      "symbol" = $2,
+      "sid" = $3,
+      "timeframe" = $4,
+      "short" = $5,
+      "status" = $6,
+      "enter_tag" = $7,
+      "init_price" = $8,
+      "quote_cost" = $9,
+      "exit_tag" = $10,
+      "leverage" = $11,
+      "enter_at" = $12,
+      "exit_at" = $13,
+      "strategy" = $14,
+      "stg_ver" = $15,
+      "profit_rate" = $16,
+      "profit" = $17,
+      "info" = $18
+    WHERE id = $19
+`
+
+type SetIOrderParams struct {
+	TaskID     int32
+	Symbol     string
+	Sid        int64
+	Timeframe  string
+	Short      bool
+	Status     int16
+	EnterTag   string
+	InitPrice  float64
+	QuoteCost  float64
+	ExitTag    string
+	Leverage   int32
+	EnterAt    int64
+	ExitAt     int64
+	Strategy   string
+	StgVer     int32
+	ProfitRate float64
+	Profit     float64
+	Info       string
+	ID         int64
+}
+
+func (q *Queries) SetIOrder(ctx context.Context, arg SetIOrderParams) error {
+	_, err := q.db.Exec(ctx, setIOrder,
+		arg.TaskID,
+		arg.Symbol,
+		arg.Sid,
+		arg.Timeframe,
+		arg.Short,
+		arg.Status,
+		arg.EnterTag,
+		arg.InitPrice,
+		arg.QuoteCost,
+		arg.ExitTag,
+		arg.Leverage,
+		arg.EnterAt,
+		arg.ExitAt,
+		arg.Strategy,
+		arg.StgVer,
+		arg.ProfitRate,
+		arg.Profit,
+		arg.Info,
+		arg.ID,
+	)
+	return err
 }
 
 const setKHole = `-- name: SetKHole :exec

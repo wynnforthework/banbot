@@ -90,7 +90,7 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 		}
 		symbolVols = symbolVols[:cutLen]
 	}
-	if f.Limit > len(symbolVols) {
+	if f.Limit > 0 && f.Limit < len(symbolVols) {
 		symbolVols = symbolVols[:f.Limit]
 	}
 	resPairs := make([]string, len(symbolVols))

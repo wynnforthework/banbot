@@ -18,8 +18,8 @@ type BotTask struct {
 
 type ExOrder struct {
 	ID        int64
-	TaskID    int32
-	InoutID   int32
+	TaskID    int64
+	InoutID   int64
 	Symbol    string
 	Enter     bool
 	OrderType string
@@ -47,7 +47,7 @@ type ExSymbol struct {
 
 type IOrder struct {
 	ID         int64
-	TaskID     int32
+	TaskID     int64
 	Symbol     string
 	Sid        int32
 	Timeframe  string

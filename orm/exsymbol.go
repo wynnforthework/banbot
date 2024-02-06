@@ -18,9 +18,9 @@ var (
 	symbolLock   sync.Mutex
 )
 
-func LoadExgSymbols(sess *Queries, exgName string) *errs.Error {
+func (q *Queries) LoadExgSymbols(exgName string) *errs.Error {
 	ctx := context.Background()
-	exsList, err := sess.ListSymbols(ctx, exgName)
+	exsList, err := q.ListSymbols(ctx, exgName)
 	if err != nil {
 		return errs.New(core.ErrDbReadFail, err)
 	}
@@ -32,6 +32,20 @@ func LoadExgSymbols(sess *Queries, exgName string) *errs.Error {
 	return nil
 }
 
+func GetExSymbols(exgName, market string) map[int32]*ExSymbol {
+	var res = make(map[int32]*ExSymbol)
+	for _, exs := range keySymbolMap {
+		if exgName != "" && exs.Exchange != exgName {
+			continue
+		}
+		if market != "" && exs.Market != market {
+			continue
+		}
+		res[exs.ID] = exs
+	}
+	return res
+}
+
 func GetSymbolByID(id int32) *ExSymbol {
 	item, ok := idSymbolMap[id]
 	if !ok {
@@ -40,8 +54,20 @@ func GetSymbolByID(id int32) *ExSymbol {
 	return item
 }
 
-func GetSymbol(exgName string, market string, symbol string) (*ExSymbol, *errs.Error) {
-	key := fmt.Sprintf("%s:%s:%s", exgName, market, symbol)
+func GetExSymbolCur(symbol string) (*ExSymbol, *errs.Error) {
+	exchange, err := exg.Get()
+	if err != nil {
+		return nil, err
+	}
+	return GetExSymbol(exchange, symbol)
+}
+
+func GetExSymbol(exchange banexg.BanExchange, symbol string) (*ExSymbol, *errs.Error) {
+	market, err := exchange.GetMarket(symbol)
+	if err != nil {
+		return nil, err
+	}
+	key := fmt.Sprintf("%s:%s:%s", exchange.GetID(), market.Type, symbol)
 	item, ok := keySymbolMap[key]
 	if !ok {
 		err := errs.NewMsg(core.ErrInvalidSymbol, "%s not exist in %d cache", symbol, len(keySymbolMap))
@@ -67,7 +93,7 @@ func EnsureExgSymbols(exchange banexg.BanExchange) *errs.Error {
 func EnsureCurSymbols(symbols []string) *errs.Error {
 	exsList := make([]*ExSymbol, 0, len(symbols))
 	exgId := config.Exchange.Name
-	marketType := config.MarketType
+	marketType := core.Market
 	for _, symbol := range symbols {
 		exsList = append(exsList, &ExSymbol{Exchange: exgId, Market: marketType, Symbol: symbol})
 	}
@@ -87,7 +113,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 	defer conn.Release()
 	if len(keySymbolMap) == 0 {
 		for exgId := range exgNames {
-			err = LoadExgSymbols(sess, exgId)
+			err = sess.LoadExgSymbols(exgId)
 			if err != nil {
 				return err
 			}
@@ -106,7 +132,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 	symbolLock.Lock()
 	defer symbolLock.Unlock()
 	for exgId := range exgNames {
-		err = LoadExgSymbols(sess, exgId)
+		err = sess.LoadExgSymbols(exgId)
 		if err != nil {
 			return err
 		}
@@ -124,7 +150,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
 	for exgId := range exgNames {
-		err = LoadExgSymbols(sess, exgId)
+		err = sess.LoadExgSymbols(exgId)
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,9 @@
 package core
 
-import "github.com/banbox/banexg"
+import (
+	"context"
+	"github.com/banbox/banexg"
+)
 
 var (
 	BotName      string                           // 当前机器人名称
@@ -11,16 +14,19 @@ var (
 	TFSecs       []*TFSecTuple                    // 所有涉及的时间周期
 	ExgName      string                           // 交易所名称
 	Market       string                           //当前市场
+	ContractType string                           // 当前合约类型
 	StgPairTfs   []*StgPairTf                     //策略、标的、周期
 	Pairs        []string                         //全局所有的标的
 	PairsMap     = make(map[string]bool)          //全局所有的标的
 	PairTfScores = make(map[string][]*TfScore)    // tf scores for pairs
 	ForbidPairs  = make(map[string]bool)          // 禁止交易的币种
+	NoEnterUntil int64                            // 禁止开单的截止13位时间戳
 	BookPairs    = make(map[string]bool)          //监听交易对的币种
 	PairCopiedMs = map[string][2]int64{}          // 所有标的从爬虫收到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的。
 	TfPairHits   = map[string]map[string]int{}    // tf[pair[hits]]一段时间内各周期各币种的bar数量，用于定时输出
 	LastBarMs    int64                            // 上次收到bar的结束时间，13位时间戳
 	OdBooks      = map[string]*banexg.OrderBook{} //缓存所有从爬虫收到的订单簿
+	NumTaCache   = 1500                           // 指标计算时缓存的历史值数量，默认1500
 )
 
 var (
@@ -60,12 +66,33 @@ const (
 )
 
 const (
+	OdDirtLong  = "long"
+	OdDirtShort = "short"
+	OdDirtBoth  = "both"
+)
+
+const (
 	BotStateRunning = 1
 	BotStateStopped = 2
+)
+
+const (
+	ExitTagUnknown     = "unknown"
+	ExitTagBotStop     = "bot_stop"
+	ExitTagForceExit   = "force_exit"
+	ExitTagUserExit    = "user_exit"
+	ExitTagThird       = "third"
+	ExitTagFatalErr    = "fatal_err"
+	ExitTagPairDel     = "pair_del"
+	ExitTagStopLoss    = "stop_loss"
+	ExitTagTakeProfit  = "take_profit"
+	ExitTagDataStuck   = "data_stuck"
+	ExitTagLiquidation = "liquidation"
 )
 
 var (
 	barPrices = make(map[string]float64) //# 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
 	prices    = make(map[string]float64) //交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
-
+	Ctx       context.Context            // 用于全部goroutine同时停止
+	StopAll   func()                     // 停止全部机器人线程
 )

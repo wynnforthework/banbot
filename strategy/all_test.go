@@ -31,7 +31,7 @@ func TestStagyJob_DrawDownExit(t *testing.T) {
 	testcom.RunFakeEnv(env, func(i int, bar ta.Kline) {
 		if i == 2 {
 			od = &orm.InOutOrder{
-				Main: &orm.IOrder{
+				IOrder: &orm.IOrder{
 					ID:        1,
 					Short:     false,
 					InitPrice: bar.Close,
@@ -43,7 +43,7 @@ func TestStagyJob_DrawDownExit(t *testing.T) {
 			fmt.Printf("open long: %f curPrice: %f\n", bar.Close, bar.Close)
 		} else if i == 10 {
 			od = &orm.InOutOrder{
-				Main: &orm.IOrder{
+				IOrder: &orm.IOrder{
 					ID:        2,
 					Short:     true,
 					InitPrice: bar.Close,

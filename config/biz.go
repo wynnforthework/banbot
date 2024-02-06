@@ -102,13 +102,14 @@ func apply(args *CmdArgs) *errs.Error {
 	core.RunMode = data.RunMode
 	Leverage = data.Leverage
 	LimitVolSecs = data.LimitVolSecs
-	MarketType = data.MarketType
-	if MarketType == banexg.MarketSpot || MarketType == banexg.MarketMargin {
+	core.ExgName = data.Exchange.Name
+	core.Market = data.MarketType
+	if core.Market == banexg.MarketSpot || core.Market == banexg.MarketMargin {
 		data.ContractType = ""
 	} else if data.ContractType == "" {
 		data.ContractType = banexg.MarketSwap
 	}
-	ContractType = data.ContractType
+	core.ContractType = data.ContractType
 	MaxMarketRate = data.MaxMarketRate
 	OdBookTtl = data.OdBookTtl
 	OrderType = data.OrderType
@@ -125,7 +126,7 @@ func apply(args *CmdArgs) *errs.Error {
 	StakeCurrency = data.StakeCurrency
 	FatalStop = data.FatalStop
 	FatalStopHours = data.FatalStopHours
-	//TimeRange = data.TimeRange
+	TimeRange = data.TimeRange
 	WsStamp = data.WsStamp
 	RunTimeframes = data.RunTimeframes
 	KlineSource = data.KlineSource
