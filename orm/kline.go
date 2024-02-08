@@ -95,6 +95,9 @@ type KlineSid struct {
 }
 
 func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs int64, limit int, handle func(int32, []*banexg.Kline)) *errs.Error {
+	if len(sids) == 0 {
+		return nil
+	}
 	tfSecs := utils.TFToSecs(timeframe)
 	tfMSecs := int64(tfSecs * 1000)
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, false)
@@ -106,17 +109,17 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 	}
 	sidTA := make([]string, len(sids))
 	for i, id := range sids {
-		sidTA[i] = fmt.Sprintf("(%v)", id)
+		sidTA[i] = fmt.Sprintf("%v", id)
 	}
 	sidText := strings.Join(sidTA, ", ")
 	dctSql := fmt.Sprintf(`
 select time,open,high,low,close,volume,sid from $tbl
-where time >= %v and time < %v and sid in (values %v)
+where time >= %v and time < %v and sid in (%v)
 order by sid,time`, startMs, finishEndMS, sidText)
 	genGpSql := func() string {
 		return fmt.Sprintf(`
 				select %s,sid from $tbl
-                where time >= %v and time < %v and sid in (values %v)
+                where time >= %v and time < %v and sid in (%v)
                 group by sid, gtime order by sid, gtime`, colAggFields(timeframe, tfSecs), startMs, finishEndMS, sidText)
 	}
 	rows, err_ := queryHyper(q, timeframe, dctSql, genGpSql)

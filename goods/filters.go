@@ -80,9 +80,9 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 		return int((b.Vol - a.Vol) / 1000)
 	})
 	if f.MinValue > 0 {
-		cutLen := len(symbolVols)
+		cutLen := len(symbolVols) + 1
 		for i, v := range symbolVols {
-			if v.Vol < f.MinValue {
+			if v.Vol >= f.MinValue {
 				continue
 			}
 			cutLen = i
