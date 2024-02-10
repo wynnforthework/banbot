@@ -39,7 +39,9 @@ InitFakeWallets
 */
 func InitFakeWallets(symbols ...string) {
 	if Wallets == nil {
-		Wallets = &BanWallets{}
+		Wallets = &BanWallets{
+			Items: map[string]*ItemWallet{},
+		}
 	}
 	updates := make(map[string]float64)
 	if len(symbols) == 0 {
@@ -600,7 +602,7 @@ func (w *BanWallets) GetAmountByLegal(symbol string, legalCost float64) float64 
 
 func (w *BanWallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols []string) ([]float64, []string, []float64) {
 	var data map[string]*ItemWallet
-	if symbols != nil {
+	if len(symbols) > 0 {
 		data = make(map[string]*ItemWallet)
 		for _, sym := range symbols {
 			if item, ok := w.Items[sym]; ok {

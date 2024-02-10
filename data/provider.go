@@ -91,6 +91,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 		return newHolds, sinceMap, err
 	}
 	curTimeMS := btime.TimeMS()
+	log.Info(fmt.Sprintf("warmup for %d pairs", len(warmJobs)))
 	for _, job := range warmJobs {
 		symbol := job.hold.getSymbol()
 		exs, err := orm.GetExSymbol(exchange, symbol)
@@ -191,6 +192,9 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 		// 触发回调
 		count, err := hold.invoke()
 		if err != nil {
+			if err.Code == core.ErrEOF {
+				break
+			}
 			log.Error("data loop main fail", zap.Error(err))
 			return err
 		}

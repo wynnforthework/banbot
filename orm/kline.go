@@ -419,7 +419,6 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 /*
 InsertKLinesAuto
 插入K线到数据库，同时调用UpdateKRange更新关联信息
-应该在事务中调用此方法，否则插入k线后立刻读取计算关联信息没有最新数据
 */
 func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
 	num, err := q.InsertKLines(timeFrame, sid, arr)

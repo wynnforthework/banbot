@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -150,12 +149,4 @@ func GetExgConfig() *ExgItemConfig {
 		return cfg
 	}
 	return &ExgItemConfig{}
-}
-
-func AllAllowTFs() []string {
-	var groups = [][]string{RunTimeframes}
-	for _, pol := range RunPolicy {
-		groups = append(groups, pol.RunTimeframes)
-	}
-	return utils.UnionArr(groups...)
 }

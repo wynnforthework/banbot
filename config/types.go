@@ -22,7 +22,7 @@ var (
 	MinOpenRate     float64
 	MaxOpenOrders   int
 	WalletAmounts   map[string]float64
-	DrawBalanceOver int
+	DrawBalanceOver float64
 	StakeCurrency   []string
 	FatalStop       map[string]float64
 	FatalStopHours  int
@@ -66,7 +66,7 @@ type Config struct {
 	MinOpenRate     float64                           `yaml:"min_open_rate" mapstructure:"min_open_rate"`
 	MaxOpenOrders   int                               `yaml:"max_open_orders" mapstructure:"max_open_orders"`
 	WalletAmounts   map[string]float64                `yaml:"wallet_amounts" mapstructure:"wallet_amounts"`
-	DrawBalanceOver int                               `yaml:"draw_balance_over" mapstructure:"draw_balance_over"`
+	DrawBalanceOver float64                           `yaml:"draw_balance_over" mapstructure:"draw_balance_over"`
 	StakeCurrency   []string                          `yaml:"stake_currency" mapstructure:"stake_currency"`
 	FatalStop       map[string]float64                `yaml:"fatal_stop" mapstructure:"fatal_stop"`
 	FatalStopHours  int                               `yaml:"fatal_stop_hours" mapstructure:"fatal_stop_hours"`
@@ -91,9 +91,9 @@ type Config struct {
 
 // 运行的策略，可以多个策略同时运行
 type RunPolicyConfig struct {
-	Name          string   `yaml:"name"`
-	RunTimeframes []string `yaml:"run_Timeframes"`
-	MaxPair       int      `yaml:"max_pair"`
+	Name          string   `yaml:"name" mapstructure:"name"`
+	RunTimeframes []string `yaml:"run_timeframes" mapstructure:"run_timeframes"`
+	MaxPair       int      `yaml:"max_pair" mapstructure:"max_pair"`
 }
 
 type DatabaseConfig struct {

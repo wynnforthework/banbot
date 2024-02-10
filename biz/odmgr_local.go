@@ -4,6 +4,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
@@ -20,6 +21,16 @@ const (
 
 type LocalOrderMgr struct {
 	OrderMgr
+}
+
+func NewLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) *LocalOrderMgr {
+	return &LocalOrderMgr{
+		OrderMgr{
+			wallet:   Wallets,
+			data:     data.Main,
+			callBack: callBack,
+		},
+	}
 }
 
 func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKline) *errs.Error {

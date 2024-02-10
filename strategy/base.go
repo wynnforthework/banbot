@@ -26,10 +26,21 @@ func (s *TradeStagy) GetStakeAmount() float64 {
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
 func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []*core.TfScore) string {
-	if s.PickTimeFrame != nil {
-		return s.PickTimeFrame(exg, symbol, tfScores)
+	// 过滤当前需要的时间周期
+	useTfs := make(map[string]bool)
+	for _, tf := range s.AllowTFs {
+		useTfs[tf] = true
 	}
-	for _, tfs := range tfScores {
+	curScores := make([]*core.TfScore, 0, len(tfScores))
+	for _, item := range tfScores {
+		if _, ok := useTfs[item.TF]; ok {
+			curScores = append(curScores, item)
+		}
+	}
+	if s.PickTimeFrame != nil {
+		return s.PickTimeFrame(exg, symbol, curScores)
+	}
+	for _, tfs := range curScores {
 		if tfs.Score >= s.MinTfScore {
 			return tfs.TF
 		}

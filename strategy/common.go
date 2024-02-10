@@ -41,12 +41,7 @@ func load(stagyName string) *TradeStagy {
 		log.Error("strategy not found", zap.String("path", filePath), zap.Error(err))
 		return nil
 	}
-	file, err := os.Open(filePath)
-	if err != nil {
-		log.Error("strategy read fail", nameVar, zap.Error(err))
-		return nil
-	}
-	linker, err := goloader.ReadObj(file, &stagyName)
+	linker, err := goloader.ReadObj(filePath, stagyName)
 	if err != nil {
 		log.Error("strategy load fail, package is `main`?", nameVar, zap.Error(err))
 		return nil
@@ -63,24 +58,42 @@ func load(stagyName string) *TradeStagy {
 		log.Error("strategy load module fail", nameVar, zap.Error(err))
 		return nil
 	}
-	main, ok := module.Syms[fmt.Sprintf("%s.Main", stagyName)]
-	if !ok || main == 0 {
-		keys := zap.String("keys", strings.Join(utils.KeysOfMap(module.Syms), ","))
-		log.Error("strategy `Main` not found", nameVar, zap.Error(err), keys)
+	keys := zap.String("keys", strings.Join(utils.KeysOfMap(module.Syms), ","))
+	prefix := stagyName + "."
+	// 加载Main
+	mainPath := prefix + "Main"
+	mainPtr := GetModuleItem(module, mainPath)
+	if mainPtr == nil {
+		log.Error("module item not found", zap.String("p", mainPath), keys)
 		return nil
 	}
-	mainPtr := (uintptr)(unsafe.Pointer(&main))
-	runFunc := *(*func() *TradeStagy)(unsafe.Pointer(&mainPtr))
+	runFunc := *(*func() *TradeStagy)(mainPtr)
 	stagy := runFunc()
 	stagy.Name = stagyName
-	module.Unload()
+	// 这里不能卸载，卸载后结构体的嵌入函数无法调用
+	// module.Unload()
 	return stagy
 }
 
+func GetModuleItem(module *goloader.CodeModule, itemPath string) unsafe.Pointer {
+	main, ok := module.Syms[itemPath]
+	if !ok || main == 0 {
+		return nil
+	}
+	mainPtr := (uintptr)(unsafe.Pointer(&main))
+	return unsafe.Pointer(&mainPtr)
+}
+
 func regLoaderTypes(symPtr map[string]uintptr) {
-	goloader.RegTypes(symPtr, ta.ATR, ta.Highest, ta.Lowest)
+	goloader.RegTypes(symPtr, &ta.BarEnv{}, &ta.Series{}, &ta.CrossLog{}, &ta.XState{}, ta.Cross, ta.Sum, ta.SMA,
+		ta.EMA, ta.EMABy, ta.RMA, ta.RMABy, ta.TR, ta.ATR, ta.MACD, ta.MACDBy, ta.RSI, ta.Highest, ta.Lowest, ta.KDJ,
+		ta.KDJBy, ta.StdDev, ta.StdDevBy, ta.BBANDS, ta.TD, &ta.AdxState{}, ta.ADX, ta.ROC, ta.HeikinAshi)
+	stgy := &TradeStagy{}
+	goloader.RegTypes(symPtr, stgy, stgy.OnPairInfos, stgy.OnStartUp, stgy.OnBar, stgy.OnInfoBar, stgy.OnTrades,
+		stgy.OnCheckExit, stgy.GetDrawDownExitRate, stgy.PickTimeFrame, stgy.OnShutDown)
 	job := &StagyJob{}
-	goloader.RegTypes(symPtr, job.OpenOrder)
+	goloader.RegTypes(symPtr, job, job.OpenOrder)
+	goloader.RegTypes(symPtr, &PairSub{}, &EnterReq{}, &ExitReq{})
 }
 
 func (q *ExitReq) Clone() *ExitReq {

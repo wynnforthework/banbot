@@ -1,11 +1,13 @@
 package goods
 
 import (
+	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -125,8 +127,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 		if err != nil {
 			return err
 		}
-		log.Info("gen symbols", zap.String("from", pairProducer.GetName()),
-			zap.Int("num", len(pairs)))
+		log.Info(fmt.Sprintf("gen symbols from %s, num: %d", pairProducer.GetName(), len(pairs)))
 	}
 	err = orm.EnsureCurSymbols(pairs)
 	if err != nil {
@@ -168,7 +169,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 }
 
 func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
-	allowTfs := config.AllAllowTFs()
+	allowTfs := allAllowTFs()
 	if len(allowTfs) == 0 {
 		return errs.NewMsg(core.ErrBadConfig, "run_timeframes is required in config")
 	}
@@ -252,4 +253,22 @@ func calcKlineScore(arr []*banexg.Kline, pipChg float64) float64 {
 	// 取平方，扩大分数差距
 	jRateScore := math.Pow(1-floats.Sum(jumpRates)/float64(len(jumpRates)), 2)
 	return chgScore*0.7 + jRateScore*0.3
+}
+
+func allAllowTFs() []string {
+	var groups = [][]string{config.RunTimeframes}
+	for _, pol := range config.RunPolicy {
+		stagy := strategy.Get(pol.Name)
+		if stagy == nil {
+			continue
+		}
+		if len(pol.RunTimeframes) > 0 {
+			groups = append(groups, pol.RunTimeframes)
+			// 配置的时间周期优先级高于策略写死的
+			stagy.AllowTFs = pol.RunTimeframes
+		} else {
+			groups = append(groups, stagy.AllowTFs)
+		}
+	}
+	return utils.UnionArr(groups...)
 }

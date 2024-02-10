@@ -29,50 +29,37 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 		startMS, endMS = endMS, startMS
 		dirt = -1
 	}
-	maxBarEndMS := (endMS/tfMSecs - 1) * tfMSecs
-	if startMS > maxBarEndMS {
+	fetchNum := int((endMS - startMS) / tfMSecs)
+	if fetchNum == 0 {
 		return nil
 	}
-	fetchNum := int((endMS - startMS) / tfMSecs)
-	batchSize := min(1000, fetchNum+5)
-	since := startMS
-	if dirt == -1 {
-		// 从后往前下载
-		since = endMS - int64(batchSize)*tfMSecs
-	}
-	nextStart := func(start, stop int64) int64 {
+	rangeMSecs := int64(min(1000, fetchNum+5)) * tfMSecs
+	nextRange := func(start, stop int64) (int64, int64) {
 		if dirt == 1 {
 			if stop >= endMS {
-				return 0
+				return 0, 0
 			}
-			return stop
+			return stop, min(endMS, stop+rangeMSecs)
 		} else {
 			// 从后往前下载
 			if start <= startMS {
-				return 0
+				return 0, 0
 			}
-			return max(start-int64(batchSize)*tfMSecs, startMS)
+			return max(startMS, start-rangeMSecs), start
 		}
 	}
-	for since > 0 {
-		data, err := exchange.FetchOHLCV(pair, timeFrame, since, batchSize, nil)
+	since, until := nextRange(startMS, startMS)
+	if dirt == -1 {
+		// 从后往前下载
+		since, until = nextRange(endMS, endMS)
+	}
+	for since > 0 && until > since {
+		curSize := int((until - since) / tfMSecs)
+		data, err := exchange.FetchOHLCV(pair, timeFrame, since, curSize, nil)
 		if err != nil {
 			return err
 		}
-		if len(data) == 0 {
-			since = nextStart(since, since+int64(batchSize)*tfMSecs)
-			continue
-		}
-		lastEndMS := data[len(data)-1].Time
-		curStart := min(since, data[0].Time)
-		since = nextStart(curStart, lastEndMS+tfMSecs)
-		if lastEndMS > maxBarEndMS {
-			endPos := len(data) - 1
-			for endPos >= 0 && data[endPos].Time > maxBarEndMS {
-				endPos -= 1
-			}
-			data = data[:endPos+1]
-		}
+		since, until = nextRange(since, until)
 		if len(data) > 0 {
 			select {
 			case <-ctx.Done():
@@ -238,6 +225,10 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	var retErr *errs.Error
 	var wg sync.WaitGroup
 	defer wg.Wait()
+	barNum := int((endMS - startMS) / tfMSecs)
+	startText := btime.ToDateStr(startMS, "")
+	endText := btime.ToDateStr(endMS, "")
+	fmt.Printf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum)
 	var pBar = progressbar.Default(int64(len(exsList)))
 	defer pBar.Close()
 	sess, conn, err := Conn(nil)

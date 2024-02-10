@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	ta "github.com/banbox/banta"
+	"github.com/bytedance/sonic"
 	"go.uber.org/zap"
 	"slices"
 	"strings"
@@ -70,8 +71,9 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 			}
 			tf := stagy.pickTimeFrame(exgName, exs.Symbol, scores)
 			if tf == "" {
-				log.Warn("LoadStagyJobs skip pair", zap.String("pair", exs.Symbol),
-					zap.String("stagy", stagy.Name), zap.Int("scores", len(scores)))
+				scoreText, _ := sonic.MarshalString(scores)
+				log.Warn("filter pair by tfScore", zap.String("pair", exs.Symbol),
+					zap.String("stagy", stagy.Name), zap.String("scores", scoreText))
 				continue
 			}
 			holdNum += 1
@@ -107,14 +109,16 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 			}
 			// 记录需要预热的数据；记录订阅信息
 			logWarm(exs.Symbol, tf, stagy.WarmupNum)
-			for _, s := range stagy.OnPairInfos(job) {
-				logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
-				jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
-				items, ok := InfoJobs[jobKey]
-				if !ok {
-					items = make([]*StagyJob, 0)
+			if stagy.OnPairInfos != nil {
+				for _, s := range stagy.OnPairInfos(job) {
+					logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
+					jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
+					items, ok := InfoJobs[jobKey]
+					if !ok {
+						items = make([]*StagyJob, 0)
+					}
+					InfoJobs[jobKey] = append(items, job)
 				}
-				InfoJobs[jobKey] = append(items, job)
 			}
 			items, ok := PairTFStags[envKey]
 			if !ok {

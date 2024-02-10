@@ -15,20 +15,57 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"math"
+)
+
+const (
+	ShowNum = 600
 )
 
 type BackTest struct {
 	biz.Trader
+	BTResult
+}
+
+type BTResult struct {
+	MaxOpenOrders int
+	MinBalance    float64
+	MaxBalance    float64
+	BarNum        int
+	Plots         PlotData
+	StartMS       int64
+	EndMS         int64
+	PlotEvery     int
+}
+
+type PlotData struct {
+	Real      []TextFloat
+	Available []TextFloat
+	Profit    []TextFloat
+	WithDraw  []TextFloat
+}
+
+type TextFloat struct {
+	Text string
+	Val  float64
 }
 
 func NewBackTest() *BackTest {
-	p := &BackTest{}
+	p := &BackTest{
+		BTResult: BTResult{
+			Plots:     PlotData{},
+			PlotEvery: 1,
+		},
+	}
+	biz.InitFakeWallets()
 	data.Main = data.NewHistProvider(p.FeedKLine)
+	biz.OdMgr = biz.NewLocalOrderMgr(p.orderCB)
 	return p
 }
 
 func (b *BackTest) Init() *errs.Error {
 	core.RunMode = core.RunModeBackTest
+	b.MinBalance = math.MaxFloat64
 	err := orm.InitTask()
 	if err != nil {
 		return err
@@ -55,15 +92,11 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = data.Main.SubWarmPairs(warms)
-	if err != nil {
-		return err
-	}
-	biz.InitFakeWallets()
-	return nil
+	return data.Main.SubWarmPairs(warms)
 }
 
 func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
+	b.BarNum += 1
 	err := b.Trader.FeedKline(bar)
 	if err != nil {
 		if err.Code == core.ErrLiquidation {
@@ -73,7 +106,7 @@ func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 		}
 		return
 	}
-
+	b.logState(btime.TimeMS())
 }
 
 func (b *BackTest) Run() {
@@ -103,4 +136,62 @@ func (b *BackTest) onLiquidation(symbol string) {
 		log.Error(fmt.Sprintf("wallet %s BOMB at %s, exit", symbol, date))
 		core.StopAll()
 	}
+}
+
+func (b *BackTest) orderCB(order *orm.InOutOrder, isEnter bool) {
+	if isEnter {
+		b.MaxOpenOrders = max(b.MaxOpenOrders, len(orm.OpenODs))
+	} else if config.DrawBalanceOver > 0 {
+		quoteLegal := biz.Wallets.AvaLegal(config.StakeCurrency)
+		if quoteLegal > config.DrawBalanceOver {
+			biz.Wallets.WithdrawLegal(quoteLegal-config.DrawBalanceOver, config.StakeCurrency)
+		}
+	}
+}
+
+func (b *BackTest) logState(timeMS int64) {
+	if b.StartMS == 0 {
+		b.StartMS = timeMS
+	}
+	b.EndMS = timeMS
+	b.logPlot(timeMS)
+	quoteLegal := biz.Wallets.TotalLegal(config.StakeCurrency, false)
+	b.MinBalance = min(b.MinBalance, quoteLegal)
+	b.MaxBalance = max(b.MaxBalance, quoteLegal)
+}
+
+func (b *BackTest) logPlot(timeMS int64) {
+	if b.BarNum%b.PlotEvery != 0 {
+		return
+	}
+	splStep := 5
+	if len(b.Plots.Real) >= ShowNum*splStep {
+		// 检查数据是否太多，超过采样总数5倍时，进行重采样
+		b.PlotEvery *= splStep
+		oldNum := len(b.Plots.Real)
+		newNum := oldNum / splStep
+		plots := PlotData{
+			Real:      make([]TextFloat, 0, newNum),
+			Available: make([]TextFloat, 0, newNum),
+			Profit:    make([]TextFloat, 0, newNum),
+			WithDraw:  make([]TextFloat, 0, newNum),
+		}
+		for i := 0; i < oldNum; i += splStep {
+			plots.Real = append(plots.Real, b.Plots.Real[i])
+			plots.Available = append(plots.Available, b.Plots.Available[i])
+			plots.Profit = append(plots.Profit, b.Plots.Profit[i])
+			plots.WithDraw = append(plots.WithDraw, b.Plots.WithDraw[i])
+		}
+		b.Plots = plots
+		return
+	}
+	avaLegal := biz.Wallets.AvaLegal(nil)
+	totalLegal := biz.Wallets.TotalLegal(nil, true)
+	profitLegal := biz.Wallets.ProfitLegal(nil)
+	drawLegal := biz.Wallets.GetWithdrawLegal(nil)
+	curDate := btime.ToDateStr(timeMS, "")
+	b.Plots.Real = append(b.Plots.Real, TextFloat{curDate, totalLegal})
+	b.Plots.Available = append(b.Plots.Available, TextFloat{curDate, avaLegal})
+	b.Plots.Profit = append(b.Plots.Profit, TextFloat{curDate, profitLegal})
+	b.Plots.WithDraw = append(b.Plots.WithDraw, TextFloat{curDate, drawLegal})
 }

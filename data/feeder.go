@@ -203,10 +203,7 @@ func (f *KlineFeeder) WarmTfs(tfBars map[string][]*banexg.Kline) int64 {
 			continue
 		}
 		tfSecs := int64(utils.TFToSecs(tf) * 1000)
-		startDate := btime.ToDateStr(bars[0].Time, "")
 		lastMS := bars[len(bars)-1].Time + tfSecs
-		endDate := btime.ToDateStr(lastMS, "")
-		log.Info(fmt.Sprintf("warnup %s/%s %s-%s", f.Symbol, tf, startDate, endDate))
 		f.fireCallBacks(f.Symbol, tf, tfSecs, bars)
 		for _, sta := range f.States {
 			if sta.TimeFrame == tf {
