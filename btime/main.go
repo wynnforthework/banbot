@@ -13,6 +13,10 @@ var (
 	UTCLocale, _ = time.LoadLocation("UTC")
 )
 
+func init() {
+	time.Local = UTCLocale
+}
+
 /*
 UTCTime
 获取10位秒级浮点数

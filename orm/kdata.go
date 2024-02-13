@@ -94,16 +94,15 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 	if oldStart == 0 {
 		// 数据不存在，下载全部区间
 		chanDown <- core.DownRange{Start: startMS, End: endMS}
-	} else if startMS < oldStart && endMS > oldEnd {
-		// 范围超过已下载区间前后范围
-		chanDown <- core.DownRange{Start: startMS, End: oldStart, Reverse: true}
-		chanDown <- core.DownRange{Start: oldEnd, End: endMS}
-	} else if startMS < oldStart {
-		// 前部超过已下载范围，只下载前面
-		chanDown <- core.DownRange{Start: startMS, End: oldStart, Reverse: true}
-	} else if endMS > oldEnd {
-		// 后部超过已下载范围，只下载后面
-		chanDown <- core.DownRange{Start: oldEnd, End: endMS}
+	} else {
+		if endMS > oldEnd {
+			// 后部超过已下载范围，下载后面
+			chanDown <- core.DownRange{Start: oldEnd, End: endMS}
+		}
+		if startMS < oldStart {
+			// 前部超过已下载范围，下载前面
+			chanDown <- core.DownRange{Start: startMS, End: oldStart, Reverse: true}
+		}
 	}
 	close(chanDown)
 	chanKline := make(chan []*banexg.Kline, 1000)
@@ -131,6 +130,12 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 				start, stop := job.Start, job.End
 				if job.Reverse {
 					start, stop = job.End, job.Start
+				}
+				barNum := int((job.End-job.Start)/1000) / utils.TFToSecs(timeFrame)
+				if barNum > 10000 {
+					startText := btime.ToDateStr(job.Start, "")
+					endText := btime.ToDateStr(job.End, "")
+					log.Info(fmt.Sprintf("fetch %s %s  %s - %s, num: %d", exs.Symbol, timeFrame, startText, endText, barNum))
 				}
 				err = FetchApiOHLCV(ctx, exchange, exs.Symbol, timeFrame, start, stop, chanKline)
 				if err != nil {
@@ -280,14 +285,15 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		}
 		exsMap[exs.ID] = exs
 	}
-	retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, limit)
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, false)
+	retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, 0)
 	if retErr != nil {
 		return retErr
 	}
 	if handler == nil {
 		return nil
 	}
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	itemNum := (endMS - startMS) / tfMSecs
 	sess, conn, err := Conn(nil)
 	if err != nil {

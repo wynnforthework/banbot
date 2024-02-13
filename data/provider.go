@@ -169,6 +169,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 	}
 	conn.Release()
 	var pBar *progressbar.ProgressBar
+	log.Info("run data loop for backtest..")
 	for {
 		holds := utils.ValsOfMap(p.holders)
 		slices.SortFunc(holds, func(a, b IHistKlineFeeder) int {

@@ -27,29 +27,6 @@ type BackTest struct {
 	BTResult
 }
 
-type BTResult struct {
-	MaxOpenOrders int
-	MinBalance    float64
-	MaxBalance    float64
-	BarNum        int
-	Plots         PlotData
-	StartMS       int64
-	EndMS         int64
-	PlotEvery     int
-}
-
-type PlotData struct {
-	Real      []TextFloat
-	Available []TextFloat
-	Profit    []TextFloat
-	WithDraw  []TextFloat
-}
-
-type TextFloat struct {
-	Text string
-	Val  float64
-}
-
 func NewBackTest() *BackTest {
 	p := &BackTest{
 		BTResult: BTResult{
@@ -58,6 +35,7 @@ func NewBackTest() *BackTest {
 		},
 	}
 	biz.InitFakeWallets()
+	p.TotalInvest = biz.Wallets.TotalLegal(nil, false)
 	data.Main = data.NewHistProvider(p.FeedKLine)
 	biz.OdMgr = biz.NewLocalOrderMgr(p.orderCB)
 	return p
@@ -65,8 +43,13 @@ func NewBackTest() *BackTest {
 
 func (b *BackTest) Init() *errs.Error {
 	core.RunMode = core.RunModeBackTest
+	btime.CurTimeMS = config.TimeRange.StartMS
 	b.MinBalance = math.MaxFloat64
-	err := orm.InitTask()
+	err := orm.SyncKlineTFs()
+	if err != nil {
+		return err
+	}
+	err = orm.InitTask()
 	if err != nil {
 		return err
 	}
@@ -125,12 +108,17 @@ func (b *BackTest) Run() {
 		log.Error("backtest clean orders fail", zap.Error(err))
 		return
 	}
+	log.Info("backtest complete")
+	b.printBtResult()
 }
 
 func (b *BackTest) onLiquidation(symbol string) {
 	date := btime.ToDateStr(btime.TimeMS(), "")
 	if config.ChargeOnBomb {
+		oldVal := biz.Wallets.TotalLegal(nil, false)
 		biz.InitFakeWallets(symbol)
+		newVal := biz.Wallets.TotalLegal(nil, false)
+		b.TotalInvest += newVal - oldVal
 		log.Error(fmt.Sprintf("wallet %s BOMB at %s, reset wallet and continue..", symbol, date))
 	} else {
 		log.Error(fmt.Sprintf("wallet %s BOMB at %s, exit", symbol, date))

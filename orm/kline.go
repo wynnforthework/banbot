@@ -57,11 +57,14 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 	tfMSecs := int64(tfSecs * 1000)
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, withUnFinish)
 	maxEndMs := endMs
-	curMs := btime.TimeMS()
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
-	unFinishMS := utils.AlignTfMSecs(curMs, tfMSecs)
-	if finishEndMS > unFinishMS {
-		finishEndMS = unFinishMS
+	unFinishMS := int64(0)
+	if core.LiveMode() && withUnFinish {
+		curMs := btime.TimeMS()
+		unFinishMS = utils.AlignTfMSecs(curMs, tfMSecs)
+		if finishEndMS > unFinishMS {
+			finishEndMS = unFinishMS
+		}
 	}
 	dctSql := fmt.Sprintf(`
 select time,open,high,low,close,volume from $tbl
@@ -101,11 +104,13 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 	tfSecs := utils.TFToSecs(timeframe)
 	tfMSecs := int64(tfSecs * 1000)
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, false)
-	curMs := btime.TimeMS()
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
-	unFinishMS := utils.AlignTfMSecs(curMs, tfMSecs)
-	if finishEndMS > unFinishMS {
-		finishEndMS = unFinishMS
+	if core.LiveMode() {
+		curMs := btime.TimeMS()
+		unFinishMS := utils.AlignTfMSecs(curMs, tfMSecs)
+		if finishEndMS > unFinishMS {
+			finishEndMS = unFinishMS
+		}
 	}
 	sidTA := make([]string, len(sids))
 	for i, id := range sids {
@@ -453,8 +458,7 @@ func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64
 	return q.updateBigHyper(sid, timeFrame, startMS, endMS, klines)
 }
 
-func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
-	// 更新有效区间范围
+func (q *Queries) CalcKLineRange(sid int32, timeFrame string) (int64, int64, *errs.Error) {
 	tblName := "kline_" + timeFrame
 	sql := fmt.Sprintf("select min(time),max(time) from %s where sid=%v", tblName, sid)
 	ctx := context.Background()
@@ -462,6 +466,44 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	var realStart, realEnd int64
 	err_ := row.Scan(&realStart, &realEnd)
 	if err_ != nil {
+		return 0, 0, errs.New(core.ErrDbReadFail, err_)
+	}
+	return realStart, realEnd, nil
+}
+
+func (q *Queries) CalcKLineRanges(timeFrame string) (map[int32][2]int64, *errs.Error) {
+	tblName := "kline_" + timeFrame
+	sql := fmt.Sprintf("select sid,min(time),max(time) from %s group by sid", tblName)
+	ctx := context.Background()
+	rows, err_ := q.db.Query(ctx, sql)
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	defer rows.Close()
+	res := make(map[int32][2]int64)
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	for rows.Next() {
+		var sid int32
+		var realStart, realEnd int64
+		err_ = rows.Scan(&sid, &realStart, &realEnd)
+		res[sid] = [2]int64{realStart, realEnd + tfMSecs}
+		if err_ != nil {
+			return res, errs.New(core.ErrDbReadFail, err_)
+		}
+	}
+	err_ = rows.Err()
+	if err_ != nil {
+		return res, errs.New(core.ErrDbReadFail, err_)
+	}
+	return res, nil
+}
+
+func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
+	// 更新有效区间范围
+	var err_ error
+	ctx := context.Background()
+	realStart, realEnd, err := q.CalcKLineRange(sid, timeFrame)
+	if err != nil {
 		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: int64(sid), Timeframe: timeFrame, Start: startMS, Stop: endMS})
 		if err_ != nil {
 			return errs.New(core.ErrDbExecFail, err_)
@@ -713,6 +755,15 @@ func GetDownTF(timeFrame string) (string, *errs.Error) {
 	return "1m", nil
 }
 
+func (q *Queries) DelKInfo(sid int32, timeFrame string) *errs.Error {
+	sql := fmt.Sprintf("delete from kinfo where sid=%v and timeframe=$1", sid)
+	_, err_ := q.db.Exec(context.Background(), sql, timeFrame)
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	return nil
+}
+
 func (q *Queries) GetKlineRange(sid int32, timeFrame string) (int64, int64) {
 	sql := fmt.Sprintf("select start,stop from kinfo where sid=%v and timeframe=$1 limit 1", sid)
 	row := q.db.QueryRow(context.Background(), sql, timeFrame)
@@ -782,4 +833,136 @@ func mapToItems[T any](rows pgx.Rows, err_ error, assign func() (T, []any)) ([]T
 		return nil, err
 	}
 	return items, nil
+}
+
+type KInfoExt struct {
+	KInfo
+	TfMSecs int64
+}
+
+/*
+SyncKlineTFs
+检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
+*/
+func SyncKlineTFs() *errs.Error {
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	infos, err_ := sess.ListKInfos(context.Background())
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	// 加载计算的区间
+	calcs := make(map[string]map[int32][2]int64)
+	for _, agg := range aggList {
+		ranges, err := sess.CalcKLineRanges(agg.TimeFrame)
+		if err != nil {
+			return err
+		}
+		calcs[agg.TimeFrame] = ranges
+	}
+	infoList := make([]KInfoExt, 0, len(infos))
+	for _, info := range infos {
+		infoList = append(infoList, KInfoExt{
+			KInfo:   *info,
+			TfMSecs: int64(utils.TFToSecs(info.Timeframe) * 1000),
+		})
+	}
+	slices.SortFunc(infoList, func(a, b KInfoExt) int {
+		return int(a.Sid - b.Sid)
+	})
+	var curSid int32
+	tfMap := make(map[string]KInfoExt)
+	for _, info := range infoList {
+		if info.Sid != curSid {
+			if len(tfMap) > 0 {
+				err = sess.SyncKlineSid(curSid, tfMap, calcs)
+				if err != nil {
+					return err
+				}
+			}
+			tfMap = make(map[string]KInfoExt)
+			curSid = info.Sid
+		}
+		tfMap[info.Timeframe] = info
+	}
+	return sess.SyncKlineSid(curSid, tfMap, calcs)
+}
+
+func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]KInfoExt, calcs map[string]map[int32][2]int64) *errs.Error {
+	var err *errs.Error
+	var err_ error
+	tfRanges := make(map[string][2]int64)
+	ctx := context.Background()
+	for _, agg := range aggList {
+		var oldStart, oldEnd int64
+		if info, ok := tfMap[agg.TimeFrame]; ok {
+			oldStart, oldEnd = info.Start, info.Stop
+		}
+		if ranges, ok := calcs[agg.TimeFrame][sid]; ok {
+			tfRanges[agg.TimeFrame] = ranges
+			newStart, newEnd := ranges[0], ranges[1]
+			overs := newEnd - newStart - (oldEnd - oldStart)
+			if overs > 0 {
+				err_ = nil
+				if newStart <= oldStart && oldEnd <= newEnd {
+					err_ = q.SetKInfo(ctx, SetKInfoParams{
+						Sid:       int64(sid),
+						Timeframe: agg.TimeFrame,
+						Start:     newStart,
+						Stop:      newEnd,
+					})
+				} else if oldStart == 0 && oldEnd == 0 {
+					_, err_ = q.AddKInfo(ctx, AddKInfoParams{
+						Sid:       int64(sid),
+						Timeframe: agg.TimeFrame,
+						Start:     newStart,
+						Stop:      newEnd,
+					})
+				}
+				if err_ != nil {
+					return errs.New(core.ErrDbExecFail, err_)
+				}
+			}
+		} else if oldStart > 0 {
+			// 没有数据，但有范围记录
+			err = q.DelKInfo(sid, agg.TimeFrame)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	// 尝试从子区间聚合更新
+	for _, agg := range aggList[1:] {
+		if agg.AggFrom == "" {
+			continue
+		}
+		subRange, ok := tfRanges[agg.AggFrom]
+		if !ok {
+			continue
+		}
+		subStart, subEnd := subRange[0], subRange[1]
+		var curStart, curEnd int64
+		if curRange, ok := tfRanges[agg.TimeFrame]; ok {
+			curStart, curEnd = curRange[0], curRange[1]
+		}
+		tfMSecs := int64(utils.TFToSecs(agg.TimeFrame) * 1000)
+		subAlignStart := utils.AlignTfMSecs(subStart, tfMSecs)
+		subAlignEnd := utils.AlignTfMSecs(subEnd, tfMSecs)
+		if subAlignStart < curStart {
+			err = q.refreshAgg(agg, sid, subStart, min(subEnd, curStart), "")
+			if err != nil {
+				return err
+			}
+		}
+		if subAlignEnd > curEnd {
+			err = q.refreshAgg(agg, sid, max(curEnd, subStart), subEnd, "")
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
