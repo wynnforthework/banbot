@@ -267,6 +267,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 type IHistKlineFeeder interface {
 	IKlineFeeder
 	getNextMS() int64
+	initNext(since int64)
 	getTotalLen() int
 	invoke() (int, *errs.Error)
 	downIfNeed(sess *orm.Queries, exchange banexg.BanExchange) *errs.Error
@@ -290,6 +291,10 @@ type HistKLineFeeder struct {
 
 func (f *HistKLineFeeder) getNextMS() int64 {
 	return f.nextMS
+}
+
+func (f *HistKLineFeeder) initNext(since int64) {
+	f.setNext()
 }
 
 func (f *HistKLineFeeder) getTotalLen() int {
@@ -336,6 +341,11 @@ func NewDBKlineFeeder(symbol string, callBack FnPairKline) (*DBKlineFeeder, *err
 	}
 	res.setNext = makeSetNext(res)
 	return res, nil
+}
+
+func (f *DBKlineFeeder) initNext(since int64) {
+	f.offsetMS = since
+	f.setNext()
 }
 
 func (f *DBKlineFeeder) downIfNeed(sess *orm.Queries, exchange banexg.BanExchange) *errs.Error {

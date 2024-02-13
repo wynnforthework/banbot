@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"slices"
+	"strings"
 )
 
 var (
@@ -109,7 +110,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 			if err != nil {
 				return newHolds, sinceMap, err
 			}
-			key := fmt.Sprintf("%s/%s", symbol, tf)
+			key := fmt.Sprintf("%s|%s", symbol, tf)
 			sinceMap[key] = job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
 		}
 	}
@@ -137,7 +138,23 @@ func NewHistProvider(callBack FnPairKline) *HistProvider[IHistKlineFeeder] {
 }
 
 func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[string]int) *errs.Error {
-	_, _, err := p.Provider.SubWarmPairs(items)
+	_, sinceMap, err := p.Provider.SubWarmPairs(items)
+	pairSince := make(map[string]int64)
+	for key, val := range sinceMap {
+		pair := strings.Split(key, "|")[0]
+		if oldVal, ok := pairSince[pair]; ok && oldVal > 0 {
+			pairSince[pair] = min(oldVal, val)
+		} else {
+			pairSince[pair] = val
+		}
+	}
+	for pair, since := range pairSince {
+		hold, ok := p.holders[pair]
+		if !ok {
+			continue
+		}
+		hold.initNext(since)
+	}
 	return err
 }
 
@@ -243,6 +260,7 @@ func NewLiveProvider(callBack FnPairKline) (*LiveProvider[IKlineFeeder], *errs.E
 		},
 		KLineWatcher: *watcher,
 	}
+	watcher.OnKLineMsg = makeOnKlineMsg(provider)
 	return provider, nil
 }
 
@@ -255,7 +273,7 @@ func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]in
 		var jobs []WatchJob
 		for _, h := range newHolds {
 			symbol, timeFrame := h.getSymbol(), h.getStates()[0].TimeFrame
-			key := fmt.Sprintf("%s/%s", symbol, timeFrame)
+			key := fmt.Sprintf("%s|%s", symbol, timeFrame)
 			if since, ok := sinceMap[key]; ok {
 				jobs = append(jobs, WatchJob{
 					Symbol:    symbol,
