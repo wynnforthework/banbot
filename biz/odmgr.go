@@ -138,6 +138,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 		DirtyMain:  true,
 		DirtyEnter: true,
 	}
+	od.SetInfo(orm.OdInfoLegalCost, req.LegalCost)
 	err := od.Save(sess)
 	if err != nil {
 		return nil, err
@@ -290,7 +291,6 @@ func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKli
 
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	od.UpdateProfits(0)
-	delete(orm.OpenODs, od.ID)
 	return od.Save(sess)
 }
 

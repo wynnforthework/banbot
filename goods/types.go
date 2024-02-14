@@ -7,7 +7,7 @@ import (
 
 type IFilter interface {
 	GetName() string
-	IsEnable() bool
+	IsDisable() bool
 	IsNeedTickers() bool
 	Filter(pairs []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error)
 }
@@ -19,7 +19,7 @@ type IProducer interface {
 
 type BaseFilter struct {
 	Name        string `yaml:"name" mapstructure:"name"`
-	Enable      bool   `yaml:"enable" mapstructure:"enable"`
+	Disable     bool   `yaml:"disable" mapstructure:"disable"`
 	NeedTickers bool
 }
 

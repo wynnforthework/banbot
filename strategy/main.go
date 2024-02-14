@@ -101,6 +101,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 				Env:       env,
 				Symbol:    exs,
 				TimeFrame: tf,
+				TPMaxs:    make(map[int64]float64),
 			}
 			if jobs, ok := Jobs[envKey]; ok {
 				Jobs[envKey] = append(jobs, job)

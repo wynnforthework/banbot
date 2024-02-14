@@ -20,8 +20,8 @@ func (f *BaseFilter) IsNeedTickers() bool {
 	return f.NeedTickers
 }
 
-func (f *BaseFilter) IsEnable() bool {
-	return f.Enable
+func (f *BaseFilter) IsDisable() bool {
+	return f.Disable
 }
 
 func (f *BaseFilter) GetName() string {
@@ -191,7 +191,7 @@ func (f *PriceFilter) validatePrice(symbol string, price float64) bool {
 		return false
 	}
 
-	if f.Max > price {
+	if f.Max > 0 && f.Max < price {
 		log.Info("PriceFilter drop, price too big", zap.String("pair", symbol), zap.Float64("price", price))
 		return false
 	}
@@ -242,7 +242,7 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, cb func(string
 	if err != nil {
 		return nil, err
 	}
-	return nil, nil
+	return res, nil
 }
 
 func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
@@ -268,12 +268,15 @@ func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.T
 }
 
 func (f *SpreadFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	return nil, nil
+	return symbols, nil
 }
 
 func (f *OffsetFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	res := symbols[f.Offset:]
-	if f.Limit > 0 {
+	var res []string
+	if f.Offset < len(symbols) {
+		res = symbols[f.Offset:]
+	}
+	if f.Limit < len(res) {
 		res = res[:f.Limit]
 	}
 	if len(res) < len(symbols) {

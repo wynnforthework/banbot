@@ -13,7 +13,7 @@ func GetPrice(symbol string) float64 {
 	if price, ok := barPrices[symbol]; ok {
 		return price
 	}
-	if strings.Contains(symbol, "USD") && strings.Contains(symbol, "/") {
+	if strings.Contains(symbol, "USD") && !strings.Contains(symbol, "/") {
 		return 1
 	}
 	panic(fmt.Errorf("invalid symbol for price: %s", symbol))

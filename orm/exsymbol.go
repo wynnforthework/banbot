@@ -8,7 +8,6 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
-	"strings"
 	"sync"
 )
 
@@ -156,15 +155,6 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 		}
 	}
 	return nil
-}
-
-func (s *ExSymbol) BaseQuote() (string, string) {
-	var arr = strings.Split(s.Symbol, "/")
-	if len(arr) != 2 {
-		panic(fmt.Sprintf("invalid symbol %s", s.Symbol))
-	}
-	quote := strings.Split(arr[1], ":")[0]
-	return arr[0], quote
 }
 
 func (s *ExSymbol) GetValidStart(startMS int64) int64 {

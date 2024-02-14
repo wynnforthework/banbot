@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	ta "github.com/banbox/banta"
 	"github.com/pkujhd/goloader"
@@ -129,7 +130,7 @@ func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 	s.Exits = nil
 }
 
-func (s *StagyJob) CheckCustomExits() []*orm.InOutEdit {
+func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 	var res []*orm.InOutEdit
 	var skipSL, skipTP = 0, 0
 	for _, od := range s.Orders {
@@ -138,7 +139,10 @@ func (s *StagyJob) CheckCustomExits() []*orm.InOutEdit {
 		}
 		slPrice := od.GetInfoFloat64(orm.KeyStopLossPrice)
 		tpPrice := od.GetInfoFloat64(orm.KeyTakeProfitPrice)
-		req := s.Stagy.OnCheckExit(s, od)
+		req, err := s.CustomExit(od)
+		if err != nil {
+			return res, err
+		}
 		if req == nil {
 			// 检查是否需要修改条件单
 			newSLPrice := s.LongSLPrice
@@ -183,5 +187,5 @@ func (s *StagyJob) CheckCustomExits() []*orm.InOutEdit {
 		log.Warn(fmt.Sprintf("%s/%s triggers on exchange is disabled, stoploss: %v, takeprofit: %v",
 			s.Stagy.Name, s.Symbol.Symbol, skipSL, skipTP))
 	}
-	return res
+	return res, nil
 }

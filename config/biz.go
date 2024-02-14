@@ -119,6 +119,9 @@ func apply(args *CmdArgs) *errs.Error {
 	TakeOverStgy = data.TakeOverStgy
 	StakeAmount = data.StakeAmount
 	MinOpenRate = data.MinOpenRate
+	if data.MaxOpenOrders == 0 {
+		data.MaxOpenOrders = 30
+	}
 	MaxOpenOrders = data.MaxOpenOrders
 	WalletAmounts = data.WalletAmounts
 	DrawBalanceOver = data.DrawBalanceOver

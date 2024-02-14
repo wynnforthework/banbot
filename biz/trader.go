@@ -44,6 +44,7 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	}
 	isLive := core.LiveMode()
 	tfMSecs := int64(utils.TFToSecs(bar.TimeFrame) * 1000)
+	core.SetBarPrice(bar.Symbol, bar.Close)
 	// 超过1分钟且周期的一半，认为bar延迟，不可下单
 	delayMs := btime.TimeMS() - bar.Time - tfMSecs
 	barExpired := delayMs >= max(60000, tfMSecs/2)
@@ -80,10 +81,14 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 		if !barExpired {
 			enters = append(enters, job.Entrys...)
 		}
-		exits = append(exits, job.Exits...)
 		if !core.IsWarmUp {
-			edits = append(edits, job.CheckCustomExits()...)
+			curEdits, err := job.CheckCustomExits()
+			if err != nil {
+				return err
+			}
+			edits = append(edits, curEdits...)
 		}
+		exits = append(exits, job.Exits...)
 	}
 	// 更新辅助订阅数据
 	for _, job := range infoJobs {

@@ -93,7 +93,9 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 			odType = exOrder.OrderType
 		}
 		price := exOrder.Price
-		if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
+		if bar == nil {
+			price = core.GetPrice(od.Symbol)
+		} else if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
 			if exOrder.Side == banexg.OdSideBuy {
 				if price < bar.Low {
 					continue

@@ -1,11 +1,11 @@
 package strategy
 
 import (
-	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"math"
@@ -52,7 +52,7 @@ func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []*core.T
 *****************************  StagyJob的成员方法   ****************************************
  */
 
-func (s *StagyJob) OpenOrder(req *EnterReq) error {
+func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	isLiveMode := core.LiveMode()
 	symbol := s.Symbol.Symbol
 	var dirType = "long"
@@ -67,10 +67,13 @@ func (s *StagyJob) OpenOrder(req *EnterReq) error {
 				zap.String("tag", req.Tag),
 				zap.String("dir", dirType))
 		}
-		return fmt.Errorf("open order disabled")
+		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
 	}
 	if req.Tag == "" {
-		return fmt.Errorf("tag is Required")
+		return errs.NewMsg(errs.CodeParamRequired, "tag is Required")
+	}
+	if req.StgyName == "" {
+		req.StgyName = s.Stagy.Name
 	}
 	if req.Amount == 0 && req.LegalCost == 0 {
 		if req.CostRate == 0 {
@@ -100,7 +103,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) error {
 				if req.Short {
 					rel = ">"
 				}
-				return fmt.Errorf("%s stoploss %f must %s %f for %s order",
+				return errs.NewMsg(errs.CodeParamInvalid, "%s stoploss %f must %s %f for %s order",
 					symbol, curSLPrice, rel, curPrice, dirType)
 			}
 			req.StopLoss = curSLPrice
@@ -126,7 +129,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) error {
 				if req.Short {
 					rel = "<"
 				}
-				return fmt.Errorf("%s takeprofit %f must %s %f for %s order",
+				return errs.NewMsg(errs.CodeParamInvalid, "%s takeprofit %f must %s %f for %s order",
 					symbol, curSLPrice, rel, curPrice, dirType)
 			}
 			req.TakeProfit = curTPPrice
@@ -141,7 +144,10 @@ func (s *StagyJob) OpenOrder(req *EnterReq) error {
 	return nil
 }
 
-func (s *StagyJob) CloseOrders(req *ExitReq) error {
+func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
+	if req.StgyName == "" {
+		req.StgyName = s.Stagy.Name
+	}
 	dirtBoth := req.Dirt == core.OdDirtBoth
 	if !s.CloseShort && (dirtBoth || req.Dirt == core.OdDirtShort) || !s.CloseLong && (dirtBoth || req.Dirt == core.OdDirtLong) {
 		log.Warn("close order disabled",
@@ -149,13 +155,13 @@ func (s *StagyJob) CloseOrders(req *ExitReq) error {
 			zap.String("pair", s.Symbol.Symbol),
 			zap.String("tag", req.Tag),
 			zap.String("dirt", req.Dirt))
-		return fmt.Errorf("close order disabled")
+		return errs.NewMsg(errs.CodeParamInvalid, "close order disabled")
 	}
 	if req.Tag == "" {
-		return fmt.Errorf("tag is required")
+		return errs.NewMsg(errs.CodeParamRequired, "tag is required")
 	}
 	if req.ExitRate > 1 {
-		return fmt.Errorf("ExitRate shoud in (0, 1], current: %f", req.ExitRate)
+		return errs.NewMsg(errs.CodeParamInvalid, "ExitRate shoud in (0, 1], current: %f", req.ExitRate)
 	} else if req.ExitRate == 0 {
 		req.ExitRate = 1
 	}
@@ -238,9 +244,10 @@ func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 }
 
 /*
+DrawDownExit
 按跟踪止盈检查是否达到回撤阈值，超出则退出，此方法由系统调用
 */
-func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) error {
+func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) *ExitReq {
 	spVal := s.getDrawDownExitPrice(od)
 	if spVal == 0 {
 		return nil
@@ -251,7 +258,7 @@ func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) error {
 		odDirt = -1
 	}
 	if (spVal-curPrice)*odDirt >= 0 {
-		return s.CloseOrders(&ExitReq{Tag: "take", OrderID: od.ID})
+		return &ExitReq{Tag: "take", OrderID: od.ID}
 	}
 	od.SetInfo(orm.OdInfoStopLoss, spVal)
 	return nil
@@ -261,15 +268,18 @@ func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) error {
 CustomExit
 检查订单是否需要退出，此方法由系统调用
 */
-func (s *StagyJob) CustomExit(od *orm.InOutOrder) error {
+func (s *StagyJob) CustomExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
+	var req *ExitReq
 	if s.Stagy.OnCheckExit != nil {
-		s.Stagy.OnCheckExit(s, od)
-		return nil
+		req = s.Stagy.OnCheckExit(s, od)
+	} else if s.Stagy.DrawDownExit {
+		req = s.DrawDownExit(od)
 	}
-	if s.Stagy.DrawDownExit {
-		return s.DrawDownExit(od)
+	var err *errs.Error
+	if req != nil {
+		err = s.CloseOrders(req)
 	}
-	return nil
+	return req, err
 }
 
 /*

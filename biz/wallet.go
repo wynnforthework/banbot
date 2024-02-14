@@ -6,6 +6,8 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -179,7 +181,11 @@ func (w *BanWallets) SetWallets(data map[string]float64) {
 	for k, v := range data {
 		item, ok := w.Items[k]
 		if !ok {
-			item = &ItemWallet{Coin: k}
+			item = &ItemWallet{
+				Coin:     k,
+				Pendings: make(map[string]float64),
+				Frozens:  make(map[string]float64),
+			}
 			w.Items[k] = item
 		} else {
 			item.Reset()
@@ -191,7 +197,11 @@ func (w *BanWallets) SetWallets(data map[string]float64) {
 func (w *BanWallets) Get(code string) *ItemWallet {
 	wallet, ok := w.Items[code]
 	if !ok {
-		wallet = &ItemWallet{Coin: code}
+		wallet = &ItemWallet{
+			Coin:     code,
+			Pendings: make(map[string]float64),
+			Frozens:  make(map[string]float64),
+		}
 		w.Items[code] = wallet
 	}
 	return wallet
@@ -351,14 +361,16 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 		legalCost = od.GetInfoFloat64(orm.OdInfoLegalCost)
 	}
 
-	isFuture := exs.Market == "future"
+	isFuture := banexg.IsContract(exs.Market)
 	var quoteCost, quoteMargin float64
+	var err *errs.Error
 
-	baseCode, quoteCode := exs.BaseQuote()
+	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
 	if isFuture || !od.Short {
 		// 期货合约，现货多单锁定quote
 		if legalCost < core.MinStakeAmount {
-			return 0, errs.NewMsg(core.ErrInvalidCost, fmt.Sprintf("margin cost must >= %v, cur: %.2f", core.MinStakeAmount, legalCost))
+			errMsg := fmt.Sprintf("margin cost must >= %v, cur: %.2f", core.MinStakeAmount, legalCost)
+			return 0, errs.NewMsg(core.ErrInvalidCost, errMsg)
 		}
 
 		if isFuture {
@@ -367,7 +379,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 		}
 
 		quoteCost = w.GetAmountByLegal(quoteCode, legalCost)
-		quoteCost, err := w.CostAva(odKey, quoteCode, quoteCost, false, 0)
+		quoteCost, err = w.CostAva(odKey, quoteCode, quoteCost, false, 0)
 
 		if err != nil {
 			return 0, err
@@ -386,7 +398,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 	} else {
 		// 现货空单，锁定base，允许金额为负
 		baseCost := w.GetAmountByLegal(baseCode, legalCost)
-		baseCost, err := w.CostAva(odKey, baseCode, baseCost, true, 0)
+		baseCost, err = w.CostAva(odKey, baseCode, baseCost, true, 0)
 		if err != nil {
 			return 0, err
 		}
@@ -408,8 +420,8 @@ func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	quoteAmount := enterPrice * subOd.Amount
 	curFee := subOd.Fee
 
-	baseCode, quoteCode := exs.BaseQuote()
-	if exs.Market == "future" {
+	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
+	if banexg.IsContract(exs.Market) {
 		// 期货合约，只锁定定价币，不涉及base币的增加
 		quoteAmount /= float64(od.Leverage)
 		gotAmt := quoteAmount - curFee
@@ -432,11 +444,11 @@ func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
 	if exs == nil {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
-	if exs.Market == "future" {
+	if banexg.IsContract(exs.Market) {
 		// 期货合约，不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
 		return
 	}
-	baseCode, quoteCode := exs.BaseQuote()
+	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
 	if od.Short {
 		// 现货空单，从quote的frozen卖，计算到quote的available，从base的pending未成交部分取消
 		w.Cancel(od.Key(), baseCode, 0, true)
@@ -470,9 +482,9 @@ func (w *BanWallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) {
 	}
 	subOd := od.Exit
 	curFee := subOd.Fee
-	baseCode, quoteCode := exs.BaseQuote()
+	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
 	odKey := od.Key()
-	if exs.Market == "future" {
+	if banexg.IsContract(exs.Market) {
 		//期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
 		//这里profit扣除了入场和出场手续费，前面入场手续费已扣过了，所以这里需要加入场手续费
 		w.Cancel(odKey, quoteCode, od.Profit+od.Enter.Fee, false)
@@ -532,7 +544,7 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 	if exs == nil {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", odList[0].Sid))
 	}
-	_, quoteCode := exs.BaseQuote()
+	_, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
 	wallet := w.Get(quoteCode)
 
 	// 计算是否爆仓

@@ -33,6 +33,7 @@ func init() {
 	cache, err_ = ristretto.NewCache(&ristretto.Config{
 		NumCounters: 1e5,
 		MaxCost:     1 << 26,
+		BufferItems: 64,
 	})
 	if err_ != nil {
 		log.Error("init cache fail", zap.Error(err_))
@@ -135,7 +136,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	}
 	if allowFilter {
 		for _, flt := range filters {
-			if !flt.IsEnable() {
+			if flt.IsDisable() {
 				continue
 			}
 			pairs, err = flt.Filter(pairs, tickersMap)
