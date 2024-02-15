@@ -87,6 +87,7 @@ func (r BTResult) printBtResult() {
 	table.SetHeader(heads)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 	table.SetCenterSeparator("|")
+	table.SetAlignment(tablewriter.ALIGN_RIGHT)
 	table.Append([]string{"Backtest From", btime.ToDateStr(r.StartMS, "")})
 	table.Append([]string{"Backtest To", btime.ToDateStr(r.EndMS, "")})
 	table.Append([]string{"Max Open Orders", strconv.Itoa(r.MaxOpenOrders)})
@@ -171,17 +172,17 @@ func textGroupProfitRanges(orders []*orm.InOutOrder) string {
 	for _, gp := range res.Clusters {
 		minPct := strconv.FormatFloat(slices.Min(gp.Items)*100, 'f', 2, 64)
 		maxPct := strconv.FormatFloat(slices.Max(gp.Items)*100, 'f', 2, 64)
-		grpTitles = append(grpTitles, fmt.Sprintf("%s ~ %s%", minPct, maxPct))
+		grpTitles = append(grpTitles, fmt.Sprintf("%s ~ %s%%", minPct, maxPct))
 	}
 	return groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		return grpTitles[res.RowGIds[i]]
-	}, "Profit Range", []string{"EnterTags", "ExitTags"}, makeEnterExits)
+	}, "Profit Range", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
 func textGroupDays(orders []*orm.InOutOrder) string {
 	return groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		return btime.ToDateStr(od.EnterAt, "2006-01-02")
-	}, "Date", []string{"EnterTags", "ExitTags"}, makeEnterExits)
+	}, "Date", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
 func makeEnterExits(orders []*orm.InOutOrder) []string {
@@ -232,8 +233,10 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 					ProfitPctSum: od.ProfitRate,
 					CostSum:      od.EnterCost(),
 					Durations:    []int{duration},
+					Orders:       make([]*orm.InOutOrder, 0, 8),
 				},
 			}
+			sta.Orders = append(sta.Orders, od)
 			if isWin {
 				sta.WinCount = 1
 			}
@@ -247,17 +250,19 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 			sta.ProfitPctSum += od.ProfitRate
 			sta.CostSum += od.EnterCost()
 			sta.Durations = append(sta.Durations, duration)
+			sta.Orders = append(sta.Orders, od)
 		}
 	}
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
-	heads := []string{title, "Count", "AvgProfit %", "TotProfit %", "SumProfit", "Duration", "WinLossRate"}
+	heads := []string{title, "Count", "Avg Profit %", "Tot Profit %", "Sum Profit", "Duration", "Win Rate"}
 	if len(extHeads) > 0 {
 		heads = append(heads, extHeads...)
 	}
 	table.SetHeader(heads)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
 	table.SetCenterSeparator("|")
+	table.SetAlignment(tablewriter.ALIGN_RIGHT)
 	for _, sta := range groups {
 		numText := strconv.Itoa(sta.Count)
 		avgProfit := strconv.FormatFloat(sta.ProfitPctSum*100/float64(sta.Count), 'f', 2, 64)
@@ -328,7 +333,7 @@ func kMeansVals(vals []float64, num int) *ClusterRes {
 	// 计算每个项所属的分组
 	rowGids := make([]int, 0, len(vals))
 	for _, v := range vals {
-		gid := -1
+		gid := len(groups) - 1
 		for i, end := range seps {
 			if v < end {
 				gid = i
