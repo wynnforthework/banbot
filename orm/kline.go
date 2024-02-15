@@ -863,18 +863,18 @@ func SyncKlineTFs() *errs.Error {
 		}
 		calcs[agg.TimeFrame] = ranges
 	}
-	infoList := make([]KInfoExt, 0, len(infos))
+	infoList := make([]*KInfoExt, 0, len(infos))
 	for _, info := range infos {
-		infoList = append(infoList, KInfoExt{
+		infoList = append(infoList, &KInfoExt{
 			KInfo:   *info,
 			TfMSecs: int64(utils.TFToSecs(info.Timeframe) * 1000),
 		})
 	}
-	slices.SortFunc(infoList, func(a, b KInfoExt) int {
+	slices.SortFunc(infoList, func(a, b *KInfoExt) int {
 		return int(a.Sid - b.Sid)
 	})
 	var curSid int32
-	tfMap := make(map[string]KInfoExt)
+	tfMap := make(map[string]*KInfoExt)
 	for _, info := range infoList {
 		if info.Sid != curSid {
 			if len(tfMap) > 0 {
@@ -883,7 +883,7 @@ func SyncKlineTFs() *errs.Error {
 					return err
 				}
 			}
-			tfMap = make(map[string]KInfoExt)
+			tfMap = make(map[string]*KInfoExt)
 			curSid = info.Sid
 		}
 		tfMap[info.Timeframe] = info
@@ -891,7 +891,7 @@ func SyncKlineTFs() *errs.Error {
 	return sess.SyncKlineSid(curSid, tfMap, calcs)
 }
 
-func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]KInfoExt, calcs map[string]map[int32][2]int64) *errs.Error {
+func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[string]map[int32][2]int64) *errs.Error {
 	var err *errs.Error
 	var err_ error
 	tfRanges := make(map[string][2]int64)

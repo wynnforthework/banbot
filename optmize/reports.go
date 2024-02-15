@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -42,7 +43,6 @@ type TextFloat struct {
 }
 
 type RowPart struct {
-	Count        int
 	WinCount     int
 	ProfitSum    float64
 	ProfitPctSum float64
@@ -135,21 +135,33 @@ func (r BTResult) printBtResult() {
 }
 
 func textGroupPairs(orders []*orm.InOutOrder) string {
-	return groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		return od.Symbol
-	}, "Pair", nil, nil)
+	})
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Title < groups[j].Title
+	})
+	return printGroups(groups, "Pair", nil, nil)
 }
 
 func textGroupEntTags(orders []*orm.InOutOrder) string {
-	return groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		return od.EnterTag
-	}, "EnterTag", nil, nil)
+	})
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Title < groups[j].Title
+	})
+	return printGroups(groups, "Enter Tag", nil, nil)
 }
 
 func textGroupExitTags(orders []*orm.InOutOrder) string {
-	return groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		return od.ExitTag
-	}, "ExitTag", nil, nil)
+	})
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Title < groups[j].Title
+	})
+	return printGroups(groups, "Exit Tag", nil, nil)
 }
 
 func textGroupProfitRanges(orders []*orm.InOutOrder) string {
@@ -174,15 +186,23 @@ func textGroupProfitRanges(orders []*orm.InOutOrder) string {
 		maxPct := strconv.FormatFloat(slices.Max(gp.Items)*100, 'f', 2, 64)
 		grpTitles = append(grpTitles, fmt.Sprintf("%s ~ %s%%", minPct, maxPct))
 	}
-	return groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		return grpTitles[res.RowGIds[i]]
-	}, "Profit Range", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
+	})
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Orders[0].ProfitRate < groups[j].Orders[0].ProfitRate
+	})
+	return printGroups(groups, "Profit Range", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
 func textGroupDays(orders []*orm.InOutOrder) string {
-	return groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		return btime.ToDateStr(od.EnterAt, "2006-01-02")
-	}, "Date", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
+	})
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Title < groups[j].Title
+	})
+	return printGroups(groups, "Date", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
 func makeEnterExits(orders []*orm.InOutOrder) []string {
@@ -214,21 +234,20 @@ func makeEnterExits(orders []*orm.InOutOrder) []string {
 	}
 }
 
-func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int) string, title string, extHeads []string, prcGrp func([]*orm.InOutOrder) []string) string {
+func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int) string) []*RowItem {
 	if len(orders) == 0 {
-		return ""
+		return nil
 	}
-	groups := make(map[string]RowItem)
+	groups := make(map[string]*RowItem)
 	for i, od := range orders {
 		tag := getTag(od, i)
 		sta, ok := groups[tag]
 		duration := max(0, int((od.ExitAt-od.EnterAt)/1000))
 		isWin := od.Profit >= 0
 		if !ok {
-			sta = RowItem{
+			sta = &RowItem{
 				Title: tag,
 				RowPart: RowPart{
-					Count:        1,
 					ProfitSum:    od.Profit,
 					ProfitPctSum: od.ProfitRate,
 					CostSum:      od.EnterCost(),
@@ -242,7 +261,6 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 			}
 			groups[tag] = sta
 		} else {
-			sta.Count += 1
 			if isWin {
 				sta.WinCount += 1
 			}
@@ -253,6 +271,10 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 			sta.Orders = append(sta.Orders, od)
 		}
 	}
+	return utils.ValsOfMap(groups)
+}
+
+func printGroups(groups []*RowItem, title string, extHeads []string, prcGrp func([]*orm.InOutOrder) []string) string {
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
 	heads := []string{title, "Count", "Avg Profit %", "Tot Profit %", "Sum Profit", "Duration", "Win Rate"}
@@ -264,12 +286,13 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 	table.SetCenterSeparator("|")
 	table.SetAlignment(tablewriter.ALIGN_RIGHT)
 	for _, sta := range groups {
-		numText := strconv.Itoa(sta.Count)
-		avgProfit := strconv.FormatFloat(sta.ProfitPctSum*100/float64(sta.Count), 'f', 2, 64)
+		grpCount := len(sta.Orders)
+		numText := strconv.Itoa(grpCount)
+		avgProfit := strconv.FormatFloat(sta.ProfitPctSum*100/float64(grpCount), 'f', 2, 64)
 		totProfit := strconv.FormatFloat(sta.ProfitSum*100/sta.CostSum, 'f', 2, 64)
 		sumProfit := strconv.FormatFloat(sta.ProfitSum, 'f', 2, 64)
 		duraText := kMeansDurations(sta.Durations, 3)
-		winRate := strconv.FormatFloat(float64(sta.WinCount)*100/float64(sta.Count), 'f', 1, 64) + "%"
+		winRate := strconv.FormatFloat(float64(sta.WinCount)*100/float64(grpCount), 'f', 1, 64) + "%"
 		row := []string{sta.Title, numText, avgProfit, totProfit, sumProfit, duraText, winRate}
 		if prcGrp != nil {
 			cols := prcGrp(sta.Orders)
@@ -295,6 +318,9 @@ func kMeansVals(vals []float64, num int) *ClusterRes {
 	// 输入值域在0~1之间
 	minVal := slices.Min(vals)
 	scale := 1 / (slices.Max(vals) - minVal)
+	if len(vals) == 1 {
+		scale = 1 / minVal
+	}
 	offset := 0 - minVal*scale
 	var d clusters.Observations
 	for _, val := range vals {
@@ -349,6 +375,12 @@ func kMeansVals(vals []float64, num int) *ClusterRes {
 }
 
 func kMeansDurations(durations []int, num int) string {
+	if len(durations) < num {
+		if len(durations) == 0 {
+			return ""
+		}
+		num = len(durations)
+	}
 	var d = make([]float64, 0, len(durations))
 	for _, dura := range durations {
 		d = append(d, float64(dura))

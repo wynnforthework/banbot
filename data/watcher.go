@@ -14,7 +14,7 @@ import (
 
 type KLineWatcher struct {
 	*utils.ClientIO
-	jobs       map[string]PairTFCache
+	jobs       map[string]*PairTFCache
 	initMsgs   []*utils.IOMsg
 	OnKLineMsg func(msg *KLineMsg) // 收到爬虫K线消息
 	OnTrade    func(exgName, market string, trade *banexg.Trade)
@@ -45,7 +45,7 @@ func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
 	}
 	res := &KLineWatcher{
 		ClientIO: client,
-		jobs:     make(map[string]PairTFCache),
+		jobs:     make(map[string]*PairTFCache),
 	}
 	res.Listens["uohlcv"] = res.onSpiderBar
 	res.Listens["ohlcv"] = res.onSpiderBar
@@ -99,7 +99,7 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 			tags = append(tags, p+"_"+j.Symbol)
 		}
 		pairs = append(pairs, j.Symbol)
-		w.jobs[jobKey] = PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since}
+		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since}
 	}
 	msg := &utils.IOMsg{Action: "subscribe", Data: tags}
 	err := w.WriteMsg(msg)
