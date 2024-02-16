@@ -128,7 +128,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 			TaskID:    orm.TaskID,
 			Symbol:    env.Symbol,
 			Enter:     true,
-			OrderType: req.OrderType,
+			OrderType: core.OrderTypeEnums[req.OrderType],
 			Side:      odSide,
 			Price:     req.Limit,
 			Amount:    req.Amount,
@@ -263,7 +263,8 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 		req.ExitRate = 1
 		return o.ExitOrder(sess, part, req)
 	}
-	od.SetExit(req.Tag, req.OrderType, req.Limit)
+	odType := core.OrderTypeEnums[req.OrderType]
+	od.SetExit(req.Tag, odType, req.Limit)
 	err := od.Save(sess)
 	if err != nil {
 		return od, err

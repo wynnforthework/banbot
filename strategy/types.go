@@ -67,9 +67,9 @@ EnterReq
 */
 type EnterReq struct {
 	Tag        string  // 入场信号
-	Short      bool    // 是否做空
 	StgyName   string  // 策略名称
-	OrderType  string  // 订单类型
+	Short      bool    // 是否做空
+	OrderType  int     // 订单类型, core.OrderType*
 	Limit      float64 //限价单入场价格，指定时订单将作为限价单提交
 	CostRate   float64 //开仓倍率、默认按配置1倍。用于计算LegalCost
 	LegalCost  float64 //花费法币金额。指定时忽略CostRate
@@ -85,13 +85,13 @@ ExitReq
 */
 type ExitReq struct {
 	Tag        string  //退出信号
-	Dirt       string  // long/short/both
 	StgyName   string  // 策略名称
-	OrderType  string  // 订单类型
+	EnterTag   string  //只退出入场信号为EnterTag的订单
+	Dirt       int     // core.OdDirt* long/short/both
+	OrderType  int     // 订单类型, core.OrderType*
 	Limit      float64 //限价单退出价格，指定时订单将作为限价单提交
 	ExitRate   float64 //退出比率，默认100%即所有订单全部退出
 	Amount     float64 //要退出的标的数量。指定时ExitRate无效
-	EnterTag   string  //只退出入场信号为EnterTag的订单
 	OrderID    int64   //只退出指定订单
 	UnOpenOnly bool    //True时只退出尚未入场的订单
 	Force      bool    //是否强制退出

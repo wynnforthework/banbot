@@ -85,23 +85,32 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 			// 初始化BarEnv
 			envKey := strings.Join([]string{exs.Symbol, tf}, "_")
 			tfMSecs := int64(utils.TFToSecs(tf) * 1000)
-			env := &ta.BarEnv{
-				Exchange:   core.ExgName,
-				MarketType: core.Market,
-				Symbol:     exs.Symbol,
-				TimeFrame:  tf,
-				TFMSecs:    tfMSecs,
-				MaxCache:   core.NumTaCache,
-				Data:       map[string]interface{}{"sid": exs.ID},
+			env, ok := Envs[envKey]
+			if !ok {
+				env = &ta.BarEnv{
+					Exchange:   core.ExgName,
+					MarketType: core.Market,
+					Symbol:     exs.Symbol,
+					TimeFrame:  tf,
+					TFMSecs:    tfMSecs,
+					MaxCache:   core.NumTaCache,
+					Data:       map[string]interface{}{"sid": exs.ID},
+				}
+				Envs[envKey] = env
 			}
-			Envs[envKey] = env
 			// 初始化交易任务
 			job := &StagyJob{
-				Stagy:     stagy,
-				Env:       env,
-				Symbol:    exs,
-				TimeFrame: tf,
-				TPMaxs:    make(map[int64]float64),
+				Stagy:         stagy,
+				Env:           env,
+				Symbol:        exs,
+				TimeFrame:     tf,
+				TPMaxs:        make(map[int64]float64),
+				OpenLong:      true,
+				OpenShort:     true,
+				CloseLong:     true,
+				CloseShort:    true,
+				ExgStopLoss:   true,
+				ExgTakeProfit: true,
 			}
 			if jobs, ok := Jobs[envKey]; ok {
 				Jobs[envKey] = append(jobs, job)

@@ -98,19 +98,20 @@ func regLoaderTypes(symPtr map[string]uintptr) {
 }
 
 func (q *ExitReq) Clone() *ExitReq {
-	return &ExitReq{
+	res := &ExitReq{
 		Tag:        q.Tag,
-		Dirt:       q.Dirt,
 		StgyName:   q.StgyName,
+		EnterTag:   q.EnterTag,
+		Dirt:       q.Dirt,
 		OrderType:  q.OrderType,
 		Limit:      q.Limit,
 		ExitRate:   q.ExitRate,
 		Amount:     q.Amount,
-		EnterTag:   q.EnterTag,
 		OrderID:    q.OrderID,
 		UnOpenOnly: q.UnOpenOnly,
 		Force:      q.Force,
 	}
+	return res
 }
 
 func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
@@ -139,7 +140,7 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 		}
 		slPrice := od.GetInfoFloat64(orm.KeyStopLossPrice)
 		tpPrice := od.GetInfoFloat64(orm.KeyTakeProfitPrice)
-		req, err := s.CustomExit(od)
+		req, err := s.customExit(od)
 		if err != nil {
 			return res, err
 		}

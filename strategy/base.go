@@ -53,27 +53,30 @@ func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []*core.T
  */
 
 func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
-	isLiveMode := core.LiveMode()
-	symbol := s.Symbol.Symbol
-	var dirType = "long"
-	if req.Short {
-		dirType = "short"
-	}
-	if req.Short && s.OpenShort || !req.Short && s.OpenLong {
-		if isLiveMode {
-			log.Warn("open order disabled",
-				zap.String("strategy", s.Stagy.Name),
-				zap.String("pair", symbol),
-				zap.String("tag", req.Tag),
-				zap.String("dir", dirType))
-		}
-		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
-	}
 	if req.Tag == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is Required")
 	}
 	if req.StgyName == "" {
 		req.StgyName = s.Stagy.Name
+	}
+	//dateStr := btime.ToDateStr(s.Env.TimeStop, "")
+	//slStr := strconv.FormatFloat(req.StopLoss, 'f', -1, 64)
+	//fmt.Println(s.Symbol.Symbol + " " + dateStr + ":" + req.Tag + ", sl:" + slStr)
+	isLiveMode := core.LiveMode()
+	symbol := s.Symbol.Symbol
+	var dirType = core.OdDirtLong
+	if req.Short {
+		dirType = core.OdDirtShort
+	}
+	if req.Short && !s.OpenShort || !req.Short && !s.OpenLong {
+		if isLiveMode {
+			log.Warn("open order disabled",
+				zap.String("strategy", s.Stagy.Name),
+				zap.String("pair", symbol),
+				zap.String("tag", req.Tag),
+				zap.Int("dir", dirType))
+		}
+		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
 	}
 	if req.Amount == 0 && req.LegalCost == 0 {
 		if req.CostRate == 0 {
@@ -145,6 +148,9 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 }
 
 func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
+	if req.Tag == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "tag is required")
+	}
 	if req.StgyName == "" {
 		req.StgyName = s.Stagy.Name
 	}
@@ -154,11 +160,8 @@ func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
 			zap.String("strategy", s.Stagy.Name),
 			zap.String("pair", s.Symbol.Symbol),
 			zap.String("tag", req.Tag),
-			zap.String("dirt", req.Dirt))
+			zap.Int("dirt", req.Dirt))
 		return errs.NewMsg(errs.CodeParamInvalid, "close order disabled")
-	}
-	if req.Tag == "" {
-		return errs.NewMsg(errs.CodeParamRequired, "tag is required")
 	}
 	if req.ExitRate > 1 {
 		return errs.NewMsg(errs.CodeParamInvalid, "ExitRate shoud in (0, 1], current: %f", req.ExitRate)
@@ -244,10 +247,10 @@ func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 }
 
 /*
-DrawDownExit
+drawDownExit
 按跟踪止盈检查是否达到回撤阈值，超出则退出，此方法由系统调用
 */
-func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) *ExitReq {
+func (s *StagyJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
 	spVal := s.getDrawDownExitPrice(od)
 	if spVal == 0 {
 		return nil
@@ -265,15 +268,15 @@ func (s *StagyJob) DrawDownExit(od *orm.InOutOrder) *ExitReq {
 }
 
 /*
-CustomExit
+customExit
 检查订单是否需要退出，此方法由系统调用
 */
-func (s *StagyJob) CustomExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
+func (s *StagyJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
 	var req *ExitReq
 	if s.Stagy.OnCheckExit != nil {
 		req = s.Stagy.OnCheckExit(s, od)
 	} else if s.Stagy.DrawDownExit {
-		req = s.DrawDownExit(od)
+		req = s.drawDownExit(od)
 	}
 	var err *errs.Error
 	if req != nil {

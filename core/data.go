@@ -66,9 +66,9 @@ const (
 )
 
 const (
-	OdDirtLong  = "long"
-	OdDirtShort = "short"
-	OdDirtBoth  = "both"
+	OdDirtShort = iota - 1
+	OdDirtBoth
+	OdDirtLong
 )
 
 const (
@@ -95,4 +95,22 @@ var (
 	prices    = make(map[string]float64) //交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
 	Ctx       context.Context            // 用于全部goroutine同时停止
 	StopAll   func()                     // 停止全部机器人线程
+)
+
+var (
+	OrderTypeEnums = []string{"", banexg.OdTypeMarket, banexg.OdTypeLimit, banexg.OdTypeStopLoss,
+		banexg.OdTypeStopLossLimit, banexg.OdTypeTakeProfit, banexg.OdTypeTakeProfitLimit,
+		banexg.OdTypeStop, banexg.OdTypeLimitMaker}
+)
+
+const (
+	OrderTypeEmpty = iota
+	OrderTypeMarket
+	OrderTypeLimit
+	OrderTypeStopLoss
+	OrderTypeStopLossLimit
+	OrderTypeTakeProfit
+	OrderTypeTakeProfitLimit
+	OrderTypeStop
+	OrderTypeLimitMaker
 )
