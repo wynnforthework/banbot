@@ -139,7 +139,7 @@ func textGroupPairs(orders []*orm.InOutOrder) string {
 		return od.Symbol
 	})
 	sort.Slice(groups, func(i, j int) bool {
-		return groups[i].Title < groups[j].Title
+		return len(groups[i].Orders) > len(groups[j].Orders)
 	})
 	return printGroups(groups, "Pair", nil, nil)
 }
@@ -315,6 +315,20 @@ type ClusterRes struct {
 }
 
 func kMeansVals(vals []float64, num int) *ClusterRes {
+	if len(vals) == 0 {
+		return nil
+	}
+	if num == 1 {
+		sumVal := float64(0)
+		for _, v := range vals {
+			sumVal += v
+		}
+		avgVal := sumVal / float64(len(vals))
+		return &ClusterRes{
+			Clusters: []Cluster{{Center: avgVal, Items: vals}},
+			RowGIds:  make([]int, len(vals)),
+		}
+	}
 	// 输入值域在0~1之间
 	minVal := slices.Min(vals)
 	scale := 1 / (slices.Max(vals) - minVal)
@@ -375,11 +389,18 @@ func kMeansVals(vals []float64, num int) *ClusterRes {
 }
 
 func kMeansDurations(durations []int, num int) string {
-	if len(durations) < num {
+	slices.Sort(durations)
+	diffNum := 1
+	for i, val := range durations[1:] {
+		if val != durations[i] {
+			diffNum += 1
+		}
+	}
+	if diffNum < num {
 		if len(durations) == 0 {
 			return ""
 		}
-		num = len(durations)
+		num = diffNum
 	}
 	var d = make([]float64, 0, len(durations))
 	for _, dura := range durations {
@@ -391,7 +412,13 @@ func kMeansDurations(durations []int, num int) string {
 	}
 	var b strings.Builder
 	for _, grp := range res.Clusters {
-		coord := int(math.Round(grp.Center))
+		grpNum := len(grp.Items)
+		var coord int
+		if grpNum == 1 {
+			coord = int(math.Round(grp.Items[0]))
+		} else {
+			coord = int(math.Round(grp.Center))
+		}
 		if coord < 60 {
 			b.WriteString(strconv.Itoa(coord))
 			b.WriteString("s")
@@ -404,7 +431,7 @@ func kMeansDurations(durations []int, num int) string {
 			b.WriteString(strconv.Itoa(lmins))
 		}
 		b.WriteString("/")
-		b.WriteString(strconv.Itoa(len(grp.Items)))
+		b.WriteString(strconv.Itoa(grpNum))
 		b.WriteString("  ")
 	}
 	return b.String()
