@@ -22,7 +22,11 @@ const (
 )
 
 const (
-	KeyStopLossPrice   = "stop_loss_price"
-	KeyTakeProfitPrice = "take_profit_price"
-	KeyStatusMsg       = "status_msg"
+	KeyStatusMsg = "status_msg"
+)
+
+const (
+	OdInfoStopLoss   = "StopLossPrice"
+	OdInfoTakeProfit = "TakeProfitPrice"
+	OdInfoLegalCost  = "LegalCost"
 )

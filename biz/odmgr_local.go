@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/banbox/banta"
 	"go.uber.org/zap"
 )
 
@@ -31,6 +32,11 @@ func NewLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) *LocalOrd
 			callBack: callBack,
 		},
 	}
+}
+
+func (o *LocalOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strategy.EnterReq,
+	exits []*strategy.ExitReq, _ []*orm.InOutEdit) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
+	return o.OrderMgr.ProcessOrders(sess, env, enters, exits)
 }
 
 func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKline) *errs.Error {
@@ -82,9 +88,12 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 		} else if od.Enter.Status < orm.OdStatusClosed {
 			exOrder = od.Enter
 		} else {
-			if od.ExitTag != "" {
+			if od.ExitTag == "" {
 				// 已入场完成，尚未出现出场信号，检查是否触发止损
-				o.tryFillTriggers(od, &bar.Kline)
+				err := o.tryFillTriggers(od, &bar.Kline)
+				if err != nil {
+					return 0, err
+				}
 			}
 			continue
 		}
@@ -134,9 +143,9 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	_, err := Wallets.EnterOd(od)
 	if err != nil {
 		if err.Code == core.ErrLowFunds {
-			od.LocalExit(core.ExitTagForceExit, 0, err.Error())
+			err = od.LocalExit(core.ExitTagForceExit, 0, err.Error())
 			o.onLowFunds()
-			return nil
+			return err
 		}
 		return err
 	}
@@ -162,10 +171,10 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 		exOrder.Amount, err = exchange.PrecAmount(market, entAmount)
 		if err != nil {
 			log.Warn("prec enter amount fail", zap.Float64("amt", entAmount), zap.Error(err))
-			od.LocalExit(core.ExitTagFatalErr, 0, err.Error())
+			err = od.LocalExit(core.ExitTagFatalErr, 0, err.Error())
 			_, quote, _, _ := utils2.SplitSymbol(od.Symbol)
 			Wallets.Cancel(od.Key(), quote, 0, true)
-			return nil
+			return err
 		}
 	}
 	maker := core.IsMaker(od.Symbol, exOrder.Side, entPrice)
@@ -277,21 +286,23 @@ func (o *LocalOrderMgr) simMarketPrice(bar *banexg.Kline, rate float64) float64 
 	return start*(1-posRate) + end*posRate
 }
 
-func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) {
-	slPrice := od.GetInfoFloat64(orm.KeyStopLossPrice)
-	tpPrice := od.GetInfoFloat64(orm.KeyTakeProfitPrice)
+func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *errs.Error {
+	slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)
+	tpPrice := od.GetInfoFloat64(orm.OdInfoTakeProfit)
 	if slPrice == 0 && tpPrice == 0 {
-		return
+		return nil
 	}
+	var err *errs.Error
 	if slPrice > 0 && (od.Short && bar.High >= slPrice || !od.Short && bar.Low <= slPrice) {
-		od.LocalExit(core.ExitTagStopLoss, slPrice, "")
+		err = od.LocalExit(core.ExitTagStopLoss, slPrice, "")
 	} else if tpPrice > 0 && (od.Short && bar.Low <= tpPrice || !od.Short && bar.High >= tpPrice) {
-		od.LocalExit(core.ExitTagTakeProfit, tpPrice, "")
+		err = od.LocalExit(core.ExitTagTakeProfit, tpPrice, "")
 	} else {
-		return
+		return nil
 	}
 	Wallets.ExitOd(od, od.Exit.Amount)
 	Wallets.ConfirmOdExit(od, od.Exit.Price)
+	return err
 }
 
 func (o *LocalOrderMgr) onLowFunds() {

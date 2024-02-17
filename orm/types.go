@@ -27,8 +27,3 @@ type KlineAgg struct {
 	CpsBefore string
 	Retention string
 }
-
-const (
-	OdInfoStopLoss  = "StopLossPrice"
-	OdInfoLegalCost = "LegalCost"
-)

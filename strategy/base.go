@@ -59,9 +59,6 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.StgyName == "" {
 		req.StgyName = s.Stagy.Name
 	}
-	//dateStr := btime.ToDateStr(s.Env.TimeStop, "")
-	//slStr := strconv.FormatFloat(req.StopLoss, 'f', -1, 64)
-	//fmt.Println(s.Symbol.Symbol + " " + dateStr + ":" + req.Tag + ", sl:" + slStr)
 	isLiveMode := core.LiveMode()
 	symbol := s.Symbol.Symbol
 	var dirType = core.OdDirtLong

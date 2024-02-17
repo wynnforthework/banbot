@@ -36,12 +36,6 @@ type OrderMgr struct {
 	wallet   *BanWallets
 	data     data.IProvider
 	callBack func(order *orm.InOutOrder, isEnter bool)
-	queue    []*OdQItem
-}
-
-type OdQItem struct {
-	Order  *orm.InOutOrder
-	Action string
 }
 
 func allowOrderEnter(env *banta.BarEnv) bool {
@@ -64,7 +58,7 @@ func allowOrderEnter(env *banta.BarEnv) bool {
 }
 
 func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strategy.EnterReq,
-	exits []*strategy.ExitReq, edits []*orm.InOutEdit) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
+	exits []*strategy.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	var entOrders, extOrders []*orm.InOutOrder
 	if len(enters) > 0 && allowOrderEnter(env) {
 		for _, ent := range enters {
@@ -83,12 +77,6 @@ func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []
 			}
 			extOrders = append(extOrders, iorders...)
 		}
-	}
-	for _, edit := range edits {
-		o.queue = append(o.queue, &OdQItem{
-			Order:  edit.Order,
-			Action: edit.Action,
-		})
 	}
 	return entOrders, extOrders, nil
 }
@@ -139,15 +127,14 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 		DirtyEnter: true,
 	}
 	od.SetInfo(orm.OdInfoLegalCost, req.LegalCost)
-	err := od.Save(sess)
-	if err != nil {
-		return nil, err
+	if req.StopLoss > 0 {
+		od.SetInfo(orm.OdInfoStopLoss, req.StopLoss)
 	}
-	o.queue = append(o.queue, &OdQItem{
-		Order:  od,
-		Action: "enter",
-	})
-	return od, nil
+	if req.TakeProfit > 0 {
+		od.SetInfo(orm.OdInfoTakeProfit, req.TakeProfit)
+	}
+	err := od.Save(sess)
+	return od, err
 }
 
 func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy.ExitReq) ([]*orm.InOutOrder, *errs.Error) {
@@ -266,14 +253,7 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 	odType := core.OrderTypeEnums[req.OrderType]
 	od.SetExit(req.Tag, odType, req.Limit)
 	err := od.Save(sess)
-	if err != nil {
-		return od, err
-	}
-	o.queue = append(o.queue, &OdQItem{
-		Order:  od,
-		Action: "exit",
-	})
-	return od, nil
+	return od, err
 }
 
 /*

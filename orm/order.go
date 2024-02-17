@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/bytedance/sonic"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"strconv"
 	"strings"
 )
@@ -162,7 +163,7 @@ func (i *InOutOrder) SetExit(tag, orderType string, limit float64) {
 LocalExit
 在本地强制退出订单，立刻生效，无需等到下一个bar。这里不涉及钱包更新，钱包需要自行更新。
 */
-func (i *InOutOrder) LocalExit(tag string, price float64, msg string) {
+func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Error {
 	if price == 0 {
 		newPrice := core.GetPrice(i.Symbol)
 		if newPrice > 0 {
@@ -190,6 +191,7 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg string) {
 	if msg != "" {
 		i.SetInfo(KeyStatusMsg, msg)
 	}
+	return i.Save(nil)
 }
 
 /*
@@ -290,6 +292,14 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 			return err
 		}
 		i.DirtyInfo = false
+	}
+	if sess == nil {
+		var conn *pgxpool.Conn
+		sess, conn, err = Conn(nil)
+		if err != nil {
+			return err
+		}
+		defer conn.Release()
 	}
 	if i.ID == 0 {
 		err = i.IOrder.saveAdd(sess)

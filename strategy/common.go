@@ -19,22 +19,22 @@ import (
 )
 
 var (
-	stagyMap = make(map[string]*TradeStagy) // 已加载的策略缓存
+	StagyMap = make(map[string]*TradeStagy) // 已加载的策略缓存
 )
 
 func Get(stagyName string) *TradeStagy {
-	obj, ok := stagyMap[stagyName]
+	obj, ok := StagyMap[stagyName]
 	if ok {
 		return obj
 	}
-	obj = load(stagyName)
+	obj = loadNative(stagyName)
 	if obj != nil {
-		stagyMap[stagyName] = obj
+		StagyMap[stagyName] = obj
 	}
 	return obj
 }
 
-func load(stagyName string) *TradeStagy {
+func loadNative(stagyName string) *TradeStagy {
 	filePath := path.Join(config.GetStagyDir(), stagyName+".o")
 	_, err := os.Stat(filePath)
 	nameVar := zap.String("name", stagyName)
@@ -138,8 +138,8 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 		if !od.CanClose() {
 			continue
 		}
-		slPrice := od.GetInfoFloat64(orm.KeyStopLossPrice)
-		tpPrice := od.GetInfoFloat64(orm.KeyTakeProfitPrice)
+		slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)
+		tpPrice := od.GetInfoFloat64(orm.OdInfoTakeProfit)
 		req, err := s.customExit(od)
 		if err != nil {
 			return res, err
@@ -153,10 +153,10 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 				newTPPrice = s.ShortTPPrice
 			}
 			if newSLPrice == 0 {
-				newSLPrice = od.GetInfoFloat64(orm.KeyStopLossPrice)
+				newSLPrice = od.GetInfoFloat64(orm.OdInfoStopLoss)
 			}
 			if newTPPrice == 0 {
-				newTPPrice = od.GetInfoFloat64(orm.KeyTakeProfitPrice)
+				newTPPrice = od.GetInfoFloat64(orm.OdInfoTakeProfit)
 			}
 			if newSLPrice != slPrice {
 				if s.ExgStopLoss {
@@ -164,10 +164,10 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 						Order:  od,
 						Action: "StopLoss",
 					})
-					od.SetInfo(orm.KeyStopLossPrice, newSLPrice)
+					od.SetInfo(orm.OdInfoStopLoss, newSLPrice)
 				} else {
 					skipSL += 1
-					od.SetInfo(orm.KeyStopLossPrice, nil)
+					od.SetInfo(orm.OdInfoStopLoss, nil)
 				}
 			}
 			if newTPPrice != tpPrice {
@@ -176,10 +176,10 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 						Order:  od,
 						Action: "TakeProfit",
 					})
-					od.SetInfo(orm.KeyTakeProfitPrice, newTPPrice)
+					od.SetInfo(orm.OdInfoTakeProfit, newTPPrice)
 				} else {
 					skipTP += 1
-					od.SetInfo(orm.KeyTakeProfitPrice, nil)
+					od.SetInfo(orm.OdInfoTakeProfit, nil)
 				}
 			}
 		}

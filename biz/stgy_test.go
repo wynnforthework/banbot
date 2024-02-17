@@ -78,11 +78,17 @@ func TestStagyRun(t *testing.T) {
 		}
 		strategy.Envs[envKey] = env
 		job := &strategy.StagyJob{
-			Stagy:     stagy,
-			Env:       env,
-			Symbol:    exs,
-			TimeFrame: tf,
-			TPMaxs:    make(map[int64]float64),
+			Stagy:         stagy,
+			Env:           env,
+			Symbol:        exs,
+			TimeFrame:     tf,
+			TPMaxs:        make(map[int64]float64),
+			OpenLong:      true,
+			OpenShort:     true,
+			CloseLong:     true,
+			CloseShort:    true,
+			ExgStopLoss:   true,
+			ExgTakeProfit: true,
 		}
 		if jobs, ok := strategy.Jobs[envKey]; ok {
 			strategy.Jobs[envKey] = append(jobs, job)
