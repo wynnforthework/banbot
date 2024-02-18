@@ -2,6 +2,7 @@ package optmize
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
@@ -11,7 +12,9 @@ import (
 	"github.com/muesli/clusters"
 	"github.com/muesli/kmeans"
 	"github.com/olekukonko/tablewriter"
+	"go.uber.org/zap"
 	"math"
+	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -28,6 +31,7 @@ type BTResult struct {
 	EndMS         int64
 	PlotEvery     int
 	TotalInvest   float64
+	OutDir        string
 }
 
 type PlotData struct {
@@ -95,6 +99,8 @@ func (r *BTResult) printBtResult() {
 	}
 	b.WriteString(r.textMetrics(orders))
 	log.Info("BackTest Reports:\n" + b.String())
+
+	r.dumpOrders(orders)
 }
 
 func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
@@ -453,4 +459,60 @@ func kMeansDurations(durations []int, num int) string {
 		b.WriteString("  ")
 	}
 	return b.String()
+}
+
+func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
+	slices.SortFunc(orders, func(a, b *orm.InOutOrder) int {
+		return int((a.EnterAt - b.EnterAt) / 1000)
+	})
+	file, err_ := os.Create(fmt.Sprintf("%s/orders_%v.csv", r.OutDir, orm.TaskID))
+	if err_ != nil {
+		log.Error("create orders.csv fail", zap.Error(err_))
+		return
+	}
+	defer file.Close()
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+	heads := []string{"sid", "symbol", "timeframe", "direction", "leverage", "entAt", "entTag", "entPrice",
+		"entAmount", " entCost", "entFee", "exitAt", "exitTag", "exitPrice", "exitAmount", "exitGot",
+		"exitFee", "profitRate", "profit"}
+	if err_ = writer.Write(heads); err_ != nil {
+		log.Error("write orders.csv fail", zap.Error(err_))
+		return
+	}
+	colNum := len(heads)
+	for _, od := range orders {
+		row := make([]string, colNum)
+		row[0] = fmt.Sprintf("%v", od.Sid)
+		row[1] = od.Symbol
+		row[2] = od.Timeframe
+		row[3] = "long"
+		if od.Short {
+			row[3] = "short"
+		}
+		row[4] = fmt.Sprintf("%v", od.Leverage)
+		row[5] = btime.ToDateStr(od.EnterAt, "")
+		row[6] = od.EnterTag
+		if od.Enter != nil {
+			row[7] = strconv.FormatFloat(od.Enter.Price, 'f', 8, 64)
+			row[8] = strconv.FormatFloat(od.Enter.Amount, 'f', 8, 64)
+			row[9] = strconv.FormatFloat(od.EnterCost(), 'f', 4, 64)
+			row[10] = strconv.FormatFloat(od.Enter.Fee, 'f', 8, 64)
+		}
+		row[11] = btime.ToDateStr(od.ExitAt, "")
+		row[12] = od.ExitTag
+		if od.Exit != nil {
+			exitGot := od.Exit.Price * od.Exit.Amount
+			row[13] = strconv.FormatFloat(od.Exit.Price, 'f', 8, 64)
+			row[14] = strconv.FormatFloat(od.Exit.Amount, 'f', 8, 64)
+			row[15] = strconv.FormatFloat(exitGot, 'f', 4, 64)
+			row[16] = strconv.FormatFloat(od.Exit.Fee, 'f', 8, 64)
+		}
+		row[17] = strconv.FormatFloat(od.ProfitRate, 'f', 4, 64)
+		row[18] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
+		if err_ = writer.Write(row); err_ != nil {
+			log.Error("write orders.csv fail", zap.Error(err_))
+			return
+		}
+	}
 }

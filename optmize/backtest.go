@@ -51,12 +51,12 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	outDir := fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), orm.TaskID)
-	err_ := os.MkdirAll(outDir, 0755)
+	b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), orm.TaskID)
+	err_ := os.MkdirAll(b.OutDir, 0755)
 	if err_ != nil {
 		return errs.New(core.ErrIOWriteFail, err_)
 	}
-	config.Args.Logfile = outDir + "/out.log"
+	config.Args.Logfile = b.OutDir + "/out.log"
 	log.Setup(config.Args.Debug, config.Args.Logfile)
 	exchange, err := exg.Get()
 	if err != nil {
