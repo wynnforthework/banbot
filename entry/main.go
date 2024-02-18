@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"os"
+	"strings"
 )
 
 var subHelp = map[string]string{
@@ -57,7 +60,7 @@ func RunCmd() {
 
 	err := sub.Parse(os.Args[2:])
 	if err != nil {
-		fmt.Printf("Error: %v", err)
+		log.Error("fail", zap.Error(err))
 		printAndExit()
 	}
 	args.Init()
@@ -107,17 +110,18 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "task_id":
 			cmd.IntVar(&args.TakId, "task-id", 0, "task")
 		default:
-			fmt.Println("undefined argument:", key)
+			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)
 		}
 	}
 }
 
 func printAndExit() {
-	fmt.Printf("banbot %v\nplease run with a subcommand:\n", VERSION)
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("banbot %v\nplease run with a subcommand:\n", VERSION))
 	for k, v := range subHelp {
-		fmt.Println("  ", k)
-		fmt.Println("\t", v)
+		b.WriteString(fmt.Sprintf("  %s\n\t%v\n", k, v))
 	}
+	log.Warn(b.String())
 	os.Exit(1)
 }

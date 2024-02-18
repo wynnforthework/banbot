@@ -233,7 +233,7 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	barNum := int((endMS - startMS) / tfMSecs)
 	startText := btime.ToDateStr(startMS, "")
 	endText := btime.ToDateStr(endMS, "")
-	fmt.Printf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum)
+	log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
 	var pBar = progressbar.Default(int64(len(exsList)))
 	defer pBar.Close()
 	sess, conn, err := Conn(nil)

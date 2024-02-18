@@ -4,6 +4,7 @@ const (
 	ErrBadConfig = -1*iota - 100
 	ErrInvalidPath
 	ErrIOReadFail
+	ErrIOWriteFail
 	ErrDbConnFail
 	ErrDbReadFail
 	ErrDbExecFail

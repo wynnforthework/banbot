@@ -1,12 +1,12 @@
 package entry
 
 import (
-	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/optmize"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
 )
 
 func RunBackTest() *errs.Error {
@@ -20,7 +20,7 @@ func RunBackTest() *errs.Error {
 }
 
 func RunTrade() *errs.Error {
-	fmt.Println("in run trade")
+	log.Info("in run trade")
 	return nil
 }
 

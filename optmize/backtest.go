@@ -16,6 +16,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"math"
+	"os"
 )
 
 const (
@@ -24,15 +25,12 @@ const (
 
 type BackTest struct {
 	biz.Trader
-	BTResult
+	*BTResult
 }
 
 func NewBackTest() *BackTest {
 	p := &BackTest{
-		BTResult: BTResult{
-			Plots:     PlotData{},
-			PlotEvery: 1,
-		},
+		BTResult: NewBTResult(),
 	}
 	biz.InitFakeWallets()
 	p.TotalInvest = biz.Wallets.TotalLegal(nil, false)
@@ -53,6 +51,13 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
+	outDir := fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), orm.TaskID)
+	err_ := os.MkdirAll(outDir, 0755)
+	if err_ != nil {
+		return errs.New(core.ErrIOWriteFail, err_)
+	}
+	config.Args.Logfile = outDir + "/out.log"
+	log.Setup(config.Args.Debug, config.Args.Logfile)
 	exchange, err := exg.Get()
 	if err != nil {
 		return err

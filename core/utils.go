@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/banbox/banexg/log"
 	"regexp"
 	"slices"
 	"strings"
@@ -43,13 +44,15 @@ PrintStagyGroups
 */
 func PrintStagyGroups() {
 	items := GroupStagyPairs()
+	var b strings.Builder
 	for key, quoteMap := range items {
-		fmt.Printf("【%s】\n", key)
+		b.WriteString(fmt.Sprintf("【%s】\n", key))
 		for quoteCode, arr := range quoteMap {
 			baseStr := strings.Join(arr, " ")
-			fmt.Printf("%s(%d): %s\n", quoteCode, len(arr), baseStr)
+			b.WriteString(fmt.Sprintf("%s(%d): %s\n", quoteCode, len(arr), baseStr))
 		}
 	}
+	log.Info("group pairs by stagy_tf:\n" + b.String())
 }
 
 var (

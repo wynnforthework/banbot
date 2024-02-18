@@ -7,11 +7,11 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/log"
 	"github.com/muesli/clusters"
 	"github.com/muesli/kmeans"
 	"github.com/olekukonko/tablewriter"
 	"math"
-	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -56,8 +56,17 @@ type RowItem struct {
 	RowPart
 }
 
-func (r BTResult) printBtResult() {
+func NewBTResult() *BTResult {
+	res := &BTResult{
+		Plots:     PlotData{},
+		PlotEvery: 1,
+	}
+	return res
+}
+
+func (r *BTResult) printBtResult() {
 	orders := orm.HistODs
+	var b strings.Builder
 	var tblText string
 	if len(orders) > 0 {
 		items := []struct {
@@ -75,14 +84,22 @@ func (r BTResult) printBtResult() {
 			if tblText != "" {
 				width := strings.Index(tblText, "\n")
 				head := utils.PadCenter(item.Title, width, "=")
-				fmt.Println(head)
-				fmt.Println(tblText)
+				b.WriteString(head)
+				b.WriteString("\n")
+				b.WriteString(tblText)
+				b.WriteString("\n")
 			}
 		}
 	} else {
-		fmt.Println("No Orders Found")
+		b.WriteString("No Orders Found\n")
 	}
-	table := tablewriter.NewWriter(os.Stdout)
+	b.WriteString(r.textMetrics(orders))
+	log.Info("BackTest Reports:\n" + b.String())
+}
+
+func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
+	var b bytes.Buffer
+	table := tablewriter.NewWriter(&b)
 	heads := []string{"Metric", "Value"}
 	table.SetHeader(heads)
 	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
@@ -132,6 +149,7 @@ func (r BTResult) printBtResult() {
 	table.Append([]string{"Max Balance", strconv.FormatFloat(r.MaxBalance, 'f', 1, 64)})
 	table.Append([]string{"Min Balance", strconv.FormatFloat(r.MinBalance, 'f', 1, 64)})
 	table.Render()
+	return b.String()
 }
 
 func textGroupPairs(orders []*orm.InOutOrder) string {

@@ -15,7 +15,10 @@ import (
 )
 
 func GetDataDir() string {
-	return os.Getenv("BanDataDir")
+	if DataDir == "" {
+		DataDir = os.Getenv("BanDataDir")
+	}
+	return DataDir
 }
 
 func GetStagyDir() string {
@@ -46,6 +49,7 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 	if runEnv != core.RunEnvProd {
 		log.Info("Running in test, Please set `BanRunEnv=prod` in production running")
 	}
+	DataDir = args.DataDir
 	var paths []string
 	if !args.NoDefault {
 		dataDir := GetDataDir()
