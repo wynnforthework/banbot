@@ -98,17 +98,20 @@ func (b *BackTest) Run() {
 		log.Error("backtest init fail", zap.Error(err))
 		return
 	}
+	core.PrintStagyGroups()
+	btStart := btime.UTCTime()
 	err = data.Main.LoopMain()
 	if err != nil {
 		log.Error("backtest loop fail", zap.Error(err))
 		return
 	}
+	btCost := btime.UTCTime() - btStart
 	err = biz.OdMgr.CleanUp()
 	if err != nil {
 		log.Error("backtest clean orders fail", zap.Error(err))
 		return
 	}
-	log.Info("backtest complete")
+	log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
 	b.printBtResult()
 }
 

@@ -49,10 +49,10 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 	}
 	if banexg.IsContract(core.Market) {
 		// 为合约更新此定价币的所有订单保证金和钱包情况
-		_, _, code, _ := utils2.SplitSymbol(bar.Symbol)
+		_, _, code, _ := core.SplitSymbol(bar.Symbol)
 		var orders []*orm.InOutOrder
 		for _, od := range allOpens {
-			_, _, odSettle, _ := utils2.SplitSymbol(od.Symbol)
+			_, _, odSettle, _ := core.SplitSymbol(od.Symbol)
 			if odSettle == code {
 				orders = append(orders, od)
 			}
@@ -172,7 +172,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 		if err != nil {
 			log.Warn("prec enter amount fail", zap.Float64("amt", entAmount), zap.Error(err))
 			err = od.LocalExit(core.ExitTagFatalErr, 0, err.Error())
-			_, quote, _, _ := utils2.SplitSymbol(od.Symbol)
+			_, quote, _, _ := core.SplitSymbol(od.Symbol)
 			Wallets.Cancel(od.Key(), quote, 0, true)
 			return err
 		}

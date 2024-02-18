@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 	"gonum.org/v1/gonum/floats"
 	"math"
+	"slices"
 	"time"
 )
 
@@ -139,11 +140,14 @@ func RefreshPairList(addPairs []string) *errs.Error {
 			if flt.IsDisable() {
 				continue
 			}
+			oldNum := len(pairs)
 			pairs, err = flt.Filter(pairs, tickersMap)
 			if err != nil {
 				return err
 			}
-			log.Info("left symbols", zap.String("after", flt.GetName()), zap.Int("num", len(pairs)))
+			if oldNum > len(pairs) {
+				log.Info(fmt.Sprintf("left %d symbols after %s", len(pairs), flt.GetName()))
+			}
 		}
 	}
 	adds := utils.UnionArr(addPairs, config.GetExgConfig().WhitePairs)
@@ -161,6 +165,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 		core.Pairs = append(core.Pairs, p)
 		core.PairsMap[p] = true
 	}
+	slices.Sort(core.Pairs)
 	// 计算交易对各维度K线质量分数
 	exchange, err := exg.Get()
 	if err != nil {

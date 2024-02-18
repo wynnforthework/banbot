@@ -137,7 +137,32 @@ func NewHistProvider(callBack FnPairKline) *HistProvider[IHistKlineFeeder] {
 	}
 }
 
+func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
+	var err *errs.Error
+	exchange, err := exg.Get()
+	if err != nil {
+		return err
+	}
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	for _, h := range p.holders {
+		err = h.downIfNeed(sess, exchange)
+		if err != nil {
+			log.Error("download ohlcv fail", zap.String("pair", h.getSymbol()), zap.Error(err))
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[string]int) *errs.Error {
+	err := p.downIfNeed()
+	if err != nil {
+		return err
+	}
 	_, sinceMap, err := p.Provider.SubWarmPairs(items)
 	pairSince := make(map[string]int64)
 	for key, val := range sinceMap {
@@ -167,24 +192,6 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 	if len(p.holders) == 0 {
 		return errs.NewMsg(core.ErrBadConfig, "no pairs to run")
 	}
-	var err *errs.Error
-	exchange, err := exg.Get()
-	if err != nil {
-		return err
-	}
-	sess, conn, err := orm.Conn(nil)
-	if err != nil {
-		return err
-	}
-	for _, h := range p.holders {
-		err = h.downIfNeed(sess, exchange)
-		if err != nil {
-			log.Error("download ohlcv fail", zap.String("pair", h.getSymbol()), zap.Error(err))
-			conn.Release()
-			return err
-		}
-	}
-	conn.Release()
 	var pBar *progressbar.ProgressBar
 	log.Info("run data loop for backtest..")
 	for {

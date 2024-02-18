@@ -6,7 +6,6 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -365,7 +364,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 	var quoteCost, quoteMargin float64
 	var err *errs.Error
 
-	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
+	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	if isFuture || !od.Short {
 		// 期货合约，现货多单锁定quote
 		if legalCost < core.MinStakeAmount {
@@ -420,7 +419,7 @@ func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	quoteAmount := enterPrice * subOd.Amount
 	curFee := subOd.Fee
 
-	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
+	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	if banexg.IsContract(exs.Market) {
 		// 期货合约，只锁定定价币，不涉及base币的增加
 		quoteAmount /= float64(od.Leverage)
@@ -448,7 +447,7 @@ func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
 		// 期货合约，不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
 		return
 	}
-	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
+	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	if od.Short {
 		// 现货空单，从quote的frozen卖，计算到quote的available，从base的pending未成交部分取消
 		w.Cancel(od.Key(), baseCode, 0, true)
@@ -482,7 +481,7 @@ func (w *BanWallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) {
 	}
 	subOd := od.Exit
 	curFee := subOd.Fee
-	baseCode, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
+	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	odKey := od.Key()
 	if banexg.IsContract(exs.Market) {
 		//期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
@@ -544,7 +543,7 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 	if exs == nil {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", odList[0].Sid))
 	}
-	_, quoteCode, _, _ := utils.SplitSymbol(exs.Symbol)
+	_, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	wallet := w.Get(quoteCode)
 
 	// 计算是否爆仓

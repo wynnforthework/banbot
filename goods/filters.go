@@ -232,15 +232,21 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, cb func(string
 	if err != nil {
 		return nil, err
 	}
-	var res []string
+	var has = make(map[string]struct{})
 	handle := func(pair string, _ string, arr []*banexg.Kline) {
 		if cb(pair, arr) {
-			res = append(res, pair)
+			has[pair] = struct{}{}
 		}
 	}
 	err = orm.FastBulkOHLCV(exchange, symbols, timeFrame, 0, 0, limit, handle)
 	if err != nil {
 		return nil, err
+	}
+	var res = make([]string, 0, len(has))
+	for _, pair := range symbols {
+		if _, ok := has[pair]; ok {
+			res = append(res, pair)
+		}
 	}
 	return res, nil
 }
@@ -272,9 +278,9 @@ func (f *SpreadFilter) Filter(symbols []string, tickers map[string]*banexg.Ticke
 }
 
 func (f *OffsetFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	var res []string
-	if f.Offset < len(symbols) {
-		res = symbols[f.Offset:]
+	var res = symbols
+	if f.Offset < len(res) {
+		res = res[f.Offset:]
 	}
 	if f.Limit < len(res) {
 		res = res[:f.Limit]

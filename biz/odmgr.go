@@ -7,7 +7,6 @@ import (
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
-	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -244,7 +243,7 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 		part := od.CutPart(req.ExitRate, 0)
 		// 这里part的key和原始的一样，所以part作为src_key
 		tgtKey, srcKey := od.Key(), part.Key()
-		base, quote, _, _ := utils2.SplitSymbol(od.Symbol)
+		base, quote, _, _ := core.SplitSymbol(od.Symbol)
 		o.wallet.CutPart(srcKey, tgtKey, base, 1-req.ExitRate)
 		o.wallet.CutPart(srcKey, tgtKey, quote, 1-req.ExitRate)
 		req.ExitRate = 1

@@ -202,9 +202,9 @@ func (f *KlineFeeder) WarmTfs(tfBars map[string][]*banexg.Kline) int64 {
 		if len(bars) == 0 {
 			continue
 		}
-		tfSecs := int64(utils.TFToSecs(tf) * 1000)
-		lastMS := bars[len(bars)-1].Time + tfSecs
-		f.fireCallBacks(f.Symbol, tf, tfSecs, bars)
+		tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+		lastMS := bars[len(bars)-1].Time + tfMSecs
+		f.fireCallBacks(f.Symbol, tf, tfMSecs, bars)
 		for _, sta := range f.States {
 			if sta.TimeFrame == tf {
 				sta.NextMS = lastMS
@@ -384,7 +384,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 				if startMS < stopMS {
 					f.TotalLen = int((stopMS-startMS)/1000)/state.TFSecs + 1
 				}
-				f.TimeRange.EndMS = utils.AlignTfMSecs(stopMS, tfMSecs)
+				//f.TimeRange.EndMS = utils.AlignTfMSecs(stopMS, tfMSecs)
 			}
 		}
 		if f.nextMS+tfMSecs >= f.TimeRange.EndMS {
