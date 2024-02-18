@@ -177,13 +177,6 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 			return err
 		}
 	}
-	maker := core.IsMaker(od.Symbol, exOrder.Side, entPrice)
-	fee, err := exchange.CalculateFee(od.Symbol, exOrder.OrderType, exOrder.Side, exOrder.Amount, entPrice, maker, nil)
-	if err != nil {
-		return err
-	}
-	exOrder.Fee = fee.Cost
-	exOrder.FeeType = fee.Currency
 	if exOrder.Price == 0 {
 		exOrder.Price = entPrice
 	}
@@ -196,6 +189,10 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = entPrice
 	exOrder.Status = orm.OdStatusClosed
+	err = od.UpdateFee(entPrice, true)
+	if err != nil {
+		return err
+	}
 	od.Status = orm.InOutStatusFullEnter
 	od.DirtyEnter = true
 	od.DirtyMain = true
@@ -206,17 +203,6 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64) *errs.Error {
 	exOrder := od.Exit
 	Wallets.ExitOd(od, exOrder.Amount)
-	exchange, err := exg.Get()
-	if err != nil {
-		return err
-	}
-	maker := core.IsMaker(od.Symbol, exOrder.Side, price)
-	fee, err := exchange.CalculateFee(od.Symbol, exOrder.OrderType, exOrder.Side, exOrder.Amount, price, maker, nil)
-	if err != nil {
-		return err
-	}
-	exOrder.Fee = fee.Cost
-	exOrder.FeeType = fee.Currency
 	updateTime := btime.TimeMS() + int64(netCost)*1000
 	exOrder.UpdateAt = updateTime
 	exOrder.CreateAt = updateTime
@@ -224,6 +210,10 @@ func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64) *errs
 	exOrder.Price = price
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = price
+	err := od.UpdateFee(price, false)
+	if err != nil {
+		return err
+	}
 	od.Status = orm.InOutStatusFullExit
 	od.DirtyMain = true
 	od.DirtyExit = true

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -109,6 +110,37 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 	i.DirtyMain = true
 }
 
+/*
+UpdateFee
+为入场/出场订单计算手续费，必须在Filled赋值后调用，否则计算为空
+*/
+func (i *InOutOrder) UpdateFee(price float64, forEnter bool) *errs.Error {
+	exchange, err := exg.Get()
+	if err != nil {
+		return err
+	}
+	exOrder := i.Enter
+	if !forEnter {
+		exOrder = i.Exit
+	}
+	var maker = false
+	if exOrder.OrderType != banexg.OdTypeMarket {
+		maker = core.IsMaker(i.Symbol, exOrder.Side, price)
+	}
+	fee, err := exchange.CalculateFee(i.Symbol, exOrder.OrderType, exOrder.Side, exOrder.Filled, price, maker, nil)
+	if err != nil {
+		return err
+	}
+	exOrder.Fee = fee.Cost
+	exOrder.FeeType = fee.Currency
+	if forEnter {
+		i.DirtyEnter = true
+	} else {
+		i.DirtyExit = true
+	}
+	return nil
+}
+
 func (i *InOutOrder) CanClose() bool {
 	if i.ExitTag != "" {
 		return false
@@ -179,12 +211,20 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Erro
 	i.SetExit(tag, banexg.OdTypeMarket, price)
 	if i.Enter.Status < OdStatusClosed {
 		i.Enter.Status = OdStatusClosed
+		err := i.UpdateFee(price, true)
+		if err != nil {
+			return err
+		}
 		i.DirtyEnter = true
 	}
 	i.Exit.Status = OdStatusClosed
 	i.Exit.Filled = i.Enter.Filled
 	i.Exit.Average = i.Exit.Price
 	i.Status = InOutStatusFullExit
+	err := i.UpdateFee(price, false)
+	if err != nil {
+		return err
+	}
 	i.UpdateProfits(price)
 	i.DirtyMain = true
 	i.DirtyExit = true

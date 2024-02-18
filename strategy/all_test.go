@@ -73,7 +73,7 @@ func TestStagyJob_DrawDownExit(t *testing.T) {
 }
 
 func TestStagyLoad(t *testing.T) {
-	stgy := load("hammer")
+	stgy := loadNative("hammer")
 	if stgy == nil {
 		return
 	}
