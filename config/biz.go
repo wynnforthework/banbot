@@ -70,18 +70,18 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 	var merged = make(map[string]interface{})
 	for _, path := range paths {
 		log.Info("Using " + path)
-		data, err := os.ReadFile(path)
+		fileData, err := os.ReadFile(path)
 		if err != nil {
 			return errs.NewMsg(core.ErrIOReadFail, "Read %s Fail: %v", path, err)
 		}
 		var unpak map[string]interface{}
-		err = yaml.Unmarshal(data, &unpak)
+		err = yaml.Unmarshal(fileData, &unpak)
 		if err != nil {
 			return errs.NewMsg(errs.CodeUnmarshalFail, "Unmarshal %s Fail: %v", path, err)
 		}
 		maps.Copy(merged, unpak)
 	}
-	err := mapstructure.Decode(merged, &data)
+	err := mapstructure.Decode(merged, &Data)
 	if err != nil {
 		return errs.NewMsg(errs.CodeUnmarshalFail, "decode Config Fail: %v", err)
 	}
@@ -93,61 +93,61 @@ func apply(args *CmdArgs) *errs.Error {
 	Debug = args.Debug
 	NoDB = args.NoDb
 	if args.TimeRange != "" {
-		data.TimeRangeRaw = args.TimeRange
+		Data.TimeRangeRaw = args.TimeRange
 	}
-	cutLen := len(data.TimeRangeRaw) / 2
-	data.TimeRange = &TimeTuple{
-		btime.ParseTimeMS(data.TimeRangeRaw[:cutLen]),
-		btime.ParseTimeMS(data.TimeRangeRaw[cutLen+1:]),
+	cutLen := len(Data.TimeRangeRaw) / 2
+	Data.TimeRange = &TimeTuple{
+		btime.ParseTimeMS(Data.TimeRangeRaw[:cutLen]),
+		btime.ParseTimeMS(Data.TimeRangeRaw[cutLen+1:]),
 	}
-	Name = data.Name
-	core.RunEnv = data.Env
-	core.RunMode = data.RunMode
-	Leverage = data.Leverage
-	LimitVolSecs = data.LimitVolSecs
-	core.ExgName = data.Exchange.Name
-	core.Market = data.MarketType
+	Name = Data.Name
+	core.RunEnv = Data.Env
+	core.RunMode = Data.RunMode
+	Leverage = Data.Leverage
+	LimitVolSecs = Data.LimitVolSecs
+	core.ExgName = Data.Exchange.Name
+	core.Market = Data.MarketType
 	if core.Market == banexg.MarketSpot || core.Market == banexg.MarketMargin {
-		data.ContractType = ""
-	} else if data.ContractType == "" {
-		data.ContractType = banexg.MarketSwap
+		Data.ContractType = ""
+	} else if Data.ContractType == "" {
+		Data.ContractType = banexg.MarketSwap
 	}
-	core.ContractType = data.ContractType
-	MaxMarketRate = data.MaxMarketRate
-	OdBookTtl = data.OdBookTtl
-	OrderType = data.OrderType
-	PreFire = data.PreFire
-	MarginAddRate = data.MarginAddRate
-	ChargeOnBomb = data.ChargeOnBomb
-	AutoEditLimit = data.AutoEditLimit
-	TakeOverStgy = data.TakeOverStgy
-	StakeAmount = data.StakeAmount
-	MinOpenRate = data.MinOpenRate
-	if data.MaxOpenOrders == 0 {
-		data.MaxOpenOrders = 30
+	core.ContractType = Data.ContractType
+	MaxMarketRate = Data.MaxMarketRate
+	OdBookTtl = Data.OdBookTtl
+	OrderType = Data.OrderType
+	PreFire = Data.PreFire
+	MarginAddRate = Data.MarginAddRate
+	ChargeOnBomb = Data.ChargeOnBomb
+	AutoEditLimit = Data.AutoEditLimit
+	TakeOverStgy = Data.TakeOverStgy
+	StakeAmount = Data.StakeAmount
+	MinOpenRate = Data.MinOpenRate
+	if Data.MaxOpenOrders == 0 {
+		Data.MaxOpenOrders = 30
 	}
-	MaxOpenOrders = data.MaxOpenOrders
-	WalletAmounts = data.WalletAmounts
-	DrawBalanceOver = data.DrawBalanceOver
-	StakeCurrency = data.StakeCurrency
-	FatalStop = data.FatalStop
-	FatalStopHours = data.FatalStopHours
-	TimeRange = data.TimeRange
-	WsStamp = data.WsStamp
-	RunTimeframes = data.RunTimeframes
-	KlineSource = data.KlineSource
-	WatchJobs = data.WatchJobs
-	RunPolicy = data.RunPolicy
-	Pairs = data.Pairs
-	PairMgr = data.PairMgr
-	PairFilters = data.PairFilters
-	Exchange = data.Exchange
-	ExgDataMap = data.ExgDataMap
-	Database = data.Database
-	SpiderAddr = data.SpiderAddr
-	APIServer = data.APIServer
-	RPCChannels = data.RPCChannels
-	Webhook = data.Webhook
+	MaxOpenOrders = Data.MaxOpenOrders
+	WalletAmounts = Data.WalletAmounts
+	DrawBalanceOver = Data.DrawBalanceOver
+	StakeCurrency = Data.StakeCurrency
+	FatalStop = Data.FatalStop
+	FatalStopHours = Data.FatalStopHours
+	TimeRange = Data.TimeRange
+	WsStamp = Data.WsStamp
+	RunTimeframes = Data.RunTimeframes
+	KlineSource = Data.KlineSource
+	WatchJobs = Data.WatchJobs
+	RunPolicy = Data.RunPolicy
+	Pairs = Data.Pairs
+	PairMgr = Data.PairMgr
+	PairFilters = Data.PairFilters
+	Exchange = Data.Exchange
+	ExgDataMap = Data.ExgDataMap
+	Database = Data.Database
+	SpiderAddr = Data.SpiderAddr
+	APIServer = Data.APIServer
+	RPCChannels = Data.RPCChannels
+	Webhook = Data.Webhook
 	return nil
 }
 

@@ -1,7 +1,7 @@
 package config
 
 var (
-	data Config
+	Data Config
 	Args *CmdArgs
 
 	Name            string

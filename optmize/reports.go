@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
@@ -13,8 +14,10 @@ import (
 	"github.com/muesli/kmeans"
 	"github.com/olekukonko/tablewriter"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 	"math"
 	"os"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -101,6 +104,8 @@ func (r *BTResult) printBtResult() {
 	log.Info("BackTest Reports:\n" + b.String())
 
 	r.dumpOrders(orders)
+
+	r.dumpConfig()
 }
 
 func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
@@ -514,5 +519,32 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 			log.Error("write orders.csv fail", zap.Error(err_))
 			return
 		}
+	}
+}
+
+func (r *BTResult) dumpConfig() {
+	itemMap := make(map[string]interface{})
+	t := reflect.TypeOf(config.Data)
+	v := reflect.ValueOf(config.Data)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("yaml")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		val := v.Field(i)
+		if val.IsNil() {
+			continue
+		}
+		itemMap[tag] = val.Interface()
+	}
+	data, err_ := yaml.Marshal(&itemMap)
+	if err_ != nil {
+		log.Error("marshal config as yaml fail", zap.Error(err_))
+		return
+	}
+	err_ = os.WriteFile(r.OutDir+"/_config.yml", data, 0644)
+	if err_ != nil {
+		log.Error("save yaml to file fail", zap.Error(err_))
 	}
 }

@@ -13,7 +13,7 @@ func TestLoadConfig(t *testing.T) {
 		fmt.Printf("load data error: %s", err)
 		return
 	}
-	data, err2 := yaml.Marshal(data)
+	data, err2 := yaml.Marshal(Data)
 	if err2 != nil {
 		fmt.Printf("dump data error: %s", err2)
 		return
