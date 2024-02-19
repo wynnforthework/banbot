@@ -660,7 +660,7 @@ func (w *BanWallets) TotalLegal(symbols []string, withUPol bool) float64 {
 	return w.calculateTotalLegal(func(x *ItemWallet) float64 { return x.Total(withUPol) }, symbols)
 }
 
-func (w *BanWallets) ProfitLegal(symbols []string) float64 {
+func (w *BanWallets) UnrealizedPOLLegal(symbols []string) float64 {
 	return w.calculateTotalLegal(func(x *ItemWallet) float64 { return x.UnrealizedPOL }, symbols)
 }
 

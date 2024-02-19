@@ -167,15 +167,15 @@ func (b *BackTest) logPlot(timeMS int64) {
 		oldNum := len(b.Plots.Real)
 		newNum := oldNum / splStep
 		plots := PlotData{
-			Real:      make([]TextFloat, 0, newNum),
-			Available: make([]TextFloat, 0, newNum),
-			Profit:    make([]TextFloat, 0, newNum),
-			WithDraw:  make([]TextFloat, 0, newNum),
+			Real:          make([]float64, 0, newNum),
+			Available:     make([]float64, 0, newNum),
+			UnrealizedPOL: make([]float64, 0, newNum),
+			WithDraw:      make([]float64, 0, newNum),
 		}
 		for i := 0; i < oldNum; i += splStep {
 			plots.Real = append(plots.Real, b.Plots.Real[i])
 			plots.Available = append(plots.Available, b.Plots.Available[i])
-			plots.Profit = append(plots.Profit, b.Plots.Profit[i])
+			plots.UnrealizedPOL = append(plots.UnrealizedPOL, b.Plots.UnrealizedPOL[i])
 			plots.WithDraw = append(plots.WithDraw, b.Plots.WithDraw[i])
 		}
 		b.Plots = plots
@@ -183,11 +183,12 @@ func (b *BackTest) logPlot(timeMS int64) {
 	}
 	avaLegal := biz.Wallets.AvaLegal(nil)
 	totalLegal := biz.Wallets.TotalLegal(nil, true)
-	profitLegal := biz.Wallets.ProfitLegal(nil)
+	profitLegal := biz.Wallets.UnrealizedPOLLegal(nil)
 	drawLegal := biz.Wallets.GetWithdrawLegal(nil)
 	curDate := btime.ToDateStr(timeMS, "")
-	b.Plots.Real = append(b.Plots.Real, TextFloat{curDate, totalLegal})
-	b.Plots.Available = append(b.Plots.Available, TextFloat{curDate, avaLegal})
-	b.Plots.Profit = append(b.Plots.Profit, TextFloat{curDate, profitLegal})
-	b.Plots.WithDraw = append(b.Plots.WithDraw, TextFloat{curDate, drawLegal})
+	b.Plots.Labels = append(b.Plots.Labels, curDate)
+	b.Plots.Real = append(b.Plots.Real, totalLegal)
+	b.Plots.Available = append(b.Plots.Available, avaLegal)
+	b.Plots.UnrealizedPOL = append(b.Plots.UnrealizedPOL, profitLegal)
+	b.Plots.WithDraw = append(b.Plots.WithDraw, drawLegal)
 }

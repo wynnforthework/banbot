@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
@@ -38,15 +39,11 @@ type BTResult struct {
 }
 
 type PlotData struct {
-	Real      []TextFloat
-	Available []TextFloat
-	Profit    []TextFloat
-	WithDraw  []TextFloat
-}
-
-type TextFloat struct {
-	Text string
-	Val  float64
+	Labels        []string
+	Real          []float64
+	Available     []float64
+	UnrealizedPOL []float64
+	WithDraw      []float64
 }
 
 type RowPart struct {
@@ -106,6 +103,10 @@ func (r *BTResult) printBtResult() {
 	r.dumpOrders(orders)
 
 	r.dumpConfig()
+
+	r.dumpStrategy()
+
+	r.dumpGraph()
 }
 
 func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
@@ -533,9 +534,6 @@ func (r *BTResult) dumpConfig() {
 			continue
 		}
 		val := v.Field(i)
-		if val.IsNil() {
-			continue
-		}
 		itemMap[tag] = val.Interface()
 	}
 	data, err_ := yaml.Marshal(&itemMap)
@@ -543,8 +541,69 @@ func (r *BTResult) dumpConfig() {
 		log.Error("marshal config as yaml fail", zap.Error(err_))
 		return
 	}
-	err_ = os.WriteFile(r.OutDir+"/_config.yml", data, 0644)
+	outName := fmt.Sprintf("%s/config_%v.yml", r.OutDir, orm.TaskID)
+	err_ = os.WriteFile(outName, data, 0644)
 	if err_ != nil {
 		log.Error("save yaml to file fail", zap.Error(err_))
+	}
+}
+
+func (r *BTResult) dumpStrategy() {
+	stagyDir := config.GetStagyDir()
+	stagyNames := make(map[string]bool)
+	for _, item := range core.StgPairTfs {
+		stagyNames[item.Stagy] = true
+	}
+	for name := range stagyNames {
+		srcPath := fmt.Sprintf("%s/%s/main.go", stagyDir, name)
+		fileData, err_ := os.ReadFile(srcPath)
+		if err_ != nil {
+			log.Warn("read fail, skip backup", zap.String("path", srcPath), zap.Error(err_))
+			continue
+		}
+		tgtPath := fmt.Sprintf("%s/%s_%v.go", r.OutDir, name, orm.TaskID)
+		err_ = os.WriteFile(tgtPath, fileData, 0644)
+		if err_ != nil {
+			log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))
+		}
+	}
+}
+
+func (r *BTResult) dumpGraph() {
+	tplPath := fmt.Sprintf("%s/btgraph.html", config.GetDataDir())
+	fileData, err_ := os.ReadFile(tplPath)
+	if err_ != nil {
+		log.Error("btgraph.html not found", zap.String("path", tplPath), zap.Error(err_))
+		return
+	}
+	content := string(fileData)
+	content = strings.Replace(content, "$title", "实时资产/余额/未实现盈亏/提现", 1)
+	items := map[string]interface{}{
+		"\"$labels\"":    r.Plots.Labels,
+		"\"$real\"":      r.Plots.Real,
+		"\"$available\"": r.Plots.Available,
+		"\"$profit\"":    r.Plots.UnrealizedPOL,
+		"\"$withdraw\"":  r.Plots.WithDraw,
+	}
+	for k, v := range items {
+		var b strings.Builder
+		if labels, ok := v.([]string); ok {
+			for _, it := range labels {
+				b.WriteString("\"")
+				b.WriteString(it)
+				b.WriteString("\",")
+			}
+		} else if vals, ok := v.([]float64); ok {
+			for _, it := range vals {
+				b.WriteString(strconv.FormatFloat(it, 'f', 2, 64))
+				b.WriteString(",")
+			}
+		}
+		content = strings.Replace(content, k, b.String(), 1)
+	}
+	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, orm.TaskID)
+	err_ = os.WriteFile(outPath, []byte(content), 0644)
+	if err_ != nil {
+		log.Error("save assets.html fail", zap.Error(err_))
 	}
 }
