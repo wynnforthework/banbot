@@ -121,7 +121,7 @@ func AlignTfMSecs(timeMSecs int64, tfMSecs int64) int64 {
 	if tfMSecs < 1000 {
 		panic("milliseconds tfMSecs is require for AlignTfMSecs")
 	}
-	return AlignTfSecs(timeMSecs/int64(1000), int(tfMSecs/1000)) * int64(1000)
+	return AlignTfSecs(timeMSecs/1000, int(tfMSecs/1000)) * 1000
 }
 
 /*

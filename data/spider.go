@@ -99,7 +99,7 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) *errs.Error {
 	var saveNum int
 	for tryCount <= 5 {
 		tryCount += 1
-		saveNum, err = sess.DownOHLCV2DB(exchange, exs, save.TimeFrame, endMS, fetchEndMS)
+		saveNum, err = sess.DownOHLCV2DB(exchange, exs, save.TimeFrame, endMS, fetchEndMS, nil)
 		if err != nil {
 			return err
 		}

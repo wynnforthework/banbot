@@ -27,8 +27,6 @@
         var profitList = ["$profit"];
         var minAva = Math.min(...avaList);
         var maxProfit = Math.max(...profitList);
-        var firstHalf = avaList[0]*0.9;
-        var minVal = Math.min(firstHalf, minAva);
         // 利润曲线在图表的底部25%区域显示
         var profitTop = Math.min(minAva, maxProfit * 4);
 
@@ -94,9 +92,9 @@
                     },
                     layout: {
                         padding:{
-                            top: 50,
+                            top: 25,
                             right: 35,
-                            bottom: 70
+                            bottom: 30
                         }
                     },
                     scales: {
@@ -123,7 +121,6 @@
                             type: 'linear',
                             display: true,
                             position: 'left',
-                            suggestedMin: minVal
                         },
                         yProfit: {
                             type: 'linear',

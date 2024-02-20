@@ -16,6 +16,7 @@ import (
 	"math"
 	"slices"
 	"strings"
+	"sync"
 )
 
 var (
@@ -148,8 +149,19 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 		return err
 	}
 	defer conn.Release()
+	var pBar = progressbar.Default(int64(len(p.holders) * core.StepTotal))
+	defer pBar.Close()
+	var m sync.Mutex
+	stepCB := func(num int) {
+		m.Lock()
+		defer m.Unlock()
+		err_ := pBar.Add(num)
+		if err_ != nil {
+			log.Error("update pBar fail", zap.Error(err_))
+		}
+	}
 	for _, h := range p.holders {
-		err = h.downIfNeed(sess, exchange)
+		err = h.downIfNeed(sess, exchange, stepCB)
 		if err != nil {
 			log.Error("download ohlcv fail", zap.String("pair", h.getSymbol()), zap.Error(err))
 			return err
@@ -159,11 +171,11 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 }
 
 func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[string]int) *errs.Error {
-	err := p.downIfNeed()
+	_, sinceMap, err := p.Provider.SubWarmPairs(items)
+	err = p.downIfNeed()
 	if err != nil {
 		return err
 	}
-	_, sinceMap, err := p.Provider.SubWarmPairs(items)
 	pairSince := make(map[string]int64)
 	for key, val := range sinceMap {
 		pair := strings.Split(key, "|")[0]

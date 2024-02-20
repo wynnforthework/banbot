@@ -33,7 +33,7 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	if fetchNum == 0 {
 		return nil
 	}
-	rangeMSecs := int64(min(1000, fetchNum+5)) * tfMSecs
+	rangeMSecs := int64(min(core.KBatchSize, fetchNum+5)) * tfMSecs
 	nextRange := func(start, stop int64) (int64, int64) {
 		if dirt == 1 {
 			if stop >= endMS {
@@ -75,34 +75,72 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 DownOHLCV2DB
 下载K线到数据库，应在事务中调用此方法，否则查询更新相关数据会有错误
 */
-func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64) (int, *errs.Error) {
+func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
+	stepCB func(num int)) (int, *errs.Error) {
 	startMS = exs.GetValidStart(startMS)
 	oldStart, oldEnd := q.GetKlineRange(exs.ID, timeFrame)
-	return downOHLCV2DBRange(exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd)
+	return downOHLCV2DBRange(exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
 }
 
 /*
 downOHLCV2DBRange
 此函数会用于多线程下载，一个数据库会话只能用于一个线程，所以不能传入Queries
+stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传入区间
 */
-func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS, oldStart, oldEnd int64) (int, *errs.Error) {
+func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
+	oldStart, oldEnd int64, stepCB func(num int)) (int, *errs.Error) {
 	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs {
 		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
+		if stepCB != nil {
+			stepCB(core.StepTotal)
+		}
 		return 0, nil
 	}
+	tfSecs := utils.TFToSecs(timeFrame)
+	var totalNum int
 	chanDown := make(chan core.DownRange, 10)
 	if oldStart == 0 {
 		// 数据不存在，下载全部区间
 		chanDown <- core.DownRange{Start: startMS, End: endMS}
+		totalNum = int((endMS-startMS)/1000) / tfSecs
 	} else {
 		if endMS > oldEnd {
 			// 后部超过已下载范围，下载后面
 			chanDown <- core.DownRange{Start: oldEnd, End: endMS}
+			totalNum += int((endMS-oldEnd)/1000) / tfSecs
 		}
 		if startMS < oldStart {
 			// 前部超过已下载范围，下载前面
 			chanDown <- core.DownRange{Start: startMS, End: oldStart, Reverse: true}
+			totalNum += int((oldStart-startMS)/1000) / tfSecs
 		}
+	}
+	if stepCB == nil && totalNum > 10000 {
+		var pBar = progressbar.Default(int64(core.StepTotal))
+		defer pBar.Close()
+		var m sync.Mutex
+		stepCB = func(num int) {
+			m.Lock()
+			defer m.Unlock()
+			err_ := pBar.Add(num)
+			if err_ != nil {
+				log.Error("update pBar fail", zap.Error(err_))
+			}
+		}
+	}
+	doneNum := 0
+	progressNum := 0
+	curStep := func(curNum int) {
+		if stepCB == nil || curNum <= 0 {
+			return
+		}
+		doneNum += curNum
+		curProgress := min(core.StepTotal, doneNum*core.StepTotal/totalNum)
+		addNum := curProgress - progressNum
+		if addNum > 0 {
+			stepCB(addNum)
+		}
+		progressNum = curProgress
 	}
 	close(chanDown)
 	chanKline := make(chan []*banexg.Kline, 1000)
@@ -131,7 +169,7 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 				if job.Reverse {
 					start, stop = job.End, job.Start
 				}
-				barNum := int((job.End-job.Start)/1000) / utils.TFToSecs(timeFrame)
+				barNum := int((job.End-job.Start)/1000) / tfSecs
 				if barNum > 10000 {
 					startText := btime.ToDateStr(job.Start, "")
 					endText := btime.ToDateStr(job.End, "")
@@ -139,6 +177,7 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 				}
 				err = FetchApiOHLCV(ctx, exchange, exs.Symbol, timeFrame, start, stop, chanKline)
 				if err != nil {
+					cancel()
 					log.Error("fetch ohlcv fail", zap.String("p", exs.Symbol), zap.Int64("st", start), zap.Error(err))
 					return
 				}
@@ -170,13 +209,16 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 					cancel()
 					return
 				} else {
-					saveNum += int(num)
+					curNum := int(num)
+					curStep(curNum)
+					saveNum += curNum
 				}
 			}
 		}
 	}()
 
 	wg.Wait()
+	curStep(totalNum - doneNum)
 	if err != nil {
 		return saveNum, err
 	}
@@ -208,7 +250,7 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 		return nil, err
 	}
 	defer conn.Release()
-	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS)
+	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -234,11 +276,20 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	startText := btime.ToDateStr(startMS, "")
 	endText := btime.ToDateStr(endMS, "")
 	log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
-	var pBar = progressbar.Default(int64(len(exsList)))
+	var pBar = progressbar.Default(int64(len(exsList) * core.StepTotal))
 	defer pBar.Close()
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err
+	}
+	var m sync.Mutex
+	downStep := func(num int) {
+		m.Lock()
+		defer m.Unlock()
+		err_ := pBar.Add(num)
+		if err_ != nil {
+			log.Error("add pBar fail", zap.Error(err_))
+		}
 	}
 	sidList := utils.KeysOfMap(exsList)
 	kRanges := sess.GetKlineRanges(sidList, timeFrame)
@@ -256,13 +307,12 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 				// 完成一个任务，从chan弹出一个
 				<-guard
 				wg.Done()
-				_ = pBar.Add(1)
 			}()
 			var oldStart, oldEnd = int64(0), int64(0)
 			if krange, ok := kRanges[exs_.ID]; ok {
 				oldStart, oldEnd = krange[0], krange[1]
 			}
-			_, retErr = downOHLCV2DBRange(exchange, exs_, downTF, startMS, endMS, oldStart, oldEnd)
+			_, retErr = downOHLCV2DBRange(exchange, exs_, downTF, startMS, endMS, oldStart, oldEnd, downStep)
 		}(exs)
 	}
 	wg.Wait()
@@ -300,7 +350,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		return err
 	}
 	defer conn.Release()
-	if itemNum < 1000 {
+	if itemNum < int64(core.KBatchSize) {
 		sidArr := utils.KeysOfMap(exsMap)
 		bulkHandler := func(sid int32, klines []*banexg.Kline) {
 			exs, ok := exsMap[sid]

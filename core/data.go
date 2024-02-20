@@ -29,10 +29,6 @@ var (
 	NumTaCache   = 1500                           // 指标计算时缓存的历史值数量，默认1500
 )
 
-var (
-	DownOHLCVParallel = 3
-)
-
 const (
 	SecsMin  = 60
 	SecsHour = SecsMin * 60
@@ -47,10 +43,11 @@ const (
 )
 
 const (
-	MinStakeAmount  = 10   // 最小开单金额
-	MaxFetchNum     = 1000 // 单次请求交易所最大返回K线数量
-	MaxDownParallel = 5    // 最大同时下载K线任务数
-	DefaultDateFmt  = "2006-01-02 15:04:05"
+	MinStakeAmount    = 10 // 最小开单金额
+	DownOHLCVParallel = 3  // 最大同时下载K线任务数
+	StepTotal         = 1000
+	KBatchSize        = 900 // 单次请求交易所最大返回K线数量, 1000时api权重过大
+	DefaultDateFmt    = "2006-01-02 15:04:05"
 )
 
 const (

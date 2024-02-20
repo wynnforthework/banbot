@@ -117,7 +117,7 @@ func ParseTimeMS(timeStr string) int64 {
 	} else if textLen == 16 && digitNum == 12 {
 		return dateToMS("2006-01-02 15:04", timeStr)
 	} else if textLen == 19 && digitNum == 14 {
-		return dateToMS("2006-01-02 15:04:05", timeStr)
+		return dateToMS(core.DefaultDateFmt, timeStr)
 	}
 	panic(fmt.Errorf("unSupport date fmt: %s", timeStr))
 }
@@ -147,7 +147,7 @@ func ToDateStr(timestamp int64, format string) string {
 	}
 
 	if format == "" {
-		format = "2006-01-02 15:04:05"
+		format = core.DefaultDateFmt
 	}
 	return t.Format(format)
 }

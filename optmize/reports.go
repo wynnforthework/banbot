@@ -142,7 +142,7 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	totProfitPct := strconv.FormatFloat(totProfitPctVal, 'f', 1, 64)
 	table.Append([]string{"Total Profit %", totProfitPct + "%"})
 	table.Append([]string{"Total Fee", strconv.FormatFloat(sumFee, 'f', 0, 64)})
-	avfProfit := strconv.FormatFloat(totProfitPctVal*1000/float64(len(orders)), 'f', 1, 64)
+	avfProfit := strconv.FormatFloat(totProfitPctVal*10/float64(len(orders)), 'f', 1, 64)
 	table.Append([]string{"Avg Profit ‰", avfProfit + "‰"})
 	table.Append([]string{"Total Cost", strconv.FormatFloat(sumCost, 'f', 0, 64)})
 	avgCost := sumCost / float64(len(orders))
