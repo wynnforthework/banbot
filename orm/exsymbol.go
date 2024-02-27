@@ -54,11 +54,7 @@ func GetSymbolByID(id int32) *ExSymbol {
 }
 
 func GetExSymbolCur(symbol string) (*ExSymbol, *errs.Error) {
-	exchange, err := exg.Get()
-	if err != nil {
-		return nil, err
-	}
-	return GetExSymbol(exchange, symbol)
+	return GetExSymbol(exg.Default, symbol)
 }
 
 func GetExSymbol(exchange banexg.BanExchange, symbol string) (*ExSymbol, *errs.Error) {

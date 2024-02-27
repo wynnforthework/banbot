@@ -1,4 +1,4 @@
-package banbot
+package main
 
 import "github.com/banbox/banbot/entry"
 

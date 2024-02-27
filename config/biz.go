@@ -104,6 +104,9 @@ func apply(args *CmdArgs) *errs.Error {
 	core.RunEnv = Data.Env
 	core.RunMode = Data.RunMode
 	Leverage = Data.Leverage
+	if Data.LimitVolSecs == 0 {
+		Data.LimitVolSecs = 10
+	}
 	LimitVolSecs = Data.LimitVolSecs
 	core.ExgName = Data.Exchange.Name
 	core.Market = Data.MarketType
@@ -114,6 +117,9 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	core.ContractType = Data.ContractType
 	MaxMarketRate = Data.MaxMarketRate
+	if Data.OdBookTtl == 0 {
+		Data.OdBookTtl = 500
+	}
 	OdBookTtl = Data.OdBookTtl
 	OrderType = Data.OrderType
 	PreFire = Data.PreFire
@@ -131,6 +137,9 @@ func apply(args *CmdArgs) *errs.Error {
 	DrawBalanceOver = Data.DrawBalanceOver
 	StakeCurrency = Data.StakeCurrency
 	FatalStop = Data.FatalStop
+	if Data.FatalStopHours == 0 {
+		Data.FatalStopHours = 8
+	}
 	FatalStopHours = Data.FatalStopHours
 	TimeRange = Data.TimeRange
 	WsStamp = Data.WsStamp
@@ -156,4 +165,13 @@ func GetExgConfig() *ExgItemConfig {
 		return cfg
 	}
 	return &ExgItemConfig{}
+}
+
+func GetTakeOverTF(pair, defTF string) string {
+	for _, item := range core.StgPairTfs {
+		if item.Stagy == TakeOverStgy && item.Pair == pair {
+			return item.TimeFrame
+		}
+	}
+	return defTF
 }

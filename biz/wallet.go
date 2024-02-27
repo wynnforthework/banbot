@@ -15,7 +15,8 @@ import (
 )
 
 var (
-	Wallets *BanWallets
+	Wallets        *BanWallets
+	IsWatchBalance bool
 )
 
 type ItemWallet struct {
@@ -420,7 +421,7 @@ func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	curFee := subOd.Fee
 
 	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
-	if banexg.IsContract(exs.Market) {
+	if core.IsContract {
 		// 期货合约，只锁定定价币，不涉及base币的增加
 		quoteAmount /= float64(od.Leverage)
 		gotAmt := quoteAmount - curFee
@@ -713,4 +714,48 @@ func (w *BanWallets) FiatValue(withUpol bool, symbols ...string) float64 {
 	}
 
 	return totalVal
+}
+
+func WatchLiveBalances() {
+	if IsWatchBalance {
+		return
+	}
+	out, err := exg.Default.WatchBalance(nil)
+	if err != nil {
+		log.Error("watch balance err", zap.Error(err))
+		return
+	}
+	IsWatchBalance = true
+	go func() {
+		defer func() {
+			IsWatchBalance = false
+		}()
+		for item := range out {
+			var msgList []string
+			for coin, it := range item.Assets {
+				if it.Free == 0 && it.Used == 0 {
+					continue
+				}
+				record, ok := Wallets.Items[coin]
+				if ok {
+					record.Available = it.Free
+				} else {
+					record = &ItemWallet{
+						Coin:      coin,
+						Available: it.Free,
+					}
+					Wallets.Items[coin] = record
+				}
+				if core.IsContract {
+					record.Pendings["*"] = it.Used
+				} else {
+					record.Frozens["*"] = it.Used
+				}
+				msgList = append(msgList, fmt.Sprintf("%s: %.5f/%.5f", coin, it.Free, it.Used))
+			}
+			if len(msgList) > 0 {
+				log.Info("update balances: " + strings.Join(msgList, "  "))
+			}
+		}
+	}()
 }

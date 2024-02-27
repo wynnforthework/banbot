@@ -4,9 +4,9 @@ import (
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/data"
+	"github.com/banbox/banbot/live"
 	"github.com/banbox/banbot/optmize"
 	"github.com/banbox/banexg/errs"
-	"github.com/banbox/banexg/log"
 )
 
 func RunBackTest() *errs.Error {
@@ -20,8 +20,12 @@ func RunBackTest() *errs.Error {
 }
 
 func RunTrade() *errs.Error {
-	log.Info("in run trade")
-	return nil
+	err := biz.SetupComs()
+	if err != nil {
+		return err
+	}
+	t := live.NewCryptoTrader()
+	return t.Run()
 }
 
 func RunDownData() *errs.Error {

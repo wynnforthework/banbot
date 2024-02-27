@@ -88,10 +88,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 	}
 	// 加载数据预热
 	sinceMap := make(map[string]int64)
-	exchange, err := exg.Get()
-	if err != nil {
-		return newHolds, sinceMap, err
-	}
+	exchange := exg.Default
 	curTimeMS := btime.TimeMS()
 	log.Info(fmt.Sprintf("warmup for %d pairs", len(warmJobs)))
 	for _, job := range warmJobs {
@@ -122,8 +119,8 @@ type HistProvider[T IHistKlineFeeder] struct {
 	Provider[T]
 }
 
-func NewHistProvider(callBack FnPairKline) *HistProvider[IHistKlineFeeder] {
-	return &HistProvider[IHistKlineFeeder]{
+func InitHistProvider(callBack FnPairKline) {
+	Main = &HistProvider[IHistKlineFeeder]{
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IHistKlineFeeder, *errs.Error) {
@@ -140,10 +137,7 @@ func NewHistProvider(callBack FnPairKline) *HistProvider[IHistKlineFeeder] {
 
 func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 	var err *errs.Error
-	exchange, err := exg.Get()
-	if err != nil {
-		return err
-	}
+	exchange := exg.Default
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return err
@@ -264,10 +258,10 @@ type LiveProvider[T IKlineFeeder] struct {
 	KLineWatcher
 }
 
-func NewLiveProvider(callBack FnPairKline) (*LiveProvider[IKlineFeeder], *errs.Error) {
+func InitLiveProvider(callBack FnPairKline) *errs.Error {
 	watcher, err := NewKlineWatcher(config.SpiderAddr)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	provider := &LiveProvider[IKlineFeeder]{
 		Provider: Provider[IKlineFeeder]{
@@ -280,7 +274,8 @@ func NewLiveProvider(callBack FnPairKline) (*LiveProvider[IKlineFeeder], *errs.E
 		KLineWatcher: *watcher,
 	}
 	watcher.OnKLineMsg = makeOnKlineMsg(provider)
-	return provider, nil
+	Main = provider
+	return nil
 }
 
 func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) *errs.Error {

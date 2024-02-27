@@ -4,7 +4,6 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
@@ -24,11 +23,9 @@ type LocalOrderMgr struct {
 	OrderMgr
 }
 
-func NewLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) *LocalOrderMgr {
-	return &LocalOrderMgr{
+func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
+	OdMgr = &LocalOrderMgr{
 		OrderMgr{
-			wallet:   Wallets,
-			data:     data.Main,
 			callBack: callBack,
 		},
 	}
@@ -47,7 +44,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 	if len(allOpens) == 0 || core.ProdMode() {
 		return nil
 	}
-	if banexg.IsContract(core.Market) {
+	if core.IsContract {
 		// 为合约更新此定价币的所有订单保证金和钱包情况
 		_, _, code, _ := core.SplitSymbol(bar.Symbol)
 		var orders []*orm.InOutOrder
@@ -149,10 +146,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 		}
 		return err
 	}
-	exchange, err := exg.Get()
-	if err != nil {
-		return err
-	}
+	exchange := exg.Default
 	market, err := exchange.GetMarket(od.Symbol)
 	if err != nil {
 		return err
@@ -163,7 +157,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	}
 	exOrder := od.Enter
 	if exOrder.Amount == 0 {
-		if od.Short && !banexg.IsContract(core.Market) {
+		if od.Short && !core.IsContract {
 			// 现货空单，必须给定数量
 			return errs.NewMsg(core.ErrInvalidCost, "EnterAmount is required")
 		}

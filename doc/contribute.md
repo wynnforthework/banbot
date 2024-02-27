@@ -3,18 +3,28 @@
 ```text
 core
   --
-utils
-  core
 btime
   core
+utils
+  core btime
 config
   core btime utils
 exg
-  config  core
+  config utils core
 orm
-  btime  config  utils  core  
+  exg config  
+data
+  orm exg config 
 strategy
-  orm utils config core products 
+  orm utils
+goods
+  strategy orm exg 
 biz:
-  config, core, exg, orm, strategy
+  exg orm strategy goods data
+optmize
+  biz data orm goods strategy
+live 
+  biz data orm goods strategy
+entry
+  optmize live data 
 ```

@@ -169,6 +169,7 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 					skipSL += 1
 					od.SetInfo(orm.OdInfoStopLoss, nil)
 				}
+				od.DirtyInfo = true
 			}
 			if newTPPrice != tpPrice {
 				if s.ExgTakeProfit {
@@ -181,6 +182,7 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 					skipTP += 1
 					od.SetInfo(orm.OdInfoTakeProfit, nil)
 				}
+				od.DirtyInfo = true
 			}
 		}
 	}

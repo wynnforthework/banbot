@@ -10,7 +10,7 @@ import (
 )
 
 func Setup() *errs.Error {
-	if DefExg != nil {
+	if Default != nil {
 		return nil
 	}
 	exgCfg := config.Exchange
@@ -18,7 +18,8 @@ func Setup() *errs.Error {
 		return errs.NewMsg(core.ErrBadConfig, "exchange is required")
 	}
 	var err *errs.Error
-	DefExg, err = GetWith(exgCfg.Name, core.Market, core.ContractType)
+	Default, err = GetWith(exgCfg.Name, core.Market, core.ContractType)
+	core.IsContract = banexg.IsContract(core.Market)
 	return err
 }
 
@@ -60,14 +61,6 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	return bex.New(name, &options)
 }
 
-func Get() (banexg.BanExchange, *errs.Error) {
-	exgCfg := config.Exchange
-	if exgCfg == nil {
-		return nil, errs.NewMsg(core.ErrBadConfig, "exchange is required")
-	}
-	return GetWith(exgCfg.Name, core.Market, core.ContractType)
-}
-
 func GetWith(name, market, contractType string) (banexg.BanExchange, *errs.Error) {
 	if contractType == "" {
 		contractType = core.ContractType
@@ -89,10 +82,10 @@ func GetWith(name, market, contractType string) (banexg.BanExchange, *errs.Error
 
 func precNum(exchange banexg.BanExchange, symbol string, num float64, source string) (float64, *errs.Error) {
 	if exchange == nil {
-		if DefExg == nil {
+		if Default == nil {
 			return 0, errs.NewMsg(core.ErrExgNotInit, "exchange not loaded")
 		}
-		exchange = DefExg
+		exchange = Default
 	}
 	market, err := exchange.GetMarket(symbol)
 	if err != nil {
@@ -123,4 +116,12 @@ func PrecPrice(exchange banexg.BanExchange, symbol string, price float64) (float
 
 func PrecAmount(exchange banexg.BanExchange, symbol string, amount float64) (float64, *errs.Error) {
 	return precNum(exchange, symbol, amount, "amount")
+}
+
+func GetLeverage(symbol string, notional float64) (int, int) {
+	leverage, maxVal := Default.GetLeverage(symbol, notional)
+	if leverage == 0 {
+		leverage = config.Leverage
+	}
+	return leverage, maxVal
 }

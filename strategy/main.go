@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
@@ -137,6 +138,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 			PairTFStags[envKey] = append(items, stagy)
 		}
 	}
+	initStagyJobs()
 	core.TFSecs = nil
 	for tf, _ := range tfs {
 		core.TFSecs = append(core.TFSecs, &core.TFSecTuple{TF: tf, Secs: utils.TFToSecs(tf)})
@@ -145,4 +147,25 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 		return a.Secs - b.Secs
 	})
 	return pairTfWarms, nil
+}
+
+func initStagyJobs() {
+	// 更新job的EnterNum
+	var enterNums = make(map[string]int)
+	for _, od := range orm.OpenODs {
+		key := fmt.Sprintf("%s_%s_%s", od.Symbol, od.Timeframe, od.Strategy)
+		num, ok := enterNums[key]
+		if ok {
+			enterNums[key] = num + 1
+		} else {
+			enterNums[key] = 1
+		}
+	}
+	for _, jobs := range Jobs {
+		for _, job := range jobs {
+			key := fmt.Sprintf("%s_%s_%s", job.Symbol.Symbol, job.TimeFrame, job.Stagy.Name)
+			num, _ := enterNums[key]
+			job.EnterNum = num
+		}
+	}
 }

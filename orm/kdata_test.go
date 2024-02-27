@@ -13,10 +13,7 @@ func TestAutoFetchOhlcv(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	exchange, err := exg.Get()
-	if err != nil {
-		panic(err)
-	}
+	exchange := exg.Default
 	// 交易对初始化
 	err = EnsureExgSymbols(exchange)
 	if err != nil {
@@ -46,10 +43,7 @@ func TestFetchOhlcvs(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	exchange, err := exg.Get()
-	if err != nil {
-		panic(err)
-	}
+	exchange := exg.Default
 	pair := "BTC/USDT:USDT"
 	curMS := btime.TimeMS()
 	limit := 127
@@ -68,10 +62,7 @@ func TestBulkDownOHLCV(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	exchange, err := exg.Get()
-	if err != nil {
-		panic(err)
-	}
+	exchange := exg.Default
 	_, err = exchange.LoadMarkets(false, nil)
 	if err != nil {
 		panic(err)

@@ -3,17 +3,19 @@ package core
 import (
 	"context"
 	"github.com/banbox/banexg"
+	"github.com/robfig/cron/v3"
 )
 
 var (
 	BotName      string                           // 当前机器人名称
 	RunMode      string                           // prod/dry_run/backtest
 	RunEnv       string                           //prod/test
-	StartAt      uint64                           // 启动时间，13位时间戳
+	StartAt      int64                            // 启动时间，13位时间戳
 	IsWarmUp     bool                             //是否当前处于预热状态
 	TFSecs       []*TFSecTuple                    // 所有涉及的时间周期
 	ExgName      string                           // 交易所名称
 	Market       string                           //当前市场
+	IsContract   bool                             // 当前市场是否是合约市场, linear/inverse/option
 	ContractType string                           // 当前合约类型
 	StgPairTfs   []*StgPairTf                     //策略、标的、周期
 	Pairs        []string                         //全局所有的标的
@@ -27,6 +29,7 @@ var (
 	LastBarMs    int64                            // 上次收到bar的结束时间，13位时间戳
 	OdBooks      = map[string]*banexg.OrderBook{} //缓存所有从爬虫收到的订单簿
 	NumTaCache   = 1500                           // 指标计算时缓存的历史值数量，默认1500
+	Cron         = cron.New()                     // 使用cron定时运行任务
 )
 
 const (
@@ -71,6 +74,12 @@ const (
 const (
 	BotStateRunning = 1
 	BotStateStopped = 2
+)
+
+const (
+	EnterTagUnknown  = "unknown"
+	EnterTagUserOpen = "user_open"
+	EnterTagThird    = "third"
 )
 
 const (

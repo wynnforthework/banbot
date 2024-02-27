@@ -38,10 +38,7 @@ func TestStagyRun(t *testing.T) {
 	}
 	core.ExgName = "binance"
 	core.Market = "linear"
-	exchange, err := exg.Get()
-	if err != nil {
-		panic(err)
-	}
+	exchange := exg.Default
 	_, err = exchange.LoadMarkets(false, nil)
 	if err != nil {
 		panic(err)

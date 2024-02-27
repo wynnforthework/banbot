@@ -4,7 +4,6 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banexg"
@@ -18,7 +17,8 @@ import (
 )
 
 var (
-	OdMgr IOrderMgr
+	OdMgr     IOrderMgr
+	OdMgrLive IOrderMgrLive
 )
 
 type IOrderMgr interface {
@@ -31,9 +31,15 @@ type IOrderMgr interface {
 	CleanUp() *errs.Error
 }
 
+type IOrderMgrLive interface {
+	IOrderMgr
+	SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []*orm.InOutOrder, *errs.Error)
+	WatchMyTrades()
+	TrialUnMatchesForever()
+	ConsumeOrderQueue()
+}
+
 type OrderMgr struct {
-	wallet   *BanWallets
-	data     data.IProvider
 	callBack func(order *orm.InOutOrder, isEnter bool)
 }
 
@@ -132,6 +138,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 	if req.TakeProfit > 0 {
 		od.SetInfo(orm.OdInfoTakeProfit, req.TakeProfit)
 	}
+	od.DirtyInfo = true
 	err := od.Save(sess)
 	return od, err
 }
@@ -244,8 +251,8 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 		// 这里part的key和原始的一样，所以part作为src_key
 		tgtKey, srcKey := od.Key(), part.Key()
 		base, quote, _, _ := core.SplitSymbol(od.Symbol)
-		o.wallet.CutPart(srcKey, tgtKey, base, 1-req.ExitRate)
-		o.wallet.CutPart(srcKey, tgtKey, quote, 1-req.ExitRate)
+		Wallets.CutPart(srcKey, tgtKey, base, 1-req.ExitRate)
+		Wallets.CutPart(srcKey, tgtKey, quote, 1-req.ExitRate)
 		req.ExitRate = 1
 		return o.ExitOrder(sess, part, req)
 	}

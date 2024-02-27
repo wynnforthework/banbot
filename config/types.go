@@ -9,9 +9,9 @@ var (
 	Debug           bool
 	NoDB            bool
 	Leverage        int
-	LimitVolSecs    int
+	LimitVolSecs    int // 限价单预期等待多长时间成交，单位秒
 	MaxMarketRate   float64
-	OdBookTtl       uint16
+	OdBookTtl       int64
 	OrderType       string
 	PreFire         float64
 	MarginAddRate   float64
@@ -55,7 +55,7 @@ type Config struct {
 	MarketType      string                            `yaml:"market_type" mapstructure:"market_type"`
 	ContractType    string                            `yaml:"contract_type" mapstructure:"contract_type"`
 	MaxMarketRate   float64                           `yaml:"max_market_rate" mapstructure:"max_market_rate"`
-	OdBookTtl       uint16                            `yaml:"odbook_ttl" mapstructure:"odbook_ttl"`
+	OdBookTtl       int64                             `yaml:"odbook_ttl" mapstructure:"odbook_ttl"`
 	OrderType       string                            `yaml:"order_type" mapstructure:"order_type"`
 	PreFire         float64                           `yaml:"prefire" mapstructure:"prefire"`
 	MarginAddRate   float64                           `yaml:"margin_add_rate" mapstructure:"margin_add_rate"`
@@ -136,7 +136,7 @@ type TelegramChannel struct {
 /** ********************************** 标的筛选器 ******************************** */
 
 type PairMgrConfig struct {
-	Cron string `yaml:"cron"`
+	Cron string `yaml:"cron" mapstructure:"cron"`
 }
 
 // 通用的过滤器

@@ -1,7 +1,13 @@
 package utils
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
+)
+
+var (
+	regHolds, _ = regexp.Compile("[{]([a-zA-Z_]+)[}]")
 )
 
 /*
@@ -64,10 +70,52 @@ func UnionArr[T comparable](arrs ...[]T) []T {
 	return result
 }
 
-func MapArr[T1, T2 any](arr []T1, doMap func(T1) T2) []T2 {
+func ConvertArr[T1, T2 any](arr []T1, doMap func(T1) T2) []T2 {
 	var res = make([]T2, len(arr))
 	for i, item := range arr {
 		res[i] = doMap(item)
 	}
 	return res
+}
+
+func ArrToMap[T1 comparable, T2 any](arr []T2, doMap func(T2) T1) map[T1][]T2 {
+	res := make(map[T1][]T2)
+	for _, v := range arr {
+		key := doMap(v)
+		if old, ok := res[key]; ok {
+			res[key] = append(old, v)
+		} else {
+			res[key] = []T2{v}
+		}
+	}
+	return res
+}
+
+func RemoveFromArr[T comparable](arr []T, it T, num int) []T {
+	res := make([]T, 0, len(arr))
+	for _, v := range arr {
+		if v == it && (num < 0 || num > 0) {
+			num -= 1
+			continue
+		}
+		res = append(res, v)
+	}
+	return res
+}
+
+func FormatWithMap(text string, args map[string]interface{}) string {
+	var b strings.Builder
+	matches := regHolds.FindAllStringSubmatchIndex(text, -1)
+	var lastEnd int
+	for _, mat := range matches {
+		start, end := mat[2], mat[3]
+		b.WriteString(text[lastEnd : start-1])
+		key := text[start:end]
+		if val, ok := args[key]; ok {
+			b.WriteString(fmt.Sprintf("%v", val))
+		}
+		lastEnd = end + 1
+	}
+	b.WriteString(text[lastEnd:])
+	return b.String()
 }

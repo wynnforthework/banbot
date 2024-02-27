@@ -2,19 +2,30 @@ package orm
 
 import (
 	"context"
+	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/bytedance/sonic"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+	"slices"
 	"strconv"
 	"strings"
 )
 
+const (
+	iOrderFields  = "id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, profit_rate, profit, info"
+	exOrderFields = "id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_at, price, average, amount, filled, status, fee, fee_type, update_at"
+)
+
 func (i *InOutOrder) SetInfo(key string, val interface{}) {
+	i.loadInfo()
 	if val == nil {
 		delete(i.Info, key)
 	} else {
@@ -23,12 +34,32 @@ func (i *InOutOrder) SetInfo(key string, val interface{}) {
 	i.DirtyInfo = true
 }
 
+func (i *InOutOrder) loadInfo() {
+	if i.Info != nil {
+		return
+	}
+	i.Info = make(map[string]interface{})
+	if i.IOrder.Info == "" {
+		return
+	}
+	err_ := sonic.UnmarshalString(i.IOrder.Info, &i.Info)
+	if err_ != nil {
+		log.Error("unmarshal ioder info fail", zap.String("info", i.IOrder.Info), zap.Error(err_))
+	}
+}
+
 func (i *InOutOrder) GetInfoFloat64(key string) float64 {
+	i.loadInfo()
 	val, ok := i.Info[key]
 	if !ok {
 		return 0
 	}
 	return utils.ConvertFloat64(val)
+}
+
+func (i *InOutOrder) GetInfoString(key string) string {
+	i.loadInfo()
+	return utils2.GetMapVal(i.Info, key, "")
 }
 
 func (i *InOutOrder) EnterCost() float64 {
@@ -115,10 +146,7 @@ UpdateFee
 为入场/出场订单计算手续费，必须在Filled赋值后调用，否则计算为空
 */
 func (i *InOutOrder) UpdateFee(price float64, forEnter bool) *errs.Error {
-	exchange, err := exg.Get()
-	if err != nil {
-		return err
-	}
+	exchange := exg.Default
 	exOrder := i.Enter
 	if !forEnter {
 		exOrder = i.Exit
@@ -230,6 +258,7 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Erro
 	i.DirtyExit = true
 	if msg != "" {
 		i.SetInfo(KeyStatusMsg, msg)
+		i.DirtyInfo = true
 	}
 	return i.Save(nil)
 }
@@ -326,12 +355,9 @@ func (i *InOutOrder) saveToMem() {
 
 func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 	var err *errs.Error
-	if i.DirtyInfo {
-		i.IOrder.Info, err = i.GetInfoText()
-		if err != nil {
-			return err
-		}
-		i.DirtyInfo = false
+	i.IOrder.Info, err = i.GetInfoText()
+	if err != nil {
+		return err
 	}
 	if sess == nil {
 		var conn *pgxpool.Conn
@@ -388,11 +414,16 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 }
 
 func (i *InOutOrder) GetInfoText() (string, *errs.Error) {
+	if !i.DirtyInfo {
+		return i.IOrder.Info, nil
+	}
+	i.DirtyInfo = false
 	if i.Info != nil && len(i.Info) > 0 {
 		infoText, err_ := sonic.MarshalString(i.Info)
 		if err_ != nil {
 			return "", errs.New(errs.CodeUnmarshalFail, err_)
 		}
+		i.DirtyMain = true
 		return infoText, nil
 	}
 	return "", nil
@@ -556,6 +587,232 @@ func (q *Queries) DumpOrdersToDb() *errs.Error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.Error) {
+	rows, err_ := q.db.Query(context.Background(), sql, args...)
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	defer rows.Close()
+	var res = make([]*IOrder, 0, 4)
+	for rows.Next() {
+		var iod IOrder
+		err_ = rows.Scan(
+			&iod.ID,
+			&iod.TaskID,
+			&iod.Symbol,
+			&iod.Sid,
+			&iod.Timeframe,
+			&iod.Short,
+			&iod.Status,
+			&iod.EnterTag,
+			&iod.InitPrice,
+			&iod.QuoteCost,
+			&iod.ExitTag,
+			&iod.Leverage,
+			&iod.EnterAt,
+			&iod.ExitAt,
+			&iod.Strategy,
+			&iod.StgVer,
+			&iod.ProfitRate,
+			&iod.Profit,
+			&iod.Info,
+		)
+		if err_ != nil {
+			return nil, errs.New(core.ErrDbReadFail, err_)
+		}
+		res = append(res, &iod)
+	}
+	return res, nil
+}
+
+func (q *Queries) getExOrders(sql string, args []interface{}) ([]*ExOrder, *errs.Error) {
+	rows, err_ := q.db.Query(context.Background(), sql, args...)
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	defer rows.Close()
+	var res = make([]*ExOrder, 0, 4)
+	for rows.Next() {
+		var iod ExOrder
+		err_ = rows.Scan(
+			&iod.ID,
+			&iod.TaskID,
+			&iod.InoutID,
+			&iod.Symbol,
+			&iod.Enter,
+			&iod.OrderType,
+			&iod.OrderID,
+			&iod.Side,
+			&iod.CreateAt,
+			&iod.Price,
+			&iod.Average,
+			&iod.Amount,
+			&iod.Filled,
+			&iod.Status,
+			&iod.Fee,
+			&iod.FeeType,
+			&iod.UpdateAt,
+		)
+		if err_ != nil {
+			return nil, errs.New(core.ErrDbReadFail, err_)
+		}
+		res = append(res, &iod)
+	}
+	return res, nil
+}
+
+type GetOrdersArgs struct {
+	Strategy    string
+	Pairs       []string
+	Status      int   // 0表示所有，1表示未平仓，2表示历史订单
+	TaskID      int64 // -1表示当前任务，0表示所有，>0表示指定任务
+	CloseAfter  int64
+	CloseBefore int64
+	Limit       int
+	Offset      int
+	OrderBy     string
+}
+
+func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
+	var b strings.Builder
+	b.WriteString("select ")
+	b.WriteString(iOrderFields)
+	b.WriteString(" from iorder where 1=1 ")
+	sqlParams := make([]interface{}, 0, 2)
+	if args.TaskID < 0 {
+		args.TaskID = TaskID
+	}
+	if args.TaskID > 0 {
+		b.WriteString(fmt.Sprintf("and task_id=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.TaskID)
+	}
+	if args.Status >= 1 {
+		rel := "<"
+		if args.Status == 2 {
+			rel = "="
+		}
+		b.WriteString(fmt.Sprintf("and status%v$%v ", rel, len(sqlParams)+1))
+		sqlParams = append(sqlParams, InOutStatusFullExit)
+	}
+	if args.Strategy != "" {
+		b.WriteString(fmt.Sprintf("and strategy=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.Strategy)
+	}
+	if len(args.Pairs) == 1 {
+		b.WriteString(fmt.Sprintf("and symbol=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.Pairs[0])
+	} else if len(args.Pairs) > 1 {
+		b.WriteString("and symbol in(")
+		for i, pair := range args.Pairs {
+			isLast := i == len(args.Pairs)-1
+			b.WriteString(fmt.Sprintf("$%v", len(sqlParams)+1))
+			if !isLast {
+				b.WriteString(",")
+			}
+			sqlParams = append(sqlParams, pair)
+		}
+		b.WriteString(") ")
+	}
+	if args.CloseAfter > 0 {
+		b.WriteString(fmt.Sprintf("and exit_at >= $%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.CloseAfter)
+	}
+	if args.CloseBefore > 0 {
+		b.WriteString(fmt.Sprintf("and exit_at < $%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.CloseBefore)
+	}
+	if args.OrderBy == "" {
+		args.OrderBy = "enter_at desc"
+	}
+	b.WriteString("order by " + args.OrderBy)
+	if args.Offset > 0 {
+		b.WriteString(fmt.Sprintf(" offset $%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.Offset)
+	}
+	if args.Limit > 0 {
+		b.WriteString(fmt.Sprintf(" limit $%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.Limit)
+	}
+	iorders, err := q.getIOrders(b.String(), sqlParams)
+	if err != nil || len(iorders) == 0 {
+		return nil, err
+	}
+	var itemMap = make(map[int64]*InOutOrder)
+	b = strings.Builder{}
+	b.WriteString("select ")
+	b.WriteString(exOrderFields)
+	b.WriteString(" from exorder where 1=1 ")
+	sqlParams = make([]interface{}, 0, 2)
+	if args.TaskID > 0 {
+		b.WriteString(fmt.Sprintf("and task_id=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.TaskID)
+	}
+	b.WriteString("and inout_id in (")
+	isFirst := true
+	for _, od := range iorders {
+		itemMap[od.ID] = &InOutOrder{
+			IOrder: od,
+		}
+		b.WriteString(fmt.Sprintf("$%v", len(sqlParams)+1))
+		if !isFirst {
+			b.WriteString(",")
+		}
+		sqlParams = append(sqlParams, od.ID)
+		isFirst = false
+	}
+	b.WriteString(")")
+	exOrders, err := q.getExOrders(b.String(), sqlParams)
+	if err != nil {
+		return nil, err
+	}
+	for _, od := range exOrders {
+		iod, ok := itemMap[od.InoutID]
+		if !ok {
+			continue
+		}
+		if od.Enter {
+			iod.Enter = od
+		} else {
+			iod.Exit = od
+		}
+	}
+	res := utils.ValsOfMap(itemMap)
+	slices.SortFunc(res, func(a, b *InOutOrder) int {
+		return int((a.EnterAt - b.EnterAt) / 1000)
+	})
+	return res, nil
+}
+
+func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
+	if od == nil || od.ID == 0 {
+		return nil
+	}
+	ctx := context.Background()
+	sql := fmt.Sprintf("delete from iorder where id=%v", od.ID)
+	_, err_ := q.db.Exec(ctx, sql)
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	delExOrder := func(exId int64) *errs.Error {
+		sql = fmt.Sprintf("delete from exorder where id=%v", exId)
+		_, err_ = q.db.Exec(ctx, sql)
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
+		return nil
+	}
+	if od.Enter != nil && od.Enter.ID > 0 {
+		err := delExOrder(od.Enter.ID)
+		if err != nil {
+			return err
+		}
+	}
+	if od.Exit != nil && od.Exit.ID > 0 {
+		return delExOrder(od.Exit.ID)
 	}
 	return nil
 }

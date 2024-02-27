@@ -26,7 +26,9 @@ const (
 )
 
 const (
-	OdInfoStopLoss   = "StopLossPrice"
-	OdInfoTakeProfit = "TakeProfitPrice"
-	OdInfoLegalCost  = "LegalCost"
+	OdInfoStopLoss          = "StopLossPrice"
+	OdInfoStopLossOrderId   = "StopLossOrderId"
+	OdInfoTakeProfit        = "TakeProfitPrice"
+	OdInfoTakeProfitOrderId = "TakeProfitOrderId"
+	OdInfoLegalCost         = "LegalCost"
 )

@@ -59,11 +59,8 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 				symbolVols = append(symbolVols, SymbolVol{symbol, total})
 			}
 		}
-		exchange, err := exg.Get()
-		if err != nil {
-			return nil, err
-		}
-		err = orm.FastBulkOHLCV(exchange, symbols, f.BackTimeframe, startMS, 0, limit, callBack)
+		exchange := exg.Default
+		err := orm.FastBulkOHLCV(exchange, symbols, f.BackTimeframe, startMS, 0, limit, callBack)
 		if err != nil {
 			return nil, err
 		}
@@ -110,11 +107,7 @@ func (f *VolumePairFilter) GenSymbols(tickers map[string]*banexg.Ticker) ([]stri
 			symbols = append(symbols, symbol)
 		}
 	} else {
-		exchange, err := exg.Get()
-		if err != nil {
-			return nil, err
-		}
-		markets := exchange.GetCurMarkets()
+		markets := exg.Default.GetCurMarkets()
 		symbols = utils.KeysOfMap(markets)
 	}
 	return f.Filter(symbols, tickers)
@@ -148,11 +141,7 @@ func (f *PriceFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker
 }
 
 func (f *PriceFilter) validatePrice(symbol string, price float64) bool {
-	exchange, err := exg.Get()
-	if err != nil {
-		log.Error("get exchange fail, price validate skip")
-		return true
-	}
+	exchange := exg.Default
 	if f.Precision > 0 {
 		pip, err := exchange.PriceOnePip(symbol)
 		if err != nil {
@@ -228,17 +217,13 @@ func (f *RateOfChangeFilter) validate(pair string, arr []*banexg.Kline) bool {
 }
 
 func filterByOHLCV(symbols []string, timeFrame string, limit int, cb func(string, []*banexg.Kline) bool) ([]string, *errs.Error) {
-	exchange, err := exg.Get()
-	if err != nil {
-		return nil, err
-	}
 	var has = make(map[string]struct{})
 	handle := func(pair string, _ string, arr []*banexg.Kline) {
 		if cb(pair, arr) {
 			has[pair] = struct{}{}
 		}
 	}
-	err = orm.FastBulkOHLCV(exchange, symbols, timeFrame, 0, 0, limit, handle)
+	err := orm.FastBulkOHLCV(exg.Default, symbols, timeFrame, 0, 0, limit, handle)
 	if err != nil {
 		return nil, err
 	}

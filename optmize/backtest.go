@@ -34,8 +34,8 @@ func NewBackTest() *BackTest {
 	}
 	biz.InitFakeWallets()
 	p.TotalInvest = biz.Wallets.TotalLegal(nil, false)
-	data.Main = data.NewHistProvider(p.FeedKLine)
-	biz.OdMgr = biz.NewLocalOrderMgr(p.orderCB)
+	data.InitHistProvider(p.FeedKLine)
+	biz.InitLocalOrderMgr(p.orderCB)
 	return p
 }
 
@@ -58,12 +58,8 @@ func (b *BackTest) Init() *errs.Error {
 	}
 	config.Args.Logfile = b.OutDir + "/out.log"
 	log.Setup(config.Args.Debug, config.Args.Logfile)
-	exchange, err := exg.Get()
-	if err != nil {
-		return err
-	}
 	// 交易对初始化
-	err = orm.EnsureExgSymbols(exchange)
+	err = orm.EnsureExgSymbols(exg.Default)
 	if err != nil {
 		return err
 	}

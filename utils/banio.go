@@ -197,7 +197,7 @@ func (c *BanConn) connect(lock bool) {
 		_ = c.Conn.Close()
 		c.Conn = nil
 	}
-	time.Sleep(time.Second * 3)
+	core.Sleep(time.Second * 3)
 	c.DoConnect(c)
 	c.RefreshMS = btime.TimeMS()
 	if c.Conn != nil {
@@ -490,7 +490,7 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 			cn, err_ := net.Dial("tcp", addr)
 			if err_ != nil {
 				log.Error("connect fail, sleep 10s and retry..", zap.String("addr", addr))
-				time.Sleep(time.Second * 10)
+				core.Sleep(time.Second * 10)
 				continue
 			}
 			c.Conn = cn
@@ -577,7 +577,7 @@ func GetNetLock(key string, timeout int) (int32, *errs.Error) {
 	}
 	stopAt := btime.Time() + float64(timeout)
 	for btime.Time() < stopAt {
-		time.Sleep(time.Microsecond * 10)
+		core.Sleep(time.Microsecond * 10)
 		val, err = GetServerData(lockKey)
 		if err != nil {
 			return 0, err

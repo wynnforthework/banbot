@@ -105,13 +105,11 @@ func RefreshPairList(addPairs []string) *errs.Error {
 		pairs = config.Pairs
 	} else {
 		allowFilter = true
-		exchange, err := exg.Get()
-		if err != nil {
-			return err
-		}
+		exchange := exg.Default
 		if needTickers && core.LiveMode() {
 			tikCache, ok := cache.Get("tickers")
 			if !ok {
+				tickersMap = make(map[string]*banexg.Ticker)
 				tickers, err := exchange.FetchTickers(nil, nil)
 				if err != nil {
 					return err
@@ -167,11 +165,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	}
 	slices.Sort(core.Pairs)
 	// 计算交易对各维度K线质量分数
-	exchange, err := exg.Get()
-	if err != nil {
-		return err
-	}
-	return calcPairTfScales(exchange, pairs)
+	return calcPairTfScales(exg.Default, pairs)
 }
 
 func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {

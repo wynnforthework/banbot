@@ -13,7 +13,11 @@ require (
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/jackc/pgx/v5 v5.5.3
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/muesli/clusters v0.0.0-20180605185049-a07a36e67d36
+	github.com/muesli/kmeans v0.3.1
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pkujhd/goloader v0.0.0-20240113094056-ff3a1e01ffcb
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/schollz/progressbar/v3 v3.14.1
 	go.uber.org/zap v1.26.0
 	golang.org/x/text v0.14.0
@@ -34,9 +38,6 @@ require (
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
-	github.com/muesli/clusters v0.0.0-20180605185049-a07a36e67d36 // indirect
-	github.com/muesli/kmeans v0.3.1 // indirect
-	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.6 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
