@@ -25,6 +25,7 @@ var (
 func Get(stagyName string) *TradeStagy {
 	obj, ok := StagyMap[stagyName]
 	if ok {
+		obj.Name = stagyName
 		return obj
 	}
 	obj = loadNative(stagyName)

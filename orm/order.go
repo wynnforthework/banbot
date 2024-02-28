@@ -374,13 +374,13 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 		}
 		i.DirtyMain = false
 		i.Enter.InoutID = i.ID
-		i.Exit.InoutID = i.ID
 		err = i.Enter.saveAdd(sess)
 		if err != nil {
 			return err
 		}
 		i.DirtyEnter = false
 		if i.Exit != nil && i.Exit.Symbol != "" {
+			i.Exit.InoutID = i.ID
 			err = i.Exit.saveAdd(sess)
 			if err != nil {
 				return err
@@ -757,10 +757,10 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 		itemMap[od.ID] = &InOutOrder{
 			IOrder: od,
 		}
-		b.WriteString(fmt.Sprintf("$%v", len(sqlParams)+1))
 		if !isFirst {
 			b.WriteString(",")
 		}
+		b.WriteString(fmt.Sprintf("$%v", len(sqlParams)+1))
 		sqlParams = append(sqlParams, od.ID)
 		isFirst = false
 	}

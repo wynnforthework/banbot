@@ -324,8 +324,7 @@ func (p *LiveProvider[IKlineFeeder]) UnSubPairs(pairs ...string) *errs.Error {
 }
 
 func (p *LiveProvider[IKlineFeeder]) LoopMain() *errs.Error {
-	p.RunForever()
-	return nil
+	return p.RunForever()
 }
 
 func makeOnKlineMsg(p *LiveProvider[IKlineFeeder]) func(msg *KLineMsg) {

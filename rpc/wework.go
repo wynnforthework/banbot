@@ -23,6 +23,9 @@ type WeWork struct {
 	corpSecret  string
 	accessToken string
 	expireAt    int64
+	toUser      string
+	toParty     string
+	toTag       string
 }
 
 const (
@@ -36,12 +39,26 @@ func NewWeWork(name string, item map[string]interface{}) *WeWork {
 		agentId:    utils.GetMapVal(item, "agent_id", ""),
 		corpId:     utils.GetMapVal(item, "corp_id", ""),
 		corpSecret: utils.GetMapVal(item, "corp_secret", ""),
+		toUser:     utils.GetMapVal(item, "touser", ""),
+		toParty:    utils.GetMapVal(item, "toparty", ""),
+		toTag:      utils.GetMapVal(item, "totag", ""),
 	}
 	if res.corpId == "" || res.corpSecret == "" || res.agentId == "" {
 		panic(name + ": `corp_id`, `corp_secret`, `agent_id` is required")
 	}
 	res.doSendMsgs = makeDoSendMsg(res)
 	return res
+}
+
+type WeWorkRes struct {
+	ErrCode int    `json:"errcode"`
+	ErrMsg  string `json:"errmsg"`
+}
+
+type WeWorkATRes struct {
+	WeWorkRes
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
 }
 
 func (w *WeWork) getToken() string {
@@ -59,28 +76,36 @@ func (w *WeWork) getToken() string {
 		log.Error("wework get token fail", zap.String("name", name), zap.Error(rsp.Error))
 		return ""
 	}
-	var res = make(map[string]interface{})
+	var res WeWorkATRes
 	err_ := sonic.UnmarshalString(rsp.Content, &res)
 	if err_ != nil {
 		log.Error("wework parse rsp fail", zap.String("name", name), zap.Error(rsp.Error),
 			zap.String("body", rsp.Content))
 		return ""
+	} else if res.ErrCode != 0 {
+		log.Error("wework get token fail", zap.String("name", name), zap.String("rsp", rsp.Content))
 	}
-	w.accessToken = utils.GetMapVal(res, "access_token", "")
-	expireSecs := utils.GetMapVal(res, "expires_in", 0)
-	if expireSecs > 0 {
-		w.expireAt = curTime + int64(expireSecs*1000)
+	w.accessToken = res.AccessToken
+	if res.ExpiresIn > 0 {
+		w.expireAt = curTime + int64(res.ExpiresIn*1000)
 	}
 	return w.accessToken
+}
+
+type WeWorkSendRes struct {
+	WeWorkRes
+	InvalidUser    string `json:"invaliduser"`
+	InvalidParty   string `json:"invalidparty"`
+	InvalidTag     string `json:"invalidtag"`
+	UnlicensedUser string `json:"unlicenseduser"`
+	Msgid          string `json:"msgid"`
+	ResponseCode   string `json:"response_code"`
 }
 
 func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 	return func(msgList []map[string]string) int {
 		token := h.getToken()
 		url := fmt.Sprintf("%s/cgi-bin/message/send?access_token=%s", urlBase, token)
-		touser := utils.GetMapVal(h.Config, "touser", "")
-		toparty := utils.GetMapVal(h.Config, "toparty", "")
-		totag := utils.GetMapVal(h.Config, "totag", "")
 		sentNum := 0
 		for _, msg := range msgList {
 			content, _ := msg["content"]
@@ -90,9 +115,9 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 				continue
 			}
 			var body = map[string]interface{}{
-				"touser":  touser,
-				"toparty": toparty,
-				"totag":   totag,
+				"touser":  h.toUser,
+				"toparty": h.toParty,
+				"totag":   h.toTag,
 				"msgtype": "text",
 				"agentid": h.agentId,
 				"text": map[string]string{
@@ -109,14 +134,13 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 				log.Error("wework send msg net fail", zap.String("content", content), zap.Error(err_))
 				continue
 			}
-			var res = make(map[string]interface{})
+			var res WeWorkSendRes
 			err_ = sonic.UnmarshalString(rsp.Content, &res)
 			if err_ != nil {
 				log.Error("wework decode rsp fail", zap.String("body", rsp.Content), zap.Error(err_))
 				continue
 			}
-			errCode := utils.GetMapVal(res, "errcode", 0)
-			if errCode > 0 {
+			if res.ErrCode > 0 {
 				log.Error("wework send msg fail", zap.String("content", content),
 					zap.String("body", rsp.Content))
 				continue

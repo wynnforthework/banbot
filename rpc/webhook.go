@@ -8,7 +8,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
-	"github.com/banbox/banexg/utils"
+	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
@@ -18,18 +18,23 @@ import (
 )
 
 type WebHook struct {
+	webHookItem
 	name       string
-	retryNum   int    // 重试次数
-	retryDelay int    // 重试间隔
-	disable    bool   // 是否禁用
-	chlType    string // 渠道类型
 	client     *http.Client
 	wg         sync.WaitGroup
 	doSendMsgs func([]map[string]string) int
 	Config     map[string]interface{}
 	MsgTypes   map[string]bool
-	Keywords   []string
 	Queue      chan map[string]string
+}
+
+type webHookItem struct {
+	MsgTypesRaw []string `mapstructure:"msg_types"`
+	Keywords    []string `mapstructure:"keywords"`
+	RetryNum    int      `mapstructure:"retry_num"`   // 重试次数
+	RetryDelay  int      `mapstructure:"retry_delay"` // 重试间隔
+	Disable     bool     `mapstructure:"disable"`     // 是否禁用
+	ChlType     string   `mapstructure:"type"`        // 渠道类型
 }
 
 const (
@@ -50,27 +55,25 @@ type IWebHook interface {
 	/*
 		发送消息，payload是msg渲染后的待发送数据
 	*/
-	SendMsg(payload map[string]string) bool
+	SendMsg(msgType string, payload map[string]string) bool
 	ConsumeForever()
 }
 
 func NewWebHook(name string, item map[string]interface{}) *WebHook {
-	var msgTypes []string
-	msgTypes = utils.GetMapVal(item, "msg_types", msgTypes)
-	keywords := utils.GetMapVal(item, "keywords", []string{})
-	res := &WebHook{
-		name:       name,
-		retryNum:   utils.GetMapVal(item, "retry_num", 0),
-		retryDelay: utils.GetMapVal(item, "retry_delay", 1000),
-		disable:    utils.GetMapVal(item, "disable", false),
-		chlType:    utils.GetMapVal(item, "type", ""),
-		Config:     item,
-		MsgTypes:   make(map[string]bool),
-		Keywords:   keywords,
-		Queue:      make(chan map[string]string),
+	var cfg webHookItem
+	err_ := mapstructure.Decode(item, &cfg)
+	if err_ != nil {
+		panic(fmt.Sprintf("rpc_channels.%v is invalid: %v", name, err_))
 	}
-	if msgTypes != nil {
-		for _, val := range msgTypes {
+	res := &WebHook{
+		webHookItem: cfg,
+		name:        name,
+		Config:      item,
+		MsgTypes:    make(map[string]bool),
+		Queue:       make(chan map[string]string),
+	}
+	if len(cfg.MsgTypesRaw) > 0 {
+		for _, val := range cfg.MsgTypesRaw {
 			res.MsgTypes[val] = true
 		}
 	}
@@ -78,19 +81,22 @@ func NewWebHook(name string, item map[string]interface{}) *WebHook {
 }
 
 func (h *WebHook) GetName() string {
-	return fmt.Sprintf("%s:%s", h.chlType, h.name)
+	return fmt.Sprintf("%s:%s", h.ChlType, h.name)
 }
 
 func (h *WebHook) IsDisable() bool {
-	return h.disable
+	return h.Disable
 }
 
 func (h *WebHook) SetDisable(val bool) {
-	h.disable = val
+	h.Disable = val
 }
 
-func (h *WebHook) SendMsg(payload map[string]string) bool {
-	if h.disable {
+func (h *WebHook) SendMsg(msgType string, payload map[string]string) bool {
+	if h.Disable {
+		return false
+	}
+	if _, ok := h.MsgTypes[msgType]; !ok {
 		return false
 	}
 	if content, ok := payload["content"]; ok && len(h.Keywords) > 0 {
@@ -111,7 +117,7 @@ func (h *WebHook) SendMsg(payload map[string]string) bool {
 }
 
 func (h *WebHook) CleanUp() {
-	h.disable = true
+	h.Disable = true
 	h.wg.Wait()
 	if h.client != nil {
 		h.client = nil
@@ -120,7 +126,7 @@ func (h *WebHook) CleanUp() {
 }
 
 func (h *WebHook) ConsumeForever() {
-	if h.disable {
+	if h.Disable {
 		return
 	}
 	name := h.GetName()
@@ -141,9 +147,9 @@ func (h *WebHook) ConsumeForever() {
 
 func (h *WebHook) doSendRetry(msgList []map[string]string) {
 	sentNum, attempts, totalNum := 0, 0, len(msgList)
-	for sentNum < totalNum && len(msgList) > 0 && attempts < h.retryNum {
+	for sentNum < totalNum && len(msgList) > 0 && attempts < h.RetryNum+1 {
 		if attempts > 0 {
-			core.Sleep(time.Duration(h.retryDelay) * time.Second)
+			core.Sleep(time.Duration(h.RetryDelay) * time.Second)
 		}
 		attempts += 1
 		curSent := h.doSendMsgs(msgList)

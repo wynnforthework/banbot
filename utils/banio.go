@@ -34,7 +34,7 @@ type IBanConn interface {
 	GetRemote() string
 	IsClosed() bool
 	HasTag(tag string) bool
-	RunForever()
+	RunForever() *errs.Error
 }
 
 type BanConn struct {
@@ -161,13 +161,12 @@ RunForever
 
 服务器端和客户端都会调用此方法
 */
-func (c *BanConn) RunForever() {
+func (c *BanConn) RunForever() *errs.Error {
 	defer c.Conn.Close()
 	for {
 		msg, err := c.ReadMsg()
 		if err != nil {
-			log.Error("read socket error", zap.Error(err))
-			return
+			return err
 		}
 		isMatch := false
 		for prefix, handle := range c.Listens {
@@ -342,7 +341,13 @@ func (s *ServerIO) RunForever() *errs.Error {
 		conn := s.WrapConn(conn_)
 		log.Info("receive client", zap.String("remote", conn.GetRemote()))
 		s.Conns = append(s.Conns, conn)
-		go conn.RunForever()
+		go func() {
+			err := conn.RunForever()
+			if err != nil {
+				log.Error("read client fail", zap.String("remote", conn.GetRemote()),
+					zap.String("err", err.Msg))
+			}
+		}()
 	}
 }
 
@@ -410,9 +415,10 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	}
 	for _, conn := range curConns {
 		go func(c IBanConn) {
-			err := c.Write(compressed)
+			err = c.Write(compressed)
 			if err != nil {
-				log.Error("broadcast fail", zap.String("tag", msg.Action), zap.Error(err))
+				log.Error("broadcast fail", zap.String("remote", c.GetRemote()),
+					zap.String("tag", msg.Action), zap.Error(err))
 			}
 		}(conn)
 	}

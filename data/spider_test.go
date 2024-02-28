@@ -27,7 +27,10 @@ func TestWatchOhlcv(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	client.RunForever()
+	err = client.RunForever()
+	if err != nil {
+		panic(err)
+	}
 }
 
 func initApp() *errs.Error {

@@ -44,6 +44,7 @@ func SendMsg(msg map[string]interface{}) {
 	if len(channels) == 0 {
 		return
 	}
+	msg["name"] = config.Name
 	msgType := utils.GetMapVal(msg, "type", "")
 	item, ok := config.Webhook[msgType]
 	if !ok {
@@ -55,7 +56,7 @@ func SendMsg(msg map[string]interface{}) {
 		payload[key] = utils2.FormatWithMap(val, msg)
 	}
 	for _, chl := range channels {
-		chl.SendMsg(payload)
+		chl.SendMsg(msgType, payload)
 	}
 }
 

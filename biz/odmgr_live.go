@@ -56,6 +56,11 @@ func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 		OrderMgr: OrderMgr{
 			callBack: callBack,
 		},
+		doneKeys:      map[string]bool{},
+		volPrices:     map[string]*VolPrice{},
+		exgIdMap:      map[string]*orm.InOutOrder{},
+		doneTrades:    map[string]bool{},
+		unMatchTrades: map[string]*banexg.MyTrade{},
 	}
 	if core.ExgName == "binance" {
 		res.applyMyTrade = bnbApplyMyTrade(res)
@@ -93,6 +98,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		TaskID: -1,
 		Limit:  1000,
 	})
+	// 这里加载完订单就释放，防止长时间占用连接
 	conn.Release()
 	orm.HistODs = make([]*orm.InOutOrder, 0, len(orders))
 	if err != nil {
@@ -186,18 +192,22 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 */
 func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, sinceMs int64,
 	openOds []*orm.InOutOrder) ([]*orm.InOutOrder, *errs.Error) {
+	var exOrders []*banexg.Order
+	var err *errs.Error
+	if len(openOds) > 0 {
+		// 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
+		exOrders, err = exg.Default.FetchOrders(pair, sinceMs, 0, nil)
+		if err != nil {
+			return openOds, err
+		}
+	}
+	// 获取交易所订单后再获取连接，减少占用时长
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return openOds, err
 	}
 	defer conn.Release()
 	if len(openOds) > 0 {
-		// 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
-		exchange := exg.Default
-		exOrders, err := exchange.FetchOrders(pair, sinceMs, 0, nil)
-		if err != nil {
-			return openOds, err
-		}
 		for _, exod := range exOrders {
 			if exod.Status != banexg.OdStatusClosed {
 				// 跳过未完成订单
@@ -352,8 +362,8 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 			if isShort {
 				tag = "平空"
 			}
-			log.Info(fmt.Sprintf("%v: price:%.5f, amount: %.5f, %v, fee: %.5f %v id: %v",
-				tag, price, part.Exit.Filled, od.Type, feeCost, odTime, od.ID))
+			log.Info(fmt.Sprintf("%v: price:%.5f, amount: %.5f, %v, %v id: %v",
+				tag, price, part.Exit.Filled, od.Type, odTime, od.ID))
 			if iod.Status < orm.InOutStatusFullExit {
 				err = iod.Save(sess)
 				if err != nil {
@@ -472,6 +482,10 @@ tryFillExit
 func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, odTime int64, orderID, odType,
 	feeName string, feeCost float64) (float64, float64, *orm.InOutOrder) {
 	if iod.Enter.Filled == 0 {
+		err := iod.LocalExit(core.ExitTagForceExit, iod.InitPrice, "not entered")
+		if err != nil {
+			log.Error("local exit no enter order fail", zap.String("key", iod.Key()), zap.Error(err))
+		}
 		return filled, feeCost, iod
 	}
 	var avaAmount, fillAmt float64

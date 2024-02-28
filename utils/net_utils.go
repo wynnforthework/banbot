@@ -16,12 +16,16 @@ func DoHttp(client *http.Client, req *http.Request) *banexg.HttpRes {
 	if err_ != nil {
 		return &banexg.HttpRes{Error: errs.New(core.ErrNetReadFail, err_)}
 	}
-	rspData, err_ := io.ReadAll(rsp.Body)
-	if err_ != nil {
-		return &banexg.HttpRes{Error: errs.New(core.ErrNetReadFail, err_)}
-	}
 	var result = banexg.HttpRes{Status: rsp.StatusCode, Headers: rsp.Header}
 	rspData, err := io.ReadAll(rsp.Body)
+	defer func() {
+		cerr := rsp.Body.Close()
+		// Only overwrite the retured error if the original error was nil and an
+		// error occurred while closing the body.
+		if err == nil && cerr != nil {
+			err = cerr
+		}
+	}()
 	if err != nil {
 		result.Error = errs.New(core.ErrNetReadFail, err)
 		return &result
@@ -35,13 +39,5 @@ func DoHttp(client *http.Client, req *http.Request) *banexg.HttpRes {
 		msg := fmt.Sprintf("%s  %v", req.URL, result.Content)
 		result.Error = errs.NewMsg(result.Status, msg)
 	}
-	defer func() {
-		cerr := rsp.Body.Close()
-		// Only overwrite the retured error if the original error was nil and an
-		// error occurred while closing the body.
-		if err == nil && cerr != nil {
-			err = cerr
-		}
-	}()
 	return &result
 }
