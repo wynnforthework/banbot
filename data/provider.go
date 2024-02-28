@@ -268,6 +268,7 @@ func InitLiveProvider(callBack FnPairKline) *errs.Error {
 			holders: make(map[string]IKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IKlineFeeder, *errs.Error) {
 				feeder := NewKlineFeeder(pair, callBack)
+				feeder.subTfs(tfs...)
 				return feeder, nil
 			},
 		},
@@ -296,14 +297,14 @@ func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]in
 				})
 			}
 		}
-		err := p.WatchJobs(core.ExgName, core.Market, "ohlcv", jobs...)
+		err = p.WatchJobs(core.ExgName, core.Market, "ohlcv", jobs...)
 		if err != nil {
 			return err
 		}
 		if len(core.BookPairs) > 0 {
 			jobs = make([]WatchJob, 0, len(core.BookPairs))
-			for p := range core.BookPairs {
-				jobs = append(jobs, WatchJob{Symbol: p, TimeFrame: "1m"})
+			for pair := range core.BookPairs {
+				jobs = append(jobs, WatchJob{Symbol: pair, TimeFrame: "1m"})
 			}
 			err = p.WatchJobs(core.ExgName, core.Market, "book", jobs...)
 			if err != nil {

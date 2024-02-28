@@ -292,7 +292,8 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 		}
 	}
 	sidList := utils.KeysOfMap(exsList)
-	kRanges := sess.GetKlineRanges(sidList, timeFrame)
+	// 这里应该使用更小的downTF
+	kRanges := sess.GetKlineRanges(sidList, downTF)
 	conn.Release()
 	for _, exs := range exsList {
 		// 如果达到并发限制，这里会阻塞等待

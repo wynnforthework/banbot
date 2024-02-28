@@ -65,6 +65,7 @@ func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 		panic("unsupport exchange for LiveOrderMgr: " + core.ExgName)
 	}
 	OdMgrLive = res
+	OdMgr = res
 }
 
 /*

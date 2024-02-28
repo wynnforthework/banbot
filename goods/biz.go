@@ -101,7 +101,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	var allowFilter = false
 	var err *errs.Error
 	var tickersMap map[string]*banexg.Ticker
-	if !core.LiveMode() && len(config.Pairs) > 0 {
+	if len(config.Pairs) > 0 {
 		pairs = config.Pairs
 	} else {
 		allowFilter = true

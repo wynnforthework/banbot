@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -57,6 +58,20 @@ func InitFakeWallets(symbols ...string) {
 		}
 	}
 	Wallets.SetWallets(config.WalletAmounts)
+}
+
+func InitLiveWallets() *errs.Error {
+	if Wallets == nil {
+		Wallets = &BanWallets{
+			Items: map[string]*ItemWallet{},
+		}
+	}
+	res, err := exg.Default.FetchBalance(nil)
+	if err != nil {
+		return err
+	}
+	updateWalletByBalances(res)
+	return nil
 }
 
 func (iw *ItemWallet) Total(withUpol bool) float64 {
@@ -630,12 +645,7 @@ func (w *BanWallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols [
 	prices := make([]float64, 0)
 
 	for key, item := range data {
-		var price float64
-		if strings.Contains(key, "USD") {
-			price = 1
-		} else {
-			price = core.GetPrice(key)
-		}
+		var price = core.GetPrice(key)
 		amounts = append(amounts, itemAmt(item)*price)
 		coins = append(coins, key)
 		prices = append(prices, price)
@@ -716,6 +726,59 @@ func (w *BanWallets) FiatValue(withUpol bool, symbols ...string) float64 {
 	return totalVal
 }
 
+func updateWalletByBalances(item *banexg.Balances) {
+	if core.IsPriceEmpty() {
+		// 所有价格都未加载时，如果请求价格，则一次性刷新
+		res, err := exg.Default.FetchTickerPrice("", nil)
+		if err != nil {
+			log.Error("load ticker prices fail", zap.Error(err))
+		} else {
+			core.SetPrices(res)
+		}
+	}
+	var items []*banexg.Asset
+	for coin, it := range item.Assets {
+		if it.Total == 0 {
+			continue
+		}
+		record, ok := Wallets.Items[coin]
+		if ok {
+			record.Available = it.Free
+			record.UnrealizedPOL = it.UPol
+		} else {
+			record = &ItemWallet{
+				Coin:          coin,
+				Available:     it.Free,
+				UnrealizedPOL: it.UPol,
+				Pendings:      make(map[string]float64),
+				Frozens:       make(map[string]float64),
+			}
+			Wallets.Items[coin] = record
+		}
+		if core.IsContract {
+			record.Pendings["*"] = it.Used
+		} else {
+			record.Frozens["*"] = it.Used
+		}
+		items = append(items, &banexg.Asset{
+			Code:  coin,
+			Free:  it.Free,
+			Used:  it.Used,
+			Total: record.Total(false) * core.GetPrice(coin),
+		})
+	}
+	slices.SortFunc(items, func(a, b *banexg.Asset) int {
+		return -int((a.Total - b.Total) * 100)
+	})
+	var msgList []string
+	for _, it := range items {
+		msgList = append(msgList, fmt.Sprintf("%s: %.5f/%.5f", it.Code, it.Free, it.Used))
+	}
+	if len(msgList) > 0 {
+		log.Info("update balances: " + strings.Join(msgList, "  "))
+	}
+}
+
 func WatchLiveBalances() {
 	if IsWatchBalance {
 		return
@@ -731,31 +794,7 @@ func WatchLiveBalances() {
 			IsWatchBalance = false
 		}()
 		for item := range out {
-			var msgList []string
-			for coin, it := range item.Assets {
-				if it.Free == 0 && it.Used == 0 {
-					continue
-				}
-				record, ok := Wallets.Items[coin]
-				if ok {
-					record.Available = it.Free
-				} else {
-					record = &ItemWallet{
-						Coin:      coin,
-						Available: it.Free,
-					}
-					Wallets.Items[coin] = record
-				}
-				if core.IsContract {
-					record.Pendings["*"] = it.Used
-				} else {
-					record.Frozens["*"] = it.Used
-				}
-				msgList = append(msgList, fmt.Sprintf("%s: %.5f/%.5f", coin, it.Free, it.Used))
-			}
-			if len(msgList) > 0 {
-				log.Info("update balances: " + strings.Join(msgList, "  "))
-			}
+			updateWalletByBalances(&item)
 		}
 	}()
 }

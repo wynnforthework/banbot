@@ -1,7 +1,9 @@
 package biz
 
 import (
+	"context"
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
@@ -10,6 +12,9 @@ import (
 )
 
 func SetupComs() *errs.Error {
+	ctx, cancel := context.WithCancel(context.Background())
+	core.Ctx = ctx
+	core.StopAll = cancel
 	log.Setup(config.Args.Debug, config.Args.Logfile)
 	err := exg.Setup()
 	if err != nil {

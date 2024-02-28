@@ -7,22 +7,23 @@ import (
 )
 
 func GetPrice(symbol string) float64 {
+	if strings.Contains(symbol, "USD") && !strings.Contains(symbol, "/") {
+		return 1
+	}
 	if price, ok := prices[symbol]; ok {
 		return price
 	}
 	if price, ok := barPrices[symbol]; ok {
 		return price
 	}
-	if strings.Contains(symbol, "USD") && !strings.Contains(symbol, "/") {
-		return 1
-	}
 	panic(fmt.Errorf("invalid symbol for price: %s", symbol))
 }
 
 func setDataPrice(data map[string]float64, pair string, price float64) {
 	data[pair] = price
-	if strings.Contains(pair, "USD") {
-		data[strings.Split(pair, "/")[0]] = price
+	base, quote, settle, _ := SplitSymbol(pair)
+	if strings.Contains(quote, "USD") && (settle == "" || settle == quote) {
+		data[base] = price
 	}
 }
 
@@ -32,6 +33,20 @@ func SetBarPrice(pair string, price float64) {
 
 func SetPrice(pair string, price float64) {
 	setDataPrice(prices, pair, price)
+}
+
+func IsPriceEmpty() bool {
+	return len(prices) == 0 && len(barPrices) == 0
+}
+
+func SetPrices(data map[string]float64) {
+	for pair, price := range data {
+		prices[pair] = price
+		base, quote, settle, _ := SplitSymbol(pair)
+		if strings.Contains(quote, "USD") && (settle == "" || settle == quote) {
+			prices[base] = price
+		}
+	}
 }
 
 func IsMaker(pair, side string, price float64) bool {
