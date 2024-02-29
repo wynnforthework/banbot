@@ -121,16 +121,16 @@ func (t *CryptoTrader) FeedKLine(bar *banexg.PairTFKline) {
 func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 	msgType := rpc.MsgTypeExit
 	subOd := od.Exit
-	action := "开多"
+	action := "平多"
 	if od.Short {
-		action = "开空"
+		action = "平空"
 	}
 	if isEnter {
 		msgType = rpc.MsgTypeEntry
 		subOd = od.Enter
-		action = "平多"
+		action = "开多"
 		if od.Short {
-			action = "平空"
+			action = "开空"
 		}
 	}
 	if subOd.Status != orm.OdStatusClosed || subOd.Amount == 0 {

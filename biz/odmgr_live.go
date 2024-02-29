@@ -56,12 +56,15 @@ func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 		OrderMgr: OrderMgr{
 			callBack: callBack,
 		},
+		queue:         make(chan *OdQItem, 1000),
 		doneKeys:      map[string]bool{},
 		volPrices:     map[string]*VolPrice{},
 		exgIdMap:      map[string]*orm.InOutOrder{},
 		doneTrades:    map[string]bool{},
 		unMatchTrades: map[string]*banexg.MyTrade{},
 	}
+	res.afterEnter = makeAfterEnter(res)
+	res.afterExit = makeAfterExit(res)
 	if core.ExgName == "binance" {
 		res.applyMyTrade = bnbApplyMyTrade(res)
 		res.exitByMyTrade = bnbExitByMyTrade(res)
@@ -488,23 +491,25 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 		}
 		return filled, feeCost, iod
 	}
-	var avaAmount, fillAmt float64
+	var avaAmount float64
+	var doCut = false // 是否应该分割一个小订单
 	if iod.Exit != nil && iod.Exit.Amount > 0 {
 		avaAmount = iod.Exit.Amount - iod.Exit.Filled
+		doCut = avaAmount/iod.Exit.Amount < 0.99
 	} else {
 		avaAmount = iod.Enter.Filled
 	}
-	var part *orm.InOutOrder
-	if filled >= avaAmount*0.99 {
-		fillAmt = avaAmount
-		filled -= avaAmount
-		part = iod.CutPart(fillAmt, 0)
-	} else {
-		fillAmt = filled
-		filled = 0
-		part = iod
+	if !doCut && filled < avaAmount*0.99 {
+		doCut = true
 	}
-	curFeeCost := feeCost * fillAmt / filled
+	var part = iod
+	fillAmt := min(avaAmount, filled)
+	curPartRate := fillAmt / filled
+	filled -= fillAmt
+	if doCut {
+		part = iod.CutPart(fillAmt, 0)
+	}
+	curFeeCost := feeCost * curPartRate
 	feeCost -= curFeeCost
 	if part.Exit == nil {
 		exitSide := banexg.OdSideSell
@@ -563,28 +568,24 @@ func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enter
 	return ents, extOrders, nil
 }
 
-func (o *LiveOrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strategy.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error) {
-	od, err := o.OrderMgr.EnterOrder(sess, env, req, doCheck)
-	if err != nil {
-		return od, err
+func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
+	return func(order *orm.InOutOrder) *errs.Error {
+		o.queue <- &OdQItem{
+			Order:  order,
+			Action: "enter",
+		}
+		return nil
 	}
-	o.queue <- &OdQItem{
-		Order:  od,
-		Action: "enter",
-	}
-	return od, nil
 }
 
-func (o *LiveOrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strategy.ExitReq) (*orm.InOutOrder, *errs.Error) {
-	exitOd, err := o.OrderMgr.ExitOrder(sess, od, req)
-	if err != nil {
-		return exitOd, err
+func makeAfterExit(o *LiveOrderMgr) FuncHandleIOrder {
+	return func(order *orm.InOutOrder) *errs.Error {
+		o.queue <- &OdQItem{
+			Order:  order,
+			Action: "exit",
+		}
+		return nil
 	}
-	o.queue <- &OdQItem{
-		Order:  od,
-		Action: "exit",
-	}
-	return exitOd, nil
 }
 
 func (o *LiveOrderMgr) ConsumeOrderQueue() {
@@ -998,8 +999,8 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 			if err != nil {
 				return err
 			}
-			conn.Release()
 			err = o.finishOrder(od, sess)
+			conn.Release()
 			if err != nil {
 				return err
 			}

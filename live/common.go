@@ -45,6 +45,8 @@ func CronFatalLossCheck() {
 	}
 }
 
+var lastNotifyDelay = int64(0)
+
 func CronKlineDelays() {
 	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {
 		curMS := btime.TimeMS()
@@ -58,10 +60,16 @@ func CronKlineDelays() {
 		}
 		if len(fails) > 0 {
 			failText := strings.Join(fails, ", ")
-			rpc.SendMsg(map[string]interface{}{
-				"type":   rpc.MsgTypeException,
-				"status": "监听爬虫K线超时：" + failText,
-			})
+			msgText := "监听爬虫K线超时：" + failText
+			log.Error(msgText)
+			if curMS-lastNotifyDelay > 600000 {
+				// 10 分钟发送一次延迟提醒
+				lastNotifyDelay = curMS
+				rpc.SendMsg(map[string]interface{}{
+					"type":   rpc.MsgTypeException,
+					"status": msgText,
+				})
+			}
 		}
 	})
 	if err_ != nil {

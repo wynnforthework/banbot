@@ -131,7 +131,8 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 			}
 			rsp := h.request("POST", url, bodyText)
 			if rsp.Status != 200 {
-				log.Error("wework send msg net fail", zap.String("content", content), zap.Error(err_))
+				log.Error("wework send msg net fail", zap.String("content", content),
+					zap.String("rsp", rsp.Content), zap.Error(err_))
 				continue
 			}
 			var res WeWorkSendRes

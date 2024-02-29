@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	regHolds, _ = regexp.Compile("[{]([a-zA-Z_]+)[}]")
+	regHolds, _ = regexp.Compile("[{]([^}]+)[}]")
 )
 
 /*
@@ -110,9 +110,14 @@ func FormatWithMap(text string, args map[string]interface{}) string {
 	for _, mat := range matches {
 		start, end := mat[2], mat[3]
 		b.WriteString(text[lastEnd : start-1])
-		key := text[start:end]
-		if val, ok := args[key]; ok {
-			b.WriteString(fmt.Sprintf("%v", val))
+		holdText := text[start:end]
+		parts := strings.Split(holdText, ":")
+		valFmt := "%v"
+		if len(parts) > 1 && len(parts[1]) > 0 {
+			valFmt = "%" + parts[1]
+		}
+		if val, ok := args[parts[0]]; ok {
+			b.WriteString(fmt.Sprintf(valFmt, val))
 		}
 		lastEnd = end + 1
 	}

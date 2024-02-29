@@ -39,8 +39,12 @@ type IOrderMgrLive interface {
 	ConsumeOrderQueue()
 }
 
+type FuncHandleIOrder = func(order *orm.InOutOrder) *errs.Error
+
 type OrderMgr struct {
-	callBack func(order *orm.InOutOrder, isEnter bool)
+	callBack   func(order *orm.InOutOrder, isEnter bool)
+	afterEnter FuncHandleIOrder
+	afterExit  FuncHandleIOrder
 }
 
 func allowOrderEnter(env *banta.BarEnv) bool {
@@ -140,6 +144,12 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 	}
 	od.DirtyInfo = true
 	err := od.Save(sess)
+	if err != nil {
+		return od, err
+	}
+	if o.afterEnter != nil {
+		err = o.afterEnter(od)
+	}
 	return od, err
 }
 
@@ -259,6 +269,12 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 	odType := core.OrderTypeEnums[req.OrderType]
 	od.SetExit(req.Tag, odType, req.Limit)
 	err := od.Save(sess)
+	if err != nil {
+		return od, err
+	}
+	if o.afterExit != nil {
+		err = o.afterExit(od)
+	}
 	return od, err
 }
 
