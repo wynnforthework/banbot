@@ -42,7 +42,7 @@ func (i *InOutOrder) loadInfo() {
 	if i.IOrder.Info == "" {
 		return
 	}
-	err_ := sonic.UnmarshalString(i.IOrder.Info, &i.Info)
+	err_ := utils2.UnmarshalString(i.IOrder.Info, &i.Info)
 	if err_ != nil {
 		log.Error("unmarshal ioder info fail", zap.String("info", i.IOrder.Info), zap.Error(err_))
 	}
@@ -403,7 +403,11 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 			i.DirtyEnter = false
 		}
 		if i.DirtyExit && i.Exit != nil && i.Exit.Symbol != "" {
-			err = i.Exit.saveUpdate(sess)
+			if i.Exit.ID == 0 {
+				err = i.Exit.saveAdd(sess)
+			} else {
+				err = i.Exit.saveUpdate(sess)
+			}
 			if err != nil {
 				return err
 			}

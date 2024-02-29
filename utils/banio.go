@@ -10,6 +10,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/banbox/banexg/utils"
 	"github.com/bytedance/sonic"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
@@ -112,7 +113,7 @@ func (c *BanConn) ReadMsg() (*IOMsg, *errs.Error) {
 		return nil, err
 	}
 	var msg IOMsg
-	err_ := sonic.Unmarshal(data, &msg)
+	err_ := utils.Unmarshal(data, &msg)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeUnmarshalFail, err_)
 	}

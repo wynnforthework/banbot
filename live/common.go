@@ -61,7 +61,7 @@ func CronKlineDelays() {
 		if len(fails) > 0 {
 			failText := strings.Join(fails, ", ")
 			msgText := "监听爬虫K线超时：" + failText
-			log.Error(msgText)
+			log.Warn(msgText)
 			if curMS-lastNotifyDelay > 600000 {
 				// 10 分钟发送一次延迟提醒
 				lastNotifyDelay = curMS
