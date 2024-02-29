@@ -146,7 +146,7 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 	chanKline := make(chan []*banexg.Kline, 1000)
 	var wg sync.WaitGroup
 	wg.Add(2)
-	var err *errs.Error
+	var outErr *errs.Error
 	saveNum := 0
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -175,10 +175,10 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 					endText := btime.ToDateStr(job.End, "")
 					log.Info(fmt.Sprintf("fetch %s %s  %s - %s, num: %d", exs.Symbol, timeFrame, startText, endText, barNum))
 				}
-				err = FetchApiOHLCV(ctx, exchange, exs.Symbol, timeFrame, start, stop, chanKline)
+				err := FetchApiOHLCV(ctx, exchange, exs.Symbol, timeFrame, start, stop, chanKline)
 				if err != nil {
+					outErr = err
 					cancel()
-					log.Error("fetch ohlcv fail", zap.String("p", exs.Symbol), zap.Int64("st", start), zap.Error(err))
 					return
 				}
 			}
@@ -205,7 +205,7 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 				}
 				num, err = sess.InsertKLines(timeFrame, exs.ID, batch)
 				if err != nil {
-					log.Error("insert kline fail", zap.Error(err))
+					outErr = err
 					cancel()
 					return
 				} else {
@@ -219,8 +219,8 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 
 	wg.Wait()
 	curStep(totalNum - doneNum)
-	if err != nil {
-		return saveNum, err
+	if outErr != nil {
+		return saveNum, outErr
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {

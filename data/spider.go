@@ -72,46 +72,50 @@ type SaveKline struct {
 	SkipFirst bool
 }
 
-func fillPrevHole(sess *orm.Queries, save *SaveKline) *errs.Error {
+func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
 	initSids[save.Sid] = true
 	if save.SkipFirst {
 		save.Arr = save.Arr[1:]
 	}
+	_, endMS := sess.GetKlineRange(save.Sid, save.TimeFrame)
 	if len(save.Arr) == 0 {
-		return nil
+		return endMS, nil
 	}
-	exs := orm.GetSymbolByID(save.Sid)
-	tfMSecs := int64(utils.TFToSecs(save.TimeFrame) * 1000)
 	fetchEndMS := save.Arr[0].Time
 
 	var err *errs.Error
-	_, endMS := sess.GetKlineRange(save.Sid, save.TimeFrame)
 	if endMS == 0 || fetchEndMS <= endMS {
 		// 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
-		return nil
+		return endMS, nil
 	}
+	exs := orm.GetSymbolByID(save.Sid)
+	tfMSecs := int64(utils.TFToSecs(save.TimeFrame) * 1000)
 	tryCount := 0
 	log.Info("start first fetch", zap.String("pair", exs.Symbol), zap.Int64("s", endMS), zap.Int64("e", fetchEndMS))
 	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
 	if err != nil {
-		return err
+		return endMS, err
 	}
+	var newEndMS = endMS
 	var saveNum int
 	for tryCount <= 5 {
 		tryCount += 1
 		saveNum, err = sess.DownOHLCV2DB(exchange, exs, save.TimeFrame, endMS, fetchEndMS, nil)
 		if err != nil {
-			return err
+			_, endMS = sess.GetKlineRange(save.Sid, save.TimeFrame)
+			return endMS, err
 		}
-		saveBars, err := sess.QueryOHLCV(exs.ID, save.TimeFrame, 0, fetchEndMS, 10, false)
+		saveBars, err := sess.QueryOHLCV(exs.ID, save.TimeFrame, 0, 0, 1, false)
 		if err != nil {
-			return err
+			_, endMS = sess.GetKlineRange(save.Sid, save.TimeFrame)
+			return endMS, err
 		}
 		var lastMS = int64(0)
 		if len(saveBars) > 0 {
 			lastMS = saveBars[len(saveBars)-1].Time
+			newEndMS = lastMS + tfMSecs
 		}
-		if lastMS+tfMSecs == fetchEndMS {
+		if newEndMS >= fetchEndMS {
 			break
 		} else {
 			//如果未成功获取最新的bar，等待2s重试（1m刚结束时请求ohlcv可能取不到）
@@ -122,7 +126,7 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) *errs.Error {
 	}
 	log.Info("first fetch ok", zap.String("pair", exs.Symbol), zap.Int64("s", endMS),
 		zap.Int64("e", fetchEndMS))
-	return nil
+	return newEndMS, nil
 }
 
 func consumeWriteQ(workNum int) {
@@ -136,9 +140,19 @@ func consumeWriteQ(workNum int) {
 			if err == nil {
 				defer conn.Release()
 				if _, ok := initSids[job.Sid]; !ok {
-					err = fillPrevHole(sess, job)
+					var nextMS int64
+					nextMS, err = fillPrevHole(sess, job)
+					var cutIdx = 0
+					for i, bar := range job.Arr {
+						if bar.Time < nextMS {
+							cutIdx = i + 1
+						} else {
+							break
+						}
+					}
+					job.Arr = job.Arr[cutIdx:]
 				}
-				if err == nil {
+				if err == nil && len(job.Arr) > 0 {
 					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, job.Arr)
 				}
 			}

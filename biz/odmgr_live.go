@@ -795,7 +795,7 @@ func (o *LiveOrderMgr) execOrderExit(od *orm.InOutOrder) *errs.Error {
 		if od.Enter.OrderID != "" {
 			order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, nil)
 			if err != nil {
-				log.Error("cancel order fail", zap.String("key", odKey), zap.Error(err))
+				log.Error("cancel order fail", zap.String("key", odKey), zap.String("err", err.Short()))
 			} else {
 				err = o.updateOdByExgRes(od, true, order)
 				if err != nil {
