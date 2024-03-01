@@ -107,3 +107,11 @@ func CronKlineSummary() {
 		log.Error("add Receive Klines Summary fail", zap.Error(err_))
 	}
 }
+
+func CronCheckTriggerOds() {
+	// 在每分钟的15s检查是否触发限价单提交
+	_, err_ := core.Cron.AddFunc("15 * * * * *", biz.VerifyTriggerOds)
+	if err_ != nil {
+		log.Error("add VerifyTriggerOds fail", zap.Error(err_))
+	}
+}

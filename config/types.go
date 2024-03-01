@@ -10,6 +10,7 @@ var (
 	NoDB            bool
 	Leverage        int
 	LimitVolSecs    int // 限价单预期等待多长时间成交，单位秒
+	PutLimitSecs    int // 在此预期时间内成交的限价单，才提交到交易所
 	MaxMarketRate   float64
 	OdBookTtl       int64
 	OrderType       string
@@ -52,6 +53,7 @@ type Config struct {
 	RunMode         string                            `yaml:"run_mode" mapstructure:"run_mode"`
 	Leverage        int                               `yaml:"leverage" mapstructure:"leverage"`
 	LimitVolSecs    int                               `yaml:"limit_vol_secs" mapstructure:"limit_vol_secs"`
+	PutLimitSecs    int                               `yaml:"put_limit_secs" mapstructure:"put_limit_secs"`
 	MarketType      string                            `yaml:"market_type" mapstructure:"market_type"`
 	ContractType    string                            `yaml:"contract_type" mapstructure:"contract_type"`
 	MaxMarketRate   float64                           `yaml:"max_market_rate" mapstructure:"max_market_rate"`

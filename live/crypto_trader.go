@@ -174,5 +174,7 @@ func (t *CryptoTrader) startJobs() {
 	CronKlineDelays()
 	// 定时输出收到K线情况，每5分钟执行：01:30  06:30  11:30
 	CronKlineSummary()
+	// 每分钟第15s检查是否触发限价单提交
+	CronCheckTriggerOds()
 	core.Cron.Start()
 }

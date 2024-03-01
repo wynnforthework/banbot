@@ -1,6 +1,7 @@
 package exg
 
 import (
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
@@ -124,4 +125,17 @@ func GetLeverage(symbol string, notional float64) (int, int) {
 		leverage = config.Leverage
 	}
 	return leverage, maxVal
+}
+
+func GetOdBook(pair string) (*banexg.OrderBook, *errs.Error) {
+	book, ok := core.OdBooks[pair]
+	if !ok || book == nil || book.TimeStamp+config.OdBookTtl < btime.TimeMS() {
+		var err *errs.Error
+		book, err = Default.FetchOrderBook(pair, 1000, nil)
+		if err != nil {
+			return nil, err
+		}
+		core.OdBooks[pair] = book
+	}
+	return book, nil
 }

@@ -110,3 +110,8 @@ func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {
 	}
 	return nil
 }
+
+func AddTriggerOd(od *InOutOrder) {
+	ods, _ := TriggerODs[od.Symbol]
+	TriggerODs[od.Symbol] = append(ods, od)
+}

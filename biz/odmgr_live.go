@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -49,7 +50,14 @@ const (
 
 var (
 	IsWatchAccConfig = false
+	pairVolMap       = map[string]*PairValItem{}
 )
+
+type PairValItem struct {
+	AvgVol   float64
+	LastVol  float64
+	ExpireMS int64
+}
 
 func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 	res := &LiveOrderMgr{
@@ -111,6 +119,22 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	var openPairs = map[string]struct{}{}
 	for _, od := range orders {
 		if od.Status < orm.InOutStatusFullExit {
+			tryOd := od.Enter
+			if od.Exit != nil {
+				tryOd = od.Exit
+			}
+			if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
+				// 订单未提交到交易所，且是入场订单
+				if isFarLimit(tryOd) {
+					orm.AddTriggerOd(od)
+				} else {
+					err = od.LocalExit(core.ExitTagForceExit, 0, "重启取消未入场订单")
+					if err != nil {
+						log.Error("cancel nonEntry order fail", zap.String("key", od.Key()), zap.Error(err))
+					}
+					continue
+				}
+			}
 			orm.OpenODs[od.ID] = od
 			sinceMS = max(sinceMS, od.EnterAt)
 			openPairs[od.Symbol] = struct{}{}
@@ -570,6 +594,11 @@ func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enter
 
 func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
+		if isFarLimit(order.Enter) {
+			// 长时间难以成交的限价单，先不提交到交易所，防止资金占用
+			orm.AddTriggerOd(order)
+			return nil
+		}
 		o.queue <- &OdQItem{
 			Order:  order,
 			Action: "enter",
@@ -1063,27 +1092,22 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 		return cache.BuyPrice, cache.SellPrice
 	}
 	// 无效或过期，需要重新计算
-	exs, err := orm.GetExSymbolCur(pair)
+	avgVol, lastVol, err := getPairMinsVol(pair, 5)
 	if err != nil {
-		log.Error("get exSymbol fail for getLimitPrice", zap.String("pair", pair), zap.Error(err))
-		return 0, 0
+		log.Error("getPairMinsVol fail for getLimitPrice", zap.String("pair", pair), zap.Error(err))
 	}
-	// 取过去5m数据计算；限价单深度=min(60*每秒平均成交量, 最后30s总成交量)
-	bars, err := orm.AutoFetchOHLCV(exg.Default, exs, "1m", 0, 0, 5, false)
-	if err != nil {
-		log.Error("get bars fail for getLimitPrice", zap.String("pair", pair), zap.Error(err))
-		return 0, 0
-	}
-	sumVol := float64(0)
-	for _, bar := range bars {
-		sumVol += bar.Volume
-	}
-	lastMinVol := bars[len(bars)-1].Volume
 	secsFlt := float64(waitSecs)
 	// 5分钟每秒成交量*等待秒数*2：这里最后乘2是以防成交量过低
-	depth := min(sumVol/150*secsFlt, lastMinVol/60*secsFlt)
-	buyPrice := getOdBookPrice(pair, banexg.OdSideBuy, depth)
-	sellPrice := getOdBookPrice(pair, banexg.OdSideSell, depth)
+	depth := min(avgVol/30*secsFlt, lastVol/60*secsFlt)
+	book, err := exg.GetOdBook(pair)
+	var buyPrice, sellPrice float64
+	if err != nil {
+		buyPrice, sellPrice = 0, 0
+		log.Error("get odBook fail", zap.String("pair", pair), zap.Error(err))
+	} else {
+		buyPrice = book.LimitPrice(banexg.OdSideBuy, depth)
+		sellPrice = book.LimitPrice(banexg.OdSideSell, depth)
+	}
 	// 价格缓存最长3s，最短传入的1/10
 	expMS := min(3000, int64(waitSecs)*100)
 	o.volPrices[key] = &VolPrice{
@@ -1094,18 +1118,147 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 	return buyPrice, sellPrice
 }
 
-func getOdBookPrice(pair, side string, depth float64) float64 {
-	book, ok := core.OdBooks[pair]
-	if !ok || book == nil || book.TimeStamp+config.OdBookTtl < btime.TimeMS() {
-		var err *errs.Error
-		book, err = exg.Default.FetchOrderBook(pair, 1000, nil)
-		if err != nil {
-			log.Error("fetch orderBook fail", zap.String("pair", pair), zap.Error(err))
-			return 0
-		}
-		core.OdBooks[pair] = book
+/*
+getPairMinsVol
+获取一段时间内，每分钟平均成交量，以及最后一分钟成交量
+此函数有缓存，每分钟更新
+*/
+func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
+	cacheKey := fmt.Sprintf("%s_%v", pair, num)
+	cache, ok := pairVolMap[cacheKey]
+	curMs := btime.TimeMS()
+	if ok && cache.ExpireMS > curMs {
+		return cache.AvgVol, cache.LastVol, nil
 	}
-	return book.LimitPrice(side, depth)
+	calc := func() (float64, float64, *errs.Error) {
+		exs, err := orm.GetExSymbolCur(pair)
+		if err != nil {
+			return 0, 0, err
+		}
+		bars, err := orm.AutoFetchOHLCV(exg.Default, exs, "1m", 0, 0, num, false)
+		if err != nil {
+			return 0, 0, err
+		} else if len(bars) == 0 {
+			return 0, 0, nil
+		}
+		sumVol := float64(0)
+		for _, bar := range bars {
+			sumVol += bar.Volume
+		}
+		lastMinVol := bars[len(bars)-1].Volume
+		return sumVol / float64(len(bars)), lastMinVol, nil
+	}
+	avg, last, err := calc()
+	expireMS := utils.AlignTfMSecs(curMs+60000, 60000)
+	pairVolMap[cacheKey] = &PairValItem{AvgVol: avg, LastVol: last, ExpireMS: expireMS}
+	return avg, last, err
+}
+
+/*
+判断一个订单是否是长时间难以成交的限价单
+*/
+func isFarLimit(od *orm.ExOrder) bool {
+	if od.Price == 0 || !strings.Contains(od.OrderType, banexg.OdTypeLimit) {
+		// 非限价单，或没有指定价格，会很快成交
+		return false
+	}
+	secs, rate, err := getSecsByLimit(od.Symbol, od.Side, od.Price)
+	if err != nil {
+		log.Error("getSecsByLimit for isFarLimit fail", zap.String("pair", od.Symbol),
+			zap.String("side", od.Side), zap.Float64("price", od.Price), zap.Error(err))
+		return false
+	}
+	if secs < config.PutLimitSecs && rate >= 0.8 {
+		return false
+	}
+	return true
+}
+
+/*
+VerifyTriggerOds
+检查是否有可触发的限价单，如有，提交到交易所，应被每分钟调用
+*/
+func VerifyTriggerOds() {
+	if len(orm.TriggerODs) == 0 {
+		return
+	}
+	var resOds []*orm.InOutOrder
+	for pair, ods := range orm.TriggerODs {
+		if len(ods) == 0 {
+			continue
+		}
+		var secsVol float64
+		var book *banexg.OrderBook
+		// 计算过去50分钟，平均成交量，以及最后一分钟成交量
+		avgVol, lastVol, err := getPairMinsVol(pair, 50)
+		if err == nil {
+			secsVol = max(avgVol, lastVol) / 60
+			if secsVol > 0 {
+				book, err = exg.GetOdBook(pair)
+			} else {
+				err = errs.NewMsg(core.ErrRunTime, "getPairMinsVol vol is zero")
+			}
+		}
+		if err != nil {
+			log.Error("VerifyTriggerOds fail", zap.String("pair", pair), zap.Error(err))
+			resOds = append(resOds, ods...)
+			continue
+		}
+		var leftOds = make([]*orm.InOutOrder, 0, len(ods))
+		for _, od := range ods {
+			if od.Status == orm.InOutStatusFullExit {
+				continue
+			}
+			subOd := od.Enter
+			if od.Exit != nil {
+				subOd = od.Exit
+			}
+			// 计算到指定价格，需要吃进的量，以及价格比例
+			waitVol, rate := book.SumVolTo(subOd.Side, subOd.Price)
+			// 最快成交时间 = 总吃进量 / 每秒成交量
+			waitSecs := int(math.Round(waitVol / secsVol))
+			if waitSecs < config.PutLimitSecs && rate >= 0.8 {
+				resOds = append(resOds, od)
+			} else {
+				leftOds = append(leftOds, od)
+			}
+		}
+		orm.TriggerODs[pair] = leftOds
+	}
+	for _, od := range resOds {
+		if od.Status == orm.InOutStatusFullExit {
+			continue
+		}
+		tag := "enter"
+		if od.Exit != nil {
+			tag = "exit"
+		}
+		OdMgrLive.queue <- &OdQItem{
+			Order:  od,
+			Action: tag,
+		}
+	}
+}
+
+/*
+getSecsByLimit
+根据目标价格，计算大概成交需要等待的时长。
+*/
+func getSecsByLimit(pair, side string, price float64) (int, float64, *errs.Error) {
+	avgVol, lastVol, err := getPairMinsVol(pair, 50)
+	if err != nil {
+		return 0, 1, err
+	}
+	secsVol := max(avgVol, lastVol) / 60
+	if secsVol == 0 {
+		return 0, 1, nil
+	}
+	book, err := exg.GetOdBook(pair)
+	if err != nil {
+		return 0, 1, err
+	}
+	waitVol, rate := book.SumVolTo(side, price)
+	return int(math.Round(waitVol / secsVol)), rate, nil
 }
 
 func editTriggerOd(od *orm.InOutOrder, prefix string) {
@@ -1222,7 +1375,7 @@ func CheckFatalStop() {
 		if lossRate >= rate {
 			lossPct := int(lossRate * 100)
 			core.NoEnterUntil = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
-			log.Error(fmt.Sprintf("%v分钟内损失%v%，禁止下单%v小时！", minsText, lossPct, config.FatalStopHours))
+			log.Error(fmt.Sprintf("%v分钟内损失%v, 禁止下单%v小时！", minsText, lossPct, config.FatalStopHours))
 			break
 		}
 	}

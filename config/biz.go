@@ -108,6 +108,10 @@ func apply(args *CmdArgs) *errs.Error {
 		Data.LimitVolSecs = 10
 	}
 	LimitVolSecs = Data.LimitVolSecs
+	if Data.PutLimitSecs == 0 {
+		Data.PutLimitSecs = 120
+	}
+	PutLimitSecs = Data.PutLimitSecs
 	core.ExgName = Data.Exchange.Name
 	core.Market = Data.MarketType
 	if core.Market == banexg.MarketSpot || core.Market == banexg.MarketMargin {

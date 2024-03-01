@@ -18,7 +18,7 @@ import (
 
 var (
 	OdMgr     IOrderMgr
-	OdMgrLive IOrderMgrLive
+	OdMgrLive *LiveOrderMgr
 )
 
 type IOrderMgr interface {
@@ -134,6 +134,9 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 		Info:       map[string]interface{}{},
 		DirtyMain:  true,
 		DirtyEnter: true,
+	}
+	if od.Enter.OrderType == "" {
+		od.Enter.OrderType = config.OrderType
 	}
 	od.SetInfo(orm.OdInfoLegalCost, req.LegalCost)
 	if req.StopLoss > 0 {
@@ -267,6 +270,9 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 		return o.ExitOrder(sess, part, req)
 	}
 	odType := core.OrderTypeEnums[req.OrderType]
+	if odType == "" {
+		odType = config.OrderType
+	}
 	od.SetExit(req.Tag, odType, req.Limit)
 	err := od.Save(sess)
 	if err != nil {
