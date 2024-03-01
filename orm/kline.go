@@ -508,6 +508,8 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 		if err_ != nil {
 			return errs.New(core.ErrDbExecFail, err_)
 		}
+		log.Debug("add kinfo", zap.Int32("sid", sid), zap.String("tf", timeFrame),
+			zap.Int64("start", startMS), zap.Int64("end", endMS))
 		return nil
 	}
 	if realStart == 0 || realEnd == 0 {
@@ -526,6 +528,8 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
+	log.Debug("set kinfo", zap.Int32("sid", sid), zap.String("tf", timeFrame),
+		zap.Int64("start", startMS), zap.Int64("end", endMS))
 	return nil
 }
 

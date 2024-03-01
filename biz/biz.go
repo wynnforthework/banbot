@@ -7,11 +7,13 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 )
 
 func SetupComs() *errs.Error {
+	errs.PrintErr = utils.PrintErr
 	ctx, cancel := context.WithCancel(context.Background())
 	core.Ctx = ctx
 	core.StopAll = cancel

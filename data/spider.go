@@ -15,6 +15,10 @@ import (
 	"time"
 )
 
+var (
+	Spider *LiveSpider
+)
+
 type NotifyKLines struct {
 	TFSecs   int
 	Interval int // 推送更新间隔, <= TFSecs
@@ -70,6 +74,7 @@ type SaveKline struct {
 	TimeFrame string
 	Arr       []*banexg.Kline
 	SkipFirst bool
+	MsgAction string
 }
 
 func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
@@ -139,6 +144,7 @@ func consumeWriteQ(workNum int) {
 			sess, conn, err := orm.Conn(ctx)
 			if err == nil {
 				defer conn.Release()
+				var addBars = job.Arr
 				if _, ok := initSids[job.Sid]; !ok {
 					var nextMS int64
 					nextMS, err = fillPrevHole(sess, job)
@@ -150,14 +156,27 @@ func consumeWriteQ(workNum int) {
 							break
 						}
 					}
-					job.Arr = job.Arr[cutIdx:]
+					addBars = job.Arr[cutIdx:]
 				}
-				if err == nil && len(job.Arr) > 0 {
-					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, job.Arr)
+				if err == nil && len(addBars) > 0 {
+					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, addBars)
 				}
 			}
 			if err != nil {
 				log.Error("consumeWriteQ: fail", zap.Int32("sid", job.Sid), zap.Error(err))
+			}
+			// 写入K线到数据库后，才发消息通知机器人，避免重复插入K线
+			tfSecs := utils.TFToSecs(job.TimeFrame)
+			err = Spider.Broadcast(&utils.IOMsg{
+				Action: job.MsgAction,
+				Data: NotifyKLines{
+					TFSecs:   tfSecs,
+					Interval: tfSecs,
+					Arr:      job.Arr,
+				},
+			})
+			if err != nil {
+				log.Error("broadCast kline fail", zap.String("action", job.MsgAction), zap.Error(err))
 			}
 			<-guard
 		}(&save)
@@ -219,7 +238,15 @@ func (m *Miner) init() {
 func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 	valids, _ := m.exchange.CheckSymbols(pairs...)
 	if len(valids) == 0 {
-		return nil
+		if len(pairs) > 0 {
+			return nil
+		}
+		// 传入为空，取当前交易所+市场的所有标的
+		markets := m.exchange.GetCurMarkets()
+		valids = make([]string, 0, len(markets))
+		for _, mar := range markets {
+			valids = append(valids, mar.Symbol)
+		}
 	}
 	ensures := make([]*orm.ExSymbol, 0, len(valids))
 	for _, p := range pairs {
@@ -318,7 +345,7 @@ func (m *Miner) watchPrices() {
 	}
 	m.IsWatchPrice = true
 	log.Info("start watch prices", zap.String("exg", m.ExgName))
-	prefix := fmt.Sprintf("price_%s_%s_", m.ExgName, m.Market)
+	prefix := fmt.Sprintf("price_%s_%s", m.ExgName, m.Market)
 
 	go func() {
 		defer func() {
@@ -467,20 +494,13 @@ func (m *Miner) watchKLines(pairs []string) {
 			state.PrevBar = last
 		}
 		if len(finishes) > 0 {
-			// 有已完成的k线
-			err_ = m.spider.Broadcast(&utils.IOMsg{
-				Action: prefix + pair,
-				Data: NotifyKLines{
-					TFSecs:   tfSecs,
-					Interval: tfSecs,
-					Arr:      finishes,
-				},
-			})
+			// 有已完成的k线，写入到数据库，然后才广播消息
 			writeQ <- SaveKline{
 				Sid:       state.Sid,
 				TimeFrame: curTF,
 				Arr:       finishes,
 				SkipFirst: false,
+				MsgAction: prefix + pair,
 			}
 		}
 		if err_ != nil {
@@ -522,11 +542,11 @@ func (m *Miner) watchKLines(pairs []string) {
 
 func RunSpider(addr string) *errs.Error {
 	server := utils.NewBanServer(addr, "spider")
-	spider := &LiveSpider{
+	Spider = &LiveSpider{
 		ServerIO: server,
 		miners:   map[string]*Miner{},
 	}
-	server.InitConn = makeInitConn(spider)
+	server.InitConn = makeInitConn(Spider)
 	go consumeWriteQ(5)
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
@@ -537,7 +557,7 @@ func RunSpider(addr string) *errs.Error {
 		return err
 	}
 	conn.Release()
-	return spider.RunForever()
+	return Spider.RunForever()
 }
 
 func (s *LiveSpider) getMiner(exgName, market string) *Miner {

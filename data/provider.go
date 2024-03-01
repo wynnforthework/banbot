@@ -275,6 +275,13 @@ func InitLiveProvider(callBack FnPairKline) *errs.Error {
 		KLineWatcher: *watcher,
 	}
 	watcher.OnKLineMsg = makeOnKlineMsg(provider)
+	// 立刻订阅实时价格
+	err = watcher.SendMsg("subscribe", []string{
+		fmt.Sprintf("price_%s_%s", core.ExgName, core.Market),
+	})
+	if err != nil {
+		return err
+	}
 	Main = provider
 	return nil
 }

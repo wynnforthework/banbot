@@ -163,7 +163,13 @@ RunForever
 服务器端和客户端都会调用此方法
 */
 func (c *BanConn) RunForever() *errs.Error {
-	defer c.Conn.Close()
+	defer func() {
+		c.Ready = false
+		err_ := c.Conn.Close()
+		if err_ != nil {
+			log.Error("close conn fail", zap.String("remote", c.Remote), zap.Error(err_))
+		}
+	}()
 	for {
 		msg, err := c.ReadMsg()
 		if err != nil {
@@ -345,8 +351,8 @@ func (s *ServerIO) RunForever() *errs.Error {
 		go func() {
 			err := conn.RunForever()
 			if err != nil {
-				log.Error("read client fail", zap.String("remote", conn.GetRemote()),
-					zap.String("err", err.Msg))
+				log.Warn("read client fail", zap.String("remote", conn.GetRemote()),
+					zap.String("err", err.Message()))
 			}
 		}()
 	}

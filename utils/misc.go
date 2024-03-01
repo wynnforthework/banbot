@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgconn"
 	"regexp"
 	"strings"
 )
@@ -123,4 +125,16 @@ func FormatWithMap(text string, args map[string]interface{}) string {
 	}
 	b.WriteString(text[lastEnd:])
 	return b.String()
+}
+
+func PrintErr(e error) string {
+	if e == nil {
+		return ""
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(e, &pgErr) {
+		return fmt.Sprintf("(SqlState %v) %s: %s, where=%s from %s.%s", pgErr.Code, pgErr.Message,
+			pgErr.Detail, pgErr.Where, pgErr.SchemaName, pgErr.TableName)
+	}
+	return e.Error()
 }

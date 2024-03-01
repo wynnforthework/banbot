@@ -72,18 +72,18 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 		log.Info("Using " + path)
 		fileData, err := os.ReadFile(path)
 		if err != nil {
-			return errs.NewMsg(core.ErrIOReadFail, "Read %s Fail: %v", path, err)
+			return errs.NewFull(core.ErrIOReadFail, err, "Read %s Fail", path)
 		}
 		var unpak map[string]interface{}
 		err = yaml.Unmarshal(fileData, &unpak)
 		if err != nil {
-			return errs.NewMsg(errs.CodeUnmarshalFail, "Unmarshal %s Fail: %v", path, err)
+			return errs.NewFull(errs.CodeUnmarshalFail, err, "Unmarshal %s Fail", path)
 		}
 		maps.Copy(merged, unpak)
 	}
 	err := mapstructure.Decode(merged, &Data)
 	if err != nil {
-		return errs.NewMsg(errs.CodeUnmarshalFail, "decode Config Fail: %v", err)
+		return errs.NewFull(errs.CodeUnmarshalFail, err, "decode Config Fail")
 	}
 	return apply(args)
 }

@@ -101,19 +101,21 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 		pairs = append(pairs, j.Symbol)
 		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since}
 	}
-	msg := &utils.IOMsg{Action: "subscribe", Data: tags}
-	err := w.WriteMsg(msg)
+	err := w.SendMsg("subscribe", tags)
 	if err != nil {
 		return err
 	}
-	w.initMsgs = append(w.initMsgs, msg)
 	if minTfSecs < 60 && banexg.IsContract(marketType) && jobType == "ohlcv" {
 		//合约市场不支持1m以下的ohlcv，使用ws监听交易归集
 		jobType = "trade"
 	}
 	args := append([]string{exgName, marketType, jobType}, pairs...)
-	msg = &utils.IOMsg{Action: "watch_pairs", Data: args}
-	err = w.WriteMsg(msg)
+	return w.SendMsg("watch_pairs", args)
+}
+
+func (w *KLineWatcher) SendMsg(action string, data interface{}) *errs.Error {
+	msg := &utils.IOMsg{Action: action, Data: data}
+	err := w.WriteMsg(msg)
 	if err != nil {
 		return err
 	}

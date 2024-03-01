@@ -145,7 +145,7 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 UpdateFee
 为入场/出场订单计算手续费，必须在Filled赋值后调用，否则计算为空
 */
-func (i *InOutOrder) UpdateFee(price float64, forEnter bool) *errs.Error {
+func (i *InOutOrder) UpdateFee(price float64, forEnter bool, isHistory bool) *errs.Error {
 	exchange := exg.Default
 	exOrder := i.Enter
 	if !forEnter {
@@ -153,7 +153,12 @@ func (i *InOutOrder) UpdateFee(price float64, forEnter bool) *errs.Error {
 	}
 	var maker = false
 	if exOrder.OrderType != banexg.OdTypeMarket {
-		maker = core.IsMaker(i.Symbol, exOrder.Side, price)
+		if isHistory {
+			// 历史已完成订单，不使用当前价格判断是否为maker，直接认为maker
+			maker = true
+		} else {
+			maker = core.IsMaker(i.Symbol, exOrder.Side, price)
+		}
 	}
 	fee, err := exchange.CalculateFee(i.Symbol, exOrder.OrderType, exOrder.Side, exOrder.Filled, price, maker, nil)
 	if err != nil {
@@ -239,7 +244,7 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Erro
 	i.SetExit(tag, banexg.OdTypeMarket, price)
 	if i.Enter.Status < OdStatusClosed {
 		i.Enter.Status = OdStatusClosed
-		err := i.UpdateFee(price, true)
+		err := i.UpdateFee(price, true, true)
 		if err != nil {
 			return err
 		}
@@ -249,7 +254,7 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Erro
 	i.Exit.Filled = i.Enter.Filled
 	i.Exit.Average = i.Exit.Price
 	i.Status = InOutStatusFullExit
-	err := i.UpdateFee(price, false)
+	err := i.UpdateFee(price, false, true)
 	if err != nil {
 		return err
 	}

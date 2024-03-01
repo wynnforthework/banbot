@@ -29,6 +29,10 @@ func (t *Trader) OnEnvJobs(bar *banexg.PairTFKline) (*ta.BarEnv, []*strategy.Sta
 	if !ok {
 		return nil, nil, nil, errs.NewMsg(core.ErrBadConfig, "env for %s/%s not found", bar.Symbol, bar.TimeFrame)
 	}
+	if core.LiveMode() && env.TimeStop > bar.Time {
+		// 此bar已过期，忽略，启动时爬虫可能会推已处理的过期bar
+		return nil, nil, nil, nil
+	}
 	// 更新BarEnv状态
 	env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
 	// 获取交易任务
@@ -56,6 +60,8 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	if err != nil {
 		log.Error(fmt.Sprintf("%s/%s OnEnvJobs fail", bar.Symbol, bar.TimeFrame), zap.Error(err))
 		return err
+	} else if env == nil || len(jobs) == 0 {
+		return nil
 	}
 	// 更新非生产模式的订单
 	allOrders := utils.ValsOfMap(orm.OpenODs)

@@ -183,7 +183,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = entPrice
 	exOrder.Status = orm.OdStatusClosed
-	err = od.UpdateFee(entPrice, true)
+	err = od.UpdateFee(entPrice, true, false)
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64) *errs
 	exOrder.Price = price
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = price
-	err := od.UpdateFee(price, false)
+	err := od.UpdateFee(price, false, false)
 	if err != nil {
 		return err
 	}

@@ -60,18 +60,10 @@ func InitFakeWallets(symbols ...string) {
 	Wallets.SetWallets(config.WalletAmounts)
 }
 
-func InitLiveWallets() *errs.Error {
-	if Wallets == nil {
-		Wallets = &BanWallets{
-			Items: map[string]*ItemWallet{},
-		}
+func InitLiveWallets() {
+	Wallets = &BanWallets{
+		Items: map[string]*ItemWallet{},
 	}
-	res, err := exg.Default.FetchBalance(nil)
-	if err != nil {
-		return err
-	}
-	updateWalletByBalances(res)
-	return nil
 }
 
 func (iw *ItemWallet) Total(withUpol bool) float64 {

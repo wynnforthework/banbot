@@ -36,10 +36,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = biz.InitLiveWallets()
-	if err != nil {
-		return err
-	}
+	biz.InitLiveWallets()
 	err = orm.InitTask()
 	if err != nil {
 		return err

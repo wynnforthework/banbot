@@ -956,7 +956,6 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 	o.exgIdMap[idKey] = od
 	if o.hasNewTrades(res) && subOd.UpdateAt < res.Timestamp {
 		subOd.UpdateAt = res.Timestamp
-		subOd.OrderID = res.ID
 		subOd.Amount = res.Amount
 		if res.Filled > 0 {
 			fillPrice := subOd.Price

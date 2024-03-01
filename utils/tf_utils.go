@@ -173,7 +173,8 @@ func BuildOHLCV(arr []*banexg.Kline, toTFSecs int, preFire float64, resOHLCV []*
 		prevKline = resOHLCV[len(resOHLCV)-1]
 	}
 	rawMS := make([]int64, 0, len(arr))
-	for _, bar := range arr {
+	for _, barRaw := range arr {
+		bar := barRaw.Clone() // 不修改原始数据
 		rawMS = append(rawMS, bar.Time)
 		bar.Time = AlignTfMSecs(bar.Time+offsetMS, tfMSecs)
 		if prevKline == nil || bar.Time >= prevKline.Time+tfMSecs {
