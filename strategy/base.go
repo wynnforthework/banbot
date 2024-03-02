@@ -139,6 +139,15 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 				zap.String("pair", symbol))
 		}
 	}
+	if req.Limit > 0 && req.OrderType == 0 {
+		req.OrderType = core.OrderTypeLimit
+	}
+	if req.Limit > 0 && (req.OrderType == core.OrderTypeLimit || req.OrderType == core.OrderTypeLimitMaker) {
+		// 是限价入场单
+		if req.StopBars == 0 {
+			req.StopBars = s.Stagy.StopEnterBars
+		}
+	}
 	s.Entrys = append(s.Entrys, req)
 	s.EnterNum += 1
 	return nil
@@ -164,6 +173,9 @@ func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
 		return errs.NewMsg(errs.CodeParamInvalid, "ExitRate shoud in (0, 1], current: %f", req.ExitRate)
 	} else if req.ExitRate == 0 {
 		req.ExitRate = 1
+	}
+	if req.Limit > 0 && req.OrderType == 0 {
+		req.OrderType = core.OrderTypeLimit
 	}
 	s.Exits = append(s.Exits, req)
 	return nil
@@ -273,7 +285,8 @@ func (s *StagyJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
 	var req *ExitReq
 	if s.Stagy.OnCheckExit != nil {
 		req = s.Stagy.OnCheckExit(s, od)
-	} else if s.Stagy.DrawDownExit {
+	} else if s.Stagy.DrawDownExit && od.Status >= orm.InOutStatusFullEnter {
+		// 只对已完全入场的订单启用回撤平仓
 		req = s.drawDownExit(od)
 	}
 	var err *errs.Error

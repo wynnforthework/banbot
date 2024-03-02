@@ -13,6 +13,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
+	"strings"
 )
 
 const (
@@ -132,6 +133,22 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 			return 0, err
 		}
 		affectNum += 1
+	}
+	// 强制平仓超时未成交的限价入场单
+	curMS := btime.TimeMS()
+	for _, od := range orders {
+		if od.Status > orm.InOutStatusInit || od.Enter.Price == 0 ||
+			!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
+			// 跳过已入场的以及非限价单
+			continue
+		}
+		stopAfter := od.GetInfoInt64(orm.OdInfoStopAfter)
+		if stopAfter > 0 && stopAfter <= curMS {
+			err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars")
+			if err != nil {
+				log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
+			}
+		}
 	}
 	return affectNum, nil
 }

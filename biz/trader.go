@@ -65,17 +65,19 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	}
 	// 更新非生产模式的订单
 	allOrders := utils.ValsOfMap(orm.OpenODs)
-	var curOrders []*orm.InOutOrder
-	for _, od := range allOrders {
-		if od.Symbol == bar.Symbol && od.Timeframe == bar.TimeFrame {
-			curOrders = append(curOrders, od)
-		}
-	}
 	if !core.IsWarmUp {
+		// 这里可能修改订单状态
 		err = OdMgr.UpdateByBar(allOrders, bar)
 		if err != nil {
 			log.Error("update orders by bar fail", zap.Error(err))
 			return err
+		}
+	}
+	// 要在UpdateByBar后检索当前开放订单，过滤已平仓订单
+	var curOrders []*orm.InOutOrder
+	for _, od := range allOrders {
+		if od.Status < orm.InOutStatusFullExit && od.Symbol == bar.Symbol && od.Timeframe == bar.TimeFrame {
+			curOrders = append(curOrders, od)
 		}
 	}
 	var enters []*strategy.EnterReq

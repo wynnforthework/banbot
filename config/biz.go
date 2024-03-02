@@ -125,8 +125,15 @@ func apply(args *CmdArgs) *errs.Error {
 		Data.OdBookTtl = 500
 	}
 	OdBookTtl = Data.OdBookTtl
+	if Data.StopEnterBars == 0 {
+		Data.StopEnterBars = 20
+	}
+	StopEnterBars = Data.StopEnterBars
 	OrderType = Data.OrderType
 	PreFire = Data.PreFire
+	if Data.MarginAddRate == 0 {
+		Data.MarginAddRate = 0.66
+	}
 	MarginAddRate = Data.MarginAddRate
 	ChargeOnBomb = Data.ChargeOnBomb
 	AutoEditLimit = Data.AutoEditLimit

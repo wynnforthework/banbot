@@ -118,6 +118,9 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 			} else {
 				Jobs[envKey] = []*StagyJob{job}
 			}
+			if stagy.OnStartUp != nil {
+				stagy.OnStartUp(job)
+			}
 			// 记录需要预热的数据；记录订阅信息
 			logWarm(exs.Symbol, tf, stagy.WarmupNum)
 			if stagy.OnPairInfos != nil {

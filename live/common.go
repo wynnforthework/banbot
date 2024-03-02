@@ -115,3 +115,11 @@ func CronCheckTriggerOds() {
 		log.Error("add VerifyTriggerOds fail", zap.Error(err_))
 	}
 }
+
+func CronCancelOldLimits() {
+	// 在每分钟的10s检查是否触发限价单提交
+	_, err_ := core.Cron.AddFunc("10 * * * * *", biz.CancelOldLimits)
+	if err_ != nil {
+		log.Error("add CancelOldLimits fail", zap.Error(err_))
+	}
+}

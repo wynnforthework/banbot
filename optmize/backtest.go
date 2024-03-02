@@ -67,6 +67,10 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
+	err = exg.Default.LoadLeverageBrackets(false, nil)
+	if err != nil {
+		return err
+	}
 	err = goods.RefreshPairList(nil)
 	if err != nil {
 		return err
@@ -163,12 +167,14 @@ func (b *BackTest) logPlot(timeMS int64) {
 		oldNum := len(b.Plots.Real)
 		newNum := oldNum / splStep
 		plots := PlotData{
+			Labels:        make([]string, 0, newNum),
 			Real:          make([]float64, 0, newNum),
 			Available:     make([]float64, 0, newNum),
 			UnrealizedPOL: make([]float64, 0, newNum),
 			WithDraw:      make([]float64, 0, newNum),
 		}
 		for i := 0; i < oldNum; i += splStep {
+			plots.Labels = append(plots.Labels, b.Plots.Labels[i])
 			plots.Real = append(plots.Real, b.Plots.Real[i])
 			plots.Available = append(plots.Available, b.Plots.Available[i])
 			plots.UnrealizedPOL = append(plots.UnrealizedPOL, b.Plots.UnrealizedPOL[i])

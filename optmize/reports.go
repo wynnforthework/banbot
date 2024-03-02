@@ -500,19 +500,12 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 		row[5] = btime.ToDateStr(od.EnterAt, "")
 		row[6] = od.EnterTag
 		if od.Enter != nil {
-			row[7] = strconv.FormatFloat(od.Enter.Price, 'f', 8, 64)
-			row[8] = strconv.FormatFloat(od.Enter.Amount, 'f', 8, 64)
-			row[9] = strconv.FormatFloat(od.EnterCost(), 'f', 4, 64)
-			row[10] = strconv.FormatFloat(od.Enter.Fee, 'f', 8, 64)
+			row[7], row[8], row[8], row[10] = calcExOrder(od.Enter)
 		}
 		row[11] = btime.ToDateStr(od.ExitAt, "")
 		row[12] = od.ExitTag
 		if od.Exit != nil {
-			exitGot := od.Exit.Price * od.Exit.Amount
-			row[13] = strconv.FormatFloat(od.Exit.Price, 'f', 8, 64)
-			row[14] = strconv.FormatFloat(od.Exit.Amount, 'f', 8, 64)
-			row[15] = strconv.FormatFloat(exitGot, 'f', 4, 64)
-			row[16] = strconv.FormatFloat(od.Exit.Fee, 'f', 8, 64)
+			row[13], row[14], row[15], row[16] = calcExOrder(od.Exit)
 		}
 		row[17] = strconv.FormatFloat(od.ProfitRate, 'f', 4, 64)
 		row[18] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
@@ -521,6 +514,19 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 			return
 		}
 	}
+}
+
+func calcExOrder(od *orm.ExOrder) (string, string, string, string) {
+	price := od.Average
+	if price == 0 {
+		price = od.Price
+	}
+	exitGot := price * od.Filled
+	priceStr := strconv.FormatFloat(price, 'f', 8, 64)
+	amtStr := strconv.FormatFloat(od.Filled, 'f', 8, 64)
+	valStr := strconv.FormatFloat(exitGot, 'f', 4, 64)
+	feeStr := strconv.FormatFloat(od.Fee, 'f', 8, 64)
+	return priceStr, amtStr, valStr, feeStr
 }
 
 func (r *BTResult) dumpConfig() {

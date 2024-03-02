@@ -60,6 +60,10 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 			return err
 		}
 		since, until = nextRange(since, until)
+		// 移除末尾超出范围的K线
+		for len(data) > 0 && data[len(data)-1].Time >= until {
+			data = data[:len(data)-1]
+		}
 		if len(data) > 0 {
 			select {
 			case <-ctx.Done():

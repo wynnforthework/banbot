@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
+	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -137,6 +138,16 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 	}
 	if od.Enter.OrderType == "" {
 		od.Enter.OrderType = config.OrderType
+	}
+	if req.Limit > 0 {
+		od.InitPrice = req.Limit
+		if req.StopBars == 0 {
+			req.StopBars = config.StopEnterBars
+		}
+		if req.StopBars > 0 {
+			stopAfter := btime.TimeMS() + int64(req.StopBars*utils2.TFToSecs(od.Timeframe))*1000
+			od.SetInfo(orm.OdInfoStopAfter, stopAfter)
+		}
 	}
 	od.SetInfo(orm.OdInfoLegalCost, req.LegalCost)
 	if req.StopLoss > 0 {

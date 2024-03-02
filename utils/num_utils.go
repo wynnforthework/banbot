@@ -58,21 +58,42 @@ func EqualIn(a, b, thres float64) bool {
 }
 
 func ConvertFloat64(i interface{}) float64 {
-	switch i := i.(type) {
+	switch v := i.(type) {
 	case int:
-		return float64(i)
+		return float64(v)
 	case int8:
-		return float64(i)
+		return float64(v)
 	case int16:
-		return float64(i)
+		return float64(v)
 	case int32:
-		return float64(i)
+		return float64(v)
 	case int64:
-		return float64(i)
+		return float64(v)
 	case float32:
-		return float64(i)
+		return float64(v)
 	case float64:
-		return i
+		return v
+	default:
+		return 0
+	}
+}
+
+func ConvertInt64(i interface{}) int64 {
+	switch v := i.(type) {
+	case int:
+		return int64(v)
+	case int8:
+		return int64(v)
+	case int16:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case int64:
+		return v
+	case float32:
+		return int64(v)
+	case float64:
+		return int64(v)
 	default:
 		return 0
 	}

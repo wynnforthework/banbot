@@ -11,14 +11,15 @@ type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float6
 type PickTimeFrameFunc func(exg string, symbol string, tfScores []*core.TfScore) string
 
 type TradeStagy struct {
-	Name         string
-	Version      int
-	WarmupNum    int
-	MinTfScore   float64
-	WatchBook    bool
-	DrawDownExit bool
-	StakeAmount  float64
-	AllowTFs     []string // 允许运行的时间周期，不提供时使用全局配置
+	Name          string
+	Version       int
+	WarmupNum     int
+	MinTfScore    float64
+	WatchBook     bool
+	DrawDownExit  bool
+	StakeAmount   float64
+	StopEnterBars int
+	AllowTFs      []string // 允许运行的时间周期，不提供时使用全局配置
 
 	OnPairInfos         func(s *StagyJob) []*PairSub
 	OnStartUp           func(s *StagyJob)
@@ -77,6 +78,7 @@ type EnterReq struct {
 	Amount     float64 //入场标的数量，由LegalCost和price计算
 	StopLoss   float64 //止损价格，不为空时在交易所提交一个止损单
 	TakeProfit float64 //止盈价格，不为空时在交易所提交一个止盈单。
+	StopBars   int     // 入场限价单超过多少个bar未成交则取消
 }
 
 /*

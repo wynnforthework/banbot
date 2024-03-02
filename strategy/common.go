@@ -136,7 +136,8 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 	var res []*orm.InOutEdit
 	var skipSL, skipTP = 0, 0
 	for _, od := range s.Orders {
-		if !od.CanClose() {
+		if !od.CanClose() || od.Status < orm.InOutStatusFullEnter {
+			// 未入场的不尝试退出
 			continue
 		}
 		slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)

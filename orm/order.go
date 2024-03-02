@@ -57,6 +57,15 @@ func (i *InOutOrder) GetInfoFloat64(key string) float64 {
 	return utils.ConvertFloat64(val)
 }
 
+func (i *InOutOrder) GetInfoInt64(key string) int64 {
+	i.loadInfo()
+	val, ok := i.Info[key]
+	if !ok {
+		return 0
+	}
+	return utils.ConvertInt64(val)
+}
+
 func (i *InOutOrder) GetInfoString(key string) string {
 	i.loadInfo()
 	return utils2.GetMapVal(i.Info, key, "")

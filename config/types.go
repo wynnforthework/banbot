@@ -13,14 +13,15 @@ var (
 	PutLimitSecs    int // 在此预期时间内成交的限价单，才提交到交易所
 	MaxMarketRate   float64
 	OdBookTtl       int64
+	StopEnterBars   int // 入场限价单超过多少个蜡烛未成交则取消
 	OrderType       string
 	PreFire         float64
-	MarginAddRate   float64
+	MarginAddRate   float64 // 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
 	ChargeOnBomb    bool
 	AutoEditLimit   bool
 	TakeOverStgy    string
 	StakeAmount     float64
-	MinOpenRate     float64
+	MinOpenRate     float64 // 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
 	MaxOpenOrders   int
 	WalletAmounts   map[string]float64
 	DrawBalanceOver float64
@@ -58,6 +59,7 @@ type Config struct {
 	ContractType    string                            `yaml:"contract_type" mapstructure:"contract_type"`
 	MaxMarketRate   float64                           `yaml:"max_market_rate" mapstructure:"max_market_rate"`
 	OdBookTtl       int64                             `yaml:"odbook_ttl" mapstructure:"odbook_ttl"`
+	StopEnterBars   int                               `json:"stop_enter_bars" mapstructure:"stop_enter_bars"`
 	OrderType       string                            `yaml:"order_type" mapstructure:"order_type"`
 	PreFire         float64                           `yaml:"prefire" mapstructure:"prefire"`
 	MarginAddRate   float64                           `yaml:"margin_add_rate" mapstructure:"margin_add_rate"`

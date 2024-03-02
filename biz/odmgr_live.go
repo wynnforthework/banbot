@@ -1177,6 +1177,7 @@ func isFarLimit(od *orm.ExOrder) bool {
 /*
 VerifyTriggerOds
 检查是否有可触发的限价单，如有，提交到交易所，应被每分钟调用
+仅实盘使用
 */
 func VerifyTriggerOds() {
 	if len(orm.TriggerODs) == 0 {
@@ -1259,6 +1260,67 @@ func getSecsByLimit(pair, side string, price float64) (int, float64, *errs.Error
 	}
 	waitVol, rate := book.SumVolTo(side, price)
 	return int(math.Round(waitVol / secsVol)), rate, nil
+}
+
+/*
+CancelOldLimits
+检查是否有超时未成交的入场限价单，有则取消。
+*/
+func CancelOldLimits() {
+	curMS := btime.TimeMS()
+	exchange := exg.Default
+	var saveOds []*orm.InOutOrder
+	for _, od := range orm.OpenODs {
+		if od.Status > orm.InOutStatusPartEnter || od.Enter.Price == 0 ||
+			!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
+			// 跳过已完全入场，或者非限价单
+			continue
+		}
+		stopAfter := od.GetInfoInt64(orm.OdInfoStopAfter)
+		if stopAfter > 0 && stopAfter <= curMS {
+			saveOds = append(saveOds, od)
+			if od.Enter.OrderID != "" {
+				res, err := exchange.CancelOrder(od.Enter.OrderID, od.Symbol, nil)
+				if err != nil {
+					log.Error("cancel old limit enters fail", zap.String("key", od.Key()), zap.Error(err))
+				} else {
+					err = OdMgrLive.updateOdByExgRes(od, true, res)
+					if err != nil {
+						log.Error("apply cancel res fail", zap.String("key", od.Key()), zap.Error(err))
+					}
+				}
+			}
+			if od.Enter.Filled == 0 {
+				// 尚未入场，直接退出
+				err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars")
+				if err != nil {
+					log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
+				}
+			} else {
+				// 部分入场，置为已完全入场
+				od.Enter.Status = orm.OdStatusClosed
+				od.Status = orm.InOutStatusFullEnter
+				od.DirtyMain = true
+				od.DirtyEnter = true
+			}
+		}
+	}
+	if len(saveOds) == 0 {
+		return
+	}
+	// 有需要保存的订单
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		log.Error("get sess to save old limits fail", zap.Error(err))
+		return
+	}
+	defer conn.Release()
+	for _, od := range saveOds {
+		err = od.Save(sess)
+		if err != nil {
+			log.Error("save od fail", zap.String("key", od.Key()), zap.Error(err))
+		}
+	}
 }
 
 func editTriggerOd(od *orm.InOutOrder, prefix string) {

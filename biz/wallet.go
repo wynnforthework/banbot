@@ -31,9 +31,7 @@ type ItemWallet struct {
 }
 
 type BanWallets struct {
-	Items         map[string]*ItemWallet
-	MarginAddRate float64 //出现亏损时，在亏损百分比后追加保证金
-	MinOpenRate   float64 //钱包余额不足单笔开单金额时，超过此比例即允许开小单
+	Items map[string]*ItemWallet
 }
 
 /*
@@ -225,7 +223,7 @@ func (w *BanWallets) CostAva(odKey string, symbol string, amount float64, negati
 	wallet := w.Get(symbol)
 	srcAmount := wallet.Available
 	if minRate == 0 {
-		minRate = w.MinOpenRate
+		minRate = config.MinOpenRate
 	}
 	var realCost float64
 	if srcAmount >= amount || negative {
@@ -571,7 +569,7 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 	}
 
 	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
-	if err == nil {
+	if err != nil {
 		return err
 	}
 	for _, od := range odList {
@@ -596,10 +594,13 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 				panic(fmt.Sprintf("od profit should < 0: %+v, profit: %f", od, od.Profit))
 			}
 			// 计算维持保证金
-			minMargin := exchange.CalcMaintMargin(od.Symbol, quoteValue) // 要求的最低保证金
-			if math.Abs(od.Profit) >= (curMargin-minMargin)*w.MarginAddRate {
+			minMargin, err := exchange.CalcMaintMargin(od.Symbol, quoteValue) // 要求的最低保证金
+			if err != nil {
+				return err
+			}
+			if math.Abs(od.Profit) >= (curMargin-minMargin)*config.MarginAddRate {
 				// 当亏损达到初始保证金比例时，为此订单增加保证金避免强平
-				lossPct := w.MarginAddRate * 100
+				lossPct := config.MarginAddRate * 100
 				log.Debug("loss addMargin", zap.Float64("lossPct", lossPct),
 					zap.String("od", odKey), zap.Float64("profit", od.Profit),
 					zap.Float64("margin", curMargin))
