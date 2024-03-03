@@ -136,12 +136,7 @@ func (b *BackTest) onLiquidation(symbol string) {
 
 func (b *BackTest) orderCB(order *orm.InOutOrder, isEnter bool) {
 	if isEnter {
-		openNum := 0
-		for _, od := range orm.OpenODs {
-			if od.Status > orm.InOutStatusInit {
-				openNum += 1
-			}
-		}
+		openNum := orm.OpenNum(orm.InOutStatusPartEnter)
 		if openNum > b.MaxOpenOrders {
 			b.MaxOpenOrders = openNum
 		}

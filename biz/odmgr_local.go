@@ -307,7 +307,16 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 }
 
 func (o *LocalOrderMgr) onLowFunds() {
-	panic("onLowFunds not implement")
+	// 如果余额不足，且没有入场的订单，则提前终止回测
+	openNum := orm.OpenNum(orm.InOutStatusPartEnter)
+	if openNum > 0 {
+		return
+	}
+	value := Wallets.TotalLegal(nil, false)
+	if value < core.MinStakeAmount {
+		log.Warn("wallet low funds, no open orders, stop backTest..")
+		core.StopAll()
+	}
 }
 
 func (o *LocalOrderMgr) CleanUp() *errs.Error {

@@ -115,3 +115,17 @@ func AddTriggerOd(od *InOutOrder) {
 	ods, _ := TriggerODs[od.Symbol]
 	TriggerODs[od.Symbol] = append(ods, od)
 }
+
+/*
+OpenNum
+返回符合指定状态的尚未平仓订单的数量
+*/
+func OpenNum(status int16) int {
+	openNum := 0
+	for _, od := range OpenODs {
+		if od.Status >= status {
+			openNum += 1
+		}
+	}
+	return openNum
+}

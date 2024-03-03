@@ -239,7 +239,7 @@ func getDrawDownExitRate(maxChg float64) float64 {
 
 func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 	_, entPrice, exmChg := s.getMaxTp(od)
-	var stopRate float64
+	var stopRate = float64(-1)
 	if s.Stagy.GetDrawDownExitRate != nil {
 		stopRate = s.Stagy.GetDrawDownExitRate(s, od, exmChg)
 	}
