@@ -27,16 +27,17 @@ import (
 )
 
 type BTResult struct {
-	MaxOpenOrders int
-	MinBalance    float64
-	MaxBalance    float64
-	BarNum        int
-	Plots         PlotData
-	StartMS       int64
-	EndMS         int64
-	PlotEvery     int
-	TotalInvest   float64
-	OutDir        string
+	MaxOpenOrders  int
+	MinReal        float64
+	MaxReal        float64 // 最大资产
+	MaxDrawDownPct float64 // 最大回撤百分比
+	BarNum         int
+	Plots          PlotData
+	StartMS        int64
+	EndMS          int64
+	PlotEvery      int
+	TotalInvest    float64
+	OutDir         string
 }
 
 type PlotData struct {
@@ -161,8 +162,9 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 		table.Append([]string{"Best Order", bestVal + "  " + bestPct + "%"})
 		table.Append([]string{"Worst Order", worstVal + "  " + worstPct + "%"})
 	}
-	table.Append([]string{"Max Balance", strconv.FormatFloat(r.MaxBalance, 'f', 1, 64)})
-	table.Append([]string{"Min Balance", strconv.FormatFloat(r.MinBalance, 'f', 1, 64)})
+	table.Append([]string{"Max Assets", strconv.FormatFloat(r.MaxReal, 'f', 1, 64)})
+	table.Append([]string{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)})
+	table.Append([]string{"Max DrawDown", strconv.FormatFloat(r.MaxDrawDownPct, 'f', 1, 64) + "%"})
 	table.Render()
 	return b.String()
 }

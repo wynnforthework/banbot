@@ -25,13 +25,22 @@ type TradeStagy struct {
 	OnPairInfos         func(s *StagyJob) []*PairSub
 	OnStartUp           func(s *StagyJob)
 	OnBar               func(s *StagyJob)
-	OnInfoBar           func(s *StagyJob, pair, tf string)             //其他依赖的bar数据
-	OnTrades            func(s *StagyJob, trades []*banexg.Trade)      // 逐笔交易数据
-	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) *ExitReq //自定义订单退出逻辑
-	GetDrawDownExitRate CalcDDExitRate                                 // 计算跟踪止盈回撤退出的比率
-	PickTimeFrame       PickTimeFrameFunc                              // 为指定币选择适合的交易周期
-	OnShutDown          func(s *StagyJob)                              // 机器人停止时回调
+	OnInfoBar           func(s *StagyJob, pair, tf string)                 // 其他依赖的bar数据
+	OnTrades            func(s *StagyJob, trades []*banexg.Trade)          // 逐笔交易数据
+	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) *ExitReq     // 自定义订单退出逻辑
+	OnOrderChange       func(s *StagyJob, od *orm.InOutOrder, chgType int) // 订单更新回调
+	GetDrawDownExitRate CalcDDExitRate                                     // 计算跟踪止盈回撤退出的比率
+	PickTimeFrame       PickTimeFrameFunc                                  // 为指定币选择适合的交易周期
+	OnShutDown          func(s *StagyJob)                                  // 机器人停止时回调
 }
+
+const (
+	OdChgNew       = iota // 新订单
+	OdChgEnter            // 创建入场订单
+	OdChgEnterFill        // 订单入场完成
+	OdChgExit             // 订单请求退出
+	OdChgExitFill         // 订单退出完成
+)
 
 type PairSub struct {
 	Pair      string

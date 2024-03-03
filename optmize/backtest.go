@@ -42,7 +42,7 @@ func NewBackTest() *BackTest {
 func (b *BackTest) Init() *errs.Error {
 	core.RunMode = core.RunModeBackTest
 	btime.CurTimeMS = config.TimeRange.StartMS
-	b.MinBalance = math.MaxFloat64
+	b.MinReal = math.MaxFloat64
 	err := orm.SyncKlineTFs()
 	if err != nil {
 		return err
@@ -136,7 +136,15 @@ func (b *BackTest) onLiquidation(symbol string) {
 
 func (b *BackTest) orderCB(order *orm.InOutOrder, isEnter bool) {
 	if isEnter {
-		b.MaxOpenOrders = max(b.MaxOpenOrders, len(orm.OpenODs))
+		openNum := 0
+		for _, od := range orm.OpenODs {
+			if od.Status > orm.InOutStatusInit {
+				openNum += 1
+			}
+		}
+		if openNum > b.MaxOpenOrders {
+			b.MaxOpenOrders = openNum
+		}
 	} else if config.DrawBalanceOver > 0 {
 		quoteLegal := biz.Wallets.AvaLegal(config.StakeCurrency)
 		if quoteLegal > config.DrawBalanceOver {
@@ -151,9 +159,14 @@ func (b *BackTest) logState(timeMS int64) {
 	}
 	b.EndMS = timeMS
 	b.logPlot(timeMS)
-	quoteLegal := biz.Wallets.TotalLegal(config.StakeCurrency, false)
-	b.MinBalance = min(b.MinBalance, quoteLegal)
-	b.MaxBalance = max(b.MaxBalance, quoteLegal)
+	quoteLegal := biz.Wallets.TotalLegal(config.StakeCurrency, true)
+	b.MinReal = min(b.MinReal, quoteLegal)
+	if quoteLegal >= b.MaxReal {
+		b.MaxReal = quoteLegal
+	} else {
+		drawDownPct := (b.MaxReal - quoteLegal) * 100 / b.MaxReal
+		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
+	}
 }
 
 func (b *BackTest) logPlot(timeMS int64) {

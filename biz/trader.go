@@ -115,11 +115,30 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 			}
 			defer conn.Release()
 		}
-		_, _, err = OdMgr.ProcessOrders(sess, env, enters, exits, edits)
+		var ents []*orm.InOutOrder
+		ents, _, err = OdMgr.ProcessOrders(sess, env, enters, exits, edits)
 		if err != nil {
 			log.Error("process orders fail", zap.Error(err))
 			return err
 		}
+		t.onStagyEnterCB(ents, jobs)
 	}
 	return nil
+}
+
+func (t *Trader) onStagyEnterCB(ents []*orm.InOutOrder, jobs []*strategy.StagyJob) {
+	if len(ents) == 0 {
+		return
+	}
+	var jobMap = map[string]*strategy.StagyJob{}
+	for _, job := range jobs {
+		jobMap[job.Stagy.Name] = job
+	}
+	for _, od := range ents {
+		job, ok := jobMap[od.Strategy]
+		if !ok || job.Stagy.OnOrderChange == nil {
+			continue
+		}
+		job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+	}
 }

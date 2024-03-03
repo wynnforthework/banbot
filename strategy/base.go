@@ -242,7 +242,9 @@ func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 	var stopRate float64
 	if s.Stagy.GetDrawDownExitRate != nil {
 		stopRate = s.Stagy.GetDrawDownExitRate(s, od, exmChg)
-	} else {
+	}
+	if stopRate < 0 {
+		// 如果策略返回负数，则表示使用默认算法
 		stopRate = getDrawDownExitRate(exmChg)
 	}
 	if utils.EqualNearly(stopRate, 0) {
