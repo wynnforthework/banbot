@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
 	"github.com/muesli/clusters"
@@ -105,6 +106,8 @@ func (r *BTResult) printBtResult() {
 	r.dumpConfig()
 
 	r.dumpStrategy()
+
+	r.dumpStagyOutputs()
 
 	r.dumpGraph()
 }
@@ -571,6 +574,29 @@ func (r *BTResult) dumpStrategy() {
 		err_ = os.WriteFile(tgtPath, fileData, 0644)
 		if err_ != nil {
 			log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))
+		}
+	}
+}
+
+func (r *BTResult) dumpStagyOutputs() {
+	for name := range strategy.Versions {
+		stgy := strategy.Get(name)
+		if len(stgy.Outputs) == 0 {
+			continue
+		}
+		outPath := fmt.Sprintf("%s/%s.log", r.OutDir, name)
+		file, err := os.Create(outPath)
+		if err != nil {
+			log.Error("create strategy output file fail", zap.String("name", name), zap.Error(err))
+			continue
+		}
+		_, err = file.WriteString(strings.Join(stgy.Outputs, "\n"))
+		if err != nil {
+			log.Error("write strategy output fail", zap.String("name", name), zap.Error(err))
+		}
+		err = file.Close()
+		if err != nil {
+			log.Error("close strategy output fail", zap.String("name", name), zap.Error(err))
 		}
 	}
 }

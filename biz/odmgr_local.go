@@ -329,5 +329,14 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 			return err
 		}
 	}
+	// 过滤未入场订单
+	var validOds = make([]*orm.InOutOrder, 0, len(orm.HistODs))
+	for _, od := range orm.HistODs {
+		if od.Enter == nil || od.Enter.Filled == 0 {
+			continue
+		}
+		validOds = append(validOds, od)
+	}
+	orm.HistODs = validOds
 	return sess.DumpOrdersToDb()
 }

@@ -20,6 +20,7 @@ type TradeStagy struct {
 	StakeAmount   float64
 	StopEnterBars int
 	AllowTFs      []string // 允许运行的时间周期，不提供时使用全局配置
+	Outputs       []string // 策略输出的文本文件内容，每个字符串是一行
 
 	OnPairInfos         func(s *StagyJob) []*PairSub
 	OnStartUp           func(s *StagyJob)

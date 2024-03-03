@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/utils"
@@ -598,6 +599,9 @@ func (i *ExOrder) CutPart(rate float64, fill bool) *ExOrder {
 }
 
 func (q *Queries) DumpOrdersToDb() *errs.Error {
+	if config.NoDB {
+		return nil
+	}
 	allOrders := append(HistODs, utils.ValsOfMap(OpenODs)...)
 	for _, od := range allOrders {
 		od.ID = 0

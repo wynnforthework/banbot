@@ -7,7 +7,6 @@ import (
 )
 
 var (
-	BotName      string                           // 当前机器人名称
 	RunMode      string                           // prod/dry_run/backtest
 	RunEnv       string                           //prod/test
 	StartAt      int64                            // 启动时间，13位时间戳
