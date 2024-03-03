@@ -9,8 +9,10 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/rpc"
+	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"slices"
 	"strings"
 )
 
@@ -39,7 +41,15 @@ func CronLoadMarkets() {
 }
 
 func CronFatalLossCheck() {
-	_, err := core.Cron.AddFunc("35 */5 * * * *", biz.CheckFatalStop)
+	checkIntvs := utils.KeysOfMap(config.FatalStop)
+	minIntv := slices.Min(checkIntvs)
+	if minIntv < 1 {
+		log.Error("fatal_stop invalid, min is 1, skip", zap.Int("current", minIntv))
+		return
+	}
+	cronStr := fmt.Sprintf("35 */%v * * * *", min(5, minIntv))
+	maxIntv := slices.Max(checkIntvs)
+	_, err := core.Cron.AddFunc(cronStr, biz.MakeCheckFatalStop(maxIntv))
 	if err != nil {
 		log.Error("add CronFatalLossCheck fail", zap.Error(err))
 	}

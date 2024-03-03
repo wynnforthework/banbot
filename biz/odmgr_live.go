@@ -107,11 +107,11 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	orm.OpenODs = make(map[int64]*orm.InOutOrder)
 	orders, err := sess.GetOrders(orm.GetOrdersArgs{
 		TaskID: -1,
+		Status: 1,
 		Limit:  1000,
 	})
 	// 这里加载完订单就释放，防止长时间占用连接
 	conn.Release()
-	orm.HistODs = make([]*orm.InOutOrder, 0, len(orders))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -138,8 +138,6 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 			orm.OpenODs[od.ID] = od
 			sinceMS = max(sinceMS, od.EnterAt)
 			openPairs[od.Symbol] = struct{}{}
-		} else {
-			orm.HistODs = append(orm.HistODs, od)
 		}
 	}
 	// 获取交易所仓位
@@ -1423,22 +1421,35 @@ func WatchLeverages() {
 CheckFatalStop
 检查是否触发全局止损，此方法应通过cron定期调用
 */
-func CheckFatalStop() {
-	if core.NoEnterUntil >= btime.TimeMS() {
-		return
-	}
-	for minsText, rate := range config.FatalStop {
-		backMins, err := strconv.Atoi(minsText)
-		if err != nil {
-			log.Error("config.fatal_stop invalid: " + minsText)
-			continue
+func MakeCheckFatalStop(maxIntv int) func() {
+	return func() {
+		if core.NoEnterUntil >= btime.TimeMS() {
+			return
 		}
-		lossRate := calcFatalLoss(backMins)
-		if lossRate >= rate {
-			lossPct := int(lossRate * 100)
-			core.NoEnterUntil = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
-			log.Error(fmt.Sprintf("%v分钟内损失%v, 禁止下单%v小时！", minsText, lossPct, config.FatalStopHours))
-			break
+		sess, conn, err := orm.Conn(nil)
+		if err != nil {
+			log.Error("get db sess fail", zap.Error(err))
+			return
+		}
+		defer conn.Release()
+		minTimeMS := btime.TimeMS() - int64(maxIntv)*60000
+		orders, err := sess.GetOrders(orm.GetOrdersArgs{
+			TaskID:     -1,
+			Status:     2,
+			CloseAfter: minTimeMS,
+		})
+		if err != nil {
+			log.Error("get cur his orders fail", zap.Error(err))
+			return
+		}
+		for backMins, rate := range config.FatalStop {
+			lossRate := calcFatalLoss(orders, backMins)
+			if lossRate >= rate {
+				lossPct := int(lossRate * 100)
+				core.NoEnterUntil = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
+				log.Error(fmt.Sprintf("%v分钟内损失%v, 禁止下单%v小时！", backMins, lossPct, config.FatalStopHours))
+				break
+			}
 		}
 	}
 }
@@ -1447,12 +1458,12 @@ func CheckFatalStop() {
 calcFatalLoss
 计算系统级别最近n分钟内，账户余额损失百分比
 */
-func calcFatalLoss(backMins int) float64 {
+func calcFatalLoss(orders []*orm.InOutOrder, backMins int) float64 {
 	minTimeMS := btime.TimeMS() - int64(backMins)*60000
 	minTimeMS = min(minTimeMS, core.StartAt)
 	sumProfit := float64(0)
-	for i := len(orm.HistODs) - 1; i >= 0; i-- {
-		od := orm.HistODs[i]
+	for i := len(orders) - 1; i >= 0; i-- {
+		od := orders[i]
 		if od.Enter.CreateAt < minTimeMS {
 			break
 		}

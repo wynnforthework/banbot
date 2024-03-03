@@ -26,7 +26,7 @@ var (
 	WalletAmounts   map[string]float64
 	DrawBalanceOver float64
 	StakeCurrency   []string
-	FatalStop       map[string]float64
+	FatalStop       map[int]float64
 	FatalStopHours  int
 	TimeRange       *TimeTuple
 	WsStamp         *string

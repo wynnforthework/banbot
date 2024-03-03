@@ -908,27 +908,24 @@ func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 		if ranges, ok := calcs[agg.TimeFrame][sid]; ok {
 			tfRanges[agg.TimeFrame] = ranges
 			newStart, newEnd := ranges[0], ranges[1]
-			overs := newEnd - newStart - (oldEnd - oldStart)
-			if overs > 0 {
-				err_ = nil
-				if newStart <= oldStart && oldEnd <= newEnd {
-					err_ = q.SetKInfo(ctx, SetKInfoParams{
-						Sid:       int64(sid),
-						Timeframe: agg.TimeFrame,
-						Start:     newStart,
-						Stop:      newEnd,
-					})
-				} else if oldStart == 0 && oldEnd == 0 {
-					_, err_ = q.AddKInfo(ctx, AddKInfoParams{
-						Sid:       int64(sid),
-						Timeframe: agg.TimeFrame,
-						Start:     newStart,
-						Stop:      newEnd,
-					})
-				}
-				if err_ != nil {
-					return errs.New(core.ErrDbExecFail, err_)
-				}
+			err_ = nil
+			if oldStart == 0 && oldEnd == 0 {
+				_, err_ = q.AddKInfo(ctx, AddKInfoParams{
+					Sid:       int64(sid),
+					Timeframe: agg.TimeFrame,
+					Start:     newStart,
+					Stop:      newEnd,
+				})
+			} else if newStart != oldStart || oldEnd != newEnd {
+				err_ = q.SetKInfo(ctx, SetKInfoParams{
+					Sid:       int64(sid),
+					Timeframe: agg.TimeFrame,
+					Start:     newStart,
+					Stop:      newEnd,
+				})
+			}
+			if err_ != nil {
+				return errs.New(core.ErrDbExecFail, err_)
 			}
 		} else if oldStart > 0 {
 			// 没有数据，但有范围记录

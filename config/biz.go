@@ -12,6 +12,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 func GetDataDir() string {
@@ -147,7 +148,16 @@ func apply(args *CmdArgs) *errs.Error {
 	WalletAmounts = Data.WalletAmounts
 	DrawBalanceOver = Data.DrawBalanceOver
 	StakeCurrency = Data.StakeCurrency
-	FatalStop = Data.FatalStop
+	FatalStop = make(map[int]float64)
+	if len(Data.FatalStop) > 0 {
+		for text, rate := range Data.FatalStop {
+			mins, err_ := strconv.Atoi(text)
+			if err_ != nil || mins < 1 {
+				panic("config fatal_stop." + text + " invalid, must be int >= 1")
+			}
+			FatalStop[mins] = rate
+		}
+	}
 	if Data.FatalStopHours == 0 {
 		Data.FatalStopHours = 8
 	}

@@ -45,8 +45,8 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	}
 	if len(accounts) > 0 {
 		accs := map[string]map[string]interface{}{}
-		for name, acc := range accounts {
-			accs[name] = map[string]interface{}{
+		for key, acc := range accounts {
+			accs[key] = map[string]interface{}{
 				banexg.OptApiKey:    acc.APIKey,
 				banexg.OptApiSecret: acc.APISecret,
 			}
