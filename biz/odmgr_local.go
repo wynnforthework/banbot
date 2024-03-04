@@ -25,10 +25,17 @@ type LocalOrderMgr struct {
 }
 
 func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
-	OdMgr = &LocalOrderMgr{
-		OrderMgr{
-			callBack: callBack,
-		},
+	for account := range config.Accounts {
+		mgr, ok := AccOdMgrs[account]
+		if !ok {
+			mgr = &LocalOrderMgr{
+				OrderMgr{
+					callBack: callBack,
+					Account:  account,
+				},
+			}
+			AccOdMgrs[account] = mgr
+		}
 	}
 }
 
@@ -42,7 +49,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 	if err != nil {
 		return err
 	}
-	if len(allOpens) == 0 || core.ProdMode() {
+	if len(allOpens) == 0 || core.ProdMode {
 		return nil
 	}
 	if core.IsContract {
@@ -55,7 +62,8 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 				orders = append(orders, od)
 			}
 		}
-		err = Wallets.UpdateOds(orders)
+		wallets := GetWallets(o.Account)
+		err = wallets.UpdateOds(orders)
 		if err != nil {
 			return err
 		}
@@ -154,7 +162,8 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 }
 
 func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *errs.Error {
-	_, err := Wallets.EnterOd(od)
+	wallets := GetWallets(o.Account)
+	_, err := wallets.EnterOd(od)
 	if err != nil {
 		if err.Code == core.ErrLowFunds {
 			err = od.LocalExit(core.ExitTagForceExit, 0, err.Error())
@@ -184,14 +193,14 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 			log.Warn("prec enter amount fail", zap.Float64("amt", entAmount), zap.Error(err))
 			err = od.LocalExit(core.ExitTagFatalErr, 0, err.Error())
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)
-			Wallets.Cancel(od.Key(), quote, 0, true)
+			wallets.Cancel(od.Key(), quote, 0, true)
 			return err
 		}
 	}
 	if exOrder.Price == 0 {
 		exOrder.Price = entPrice
 	}
-	Wallets.ConfirmOdEnter(od, entPrice)
+	wallets.ConfirmOdEnter(od, entPrice)
 	updateTime := btime.TimeMS() + int64(netCost)*1000
 	exOrder.UpdateAt = updateTime
 	if exOrder.CreateAt == 0 {
@@ -212,8 +221,9 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 }
 
 func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64) *errs.Error {
+	wallets := GetWallets(o.Account)
 	exOrder := od.Exit
-	Wallets.ExitOd(od, exOrder.Amount)
+	wallets.ExitOd(od, exOrder.Amount)
 	updateTime := btime.TimeMS() + int64(netCost)*1000
 	exOrder.UpdateAt = updateTime
 	exOrder.CreateAt = updateTime
@@ -229,7 +239,7 @@ func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64) *errs
 	od.DirtyMain = true
 	od.DirtyExit = true
 	_ = o.finishOrder(od, nil)
-	Wallets.ConfirmOdExit(od, price)
+	wallets.ConfirmOdExit(od, price)
 	o.callBack(od, false)
 	return nil
 }
@@ -301,21 +311,24 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 	} else {
 		return nil
 	}
-	Wallets.ExitOd(od, od.Exit.Amount)
-	Wallets.ConfirmOdExit(od, od.Exit.Price)
+	wallets := GetWallets(o.Account)
+	wallets.ExitOd(od, od.Exit.Amount)
+	wallets.ConfirmOdExit(od, od.Exit.Price)
 	return err
 }
 
 func (o *LocalOrderMgr) onLowFunds() {
 	// 如果余额不足，且没有入场的订单，则提前终止回测
-	openNum := orm.OpenNum(orm.InOutStatusPartEnter)
+	openNum := orm.OpenNum(o.Account, orm.InOutStatusPartEnter)
 	if openNum > 0 {
 		return
 	}
-	value := Wallets.TotalLegal(nil, false)
+	wallets := GetWallets(o.Account)
+	value := wallets.TotalLegal(nil, false)
 	if value < core.MinStakeAmount {
 		log.Warn("wallet low funds, no open orders, stop backTest..")
 		core.StopAll()
+		core.BotRunning = false
 	}
 }
 

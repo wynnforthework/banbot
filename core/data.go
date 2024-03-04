@@ -8,25 +8,27 @@ import (
 
 var (
 	RunMode      string                           // prod/dry_run/backtest
-	RunEnv       string                           //prod/test
+	RunEnv       string                           // prod/test
 	StartAt      int64                            // 启动时间，13位时间戳
-	IsWarmUp     bool                             //是否当前处于预热状态
+	IsWarmUp     bool                             // 是否当前处于预热状态
+	ProdMode     bool                             // 是否是生产环境正式交易模式
+	LiveMode     bool                             // 是否是实时模式：实盘+模拟运行
 	TFSecs       []*TFSecTuple                    // 所有涉及的时间周期
 	ExgName      string                           // 交易所名称
-	Market       string                           //当前市场
+	Market       string                           // 当前市场
 	IsContract   bool                             // 当前市场是否是合约市场, linear/inverse/option
 	ContractType string                           // 当前合约类型
-	StgPairTfs   []*StgPairTf                     //策略、标的、周期
-	Pairs        []string                         //全局所有的标的
-	PairsMap     = make(map[string]bool)          //全局所有的标的
+	StgPairTfs   []*StgPairTf                     // 策略、标的、周期
+	Pairs        []string                         // 全局所有的标的
+	PairsMap     = make(map[string]bool)          // 全局所有的标的
 	PairTfScores = make(map[string][]*TfScore)    // tf scores for pairs
 	ForbidPairs  = make(map[string]bool)          // 禁止交易的币种
 	NoEnterUntil int64                            // 禁止开单的截止13位时间戳
-	BookPairs    = make(map[string]bool)          //监听交易对的币种
+	BookPairs    = make(map[string]bool)          // 监听交易对的币种
 	PairCopiedMs = map[string][2]int64{}          // 所有标的从爬虫收到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的。
 	TfPairHits   = map[string]map[string]int{}    // tf[pair[hits]]一段时间内各周期各币种的bar数量，用于定时输出
 	LastBarMs    int64                            // 上次收到bar的结束时间，13位时间戳
-	OdBooks      = map[string]*banexg.OrderBook{} //缓存所有从爬虫收到的订单簿
+	OdBooks      = map[string]*banexg.OrderBook{} // 缓存所有从爬虫收到的订单簿
 	NumTaCache   = 1500                           // 指标计算时缓存的历史值数量，默认1500
 	Cron         = cron.New(cron.WithSeconds())   // 使用cron定时运行任务
 )
@@ -71,11 +73,6 @@ const (
 )
 
 const (
-	BotStateRunning = 1
-	BotStateStopped = 2
-)
-
-const (
 	EnterTagUnknown  = "unknown"
 	EnterTagUserOpen = "user_open"
 	EnterTagThird    = "third"
@@ -96,10 +93,11 @@ const (
 )
 
 var (
-	barPrices = make(map[string]float64) //# 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
-	prices    = make(map[string]float64) //交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
-	Ctx       context.Context            // 用于全部goroutine同时停止
-	StopAll   func()                     // 停止全部机器人线程
+	barPrices  = make(map[string]float64) //# 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
+	prices     = make(map[string]float64) //交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
+	Ctx        context.Context            // 用于全部goroutine同时停止
+	StopAll    func()                     // 停止全部机器人线程
+	BotRunning bool                       // 机器人是否正在运行
 )
 
 var (

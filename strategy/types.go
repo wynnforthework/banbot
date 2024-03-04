@@ -17,7 +17,7 @@ type TradeStagy struct {
 	MinTfScore    float64
 	WatchBook     bool
 	DrawDownExit  bool
-	StakeAmount   float64
+	StakeRate     float64 // 相对基础金额开单倍率
 	StopEnterBars int
 	AllowTFs      []string // 允许运行的时间周期，不提供时使用全局配置
 	Outputs       []string // 策略输出的文本文件内容，每个字符串是一行
@@ -54,21 +54,22 @@ type StagyJob struct {
 	Entrys        []*EnterReq
 	Exits         []*ExitReq
 	Orders        []*orm.InOutOrder
-	Symbol        *orm.ExSymbol     //当前运行的币种
-	TimeFrame     string            //当前运行的时间周期
+	Symbol        *orm.ExSymbol     // 当前运行的币种
+	TimeFrame     string            // 当前运行的时间周期
+	Account       string            // 当前任务所属账号
 	TPMaxs        map[int64]float64 // 订单最大盈利时价格
-	EnterNum      int               //记录已提交入场订单数量，避免访问数据库过于频繁
-	CheckMS       int64             //上次处理信号的时间戳，13位毫秒
+	EnterNum      int               // 记录已提交入场订单数量，避免访问数据库过于频繁
+	CheckMS       int64             // 上次处理信号的时间戳，13位毫秒
 	OpenLong      bool              // 是否允许开多
-	OpenShort     bool              //是否允许开空
-	CloseLong     bool              //是否允许平多
-	CloseShort    bool              //是否允许平空
+	OpenShort     bool              // 是否允许开空
+	CloseLong     bool              // 是否允许平多
+	CloseShort    bool              // 是否允许平空
 	ExgStopLoss   bool              // 是否允许交易所止损
-	LongSLPrice   float64           //做多止损价格
-	ShortSLPrice  float64           //做空止损价格
-	ExgTakeProfit bool              //是否允许交易所止盈
-	LongTPPrice   float64           //做多止盈价格
-	ShortTPPrice  float64           //做空止盈价格
+	LongSLPrice   float64           // 做多止损价格
+	ShortSLPrice  float64           // 做空止损价格
+	ExgTakeProfit bool              // 是否允许交易所止盈
+	LongTPPrice   float64           // 做多止盈价格
+	ShortTPPrice  float64           // 做空止盈价格
 	More          interface{}       // 策略自定义的额外信息
 }
 

@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	OdMgr     IOrderMgr
-	OdMgrLive *LiveOrderMgr
+	AccOdMgrs     = make(map[string]IOrderMgr)
+	AccLiveOdMgrs = make(map[string]*LiveOrderMgr)
 )
 
 type IOrderMgr interface {
@@ -46,13 +46,59 @@ type OrderMgr struct {
 	callBack   func(order *orm.InOutOrder, isEnter bool)
 	afterEnter FuncHandleIOrder
 	afterExit  FuncHandleIOrder
+	Account    string
 }
 
-func allowOrderEnter(env *banta.BarEnv) bool {
+func GetOdMgr(account string) IOrderMgr {
+	if !core.ProdMode {
+		account = config.DefAcc
+	}
+	val, _ := AccOdMgrs[account]
+	return val
+}
+
+func GetLiveOdMgr(account string) *LiveOrderMgr {
+	if !core.ProdMode {
+		panic("call GetLiveOdMgr in non-ProdRunMode is forbidden: " + core.RunMode)
+	}
+	val, _ := AccLiveOdMgrs[account]
+	return val
+}
+
+func CleanUpOdMgr() *errs.Error {
+	var err *errs.Error
+	isProd := core.ProdMode
+	for account := range config.Accounts {
+		var curErr *errs.Error
+		if isProd {
+			if mgr, ok := AccLiveOdMgrs[account]; ok {
+				curErr = mgr.CleanUp()
+			}
+		} else {
+			if mgr, ok := AccOdMgrs[account]; ok {
+				curErr = mgr.CleanUp()
+			}
+		}
+		if curErr != nil {
+			if err != nil {
+				log.Error("clean odMgr fail", zap.String("acc", account), zap.Error(curErr))
+			} else {
+				err = curErr
+			}
+		}
+	}
+	return err
+}
+
+func allowOrderEnter(account string, env *banta.BarEnv) bool {
 	if _, ok := core.ForbidPairs[env.Symbol]; ok {
 		return false
 	}
-	if core.RunMode == core.RunModeOther || len(orm.OpenODs) >= config.MaxOpenOrders {
+	if core.RunMode == core.RunModeOther {
+		return false
+	}
+	openOds := orm.GetOpenODs(account)
+	if len(openOds) >= config.MaxOpenOrders {
 		return false
 	}
 	if btime.TimeMS() < core.NoEnterUntil {
@@ -70,7 +116,7 @@ func allowOrderEnter(env *banta.BarEnv) bool {
 func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strategy.EnterReq,
 	exits []*strategy.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	var entOrders, extOrders []*orm.InOutOrder
-	if len(enters) > 0 && allowOrderEnter(env) {
+	if len(enters) > 0 && allowOrderEnter(o.Account, env) {
 		for _, ent := range enters {
 			iorder, err := o.EnterOrder(sess, env, ent, false)
 			if err != nil {
@@ -96,20 +142,21 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 	if req.Short && isSpot {
 		return nil, errs.NewMsg(core.ErrRunTime, "short oder is invalid for spot")
 	}
-	if doCheck && !allowOrderEnter(env) {
+	if doCheck && !allowOrderEnter(o.Account, env) {
 		return nil, nil
 	}
 	if req.Leverage == 0 && !isSpot {
-		req.Leverage = config.Leverage
+		req.Leverage = config.GetAccLeverage(o.Account)
 	}
 	stgVer, _ := strategy.Versions[req.StgyName]
 	odSide := banexg.OdSideBuy
 	if req.Short {
 		odSide = banexg.OdSideSell
 	}
+	taskId := orm.GetTaskID(o.Account)
 	od := &orm.InOutOrder{
 		IOrder: &orm.IOrder{
-			TaskID:    orm.TaskID,
+			TaskID:    taskId,
 			Symbol:    env.Symbol,
 			Sid:       utils.GetMapVal(env.Data, "sid", int32(0)),
 			Timeframe: env.TimeFrame,
@@ -123,7 +170,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 			StgVer:    int32(stgVer),
 		},
 		Enter: &orm.ExOrder{
-			TaskID:    orm.TaskID,
+			TaskID:    taskId,
 			Symbol:    env.Symbol,
 			Enter:     true,
 			OrderType: core.OrderTypeEnums[req.OrderType],
@@ -170,9 +217,10 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy.ExitReq) ([]*orm.InOutOrder, *errs.Error) {
 	// 筛选匹配的订单
 	var matches []*orm.InOutOrder
+	openOds := orm.GetOpenODs(o.Account)
 	if req.OrderID > 0 {
 		// 精确指定退出的订单ID
-		od, ok := orm.OpenODs[req.OrderID]
+		od, ok := openOds[req.OrderID]
 		if !ok {
 			return nil, errs.NewMsg(errs.CodeParamInvalid, "req orderId not found: %d", req.OrderID)
 		}
@@ -188,7 +236,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy
 		}
 		dirtBoth := req.Dirt == core.OdDirtBoth
 		isShort := req.Dirt == core.OdDirtShort
-		for _, od := range orm.OpenODs {
+		for _, od := range openOds {
 			if req.StgyName != "" && od.Strategy != req.StgyName {
 				continue
 			}
@@ -275,8 +323,9 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 		// 这里part的key和原始的一样，所以part作为src_key
 		tgtKey, srcKey := od.Key(), part.Key()
 		base, quote, _, _ := core.SplitSymbol(od.Symbol)
-		Wallets.CutPart(srcKey, tgtKey, base, 1-req.ExitRate)
-		Wallets.CutPart(srcKey, tgtKey, quote, 1-req.ExitRate)
+		wallets := GetWallets(o.Account)
+		wallets.CutPart(srcKey, tgtKey, base, 1-req.ExitRate)
+		wallets.CutPart(srcKey, tgtKey, quote, 1-req.ExitRate)
 		req.ExitRate = 1
 		return o.ExitOrder(sess, part, req)
 	}

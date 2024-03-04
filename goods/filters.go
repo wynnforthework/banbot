@@ -43,7 +43,7 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 	var symbolVols = make([]SymbolVol, 0)
 	if !f.NeedTickers {
 		startMS := int64(0)
-		if !core.LiveMode() {
+		if !core.LiveMode {
 			startMS = config.TimeRange.StartMS
 		}
 		limit := f.BackPeriod
@@ -114,7 +114,7 @@ func (f *VolumePairFilter) GenSymbols(tickers map[string]*banexg.Ticker) ([]stri
 }
 
 func (f *PriceFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	if core.LiveMode() {
+	if core.LiveMode {
 		res := make([]string, 0, len(symbols))
 		if len(tickers) == 0 {
 			log.Warn("no tickers, PriceFilter skipped")

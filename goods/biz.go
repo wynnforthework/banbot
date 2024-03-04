@@ -106,7 +106,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	} else {
 		allowFilter = true
 		exchange := exg.Default
-		if needTickers && core.LiveMode() {
+		if needTickers && core.LiveMode {
 			tikCache, ok := cache.Get("tickers")
 			if !ok {
 				tickersMap = make(map[string]*banexg.Ticker)

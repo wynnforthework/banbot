@@ -33,6 +33,7 @@ type LiveOrderMgr struct {
 	isWatchMyTrade   bool                       // 是否正在监听账户交易流
 	isTrialUnMatches bool                       // 是否正在监听未匹配交易
 	isConsumeOrderQ  bool                       // 是否正在从订单队列消费
+	isWatchAccConfig bool                       // 是否正在监听杠杆倍数变化
 	unMatchTrades    map[string]*banexg.MyTrade // 从ws收到的暂无匹配的订单的交易
 	applyMyTrade     FuncApplyMyTrade
 	exitByMyTrade    FuncHandleMyTrade
@@ -49,8 +50,7 @@ const (
 )
 
 var (
-	IsWatchAccConfig = false
-	pairVolMap       = map[string]*PairValItem{}
+	pairVolMap = map[string]*PairValItem{}
 )
 
 type PairValItem struct {
@@ -60,9 +60,23 @@ type PairValItem struct {
 }
 
 func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
+	for account := range config.Accounts {
+		mgr, ok := AccLiveOdMgrs[account]
+		if !ok {
+			odMgr := newLiveOrderMgr(account, callBack)
+			AccLiveOdMgrs[account] = odMgr
+			AccOdMgrs[account] = odMgr
+		} else {
+			mgr.callBack = callBack
+		}
+	}
+}
+
+func newLiveOrderMgr(account string, callBack func(od *orm.InOutOrder, isEnter bool)) *LiveOrderMgr {
 	res := &LiveOrderMgr{
 		OrderMgr: OrderMgr{
 			callBack: callBack,
+			Account:  account,
 		},
 		queue:         make(chan *OdQItem, 1000),
 		doneKeys:      map[string]bool{},
@@ -80,8 +94,7 @@ func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 	} else {
 		panic("unsupport exchange for LiveOrderMgr: " + core.ExgName)
 	}
-	OdMgrLive = res
-	OdMgr = res
+	return res
 }
 
 /*
@@ -104,9 +117,10 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		return nil, nil, nil, err
 	}
 	// 从数据库加载订单
-	orm.OpenODs = make(map[int64]*orm.InOutOrder)
+	openOds := orm.GetOpenODs(o.Account)
+	taskId := orm.GetTaskID(o.Account)
 	orders, err := sess.GetOrders(orm.GetOrdersArgs{
-		TaskID: -1,
+		TaskID: taskId,
 		Status: 1,
 		Limit:  1000,
 	})
@@ -126,7 +140,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 			if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
 				// 订单未提交到交易所，且是入场订单
 				if isFarLimit(tryOd) {
-					orm.AddTriggerOd(od)
+					orm.AddTriggerOd(o.Account, od)
 				} else {
 					err = od.LocalExit(core.ExitTagForceExit, 0, "重启取消未入场订单")
 					if err != nil {
@@ -135,13 +149,15 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 					continue
 				}
 			}
-			orm.OpenODs[od.ID] = od
+			openOds[od.ID] = od
 			sinceMS = max(sinceMS, od.EnterAt)
 			openPairs[od.Symbol] = struct{}{}
 		}
 	}
 	// 获取交易所仓位
-	posList, err := exchange.FetchAccountPositions(nil, nil)
+	posList, err := exchange.FetchAccountPositions(nil, &map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+	})
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -149,10 +165,10 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		openPairs[v.Symbol] = struct{}{}
 		return v.Symbol
 	})
-	var resOdList = make([]*orm.InOutOrder, 0, len(orm.OpenODs))
+	var resOdList = make([]*orm.InOutOrder, 0, len(openOds))
 	for pair := range openPairs {
 		curOds := make([]*orm.InOutOrder, 0, 2)
-		for _, od := range orm.OpenODs {
+		for _, od := range openOds {
 			if od.Symbol == pair {
 				curOds = append(curOds, od)
 			}
@@ -188,19 +204,19 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	resMap := utils.ArrToMap(resOdList, func(od *orm.InOutOrder) int64 {
 		return od.ID
 	})
-	for key, od := range orm.OpenODs {
+	for key, od := range openOds {
 		_, newHas := resMap[key]
 		if !newHas {
 			delList = append(delList, od)
 		}
 	}
 	for key, od := range resMap {
-		_, oldHas := orm.OpenODs[key]
+		_, oldHas := openOds[key]
 		if oldHas {
 			oldList = append(oldList, od...)
 		} else {
 			newList = append(newList, od...)
-			orm.OpenODs[key] = od[0]
+			openOds[key] = od[0]
 		}
 	}
 	if len(oldList) > 0 {
@@ -221,7 +237,9 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	var err *errs.Error
 	if len(openOds) > 0 {
 		// 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
-		exOrders, err = exg.Default.FetchOrders(pair, sinceMs, 0, nil)
+		exOrders, err = exg.Default.FetchOrders(pair, sinceMs, 0, &map[string]interface{}{
+			banexg.ParamAccount: o.Account,
+		})
 		if err != nil {
 			return openOds, err
 		}
@@ -427,7 +445,10 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, filled float64, odType string,
 	feeCost float64, feeName string, enterAt int64, entStatus int, entOdId string, defTF string) *orm.InOutOrder {
 	notional := average * filled
-	leverage, _ := exg.GetLeverage(exs.Symbol, notional)
+	leverage, _ := exg.GetLeverage(exs.Symbol, notional, o.Account)
+	if leverage == 0 {
+		leverage = config.GetAccLeverage(o.Account)
+	}
 	status := orm.InOutStatusPartEnter
 	if entStatus == orm.OdStatusClosed {
 		status = orm.InOutStatusFullEnter
@@ -437,9 +458,10 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 	if short {
 		entSide = banexg.OdSideSell
 	}
+	taskId := orm.GetTaskID(o.Account)
 	od := &orm.InOutOrder{
 		IOrder: &orm.IOrder{
-			TaskID:    orm.TaskID,
+			TaskID:    taskId,
 			Symbol:    exs.Symbol,
 			Sid:       exs.ID,
 			Timeframe: defTF,
@@ -454,7 +476,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 			StgVer:    int32(stgVer),
 		},
 		Enter: &orm.ExOrder{
-			TaskID:    orm.TaskID,
+			TaskID:    taskId,
 			Symbol:    exs.Symbol,
 			Enter:     true,
 			OrderType: odType,
@@ -538,8 +560,9 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 		if part.Short {
 			exitSide = banexg.OdSideBuy
 		}
+		taskId := orm.GetTaskID(o.Account)
 		part.Exit = &orm.ExOrder{
-			TaskID:    orm.TaskID,
+			TaskID:    taskId,
 			InoutID:   part.ID,
 			Symbol:    part.Symbol,
 			Enter:     false,
@@ -594,7 +617,7 @@ func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
 		if isFarLimit(order.Enter) {
 			// 长时间难以成交的限价单，先不提交到交易所，防止资金占用
-			orm.AddTriggerOd(order)
+			orm.AddTriggerOd(o.Account, order)
 			return nil
 		}
 		o.queue <- &OdQItem{
@@ -652,7 +675,9 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 	if o.isWatchMyTrade {
 		return
 	}
-	out, err := exg.Default.WatchMyTrades(nil)
+	out, err := exg.Default.WatchMyTrades(&map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+	})
 	if err != nil {
 		log.Error("WatchMyTrades fail", zap.Error(err))
 		return
@@ -702,7 +727,7 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 }
 
 func (o *LiveOrderMgr) TrialUnMatchesForever() {
-	if !core.ProdMode() || o.isTrialUnMatches {
+	if !core.ProdMode || o.isTrialUnMatches {
 		return
 	}
 	o.isTrialUnMatches = true
@@ -780,7 +805,8 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 			legalCost := od.GetInfoFloat64(orm.OdInfoLegalCost)
 			if legalCost > 0 {
 				_, quote, _, _ := core.SplitSymbol(od.Symbol)
-				od.QuoteCost = Wallets.GetAmountByLegal(quote, legalCost)
+				wallets := GetWallets(o.Account)
+				od.QuoteCost = wallets.GetAmountByLegal(quote, legalCost)
 				if od.QuoteCost == 0 {
 					core.ForbidPairs[od.Symbol] = true
 					forceDelOd(errs.NewMsg(core.ErrRunTime, "no available"))
@@ -820,7 +846,9 @@ func (o *LiveOrderMgr) execOrderExit(od *orm.InOutOrder) *errs.Error {
 	if (od.Enter.Amount == 0 || od.Enter.Filled < od.Enter.Amount) && od.Enter.Status < orm.OdStatusClosed {
 		// 可能尚未入场，或未完全入场
 		if od.Enter.OrderID != "" {
-			order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, nil)
+			order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, &map[string]interface{}{
+				banexg.ParamAccount: o.Account,
+			})
 			if err != nil {
 				log.Error("cancel order fail", zap.String("key", odKey), zap.String("err", err.Short()))
 			} else {
@@ -869,11 +897,13 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 	}()
 	var err *errs.Error
 	exchange := exg.Default
-	leverage, maxLeverage := exg.GetLeverage(od.Symbol, od.QuoteCost)
+	leverage, maxLeverage := exg.GetLeverage(od.Symbol, od.QuoteCost, o.Account)
 	if isEnter && od.Leverage > 0 && od.Leverage != int32(leverage) {
 		newLeverage := min(maxLeverage, int(od.Leverage))
 		if newLeverage != leverage {
-			_, err = exchange.SetLeverage(newLeverage, od.Symbol, nil)
+			_, err = exchange.SetLeverage(newLeverage, od.Symbol, &map[string]interface{}{
+				banexg.ParamAccount: o.Account,
+			})
 			if err != nil {
 				return err
 			}
@@ -1178,11 +1208,18 @@ VerifyTriggerOds
 仅实盘使用
 */
 func VerifyTriggerOds() {
-	if len(orm.TriggerODs) == 0 {
+	for account := range config.Accounts {
+		verifyAccountTriggerOds(account)
+	}
+}
+
+func verifyAccountTriggerOds(account string) {
+	triggerOds := orm.GetTriggerODs(account)
+	if len(triggerOds) == 0 {
 		return
 	}
 	var resOds []*orm.InOutOrder
-	for pair, ods := range orm.TriggerODs {
+	for pair, ods := range triggerOds {
 		if len(ods) == 0 {
 			continue
 		}
@@ -1222,8 +1259,9 @@ func VerifyTriggerOds() {
 				leftOds = append(leftOds, od)
 			}
 		}
-		orm.TriggerODs[pair] = leftOds
+		triggerOds[pair] = leftOds
 	}
+	odMgr := GetLiveOdMgr(account)
 	for _, od := range resOds {
 		if od.Status == orm.InOutStatusFullExit {
 			continue
@@ -1232,7 +1270,7 @@ func VerifyTriggerOds() {
 		if od.Exit != nil {
 			tag = "exit"
 		}
-		OdMgrLive.queue <- &OdQItem{
+		odMgr.queue <- &OdQItem{
 			Order:  od,
 			Action: tag,
 		}
@@ -1265,10 +1303,18 @@ CancelOldLimits
 检查是否有超时未成交的入场限价单，有则取消。
 */
 func CancelOldLimits() {
+	for account := range config.Accounts {
+		cancelAccountOldLimits(account)
+	}
+}
+
+func cancelAccountOldLimits(account string) {
 	curMS := btime.TimeMS()
 	exchange := exg.Default
 	var saveOds []*orm.InOutOrder
-	for _, od := range orm.OpenODs {
+	openOds := orm.GetOpenODs(account)
+	odMgr := GetLiveOdMgr(account)
+	for _, od := range openOds {
 		if od.Status > orm.InOutStatusPartEnter || od.Enter.Price == 0 ||
 			!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
 			// 跳过已完全入场，或者非限价单
@@ -1278,11 +1324,13 @@ func CancelOldLimits() {
 		if stopAfter > 0 && stopAfter <= curMS {
 			saveOds = append(saveOds, od)
 			if od.Enter.OrderID != "" {
-				res, err := exchange.CancelOrder(od.Enter.OrderID, od.Symbol, nil)
+				res, err := exchange.CancelOrder(od.Enter.OrderID, od.Symbol, &map[string]interface{}{
+					banexg.ParamAccount: account,
+				})
 				if err != nil {
 					log.Error("cancel old limit enters fail", zap.String("key", od.Key()), zap.Error(err))
 				} else {
-					err = OdMgrLive.updateOdByExgRes(od, true, res)
+					err = odMgr.updateOdByExgRes(od, true, res)
 					if err != nil {
 						log.Error("apply cancel res fail", zap.String("key", od.Key()), zap.Error(err))
 					}
@@ -1323,7 +1371,10 @@ func CancelOldLimits() {
 
 func editTriggerOd(od *orm.InOutOrder, prefix string) {
 	orderId := od.GetInfoString(prefix + "OrderId")
-	params := map[string]interface{}{}
+	account := orm.GetTaskAcc(od.TaskID)
+	params := map[string]interface{}{
+		banexg.ParamAccount: account,
+	}
 	if core.IsContract {
 		params[banexg.ParamPositionSide] = "LONG"
 		if od.Short {
@@ -1355,7 +1406,9 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 		od.DirtyInfo = true
 	}
 	if orderId != "" && (res == nil || res.Status == "open") {
-		_, err = exg.Default.CancelOrder(orderId, od.Symbol, nil)
+		_, err = exg.Default.CancelOrder(orderId, od.Symbol, &map[string]interface{}{
+			banexg.ParamAccount: account,
+		})
 		if err != nil {
 			log.Error("cancel old trigger fail", zap.String("key", od.Key()), zap.Error(err))
 		}
@@ -1370,14 +1423,17 @@ func cancelTriggerOds(od *orm.InOutOrder) {
 	slOrder := od.GetInfoString(orm.OdInfoStopLossOrderId)
 	tpOrder := od.GetInfoString(orm.OdInfoTakeProfitOrderId)
 	odKey := od.Key()
+	args := &map[string]interface{}{
+		banexg.ParamAccount: orm.GetTaskAcc(od.TaskID),
+	}
 	if slOrder != "" {
-		_, err := exg.Default.CancelOrder(slOrder, od.Symbol, nil)
+		_, err := exg.Default.CancelOrder(slOrder, od.Symbol, args)
 		if err != nil {
 			log.Error("cancel stopLoss fail", zap.String("key", odKey), zap.Error(err))
 		}
 	}
 	if tpOrder != "" {
-		_, err := exg.Default.CancelOrder(tpOrder, od.Symbol, nil)
+		_, err := exg.Default.CancelOrder(tpOrder, od.Symbol, args)
 		if err != nil {
 			log.Error("cancel takeProfit fail", zap.String("key", odKey), zap.Error(err))
 		}
@@ -1394,22 +1450,21 @@ func (o *LiveOrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.
 	return o.OrderMgr.finishOrder(od, sess)
 }
 
-func WatchLeverages() {
-	if !IsWatchAccConfig {
+func (o *LiveOrderMgr) WatchLeverages() {
+	if !core.IsContract || o.isWatchAccConfig {
 		return
 	}
-	if !core.IsContract {
-		return
-	}
-	out, err := exg.Default.WatchAccountConfig(nil)
+	out, err := exg.Default.WatchAccountConfig(&map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+	})
 	if err != nil {
 		log.Error("WatchLeverages error", zap.Error(err))
 		return
 	}
-	IsWatchAccConfig = true
+	o.isWatchAccConfig = true
 	go func() {
 		defer func() {
-			IsWatchAccConfig = false
+			o.isWatchAccConfig = false
 		}()
 		for range out {
 			continue
@@ -1423,33 +1478,41 @@ CheckFatalStop
 */
 func MakeCheckFatalStop(maxIntv int) func() {
 	return func() {
-		if core.NoEnterUntil >= btime.TimeMS() {
-			return
+		for account := range config.Accounts {
+			checkAccFatalStop(account, maxIntv)
 		}
-		sess, conn, err := orm.Conn(nil)
-		if err != nil {
-			log.Error("get db sess fail", zap.Error(err))
-			return
-		}
-		defer conn.Release()
-		minTimeMS := btime.TimeMS() - int64(maxIntv)*60000
-		orders, err := sess.GetOrders(orm.GetOrdersArgs{
-			TaskID:     -1,
-			Status:     2,
-			CloseAfter: minTimeMS,
-		})
-		if err != nil {
-			log.Error("get cur his orders fail", zap.Error(err))
-			return
-		}
-		for backMins, rate := range config.FatalStop {
-			lossRate := calcFatalLoss(orders, backMins)
-			if lossRate >= rate {
-				lossPct := int(lossRate * 100)
-				core.NoEnterUntil = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
-				log.Error(fmt.Sprintf("%v分钟内损失%v, 禁止下单%v小时！", backMins, lossPct, config.FatalStopHours))
-				break
-			}
+	}
+}
+
+func checkAccFatalStop(account string, maxIntv int) {
+	if core.NoEnterUntil >= btime.TimeMS() {
+		return
+	}
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		log.Error("get db sess fail", zap.Error(err))
+		return
+	}
+	defer conn.Release()
+	minTimeMS := btime.TimeMS() - int64(maxIntv)*60000
+	taskId := orm.GetTaskID(account)
+	orders, err := sess.GetOrders(orm.GetOrdersArgs{
+		TaskID:     taskId,
+		Status:     2,
+		CloseAfter: minTimeMS,
+	})
+	if err != nil {
+		log.Error("get cur his orders fail", zap.Error(err))
+		return
+	}
+	wallets := GetWallets(account)
+	for backMins, rate := range config.FatalStop {
+		lossRate := calcFatalLoss(wallets, orders, backMins)
+		if lossRate >= rate {
+			lossPct := int(lossRate * 100)
+			core.NoEnterUntil = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
+			log.Error(fmt.Sprintf("%v分钟内损失%v, 禁止下单%v小时！", backMins, lossPct, config.FatalStopHours))
+			break
 		}
 	}
 }
@@ -1458,7 +1521,7 @@ func MakeCheckFatalStop(maxIntv int) func() {
 calcFatalLoss
 计算系统级别最近n分钟内，账户余额损失百分比
 */
-func calcFatalLoss(orders []*orm.InOutOrder, backMins int) float64 {
+func calcFatalLoss(wallets *BanWallets, orders []*orm.InOutOrder, backMins int) float64 {
 	minTimeMS := btime.TimeMS() - int64(backMins)*60000
 	minTimeMS = min(minTimeMS, core.StartAt)
 	sumProfit := float64(0)
@@ -1473,10 +1536,27 @@ func calcFatalLoss(orders []*orm.InOutOrder, backMins int) float64 {
 		return 0
 	}
 	lossVal := math.Abs(sumProfit)
-	totalLegal := Wallets.TotalLegal(nil, false)
+	totalLegal := wallets.TotalLegal(nil, false)
 	return lossVal / (lossVal + totalLegal)
 }
 
 func (o *LiveOrderMgr) CleanUp() *errs.Error {
 	return nil
+}
+
+func StartLiveOdMgr() {
+	if !core.ProdMode {
+		panic("StartLiveOdMgr for non-ProdRunMode is forbidden:" + core.RunMode)
+	}
+	for account := range config.Accounts {
+		odMgr := GetLiveOdMgr(account)
+		// 监听账户订单流
+		odMgr.WatchMyTrades()
+		// 跟踪用户下单
+		odMgr.TrialUnMatchesForever()
+		// 消费订单队列
+		odMgr.ConsumeOrderQueue()
+		// 监听杠杆倍数变化
+		odMgr.WatchLeverages()
+	}
 }

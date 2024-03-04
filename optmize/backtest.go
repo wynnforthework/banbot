@@ -33,14 +33,14 @@ func NewBackTest() *BackTest {
 		BTResult: NewBTResult(),
 	}
 	biz.InitFakeWallets()
-	p.TotalInvest = biz.Wallets.TotalLegal(nil, false)
+	wallets := biz.GetWallets("")
+	p.TotalInvest = wallets.TotalLegal(nil, false)
 	data.InitHistProvider(p.FeedKLine)
 	biz.InitLocalOrderMgr(p.orderCB)
 	return p
 }
 
 func (b *BackTest) Init() *errs.Error {
-	core.RunMode = core.RunModeBackTest
 	btime.CurTimeMS = config.TimeRange.StartMS
 	b.MinReal = math.MaxFloat64
 	err := orm.SyncKlineTFs()
@@ -51,7 +51,8 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), orm.TaskID)
+	taskId := orm.GetTaskID("")
+	b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), taskId)
 	err_ := os.MkdirAll(b.OutDir, 0755)
 	if err_ != nil {
 		return errs.New(core.ErrIOWriteFail, err_)
@@ -111,7 +112,7 @@ func (b *BackTest) Run() {
 		return
 	}
 	btCost := btime.UTCTime() - btStart
-	err = biz.OdMgr.CleanUp()
+	err = biz.GetOdMgr("").CleanUp()
 	if err != nil {
 		log.Error("backtest clean orders fail", zap.Error(err))
 		return
@@ -123,27 +124,34 @@ func (b *BackTest) Run() {
 func (b *BackTest) onLiquidation(symbol string) {
 	date := btime.ToDateStr(btime.TimeMS(), "")
 	if config.ChargeOnBomb {
-		oldVal := biz.Wallets.TotalLegal(nil, false)
+		wallets := biz.GetWallets("")
+		oldVal := wallets.TotalLegal(nil, false)
 		biz.InitFakeWallets(symbol)
-		newVal := biz.Wallets.TotalLegal(nil, false)
+		newVal := wallets.TotalLegal(nil, false)
 		b.TotalInvest += newVal - oldVal
 		log.Error(fmt.Sprintf("wallet %s BOMB at %s, reset wallet and continue..", symbol, date))
 	} else {
 		log.Error(fmt.Sprintf("wallet %s BOMB at %s, exit", symbol, date))
 		core.StopAll()
+		core.BotRunning = false
 	}
 }
 
 func (b *BackTest) orderCB(order *orm.InOutOrder, isEnter bool) {
 	if isEnter {
-		openNum := orm.OpenNum(orm.InOutStatusPartEnter)
+		openNum := orm.OpenNum("", orm.InOutStatusPartEnter)
 		if openNum > b.MaxOpenOrders {
 			b.MaxOpenOrders = openNum
 		}
-	} else if config.DrawBalanceOver > 0 {
-		quoteLegal := biz.Wallets.AvaLegal(config.StakeCurrency)
-		if quoteLegal > config.DrawBalanceOver {
-			biz.Wallets.WithdrawLegal(quoteLegal-config.DrawBalanceOver, config.StakeCurrency)
+	} else {
+		wallets := biz.GetWallets("")
+		// 更新单笔开单金额
+		wallets.TryUpdateStakePctAmt()
+		if config.DrawBalanceOver > 0 {
+			quoteLegal := wallets.AvaLegal(config.StakeCurrency)
+			if quoteLegal > config.DrawBalanceOver {
+				wallets.WithdrawLegal(quoteLegal-config.DrawBalanceOver, config.StakeCurrency)
+			}
 		}
 	}
 }
@@ -154,7 +162,8 @@ func (b *BackTest) logState(timeMS int64) {
 	}
 	b.EndMS = timeMS
 	b.logPlot(timeMS)
-	quoteLegal := biz.Wallets.TotalLegal(config.StakeCurrency, true)
+	wallets := biz.GetWallets("")
+	quoteLegal := wallets.TotalLegal(config.StakeCurrency, true)
 	b.MinReal = min(b.MinReal, quoteLegal)
 	if quoteLegal >= b.MaxReal {
 		b.MaxReal = quoteLegal
@@ -191,10 +200,11 @@ func (b *BackTest) logPlot(timeMS int64) {
 		b.Plots = plots
 		return
 	}
-	avaLegal := biz.Wallets.AvaLegal(nil)
-	totalLegal := biz.Wallets.TotalLegal(nil, true)
-	profitLegal := biz.Wallets.UnrealizedPOLLegal(nil)
-	drawLegal := biz.Wallets.GetWithdrawLegal(nil)
+	wallets := biz.GetWallets("")
+	avaLegal := wallets.AvaLegal(nil)
+	totalLegal := wallets.TotalLegal(nil, true)
+	profitLegal := wallets.UnrealizedPOLLegal(nil)
+	drawLegal := wallets.GetWithdrawLegal(nil)
 	curDate := btime.ToDateStr(timeMS, "")
 	b.Plots.Labels = append(b.Plots.Labels, curDate)
 	b.Plots.Real = append(b.Plots.Real, totalLegal)

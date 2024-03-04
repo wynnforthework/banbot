@@ -29,16 +29,8 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	if exgCfg == nil {
 		return nil, errs.NewMsg(core.ErrBadConfig, "exchange is required")
 	}
-	cfg, ok := exgCfg.Items[name]
-	if !ok {
-		return nil, errs.NewMsg(core.ErrBadConfig, "exchange config not found: %s", exgCfg.Name)
-	}
-	var accounts map[string]*config.CreditConfig
-	if core.EnvProd() {
-		accounts = cfg.CreditProds
-	} else {
-		accounts = cfg.CreditTests
-	}
+	var cfg = config.GetExgConfig()
+	var accounts = config.GetExgAccounts()
 	var options = map[string]interface{}{}
 	for key, val := range cfg.Options {
 		options[utils.SnakeToCamel(key)] = val
@@ -119,12 +111,8 @@ func PrecAmount(exchange banexg.BanExchange, symbol string, amount float64) (flo
 	return precNum(exchange, symbol, amount, "amount")
 }
 
-func GetLeverage(symbol string, notional float64) (int, int) {
-	leverage, maxVal := Default.GetLeverage(symbol, notional)
-	if leverage == 0 {
-		leverage = config.Leverage
-	}
-	return leverage, maxVal
+func GetLeverage(symbol string, notional float64, account string) (int, int) {
+	return Default.GetLeverage(symbol, notional, account)
 }
 
 func GetOdBook(pair string) (*banexg.OrderBook, *errs.Error) {

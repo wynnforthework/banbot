@@ -201,6 +201,9 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 	var pBar *progressbar.ProgressBar
 	log.Info("run data loop for backtest..")
 	for {
+		if !core.BotRunning {
+			break
+		}
 		holds := utils.ValsOfMap(p.holders)
 		slices.SortFunc(holds, func(a, b IHistKlineFeeder) int {
 			va, vb := a.getNextMS(), b.getNextMS()

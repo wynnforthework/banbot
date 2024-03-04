@@ -77,7 +77,7 @@ delete from khole where sid=%v;`, sid, sid, sid, sid, sid, sid, sid, sid))
 		panic(err)
 	}
 	conn.Release()
-	core.RunMode = core.RunModeBackTest
+	core.SetRunMode(core.RunModeBackTest, true)
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	for i, bar := range arr {
 		btime.CurTimeMS = bar.Time + tfMSecs

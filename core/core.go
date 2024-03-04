@@ -16,23 +16,20 @@ func IsLiveMode(mode string) bool {
 	return mode == RunModeProd || mode == RunModeDryRun
 }
 
-func LiveMode() bool {
-	return IsLiveMode(RunMode)
-}
-
-/*
-ProdMode
-提交到交易所模式
-*/
-func ProdMode() bool {
-	return RunMode == RunModeProd
-}
-
 /*
 EnvProd 是否使用正式网络
 */
 func EnvProd() bool {
 	return RunEnv == RunEnvProd
+}
+
+func SetRunMode(mode string, force bool) {
+	if !force && RunMode != "" {
+		return
+	}
+	RunMode = mode
+	ProdMode = RunMode == RunModeProd
+	LiveMode = IsLiveMode(RunMode)
 }
 
 /*

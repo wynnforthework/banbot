@@ -25,11 +25,13 @@ type WebHook struct {
 	doSendMsgs func([]map[string]string) int
 	Config     map[string]interface{}
 	MsgTypes   map[string]bool
+	Accounts   map[string]bool
 	Queue      chan map[string]string
 }
 
 type webHookItem struct {
 	MsgTypesRaw []string `mapstructure:"msg_types"`
+	AccountsRaw []string `mapstructure:"accounts"`
 	Keywords    []string `mapstructure:"keywords"`
 	RetryNum    int      `mapstructure:"retry_num"`   // 重试次数
 	RetryDelay  int      `mapstructure:"retry_delay"` // 重试间隔
@@ -55,7 +57,7 @@ type IWebHook interface {
 	/*
 		发送消息，payload是msg渲染后的待发送数据
 	*/
-	SendMsg(msgType string, payload map[string]string) bool
+	SendMsg(msgType string, account string, payload map[string]string) bool
 	ConsumeForever()
 }
 
@@ -70,11 +72,17 @@ func NewWebHook(name string, item map[string]interface{}) *WebHook {
 		name:        name,
 		Config:      item,
 		MsgTypes:    make(map[string]bool),
+		Accounts:    make(map[string]bool),
 		Queue:       make(chan map[string]string),
 	}
 	if len(cfg.MsgTypesRaw) > 0 {
 		for _, val := range cfg.MsgTypesRaw {
 			res.MsgTypes[val] = true
+		}
+	}
+	if len(cfg.AccountsRaw) > 0 {
+		for _, val := range cfg.AccountsRaw {
+			res.Accounts[val] = true
 		}
 	}
 	return res
@@ -92,12 +100,17 @@ func (h *WebHook) SetDisable(val bool) {
 	h.Disable = val
 }
 
-func (h *WebHook) SendMsg(msgType string, payload map[string]string) bool {
+func (h *WebHook) SendMsg(msgType string, account string, payload map[string]string) bool {
 	if h.Disable {
 		return false
 	}
 	if _, ok := h.MsgTypes[msgType]; !ok {
 		return false
+	}
+	if account != "" {
+		if _, ok := h.Accounts[account]; !ok {
+			return false
+		}
 	}
 	if content, ok := payload["content"]; ok && len(h.Keywords) > 0 {
 		match := false

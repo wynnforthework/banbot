@@ -3,6 +3,7 @@ package entry
 import (
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/live"
 	"github.com/banbox/banbot/optmize"
@@ -10,10 +11,12 @@ import (
 )
 
 func RunBackTest() *errs.Error {
+	core.SetRunMode(core.RunModeBackTest, true)
 	err := biz.SetupComs()
 	if err != nil {
 		return err
 	}
+	core.BotRunning = true
 	b := optmize.NewBackTest()
 	b.Run()
 	return nil
@@ -24,6 +27,7 @@ func RunTrade() *errs.Error {
 	if err != nil {
 		return err
 	}
+	core.BotRunning = true
 	t := live.NewCryptoTrader()
 	return t.Run()
 }

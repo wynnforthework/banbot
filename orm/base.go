@@ -11,9 +11,10 @@ import (
 )
 
 var (
-	pool   *pgxpool.Pool
-	TaskID int64
-	Task   *BotTask
+	pool         *pgxpool.Pool
+	AccTaskIDs   = make(map[string]int64)
+	AccTasks     = make(map[string]*BotTask)
+	taskIdAccMap = make(map[int64]string)
 )
 
 func Setup() *errs.Error {
@@ -111,18 +112,71 @@ func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {
 	return nil
 }
 
-func AddTriggerOd(od *InOutOrder) {
-	ods, _ := TriggerODs[od.Symbol]
-	TriggerODs[od.Symbol] = append(ods, od)
+func GetTaskID(account string) int64 {
+	if !core.ProdMode {
+		account = config.DefAcc
+	}
+	if id, ok := AccTaskIDs[account]; ok {
+		return id
+	}
+	return 0
+}
+
+func GetTask(account string) *BotTask {
+	if !core.ProdMode {
+		account = config.DefAcc
+	}
+	if task, ok := AccTasks[account]; ok {
+		return task
+	}
+	return nil
+}
+
+func GetTaskAcc(id int64) string {
+	if acc, ok := taskIdAccMap[id]; ok {
+		return acc
+	}
+	return ""
+}
+
+func GetOpenODs(account string) map[int64]*InOutOrder {
+	if !core.ProdMode {
+		account = config.DefAcc
+	}
+	val, ok := AccOpenODs[account]
+	if !ok {
+		val = make(map[int64]*InOutOrder)
+		AccOpenODs[account] = val
+	}
+	return val
+}
+
+func GetTriggerODs(account string) map[string][]*InOutOrder {
+	if !core.ProdMode {
+		account = config.DefAcc
+	}
+	val, ok := AccTriggerODs[account]
+	if !ok {
+		val = make(map[string][]*InOutOrder)
+		AccTriggerODs[account] = val
+	}
+	return val
+}
+
+func AddTriggerOd(account string, od *InOutOrder) {
+	triggerOds := GetTriggerODs(account)
+	ods, _ := triggerOds[od.Symbol]
+	triggerOds[od.Symbol] = append(ods, od)
 }
 
 /*
 OpenNum
 返回符合指定状态的尚未平仓订单的数量
 */
-func OpenNum(status int16) int {
+func OpenNum(account string, status int16) int {
 	openNum := 0
-	for _, od := range OpenODs {
+	openOds := GetOpenODs(account)
+	for _, od := range openOds {
 		if od.Status >= status {
 			openNum += 1
 		}

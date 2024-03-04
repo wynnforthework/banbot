@@ -16,8 +16,7 @@ import (
 )
 
 var (
-	Wallets        *BanWallets
-	IsWatchBalance bool
+	AccWallets = make(map[string]*BanWallets)
 )
 
 type ItemWallet struct {
@@ -31,7 +30,9 @@ type ItemWallet struct {
 }
 
 type BanWallets struct {
-	Items map[string]*ItemWallet
+	Items   map[string]*ItemWallet
+	Account string
+	IsWatch bool
 }
 
 /*
@@ -39,11 +40,6 @@ InitFakeWallets
 从配置文件初始化一个钱包对象
 */
 func InitFakeWallets(symbols ...string) {
-	if Wallets == nil {
-		Wallets = &BanWallets{
-			Items: map[string]*ItemWallet{},
-		}
-	}
 	updates := make(map[string]float64)
 	if len(symbols) == 0 {
 		updates = config.WalletAmounts
@@ -55,13 +51,24 @@ func InitFakeWallets(symbols ...string) {
 			}
 		}
 	}
-	Wallets.SetWallets(config.WalletAmounts)
+	wallets := GetWallets("")
+	wallets.SetWallets(updates)
+	wallets.TryUpdateStakePctAmt()
 }
 
-func InitLiveWallets() {
-	Wallets = &BanWallets{
-		Items: map[string]*ItemWallet{},
+func GetWallets(account string) *BanWallets {
+	if !core.ProdMode {
+		account = config.DefAcc
 	}
+	val, ok := AccWallets[account]
+	if !ok {
+		val = &BanWallets{
+			Items:   map[string]*ItemWallet{},
+			Account: account,
+		}
+		AccWallets[account] = val
+	}
+	return val
 }
 
 func (iw *ItemWallet) Total(withUpol bool) float64 {
@@ -414,7 +421,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 }
 
 func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
-	if core.ProdMode() {
+	if core.ProdMode {
 		return
 	}
 	exs := orm.GetSymbolByID(od.Sid)
@@ -442,7 +449,7 @@ func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	}
 }
 func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
-	if core.ProdMode() {
+	if core.ProdMode {
 		return
 	}
 	exs := orm.GetSymbolByID(od.Sid)
@@ -478,7 +485,7 @@ func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
 }
 
 func (w *BanWallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) {
-	if core.ProdMode() {
+	if core.ProdMode {
 		return
 	}
 	exs := orm.GetSymbolByID(od.Sid)
@@ -719,7 +726,29 @@ func (w *BanWallets) FiatValue(withUpol bool, symbols ...string) float64 {
 	return totalVal
 }
 
-func updateWalletByBalances(item *banexg.Balances) {
+/*
+TryUpdateStakePctAmt
+更新单笔开单金额
+回测模式应在订单平仓时调用此方法
+*/
+func (w *BanWallets) TryUpdateStakePctAmt() {
+	if config.StakePct > 0 {
+		acc, ok := config.Accounts[w.Account]
+		if ok {
+			legalValue := w.TotalLegal(nil, true)
+			// 四舍五入到十位
+			pctAmt := math.Round(legalValue*config.StakePct/1000) * 10
+			if acc.StakePctAmt == 0 {
+				acc.StakePctAmt = pctAmt
+			} else if math.Abs(pctAmt/acc.StakePctAmt-1) >= 0.2 {
+				// 总资产变化超过20%才更新
+				acc.StakePctAmt = pctAmt
+			}
+		}
+	}
+}
+
+func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 	if core.IsPriceEmpty() {
 		// 所有价格都未加载时，如果请求价格，则一次性刷新
 		res, err := exg.Default.FetchTickerPrice("", nil)
@@ -734,7 +763,7 @@ func updateWalletByBalances(item *banexg.Balances) {
 		if it.Total == 0 {
 			continue
 		}
-		record, ok := Wallets.Items[coin]
+		record, ok := wallets.Items[coin]
 		if ok {
 			record.Available = it.Free
 			record.UnrealizedPOL = it.UPol
@@ -746,7 +775,7 @@ func updateWalletByBalances(item *banexg.Balances) {
 				Pendings:      make(map[string]float64),
 				Frozens:       make(map[string]float64),
 			}
-			Wallets.Items[coin] = record
+			wallets.Items[coin] = record
 		}
 		if core.IsContract {
 			record.Pendings["*"] = it.Used
@@ -760,6 +789,8 @@ func updateWalletByBalances(item *banexg.Balances) {
 			Total: record.Total(false) * core.GetPrice(coin),
 		})
 	}
+	// 更新单笔开单金额
+	wallets.TryUpdateStakePctAmt()
 	slices.SortFunc(items, func(a, b *banexg.Asset) int {
 		return -int((a.Total - b.Total) * 100)
 	})
@@ -773,21 +804,26 @@ func updateWalletByBalances(item *banexg.Balances) {
 }
 
 func WatchLiveBalances() {
-	if IsWatchBalance {
-		return
-	}
-	out, err := exg.Default.WatchBalance(nil)
-	if err != nil {
-		log.Error("watch balance err", zap.Error(err))
-		return
-	}
-	IsWatchBalance = true
-	go func() {
-		defer func() {
-			IsWatchBalance = false
-		}()
-		for item := range out {
-			updateWalletByBalances(&item)
+	for account := range config.Accounts {
+		wallets := GetWallets(account)
+		if wallets.IsWatch {
+			continue
 		}
-	}()
+		out, err := exg.Default.WatchBalance(&map[string]interface{}{
+			banexg.ParamAccount: account,
+		})
+		if err != nil {
+			log.Error("watch balance err", zap.Error(err))
+			return
+		}
+		wallets.IsWatch = true
+		go func() {
+			defer func() {
+				wallets.IsWatch = false
+			}()
+			for item := range out {
+				updateWalletByBalances(wallets, &item)
+			}
+		}()
+	}
 }

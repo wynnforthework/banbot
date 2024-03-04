@@ -337,15 +337,16 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 }
 
 func (i *InOutOrder) Save(sess *Queries) *errs.Error {
-	if core.LiveMode() {
+	if core.LiveMode {
 		err := i.saveToDb(sess)
 		if err != nil {
 			return err
 		}
+		openOds := GetOpenODs(GetTaskAcc(i.TaskID))
 		if i.Status < InOutStatusFullExit {
-			OpenODs[i.ID] = i
+			openOds[i.ID] = i
 		} else {
-			delete(OpenODs, i.ID)
+			delete(openOds, i.ID)
 		}
 	} else {
 		i.saveToMem()
@@ -358,11 +359,12 @@ func (i *InOutOrder) saveToMem() {
 		i.ID = FakeOdId
 		FakeOdId += 1
 	}
+	openOds := GetOpenODs(GetTaskAcc(i.TaskID))
 	if i.Status < InOutStatusFullExit {
-		OpenODs[i.ID] = i
+		openOds[i.ID] = i
 	} else {
-		if _, ok := OpenODs[i.ID]; ok {
-			delete(OpenODs, i.ID)
+		if _, ok := openOds[i.ID]; ok {
+			delete(openOds, i.ID)
 			HistODs = append(HistODs, i)
 		}
 	}
@@ -602,12 +604,14 @@ func (q *Queries) DumpOrdersToDb() *errs.Error {
 	if config.NoDB {
 		return nil
 	}
-	allOrders := append(HistODs, utils.ValsOfMap(OpenODs)...)
-	for _, od := range allOrders {
-		od.ID = 0
-		err := od.saveToDb(q)
-		if err != nil {
-			return err
+	for _, orders := range AccOpenODs {
+		allOrders := append(HistODs, utils.ValsOfMap(orders)...)
+		for _, od := range allOrders {
+			od.ID = 0
+			err := od.saveToDb(q)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -691,7 +695,7 @@ type GetOrdersArgs struct {
 	Strategy    string
 	Pairs       []string
 	Status      int   // 0表示所有，1表示未平仓，2表示历史订单
-	TaskID      int64 // -1表示当前任务，0表示所有，>0表示指定任务
+	TaskID      int64 // 0表示所有，>0表示指定任务
 	CloseAfter  int64
 	CloseBefore int64
 	Limit       int
@@ -705,9 +709,6 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	b.WriteString(iOrderFields)
 	b.WriteString(" from iorder where 1=1 ")
 	sqlParams := make([]interface{}, 0, 2)
-	if args.TaskID < 0 {
-		args.TaskID = TaskID
-	}
 	if args.TaskID > 0 {
 		b.WriteString(fmt.Sprintf("and task_id=$%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, args.TaskID)

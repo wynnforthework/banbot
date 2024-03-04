@@ -124,7 +124,7 @@ func (f *Feeder) onStateOhlcvs(state PairTFCache, bars []*banexg.Kline, lastOk, 
 }
 
 func (f *Feeder) fireCallBacks(pair, timeFrame string, tfMSecs int64, bars []*banexg.Kline) {
-	isLive := core.LiveMode()
+	isLive := core.LiveMode
 	for _, bar := range bars {
 		if !isLive {
 			btime.CurTimeMS = bar.Time + tfMSecs

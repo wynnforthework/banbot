@@ -37,22 +37,20 @@ core
     NoEnterUntil  // 在给定截止时间戳之前禁止开单
     
 biz
-    OdMgr // 订单簿对象，必定不为空
-    OdMgrLive // 实盘订单簿对象，实盘时不为空
-    Wallets // 钱包
-    IsWatchBalance
-    IsWatchAccConfig
+    AccOdMgrs // 订单簿对象，必定不为空
+    AccLiveOdMgrs // 实盘订单簿对象，实盘时不为空
+    AccWallets // 钱包
     
 data
     Main // 当前数据源
     Spider // 爬虫
 
 orm
-    OpenODs // 打开的订单：尚未提交、已提交未入场、部分入场，全部入场，部分出场
     HistODs // 已平仓的订单：全部出场，仅回测使用
-    TriggerODs // 尚未提交的限价入场单，等待轮询提交到交易所，仅实盘使用
-    TaskID // 当前任务ID
-    Task // 当前任务
+    AccOpenODs // 打开的订单：尚未提交、已提交未入场、部分入场，全部入场，部分出场
+    AccTriggerODs // 尚未提交的限价入场单，等待轮询提交到交易所，仅实盘使用
+    AccTaskIDs // 当前任务ID
+    AccTasks // 当前任务
 
 exg
     Default  // 交易所对象
@@ -61,7 +59,8 @@ strategy
     StagyMap // 策略注册map
     Versions // 策略版本
     Envs // 涉及的所有K线环境：Pair+TimeFrame
-    Jobs // 涉及的所有标的
-    InfoJobs // 涉及的所有辅助信息标的
     PairTFStags // 标的+TF+策略
+    AccJobs // 涉及的所有标的
+    AccInfoJobs // 涉及的所有辅助信息标的
 ```
+注意：所有Acc开头的变量都是支持多账户的map

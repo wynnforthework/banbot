@@ -188,9 +188,33 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 			}
 		}
 	}
-	if core.LiveMode() && skipSL+skipTP > 0 {
+	if core.LiveMode && skipSL+skipTP > 0 {
 		log.Warn(fmt.Sprintf("%s/%s triggers on exchange is disabled, stoploss: %v, takeprofit: %v",
 			s.Stagy.Name, s.Symbol.Symbol, skipSL, skipTP))
 	}
 	return res, nil
+}
+
+func GetJobs(account string) map[string][]*StagyJob {
+	if !core.ProdMode {
+		account = config.DefAcc
+	}
+	jobs, ok := AccJobs[account]
+	if !ok {
+		jobs = map[string][]*StagyJob{}
+		AccJobs[account] = jobs
+	}
+	return jobs
+}
+
+func GetInfoJobs(account string) map[string][]*StagyJob {
+	if !core.ProdMode {
+		account = config.DefAcc
+	}
+	jobs, ok := AccInfoJobs[account]
+	if !ok {
+		jobs = map[string][]*StagyJob{}
+		AccInfoJobs[account] = jobs
+	}
+	return jobs
 }

@@ -59,7 +59,7 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 	maxEndMs := endMs
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
 	unFinishMS := int64(0)
-	if core.LiveMode() && withUnFinish {
+	if core.LiveMode && withUnFinish {
 		curMs := btime.TimeMS()
 		unFinishMS = utils.AlignTfMSecs(curMs, tfMSecs)
 		if finishEndMS > unFinishMS {
@@ -105,7 +105,7 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 	tfMSecs := int64(tfSecs * 1000)
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, false)
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
-	if core.LiveMode() {
+	if core.LiveMode {
 		curMs := btime.TimeMS()
 		unFinishMS := utils.AlignTfMSecs(curMs, tfMSecs)
 		if finishEndMS > unFinishMS {

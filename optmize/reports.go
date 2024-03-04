@@ -126,9 +126,10 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	table.Append([]string{"Max Open Orders", strconv.Itoa(r.MaxOpenOrders)})
 	table.Append([]string{"Total Orders/BarNum", fmt.Sprintf("%v/%v", len(orders), r.BarNum)})
 	table.Append([]string{"Total Investment", strconv.FormatFloat(r.TotalInvest, 'f', 0, 64)})
-	finBalance := biz.Wallets.AvaLegal(nil)
+	wallets := biz.GetWallets("")
+	finBalance := wallets.AvaLegal(nil)
 	table.Append([]string{"Final Balance", strconv.FormatFloat(finBalance, 'f', 0, 64)})
-	finWithDraw := biz.Wallets.GetWithdrawLegal(nil)
+	finWithDraw := wallets.GetWithdrawLegal(nil)
 	table.Append([]string{"Final WithDraw", strconv.FormatFloat(finWithDraw, 'f', 0, 64)})
 	sumProfit := float64(0)
 	sumFee := float64(0)
@@ -476,7 +477,8 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 	slices.SortFunc(orders, func(a, b *orm.InOutOrder) int {
 		return int((a.EnterAt - b.EnterAt) / 1000)
 	})
-	file, err_ := os.Create(fmt.Sprintf("%s/orders_%v.csv", r.OutDir, orm.TaskID))
+	taskId := orm.GetTaskID("")
+	file, err_ := os.Create(fmt.Sprintf("%s/orders_%v.csv", r.OutDir, taskId))
 	if err_ != nil {
 		log.Error("create orders.csv fail", zap.Error(err_))
 		return
@@ -505,7 +507,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 		row[5] = btime.ToDateStr(od.EnterAt, "")
 		row[6] = od.EnterTag
 		if od.Enter != nil {
-			row[7], row[8], row[8], row[10] = calcExOrder(od.Enter)
+			row[7], row[8], row[9], row[10] = calcExOrder(od.Enter)
 		}
 		row[11] = btime.ToDateStr(od.ExitAt, "")
 		row[12] = od.ExitTag
@@ -552,7 +554,8 @@ func (r *BTResult) dumpConfig() {
 		log.Error("marshal config as yaml fail", zap.Error(err_))
 		return
 	}
-	outName := fmt.Sprintf("%s/config_%v.yml", r.OutDir, orm.TaskID)
+	taskId := orm.GetTaskID("")
+	outName := fmt.Sprintf("%s/config_%v.yml", r.OutDir, taskId)
 	err_ = os.WriteFile(outName, data, 0644)
 	if err_ != nil {
 		log.Error("save yaml to file fail", zap.Error(err_))
@@ -565,6 +568,7 @@ func (r *BTResult) dumpStrategy() {
 	for _, item := range core.StgPairTfs {
 		stagyNames[item.Stagy] = true
 	}
+	taskId := orm.GetTaskID("")
 	for name := range stagyNames {
 		srcPath := fmt.Sprintf("%s/%s/main.go", stagyDir, name)
 		fileData, err_ := os.ReadFile(srcPath)
@@ -572,7 +576,7 @@ func (r *BTResult) dumpStrategy() {
 			log.Warn("read fail, skip backup", zap.String("path", srcPath), zap.Error(err_))
 			continue
 		}
-		tgtPath := fmt.Sprintf("%s/%s_%v.go", r.OutDir, name, orm.TaskID)
+		tgtPath := fmt.Sprintf("%s/%s_%v.go", r.OutDir, name, taskId)
 		err_ = os.WriteFile(tgtPath, fileData, 0644)
 		if err_ != nil {
 			log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))
@@ -635,7 +639,8 @@ func (r *BTResult) dumpGraph() {
 		}
 		content = strings.Replace(content, k, b.String(), 1)
 	}
-	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, orm.TaskID)
+	taskId := orm.GetTaskID("")
+	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, taskId)
 	err_ = os.WriteFile(outPath, []byte(content), 0644)
 	if err_ != nil {
 		log.Error("save assets.html fail", zap.Error(err_))

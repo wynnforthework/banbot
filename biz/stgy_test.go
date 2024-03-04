@@ -58,6 +58,7 @@ func TestStagyRun(t *testing.T) {
 	if stagy == nil {
 		panic("load strategy fail")
 	}
+	accJobs := strategy.GetJobs("")
 	for _, symbol := range pairs {
 		exs, err := orm.GetExSymbolCur(symbol)
 		if err != nil {
@@ -87,10 +88,10 @@ func TestStagyRun(t *testing.T) {
 			ExgStopLoss:   true,
 			ExgTakeProfit: true,
 		}
-		if jobs, ok := strategy.Jobs[envKey]; ok {
-			strategy.Jobs[envKey] = append(jobs, job)
+		if jobs, ok := accJobs[envKey]; ok {
+			accJobs[envKey] = append(jobs, job)
 		} else {
-			strategy.Jobs[envKey] = []*strategy.StagyJob{job}
+			accJobs[envKey] = []*strategy.StagyJob{job}
 		}
 	}
 	curTime := utils.AlignTfMSecs(btime.TimeMS(), tfMSecs) - tfMSecs*int64(barNum)
@@ -112,7 +113,7 @@ func TestStagyRun(t *testing.T) {
 			env, _ := strategy.Envs[envKey]
 			env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
 			core.SetBarPrice(pair, bar.Close)
-			jobs, _ := strategy.Jobs[envKey]
+			jobs, _ := accJobs[envKey]
 			for _, job := range jobs {
 				job.InitBar(nil)
 				job.Stagy.OnBar(job)

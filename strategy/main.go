@@ -99,39 +99,44 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 				}
 				Envs[envKey] = env
 			}
-			// 初始化交易任务
-			job := &StagyJob{
-				Stagy:         stagy,
-				Env:           env,
-				Symbol:        exs,
-				TimeFrame:     tf,
-				TPMaxs:        make(map[int64]float64),
-				OpenLong:      true,
-				OpenShort:     true,
-				CloseLong:     true,
-				CloseShort:    true,
-				ExgStopLoss:   true,
-				ExgTakeProfit: true,
-			}
-			if jobs, ok := Jobs[envKey]; ok {
-				Jobs[envKey] = append(jobs, job)
-			} else {
-				Jobs[envKey] = []*StagyJob{job}
-			}
-			if stagy.OnStartUp != nil {
-				stagy.OnStartUp(job)
-			}
 			// 记录需要预热的数据；记录订阅信息
 			logWarm(exs.Symbol, tf, stagy.WarmupNum)
-			if stagy.OnPairInfos != nil {
-				for _, s := range stagy.OnPairInfos(job) {
-					logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
-					jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
-					items, ok := InfoJobs[jobKey]
-					if !ok {
-						items = make([]*StagyJob, 0)
+			for account := range config.Accounts {
+				jobs := GetJobs(account)
+				infoJobs := GetInfoJobs(account)
+				// 初始化交易任务
+				job := &StagyJob{
+					Stagy:         stagy,
+					Env:           env,
+					Symbol:        exs,
+					TimeFrame:     tf,
+					Account:       account,
+					TPMaxs:        make(map[int64]float64),
+					OpenLong:      true,
+					OpenShort:     true,
+					CloseLong:     true,
+					CloseShort:    true,
+					ExgStopLoss:   true,
+					ExgTakeProfit: true,
+				}
+				if envJobs, ok := jobs[envKey]; ok {
+					jobs[envKey] = append(envJobs, job)
+				} else {
+					jobs[envKey] = []*StagyJob{job}
+				}
+				if stagy.OnStartUp != nil {
+					stagy.OnStartUp(job)
+				}
+				if stagy.OnPairInfos != nil {
+					for _, s := range stagy.OnPairInfos(job) {
+						logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
+						jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
+						items, ok := infoJobs[jobKey]
+						if !ok {
+							items = make([]*StagyJob, 0)
+						}
+						infoJobs[jobKey] = append(items, job)
 					}
-					InfoJobs[jobKey] = append(items, job)
 				}
 			}
 			items, ok := PairTFStags[envKey]
@@ -154,21 +159,25 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 
 func initStagyJobs() {
 	// 更新job的EnterNum
-	var enterNums = make(map[string]int)
-	for _, od := range orm.OpenODs {
-		key := fmt.Sprintf("%s_%s_%s", od.Symbol, od.Timeframe, od.Strategy)
-		num, ok := enterNums[key]
-		if ok {
-			enterNums[key] = num + 1
-		} else {
-			enterNums[key] = 1
+	for account := range config.Accounts {
+		openOds := orm.GetOpenODs(account)
+		var enterNums = make(map[string]int)
+		for _, od := range openOds {
+			key := fmt.Sprintf("%s_%s_%s", od.Symbol, od.Timeframe, od.Strategy)
+			num, ok := enterNums[key]
+			if ok {
+				enterNums[key] = num + 1
+			} else {
+				enterNums[key] = 1
+			}
 		}
-	}
-	for _, jobs := range Jobs {
-		for _, job := range jobs {
-			key := fmt.Sprintf("%s_%s_%s", job.Symbol.Symbol, job.TimeFrame, job.Stagy.Name)
-			num, _ := enterNums[key]
-			job.EnterNum = num
+		accJobs := GetJobs(account)
+		for _, jobs := range accJobs {
+			for _, job := range jobs {
+				key := fmt.Sprintf("%s_%s_%s", job.Symbol.Symbol, job.TimeFrame, job.Stagy.Name)
+				num, _ := enterNums[key]
+				job.EnterNum = num
+			}
 		}
 	}
 }

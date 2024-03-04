@@ -3,6 +3,7 @@ package biz
 import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
@@ -23,30 +24,26 @@ func (t *Trader) Init() *errs.Error {
 	return SetupComs()
 }
 
-func (t *Trader) OnEnvJobs(bar *banexg.PairTFKline) (*ta.BarEnv, []*strategy.StagyJob, []*strategy.StagyJob, *errs.Error) {
+func (t *Trader) OnEnvJobs(bar *banexg.PairTFKline) (*ta.BarEnv, *errs.Error) {
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
 	env, ok := strategy.Envs[envKey]
 	if !ok {
-		return nil, nil, nil, errs.NewMsg(core.ErrBadConfig, "env for %s/%s not found", bar.Symbol, bar.TimeFrame)
+		return nil, errs.NewMsg(core.ErrBadConfig, "env for %s/%s not found", bar.Symbol, bar.TimeFrame)
 	}
-	if core.LiveMode() && env.TimeStop > bar.Time {
+	if core.LiveMode && env.TimeStop > bar.Time {
 		// 此bar已过期，忽略，启动时爬虫可能会推已处理的过期bar
-		return nil, nil, nil, nil
+		return nil, nil
 	}
 	// 更新BarEnv状态
 	env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
-	// 获取交易任务
-	jobs, ok := strategy.Jobs[envKey]
-	// 辅助订阅的任务
-	infoJobs, ok := strategy.InfoJobs[envKey]
-	return env, jobs, infoJobs, nil
+	return env, nil
 }
 
 func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	if _, ok := core.ForbidPairs[bar.Symbol]; ok {
 		return nil
 	}
-	isLive := core.LiveMode()
+	isLive := core.LiveMode
 	tfMSecs := int64(utils.TFToSecs(bar.TimeFrame) * 1000)
 	core.SetBarPrice(bar.Symbol, bar.Close)
 	// 超过1分钟且周期的一半，认为bar延迟，不可下单
@@ -56,18 +53,43 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 		log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delayMs/1000))
 	}
 	// 更新指标环境
-	env, jobs, infoJobs, err := t.OnEnvJobs(bar)
+	env, err := t.OnEnvJobs(bar)
 	if err != nil {
 		log.Error(fmt.Sprintf("%s/%s OnEnvJobs fail", bar.Symbol, bar.TimeFrame), zap.Error(err))
 		return err
-	} else if env == nil || len(jobs) == 0 {
+	} else if env == nil {
 		return nil
 	}
+	for account := range config.Accounts {
+		curErr := t.onAccountKline(account, env, bar, barExpired)
+		if curErr != nil {
+			if err != nil {
+				log.Error("onAccountKline fail", zap.String("account", account), zap.Error(curErr))
+			} else {
+				err = curErr
+			}
+		}
+	}
+	return err
+}
+
+func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.PairTFKline, barExpired bool) *errs.Error {
+	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
+	// 获取交易任务
+	jobs, _ := strategy.GetJobs(account)[envKey]
+	// 辅助订阅的任务
+	infoJobs, _ := strategy.GetInfoJobs(account)[envKey]
+	if len(jobs) == 0 && len(infoJobs) == 0 {
+		return nil
+	}
+	openOds := orm.GetOpenODs(account)
 	// 更新非生产模式的订单
-	allOrders := utils.ValsOfMap(orm.OpenODs)
+	allOrders := utils.ValsOfMap(openOds)
+	odMgr := GetOdMgr(account)
+	var err *errs.Error
 	if !core.IsWarmUp {
 		// 这里可能修改订单状态
-		err = OdMgr.UpdateByBar(allOrders, bar)
+		err = odMgr.UpdateByBar(allOrders, bar)
 		if err != nil {
 			log.Error("update orders by bar fail", zap.Error(err))
 			return err
@@ -106,6 +128,7 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	if !core.IsWarmUp && len(enters)+len(exits)+len(edits) > 0 {
 		var sess *orm.Queries
 		var conn *pgxpool.Conn
+		isLive := core.LiveMode
 		if isLive {
 			// 非实时模式，订单临时保存到内存，无需数据库
 			sess, conn, err = orm.Conn(nil)
@@ -116,7 +139,7 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 			defer conn.Release()
 		}
 		var ents []*orm.InOutOrder
-		ents, _, err = OdMgr.ProcessOrders(sess, env, enters, exits, edits)
+		ents, _, err = odMgr.ProcessOrders(sess, env, enters, exits, edits)
 		if err != nil {
 			log.Error("process orders fail", zap.Error(err))
 			return err

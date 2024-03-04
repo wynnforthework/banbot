@@ -15,11 +15,30 @@ import (
 ******************************  TradeStagy的成员方法  ***********************************
  */
 
-func (s *TradeStagy) GetStakeAmount() float64 {
-	if s.StakeAmount == 0 {
-		return config.StakeAmount
+func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
+	var amount float64
+	acc, ok := config.Accounts[j.Account]
+	// 优先使用百分比开单
+	if ok && acc.StakePctAmt > 0 {
+		amount = acc.StakePctAmt
+	} else {
+		amount = config.StakeAmount
 	}
-	return s.StakeAmount
+	// 乘以策略倍率
+	if s.StakeRate > 0 {
+		amount *= s.StakeRate
+	}
+	// 乘以账户倍率
+	if ok && acc.StakeRate > 0 {
+		amount *= acc.StakeRate
+	}
+	// 检查是否超出最大金额
+	if ok && acc.MaxStakeAmt > 0 && acc.MaxStakeAmt < amount {
+		amount = acc.MaxStakeAmt
+	} else if config.MaxStakeAmt > 0 && config.MaxStakeAmt < amount {
+		amount = config.MaxStakeAmt
+	}
+	return amount
 }
 
 /*
@@ -59,7 +78,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.StgyName == "" {
 		req.StgyName = s.Stagy.Name
 	}
-	isLiveMode := core.LiveMode()
+	isLiveMode := core.LiveMode
 	symbol := s.Symbol.Symbol
 	var dirType = core.OdDirtLong
 	if req.Short {
@@ -79,7 +98,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		if req.CostRate == 0 {
 			req.CostRate = 1
 		}
-		req.LegalCost = s.Stagy.GetStakeAmount() * req.CostRate
+		req.LegalCost = s.Stagy.GetStakeAmount(s) * req.CostRate
 	}
 	// 检查价格是否有效
 	curPrice := core.GetPrice(symbol)
@@ -316,5 +335,5 @@ func (s *StagyJob) Position(side string, enterTag string) float64 {
 		}
 		totalCost += od.EnterCost()
 	}
-	return totalCost / s.Stagy.GetStakeAmount()
+	return totalCost / s.Stagy.GetStakeAmount(s)
 }

@@ -1,8 +1,10 @@
 package config
 
 var (
-	Data Config
-	Args *CmdArgs
+	Data     Config
+	Args     *CmdArgs
+	Accounts map[string]*AccountConfig // 交易所账户
+	DefAcc   = "default"               // 非实盘交易时，账户默认的key（回测、模拟交易）
 
 	Name            string
 	Loaded          bool
@@ -20,7 +22,9 @@ var (
 	ChargeOnBomb    bool
 	AutoEditLimit   bool
 	TakeOverStgy    string
-	StakeAmount     float64
+	StakeAmount     float64 // 单笔开单金额，优先级低于StakePct
+	StakePct        float64 // 单笔开单金额百分比
+	MaxStakeAmt     float64 // 单笔最大开单金额
 	MinOpenRate     float64 // 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
 	MaxOpenOrders   int
 	WalletAmounts   map[string]float64
@@ -67,6 +71,8 @@ type Config struct {
 	AutoEditLimit   bool                              `yaml:"auto_edit_limit" mapstructure:"auto_edit_limit"`
 	TakeOverStgy    string                            `yaml:"take_over_stgy" mapstructure:"take_over_stgy"`
 	StakeAmount     float64                           `yaml:"stake_amount" mapstructure:"stake_amount"`
+	StakePct        float64                           `yaml:"stake_pct" mapstructure:"stake_pct"`
+	MaxStakeAmt     float64                           `yaml:"max_stake_amt" mapstructure:"max_stake_amt"`
 	MinOpenRate     float64                           `yaml:"min_open_rate" mapstructure:"min_open_rate"`
 	MaxOpenOrders   int                               `yaml:"max_open_orders" mapstructure:"max_open_orders"`
 	WalletAmounts   map[string]float64                `yaml:"wallet_amounts" mapstructure:"wallet_amounts"`
@@ -159,18 +165,21 @@ type ExchangeConfig struct {
 
 // 具体交易所的配置
 type ExgItemConfig struct {
-	CreditProds map[string]*CreditConfig `yaml:"credit_prods,omitempty" mapstructure:"credit_prods,omitempty"`
-	CreditTests map[string]*CreditConfig `yaml:"credit_tests,omitempty" mapstructure:"credit_tests,omitempty"`
-	Options     map[string]interface{}   `yaml:"options,omitempty" mapstructure:"options,omitempty"`
-	WhitePairs  []string                 `yaml:"white_pairs,omitempty" mapstructure:"white_pairs,omitempty"`
-	BlackPairs  []string                 `yaml:"black_pairs,omitempty" mapstructure:"black_pairs,omitempty"`
+	AccountProds map[string]*AccountConfig `yaml:"account_prods,omitempty" mapstructure:"account_prods,omitempty"`
+	AccountTests map[string]*AccountConfig `yaml:"account_tests,omitempty" mapstructure:"account_tests,omitempty"`
+	Options      map[string]interface{}    `yaml:"options,omitempty" mapstructure:"options,omitempty"`
+	WhitePairs   []string                  `yaml:"white_pairs,omitempty" mapstructure:"white_pairs,omitempty"`
+	BlackPairs   []string                  `yaml:"black_pairs,omitempty" mapstructure:"black_pairs,omitempty"`
 }
 
-// CreditConfig 存储 API 密钥和秘密的配置
-type CreditConfig struct {
+// AccountConfig 存储 API 密钥和秘密的配置
+type AccountConfig struct {
 	APIKey      string  `yaml:"api_key" mapstructure:"api_key"`
 	APISecret   string  `yaml:"api_secret" mapstructure:"api_secret"`
-	StakeAmount float64 `yaml:"stake_amount" mapstructure:"stake_amount"`
+	MaxStakeAmt float64 `yaml:"max_stake_amt" mapstructure:"max_stake_amt"` // 允许的单笔最大金额
+	StakeRate   float64 `yaml:"stake_rate" mapstructure:"stake_rate"`       // 相对基准的开单金额倍数
+	StakePctAmt float64 // 按百分比开单时，当前允许的金额
+	Leverage    int     `yaml:"leverage" mapstructure:"leverage"`
 }
 
 type TimeTuple struct {

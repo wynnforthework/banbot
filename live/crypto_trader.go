@@ -3,6 +3,7 @@ package live
 import (
 	"fmt"
 	"github.com/banbox/banbot/biz"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
@@ -22,9 +23,7 @@ type CryptoTrader struct {
 }
 
 func NewCryptoTrader() *CryptoTrader {
-	res := &CryptoTrader{}
-	biz.InitLiveOrderMgr(res.orderCB)
-	return res
+	return &CryptoTrader{}
 }
 
 func (t *CryptoTrader) Init() *errs.Error {
@@ -36,7 +35,6 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	biz.InitLiveWallets()
 	err = orm.InitTask()
 	if err != nil {
 		return err
@@ -54,16 +52,12 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	// 先更新所有未平仓订单的状态
-	oldList, newList, delList, err := biz.OdMgrLive.SyncExgOrders()
+	// 订单管理器初始化
+	addPairs, err := t.initOdMgr()
 	if err != nil {
 		return err
 	}
-	var addPairs = make(map[string]bool)
-	for _, od := range orm.OpenODs {
-		addPairs[od.Symbol] = true
-	}
-	err = goods.RefreshPairList(utils.KeysOfMap(addPairs))
+	err = goods.RefreshPairList(addPairs)
 	if err != nil {
 		return err
 	}
@@ -72,16 +66,34 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = data.Main.SubWarmPairs(warms)
-	if err != nil {
-		return err
+	return data.Main.SubWarmPairs(warms)
+}
+
+func (t *CryptoTrader) initOdMgr() ([]string, *errs.Error) {
+	if !core.ProdMode {
+		biz.InitLocalOrderMgr(t.orderCB)
+		return nil, nil
 	}
-	msg := fmt.Sprintf("订单恢复%d，删除%d，新增%d，已开启%d单", len(oldList), len(delList), len(newList), len(orm.OpenODs))
-	rpc.SendMsg(map[string]interface{}{
-		"type":   rpc.MsgTypeStatus,
-		"status": msg,
-	})
-	return nil
+	biz.InitLiveOrderMgr(t.orderCB)
+	var addPairs = make(map[string]bool)
+	for account := range config.Accounts {
+		odMgr := biz.GetLiveOdMgr(account)
+		oldList, newList, delList, err := odMgr.SyncExgOrders()
+		if err != nil {
+			return nil, err
+		}
+		openOds := orm.GetOpenODs(account)
+		for _, od := range openOds {
+			addPairs[od.Symbol] = true
+		}
+		msg := fmt.Sprintf("订单恢复%d，删除%d，新增%d，已开启%d单", len(oldList), len(delList), len(newList), len(openOds))
+		rpc.SendMsg(map[string]interface{}{
+			"type":    rpc.MsgTypeStatus,
+			"account": account,
+			"status":  msg,
+		})
+	}
+	return utils.KeysOfMap(addPairs), nil
 }
 
 func (t *CryptoTrader) Run() *errs.Error {
@@ -95,7 +107,7 @@ func (t *CryptoTrader) Run() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = biz.OdMgrLive.CleanUp()
+	err = biz.CleanUpOdMgr()
 	if err != nil {
 		return err
 	}
@@ -133,8 +145,10 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 	if subOd.Status != orm.OdStatusClosed || subOd.Amount == 0 {
 		return
 	}
+	account := orm.GetTaskAcc(od.TaskID)
 	rpc.SendMsg(map[string]interface{}{
 		"type":        msgType,
+		"account":     account,
 		"action":      action,
 		"enter_tag":   od.EnterTag,
 		"exit_tag":    od.ExitTag,
@@ -156,14 +170,8 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 func (t *CryptoTrader) startJobs() {
 	// 监听余额
 	biz.WatchLiveBalances()
-	// 监听杠杆倍数
-	biz.WatchLeverages()
-	// 监听账户订单流
-	biz.OdMgrLive.WatchMyTrades()
-	// 跟踪用户下单
-	biz.OdMgrLive.TrialUnMatchesForever()
-	// 消费订单队列
-	biz.OdMgrLive.ConsumeOrderQueue()
+	// 监听账户订单流、处理用户下单、消费订单队列
+	biz.StartLiveOdMgr()
 	// 定期刷新交易对
 	CronRefreshPairs()
 	// 定时刷新市场行情

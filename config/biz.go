@@ -103,7 +103,7 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	Name = Data.Name
 	core.RunEnv = Data.Env
-	core.RunMode = Data.RunMode
+	core.SetRunMode(Data.RunMode, false)
 	Leverage = Data.Leverage
 	if Data.LimitVolSecs == 0 {
 		Data.LimitVolSecs = 10
@@ -140,6 +140,8 @@ func apply(args *CmdArgs) *errs.Error {
 	AutoEditLimit = Data.AutoEditLimit
 	TakeOverStgy = Data.TakeOverStgy
 	StakeAmount = Data.StakeAmount
+	StakePct = Data.StakePct
+	MaxStakeAmt = Data.MaxStakeAmt
 	MinOpenRate = Data.MinOpenRate
 	if Data.MaxOpenOrders == 0 {
 		Data.MaxOpenOrders = 30
@@ -172,6 +174,7 @@ func apply(args *CmdArgs) *errs.Error {
 	PairMgr = Data.PairMgr
 	PairFilters = Data.PairFilters
 	Exchange = Data.Exchange
+	initExgAccs()
 	ExgDataMap = Data.ExgDataMap
 	Database = Data.Database
 	SpiderAddr = Data.SpiderAddr
@@ -195,4 +198,41 @@ func GetTakeOverTF(pair, defTF string) string {
 		}
 	}
 	return defTF
+}
+
+func GetExgAccounts() map[string]*AccountConfig {
+	exgCfg := GetExgConfig()
+	var accounts map[string]*AccountConfig
+	if core.EnvProd() {
+		accounts = exgCfg.AccountProds
+	} else {
+		accounts = exgCfg.AccountTests
+	}
+	return accounts
+}
+
+func GetAccLeverage(account string) int {
+	acc, ok := Accounts[account]
+	if ok && acc.Leverage > 0 {
+		return acc.Leverage
+	} else {
+		return Leverage
+	}
+}
+
+func initExgAccs() {
+	var accs = GetExgAccounts()
+	if len(accs) == 0 {
+		Accounts = make(map[string]*AccountConfig)
+		return
+	}
+	if !core.ProdMode {
+		// 非生产环境，只启用一个账号
+		for _, val := range accs {
+			Accounts[DefAcc] = val
+			break
+		}
+		return
+	}
+	Accounts = accs
 }

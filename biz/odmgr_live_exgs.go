@@ -76,7 +76,8 @@ func bnbExitByMyTrade(o *LiveOrderMgr) FuncHandleMyTrade {
 		}
 		isShort := trade.PosSide == banexg.PosSideShort
 		var openOds []*orm.InOutOrder
-		for _, od := range orm.OpenODs {
+		accOpenOds := orm.GetOpenODs(o.Account)
+		for _, od := range accOpenOds {
 			if od.Short != isShort || od.Symbol != trade.Symbol || od.Enter.Side == trade.Side {
 				continue
 			}
@@ -154,7 +155,8 @@ func (o *LiveOrderMgr) makeInOutOd(sess *orm.Queries, pair string, short bool, a
 		log.Error("save third order fail", zap.String("key", iod.Key()), zap.Error(err))
 		return nil
 	}
-	orm.OpenODs[iod.ID] = iod
+	openOds := orm.GetOpenODs(o.Account)
+	openOds[iod.ID] = iod
 	return iod
 }
 
