@@ -345,7 +345,7 @@ func (m *Miner) watchPrices() {
 	if m.IsWatchPrice {
 		return
 	}
-	out, err := m.exchange.WatchMarkPrices(nil, &map[string]interface{}{
+	out, err := m.exchange.WatchMarkPrices(nil, map[string]interface{}{
 		banexg.ParamInterval: "1s",
 	})
 	if err != nil {

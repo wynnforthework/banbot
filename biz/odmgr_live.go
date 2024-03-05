@@ -155,7 +155,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		}
 	}
 	// 获取交易所仓位
-	posList, err := exchange.FetchAccountPositions(nil, &map[string]interface{}{
+	posList, err := exchange.FetchAccountPositions(nil, map[string]interface{}{
 		banexg.ParamAccount: o.Account,
 	})
 	if err != nil {
@@ -237,7 +237,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	var err *errs.Error
 	if len(openOds) > 0 {
 		// 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
-		exOrders, err = exg.Default.FetchOrders(pair, sinceMs, 0, &map[string]interface{}{
+		exOrders, err = exg.Default.FetchOrders(pair, sinceMs, 0, map[string]interface{}{
 			banexg.ParamAccount: o.Account,
 		})
 		if err != nil {
@@ -675,7 +675,7 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 	if o.isWatchMyTrade {
 		return
 	}
-	out, err := exg.Default.WatchMyTrades(&map[string]interface{}{
+	out, err := exg.Default.WatchMyTrades(map[string]interface{}{
 		banexg.ParamAccount: o.Account,
 	})
 	if err != nil {
@@ -846,7 +846,7 @@ func (o *LiveOrderMgr) execOrderExit(od *orm.InOutOrder) *errs.Error {
 	if (od.Enter.Amount == 0 || od.Enter.Filled < od.Enter.Amount) && od.Enter.Status < orm.OdStatusClosed {
 		// 可能尚未入场，或未完全入场
 		if od.Enter.OrderID != "" {
-			order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, &map[string]interface{}{
+			order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, map[string]interface{}{
 				banexg.ParamAccount: o.Account,
 			})
 			if err != nil {
@@ -901,7 +901,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 	if isEnter && od.Leverage > 0 && od.Leverage != int32(leverage) {
 		newLeverage := min(maxLeverage, int(od.Leverage))
 		if newLeverage != leverage {
-			_, err = exchange.SetLeverage(newLeverage, od.Symbol, &map[string]interface{}{
+			_, err = exchange.SetLeverage(newLeverage, od.Symbol, map[string]interface{}{
 				banexg.ParamAccount: o.Account,
 			})
 			if err != nil {
@@ -962,14 +962,16 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		}
 	}
 	side, amount, price := subOd.Side, subOd.Amount, subOd.Price
-	params := map[string]interface{}{}
+	params := map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+	}
 	if core.IsContract {
 		params["positionSide"] = "LONG"
 		if od.Short {
 			params["positionSide"] = "SHORT"
 		}
 	}
-	res, err := exchange.CreateOrder(od.Symbol, subOd.OrderType, side, amount, price, &params)
+	res, err := exchange.CreateOrder(od.Symbol, subOd.OrderType, side, amount, price, params)
 	if err != nil {
 		return err
 	}
@@ -1324,7 +1326,7 @@ func cancelAccountOldLimits(account string) {
 		if stopAfter > 0 && stopAfter <= curMS {
 			saveOds = append(saveOds, od)
 			if od.Enter.OrderID != "" {
-				res, err := exchange.CancelOrder(od.Enter.OrderID, od.Symbol, &map[string]interface{}{
+				res, err := exchange.CancelOrder(od.Enter.OrderID, od.Symbol, map[string]interface{}{
 					banexg.ParamAccount: account,
 				})
 				if err != nil {
@@ -1397,7 +1399,7 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 	if od.Short {
 		side = banexg.OdSideBuy
 	}
-	res, err := exg.Default.CreateOrder(od.Symbol, config.OrderType, side, od.Enter.Amount, trigPrice, &params)
+	res, err := exg.Default.CreateOrder(od.Symbol, config.OrderType, side, od.Enter.Amount, trigPrice, params)
 	if err != nil {
 		log.Error("put trigger order fail", zap.String("key", od.Key()), zap.Error(err))
 	}
@@ -1406,7 +1408,7 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 		od.DirtyInfo = true
 	}
 	if orderId != "" && (res == nil || res.Status == "open") {
-		_, err = exg.Default.CancelOrder(orderId, od.Symbol, &map[string]interface{}{
+		_, err = exg.Default.CancelOrder(orderId, od.Symbol, map[string]interface{}{
 			banexg.ParamAccount: account,
 		})
 		if err != nil {
@@ -1423,7 +1425,7 @@ func cancelTriggerOds(od *orm.InOutOrder) {
 	slOrder := od.GetInfoString(orm.OdInfoStopLossOrderId)
 	tpOrder := od.GetInfoString(orm.OdInfoTakeProfitOrderId)
 	odKey := od.Key()
-	args := &map[string]interface{}{
+	args := map[string]interface{}{
 		banexg.ParamAccount: orm.GetTaskAcc(od.TaskID),
 	}
 	if slOrder != "" {
@@ -1454,7 +1456,7 @@ func (o *LiveOrderMgr) WatchLeverages() {
 	if !core.IsContract || o.isWatchAccConfig {
 		return
 	}
-	out, err := exg.Default.WatchAccountConfig(&map[string]interface{}{
+	out, err := exg.Default.WatchAccountConfig(map[string]interface{}{
 		banexg.ParamAccount: o.Account,
 	})
 	if err != nil {

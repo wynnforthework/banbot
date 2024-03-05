@@ -809,7 +809,7 @@ func WatchLiveBalances() {
 		if wallets.IsWatch {
 			continue
 		}
-		out, err := exg.Default.WatchBalance(&map[string]interface{}{
+		out, err := exg.Default.WatchBalance(map[string]interface{}{
 			banexg.ParamAccount: account,
 		})
 		if err != nil {
@@ -822,7 +822,7 @@ func WatchLiveBalances() {
 				wallets.IsWatch = false
 			}()
 			for item := range out {
-				updateWalletByBalances(wallets, &item)
+				updateWalletByBalances(wallets, item)
 			}
 		}()
 	}

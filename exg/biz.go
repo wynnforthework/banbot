@@ -51,7 +51,7 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	if contractType != "" {
 		options[banexg.OptContractType] = contractType
 	}
-	return bex.New(name, &options)
+	return bex.New(name, options)
 }
 
 func GetWith(name, market, contractType string) (banexg.BanExchange, *errs.Error) {
