@@ -444,7 +444,7 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 	res.Listens["onGetVal"] = func(action string, data interface{}) {
 		key := fmt.Sprintf("%v", data)
 		val := s.GetVal(key)
-		err := res.WriteMsg(&IOMsg{Action: "onGetValRes", Data: IOKeyVal{
+		err := res.WriteMsg(&IOMsg{Action: "onGetValRes", Data: &IOKeyVal{
 			Key: key,
 			Val: val,
 		}})

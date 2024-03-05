@@ -404,8 +404,14 @@ InsertKLines
 只批量插入K线，如需同时更新关联信息，请使用InsertKLinesAuto
 */
 func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
+	arrLen := len(arr)
+	if arrLen == 0 {
+		return 0, nil
+	}
+	log.Debug("insert klines", zap.String("tf", timeFrame), zap.Int32("sid", sid),
+		zap.Int("num", arrLen), zap.Int64("start", arr[0].Time), zap.Int64("end", arr[arrLen-1].Time))
 	tblName := "kline_" + timeFrame
-	var adds = make([]*KlineSid, len(arr))
+	var adds = make([]*KlineSid, arrLen)
 	for i, v := range arr {
 		adds[i] = &KlineSid{
 			Kline: *v,

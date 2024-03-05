@@ -166,7 +166,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	_, err := wallets.EnterOd(od)
 	if err != nil {
 		if err.Code == core.ErrLowFunds {
-			err = od.LocalExit(core.ExitTagForceExit, 0, err.Error())
+			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, err.Error())
 			o.onLowFunds()
 			return err
 		}
@@ -191,7 +191,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 		exOrder.Amount, err = exchange.PrecAmount(market, entAmount)
 		if err != nil {
 			log.Warn("prec enter amount fail", zap.Float64("amt", entAmount), zap.Error(err))
-			err = od.LocalExit(core.ExitTagFatalErr, 0, err.Error())
+			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error())
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)
 			wallets.Cancel(od.Key(), quote, 0, true)
 			return err

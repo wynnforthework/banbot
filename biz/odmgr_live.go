@@ -142,7 +142,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 				if isFarLimit(tryOd) {
 					orm.AddTriggerOd(o.Account, od)
 				} else {
-					err = od.LocalExit(core.ExitTagForceExit, 0, "重启取消未入场订单")
+					err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单")
 					if err != nil {
 						log.Error("cancel nonEntry order fail", zap.String("key", od.Key()), zap.Error(err))
 					}
@@ -700,7 +700,7 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 			odKey := trade.Symbol + trade.Order
 			if _, ok := o.exgIdMap[odKey]; !ok {
 				// 没有匹配订单，记录到unMatchTrades
-				o.unMatchTrades[tradeKey] = &trade
+				o.unMatchTrades[tradeKey] = trade
 				continue
 			}
 			if _, ok := o.doneKeys[odKey]; ok {
@@ -708,7 +708,7 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 				continue
 			}
 			iod := o.exgIdMap[odKey]
-			err = o.updateByMyTrade(iod, &trade)
+			err = o.updateByMyTrade(iod, trade)
 			if err != nil {
 				log.Error("updateByMyTrade fail", zap.String("key", iod.Key()),
 					zap.String("trade", trade.ID), zap.Error(err))
@@ -814,7 +814,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 				}
 			} else {
 				msg := "QuoteCost is required for enter:"
-				err = od.LocalExit(core.ExitTagFatalErr, 0, msg)
+				err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg)
 				if err != nil {
 					log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
 				}
@@ -833,7 +833,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 	if err != nil {
 		msg := "submit order fail, local exit"
 		log.Error(msg, zap.String("key", odKey), zap.Error(err))
-		err = od.LocalExit(core.ExitTagFatalErr, 0, msg)
+		err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg)
 		if err != nil {
 			log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
 		}

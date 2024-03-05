@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -65,8 +66,9 @@ func getCheckInterval(tfSecs int) float64 {
 /** *******************************  爬虫部分   ****************************
  */
 var (
-	initSids = map[int32]bool{}
-	writeQ   = make(chan SaveKline, 1000)
+	initSids  = map[int32]bool{} // 标记sid是否已初始化数据
+	initMutex sync.Mutex         // 防止出现initSids并发读和写
+	writeQ    = make(chan *SaveKline, 1000)
 )
 
 type SaveKline struct {
@@ -78,7 +80,9 @@ type SaveKline struct {
 }
 
 func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
+	initMutex.Lock()
 	initSids[save.Sid] = true
+	initMutex.Unlock()
 	if save.SkipFirst {
 		save.Arr = save.Arr[1:]
 	}
@@ -145,7 +149,10 @@ func consumeWriteQ(workNum int) {
 			if err == nil {
 				defer conn.Release()
 				var addBars = job.Arr
-				if _, ok := initSids[job.Sid]; !ok {
+				initMutex.Lock()
+				_, ok := initSids[job.Sid]
+				initMutex.Unlock()
+				if !ok {
 					var nextMS int64
 					nextMS, err = fillPrevHole(sess, job)
 					var cutIdx = 0
@@ -179,7 +186,7 @@ func consumeWriteQ(workNum int) {
 				log.Error("broadCast kline fail", zap.String("action", job.MsgAction), zap.Error(err))
 			}
 			<-guard
-		}(&save)
+		}(save)
 	}
 }
 
@@ -497,7 +504,7 @@ func (m *Miner) watchKLines(pairs []string) {
 		}
 		if len(finishes) > 0 {
 			// 有已完成的k线，写入到数据库，然后才广播消息
-			writeQ <- SaveKline{
+			writeQ <- &SaveKline{
 				Sid:       state.Sid,
 				TimeFrame: curTF,
 				Arr:       finishes,

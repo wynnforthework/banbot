@@ -102,20 +102,20 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 	}
 	tfSecs := utils.TFToSecs(timeFrame)
 	var totalNum int
-	chanDown := make(chan core.DownRange, 10)
+	chanDown := make(chan *core.DownRange, 10)
 	if oldStart == 0 {
 		// 数据不存在，下载全部区间
-		chanDown <- core.DownRange{Start: startMS, End: endMS}
+		chanDown <- &core.DownRange{Start: startMS, End: endMS}
 		totalNum = int((endMS-startMS)/1000) / tfSecs
 	} else {
 		if endMS > oldEnd {
 			// 后部超过已下载范围，下载后面
-			chanDown <- core.DownRange{Start: oldEnd, End: endMS}
+			chanDown <- &core.DownRange{Start: oldEnd, End: endMS}
 			totalNum += int((endMS-oldEnd)/1000) / tfSecs
 		}
 		if startMS < oldStart {
 			// 前部超过已下载范围，下载前面
-			chanDown <- core.DownRange{Start: startMS, End: oldStart, Reverse: true}
+			chanDown <- &core.DownRange{Start: startMS, End: oldStart, Reverse: true}
 			totalNum += int((oldStart-startMS)/1000) / tfSecs
 		}
 	}
