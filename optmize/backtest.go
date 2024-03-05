@@ -61,7 +61,9 @@ func (b *BackTest) Init() *errs.Error {
 	}
 	config.Args.Logfile = b.OutDir + "/out.log"
 	log.Setup(config.Args.Debug, config.Args.Logfile)
+	b.checkCfg()
 	// 交易对初始化
+	log.Info("loading exchange markets ...")
 	err = orm.EnsureExgSymbols(exg.Default)
 	if err != nil {
 		return err
@@ -121,6 +123,16 @@ func (b *BackTest) Run() {
 	}
 	log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
 	b.printBtResult()
+}
+
+func (b *BackTest) checkCfg() {
+	_, ok := config.Accounts[config.DefAcc]
+	if !ok {
+		panic("default Account invalid!")
+	}
+	if config.StakePct > 0 {
+		log.Warn("stake_amt may result in inconsistent order amounts with each backtest!")
+	}
 }
 
 func (b *BackTest) onLiquidation(symbol string) {

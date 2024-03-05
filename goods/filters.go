@@ -1,6 +1,7 @@
 package goods
 
 import (
+	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
@@ -63,6 +64,10 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 		err := orm.FastBulkOHLCV(exchange, symbols, f.BackTimeframe, startMS, 0, limit, callBack)
 		if err != nil {
 			return nil, err
+		}
+		if len(symbolVols) == 0 {
+			msg := fmt.Sprintf("No data found for %d pairs at %v", len(symbols), startMS)
+			return nil, errs.NewMsg(core.ErrRunTime, msg)
 		}
 	} else {
 		for _, symbol := range symbols {

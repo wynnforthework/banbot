@@ -36,6 +36,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 		return err
 	}
 	// 交易对初始化
+	log.Info("loading exchange markets ...")
 	err = orm.EnsureExgSymbols(exg.Default)
 	if err != nil {
 		return err

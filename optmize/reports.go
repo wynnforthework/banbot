@@ -474,8 +474,12 @@ func kMeansDurations(durations []int, num int) string {
 }
 
 func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
-	slices.SortFunc(orders, func(a, b *orm.InOutOrder) int {
-		return int((a.EnterAt - b.EnterAt) / 1000)
+	sort.Slice(orders, func(i, j int) bool {
+		var a, b = orders[i], orders[j]
+		if a.EnterAt != b.EnterAt {
+			return a.EnterAt < b.EnterAt
+		}
+		return a.Symbol < b.Symbol
 	})
 	taskId := orm.GetTaskID("")
 	file, err_ := os.Create(fmt.Sprintf("%s/orders_%v.csv", r.OutDir, taskId))
