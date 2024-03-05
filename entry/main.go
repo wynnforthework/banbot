@@ -22,7 +22,7 @@ var subHelp = map[string]string{
 
 const VERSION = "0.1.1"
 
-type FuncEntry = func() *errs.Error
+type FuncEntry = func(args *config.CmdArgs) *errs.Error
 
 func RunCmd() {
 	if len(os.Args) < 2 {
@@ -64,11 +64,7 @@ func RunCmd() {
 		printAndExit()
 	}
 	args.Init()
-	err2 := config.LoadConfig(&args)
-	if err2 != nil {
-		panic(err2)
-	}
-	err2 = entry()
+	err2 := entry(&args)
 	if err2 != nil {
 		panic(err2)
 	}
@@ -78,8 +74,9 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 	cmd.Var(&args.Configs, "config", "config path to use, Multiple -config options may be used")
 	cmd.StringVar(&args.Logfile, "logfile", "", "Log to the file specified")
 	cmd.StringVar(&args.DataDir, "datadir", "", "Path to data dir.")
-	cmd.BoolVar(&args.NoDb, "nodb", false, "dont use database")
+	cmd.BoolVar(&args.NoDb, "nodb", false, "dont save orders to database")
 	cmd.BoolVar(&args.Debug, "debug", false, "set logging level to debug")
+	cmd.BoolVar(&args.FixTFKline, "fixtf", false, "sync kline data between TimeFrames")
 	cmd.BoolVar(&args.NoCompress, "no-compress", false, "disable compress for hyper table")
 	cmd.BoolVar(&args.NoDefault, "no-default", false, "ignore default: config.yml, config.local.yml")
 
@@ -87,6 +84,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		switch key {
 		case "stake_amount":
 			cmd.Float64Var(&args.StakeAmount, "stake-amount", 0.0, "Override `stake_amount` in config")
+		case "stake_pct":
+			cmd.Float64Var(&args.StakePct, "stake-pct", 0.0, "Override `stake_pct` in config")
 		case "pairs":
 			cmd.StringVar(&args.RawPairs, "pairs", "", "comma-separated pairs")
 		case "stg_dir":

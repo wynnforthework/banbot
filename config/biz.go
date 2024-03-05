@@ -93,6 +93,7 @@ func apply(args *CmdArgs) *errs.Error {
 	Loaded = true
 	Debug = args.Debug
 	NoDB = args.NoDb
+	FixTFKline = args.FixTFKline
 	if args.TimeRange != "" {
 		Data.TimeRangeRaw = args.TimeRange
 	}
@@ -139,7 +140,13 @@ func apply(args *CmdArgs) *errs.Error {
 	ChargeOnBomb = Data.ChargeOnBomb
 	AutoEditLimit = Data.AutoEditLimit
 	TakeOverStgy = Data.TakeOverStgy
+	if args.StakeAmount > 0 {
+		Data.StakeAmount = args.StakeAmount
+	}
 	StakeAmount = Data.StakeAmount
+	if args.StakePct > 0 {
+		Data.StakePct = args.StakePct
+	}
 	StakePct = Data.StakePct
 	MaxStakeAmt = Data.MaxStakeAmt
 	MinOpenRate = Data.MinOpenRate
@@ -166,10 +173,16 @@ func apply(args *CmdArgs) *errs.Error {
 	FatalStopHours = Data.FatalStopHours
 	TimeRange = Data.TimeRange
 	WsStamp = Data.WsStamp
+	if len(args.TimeFrames) > 0 {
+		Data.RunTimeframes = args.TimeFrames
+	}
 	RunTimeframes = Data.RunTimeframes
 	KlineSource = Data.KlineSource
 	WatchJobs = Data.WatchJobs
 	RunPolicy = Data.RunPolicy
+	if len(args.Pairs) > 0 {
+		Data.Pairs = args.Pairs
+	}
 	Pairs = Data.Pairs
 	PairMgr = Data.PairMgr
 	PairFilters = Data.PairFilters
@@ -200,17 +213,6 @@ func GetTakeOverTF(pair, defTF string) string {
 	return defTF
 }
 
-func GetExgAccounts() map[string]*AccountConfig {
-	exgCfg := GetExgConfig()
-	var accounts map[string]*AccountConfig
-	if core.EnvProd() {
-		accounts = exgCfg.AccountProds
-	} else {
-		accounts = exgCfg.AccountTests
-	}
-	return accounts
-}
-
 func GetAccLeverage(account string) int {
 	acc, ok := Accounts[account]
 	if ok && acc.Leverage > 0 {
@@ -221,9 +223,15 @@ func GetAccLeverage(account string) int {
 }
 
 func initExgAccs() {
-	var accs = GetExgAccounts()
+	exgCfg := GetExgConfig()
+	var accs map[string]*AccountConfig
+	if core.EnvProd() {
+		accs = exgCfg.AccountProds
+	} else {
+		accs = exgCfg.AccountTests
+	}
+	Accounts = make(map[string]*AccountConfig)
 	if len(accs) == 0 {
-		Accounts = make(map[string]*AccountConfig)
 		return
 	}
 	if !core.ProdMode {

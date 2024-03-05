@@ -19,10 +19,12 @@ type CmdArgs struct {
 	Debug         bool
 	NoCompress    bool
 	NoDefault     bool
+	FixTFKline    bool
 	TimeRange     string
 	RawTimeFrames string
 	TimeFrames    []string
 	StakeAmount   float64
+	StakePct      float64
 	RawPairs      string
 	Pairs         []string
 	Action        string

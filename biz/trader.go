@@ -20,10 +20,6 @@ import (
 type Trader struct {
 }
 
-func (t *Trader) Init() *errs.Error {
-	return SetupComs()
-}
-
 func (t *Trader) OnEnvJobs(bar *banexg.PairTFKline) (*ta.BarEnv, *errs.Error) {
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
 	env, ok := strategy.Envs[envKey]

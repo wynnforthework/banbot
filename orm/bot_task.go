@@ -19,7 +19,7 @@ func InitTask() *errs.Error {
 	isLiveMode := core.LiveMode
 	if config.NoDB {
 		if isLiveMode {
-			panic("`no_db` not available in live mode!")
+			panic("`nodb` not available in live mode!")
 		}
 		AccTasks[config.DefAcc] = &BotTask{ID: -1, Mode: core.RunMode, CreateAt: btime.UTCStamp(),
 			StartAt: config.TimeRange.StartMS, StopAt: config.TimeRange.EndMS}

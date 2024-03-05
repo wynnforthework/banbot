@@ -43,11 +43,13 @@ func NewBackTest() *BackTest {
 func (b *BackTest) Init() *errs.Error {
 	btime.CurTimeMS = config.TimeRange.StartMS
 	b.MinReal = math.MaxFloat64
-	err := orm.SyncKlineTFs()
-	if err != nil {
-		return err
+	if config.FixTFKline {
+		err := orm.SyncKlineTFs()
+		if err != nil {
+			return err
+		}
 	}
-	err = orm.InitTask()
+	err := orm.InitTask()
 	if err != nil {
 		return err
 	}

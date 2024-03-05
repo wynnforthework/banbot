@@ -10,9 +10,9 @@ import (
 	"github.com/banbox/banexg/errs"
 )
 
-func RunBackTest() *errs.Error {
+func RunBackTest(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeBackTest, true)
-	err := biz.SetupComs()
+	err := biz.SetupComs(args)
 	if err != nil {
 		return err
 	}
@@ -22,8 +22,8 @@ func RunBackTest() *errs.Error {
 	return nil
 }
 
-func RunTrade() *errs.Error {
-	err := biz.SetupComs()
+func RunTrade(args *config.CmdArgs) *errs.Error {
+	err := biz.SetupComs(args)
 	if err != nil {
 		return err
 	}
@@ -32,16 +32,16 @@ func RunTrade() *errs.Error {
 	return t.Run()
 }
 
-func RunDownData() *errs.Error {
+func RunDownData(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func RunDbCmd() *errs.Error {
+func RunDbCmd(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func RunSpider() *errs.Error {
-	err := biz.SetupComs()
+func RunSpider(args *config.CmdArgs) *errs.Error {
+	err := biz.SetupComs(args)
 	if err != nil {
 		return err
 	}

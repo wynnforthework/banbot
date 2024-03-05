@@ -30,7 +30,7 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 		return nil, errs.NewMsg(core.ErrBadConfig, "exchange is required")
 	}
 	var cfg = config.GetExgConfig()
-	var accounts = config.GetExgAccounts()
+	var accounts = config.Accounts
 	var options = map[string]interface{}{}
 	for key, val := range cfg.Options {
 		options[utils.SnakeToCamel(key)] = val

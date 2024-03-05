@@ -10,6 +10,7 @@ var (
 	Loaded          bool
 	Debug           bool
 	NoDB            bool
+	FixTFKline      bool
 	Leverage        int
 	LimitVolSecs    int // 限价单预期等待多长时间成交，单位秒
 	PutLimitSecs    int // 在此预期时间内成交的限价单，才提交到交易所

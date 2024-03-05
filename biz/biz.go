@@ -12,11 +12,15 @@ import (
 	"github.com/banbox/banexg/log"
 )
 
-func SetupComs() *errs.Error {
+func SetupComs(args *config.CmdArgs) *errs.Error {
 	errs.PrintErr = utils.PrintErr
 	ctx, cancel := context.WithCancel(context.Background())
 	core.Ctx = ctx
 	core.StopAll = cancel
+	err2 := config.LoadConfig(args)
+	if err2 != nil {
+		panic(err2)
+	}
 	log.Setup(config.Args.Debug, config.Args.Logfile)
 	err := exg.Setup()
 	if err != nil {
