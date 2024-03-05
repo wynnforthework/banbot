@@ -855,6 +855,7 @@ SyncKlineTFs
 检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
 */
 func SyncKlineTFs() *errs.Error {
+	log.Info("run kline data sync ...")
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err

@@ -550,6 +550,10 @@ func (m *Miner) watchKLines(pairs []string) {
 }
 
 func RunSpider(addr string) *errs.Error {
+	err := orm.SyncKlineTFs()
+	if err != nil {
+		return err
+	}
 	server := utils.NewBanServer(addr, "spider")
 	Spider = &LiveSpider{
 		ServerIO: server,

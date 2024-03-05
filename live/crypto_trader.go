@@ -27,11 +27,7 @@ func NewCryptoTrader() *CryptoTrader {
 }
 
 func (t *CryptoTrader) Init() *errs.Error {
-	err := orm.SyncKlineTFs()
-	if err != nil {
-		return err
-	}
-	err = data.InitLiveProvider(t.FeedKLine)
+	err := data.InitLiveProvider(t.FeedKLine)
 	if err != nil {
 		return err
 	}
