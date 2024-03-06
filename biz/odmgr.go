@@ -50,7 +50,7 @@ type OrderMgr struct {
 }
 
 func GetOdMgr(account string) IOrderMgr {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	val, _ := AccOdMgrs[account]
@@ -58,8 +58,8 @@ func GetOdMgr(account string) IOrderMgr {
 }
 
 func GetLiveOdMgr(account string) *LiveOrderMgr {
-	if !core.ProdMode {
-		panic("call GetLiveOdMgr in non-ProdRunMode is forbidden: " + core.RunMode)
+	if !core.EnvReal {
+		panic("call GetLiveOdMgr in FakeEnv is forbidden: " + core.RunEnv)
 	}
 	val, _ := AccLiveOdMgrs[account]
 	return val
@@ -67,10 +67,9 @@ func GetLiveOdMgr(account string) *LiveOrderMgr {
 
 func CleanUpOdMgr() *errs.Error {
 	var err *errs.Error
-	isProd := core.ProdMode
 	for account := range config.Accounts {
 		var curErr *errs.Error
-		if isProd {
+		if core.EnvReal {
 			if mgr, ok := AccLiveOdMgrs[account]; ok {
 				curErr = mgr.CleanUp()
 			}
@@ -95,6 +94,7 @@ func allowOrderEnter(account string, env *banta.BarEnv) bool {
 		return false
 	}
 	if core.RunMode == core.RunModeOther {
+		// 不涉及订单模式，禁止开单
 		return false
 	}
 	openOds := orm.GetOpenODs(account)
@@ -105,7 +105,8 @@ func allowOrderEnter(account string, env *banta.BarEnv) bool {
 		log.Warn("any enter forbid", zap.String("pair", env.Symbol))
 		return false
 	}
-	if core.RunMode != core.RunModeProd {
+	if !core.LiveMode {
+		// 回测模式，不检查延迟，直接允许
 		return true
 	}
 	// 实盘订单提交到交易所，检查延迟不能超过80%

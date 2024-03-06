@@ -196,7 +196,7 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 }
 
 func GetJobs(account string) map[string][]*StagyJob {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	jobs, ok := AccJobs[account]
@@ -208,7 +208,7 @@ func GetJobs(account string) map[string][]*StagyJob {
 }
 
 func GetInfoJobs(account string) map[string][]*StagyJob {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	jobs, ok := AccInfoJobs[account]

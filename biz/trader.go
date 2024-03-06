@@ -39,13 +39,12 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	if _, ok := core.ForbidPairs[bar.Symbol]; ok {
 		return nil
 	}
-	isLive := core.LiveMode
 	tfMSecs := int64(utils.TFToSecs(bar.TimeFrame) * 1000)
 	core.SetBarPrice(bar.Symbol, bar.Close)
 	// 超过1分钟且周期的一半，认为bar延迟，不可下单
 	delayMs := btime.TimeMS() - bar.Time - tfMSecs
 	barExpired := delayMs >= max(60000, tfMSecs/2)
-	if barExpired && isLive && !core.IsWarmUp {
+	if barExpired && core.LiveMode && !core.IsWarmUp {
 		log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delayMs/1000))
 	}
 	// 更新指标环境
@@ -124,9 +123,8 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 	if !core.IsWarmUp && len(enters)+len(exits)+len(edits) > 0 {
 		var sess *orm.Queries
 		var conn *pgxpool.Conn
-		isLive := core.LiveMode
-		if isLive {
-			// 非实时模式，订单临时保存到内存，无需数据库
+		if core.LiveMode {
+			// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
 			sess, conn, err = orm.Conn(nil)
 			if err != nil {
 				log.Error("get db sess fail", zap.Error(err))

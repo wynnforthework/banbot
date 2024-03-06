@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
+	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
-	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -80,7 +80,7 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 		if err != nil {
 			return errs.NewFull(errs.CodeUnmarshalFail, err, "Unmarshal %s Fail", path)
 		}
-		maps.Copy(merged, unpak)
+		utils2.DeepCopyMap(merged, unpak)
 	}
 	err := mapstructure.Decode(merged, &Data)
 	if err != nil {
@@ -103,8 +103,7 @@ func apply(args *CmdArgs) *errs.Error {
 		btime.ParseTimeMS(Data.TimeRangeRaw[cutLen+1:]),
 	}
 	Name = Data.Name
-	core.RunEnv = Data.Env
-	core.SetRunMode(Data.RunMode, false)
+	core.SetRunEnv(Data.Env)
 	Leverage = Data.Leverage
 	if Data.LimitVolSecs == 0 {
 		Data.LimitVolSecs = 10
@@ -225,7 +224,7 @@ func GetAccLeverage(account string) int {
 func initExgAccs() {
 	exgCfg := GetExgConfig()
 	var accs map[string]*AccountConfig
-	if core.EnvProd() {
+	if core.RunEnv != core.RunEnvTest {
 		accs = exgCfg.AccountProds
 	} else {
 		accs = exgCfg.AccountTests
@@ -234,7 +233,7 @@ func initExgAccs() {
 	if len(accs) == 0 {
 		return
 	}
-	if !core.ProdMode {
+	if !core.EnvReal {
 		// 非生产环境，只启用一个账号
 		for _, val := range accs {
 			Accounts[DefAcc] = val

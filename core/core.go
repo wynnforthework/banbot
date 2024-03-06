@@ -12,24 +12,14 @@ func GetStagyJobs(stagy string) map[string]string {
 	return result
 }
 
-func IsLiveMode(mode string) bool {
-	return mode == RunModeProd || mode == RunModeDryRun
-}
-
-/*
-EnvProd 是否使用正式网络
-*/
-func EnvProd() bool {
-	return RunEnv == RunEnvProd
-}
-
-func SetRunMode(mode string, force bool) {
-	if !force && RunMode != "" {
-		return
-	}
+func SetRunMode(mode string) {
 	RunMode = mode
-	ProdMode = RunMode == RunModeProd
-	LiveMode = IsLiveMode(RunMode)
+	LiveMode = RunMode == RunModeLive
+}
+
+func SetRunEnv(env string) {
+	RunEnv = env
+	EnvReal = RunEnv != RunEnvDryRun
 }
 
 /*

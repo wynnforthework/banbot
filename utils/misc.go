@@ -138,3 +138,18 @@ func PrintErr(e error) string {
 	}
 	return e.Error()
 }
+
+func DeepCopyMap(dst, src map[string]interface{}) {
+	if src == nil {
+		return
+	}
+	for k, v := range src {
+		if vSrcMap, ok := v.(map[string]interface{}); ok {
+			if vDstMap, ok := dst[k].(map[string]interface{}); ok {
+				DeepCopyMap(vDstMap, vSrcMap)
+				continue
+			}
+		}
+		dst[k] = v
+	}
+}

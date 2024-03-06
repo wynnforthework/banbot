@@ -11,7 +11,7 @@ import (
 )
 
 func RunBackTest(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeBackTest, true)
+	core.SetRunMode(core.RunModeBackTest)
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err
@@ -23,6 +23,7 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 }
 
 func RunTrade(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeLive)
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err
@@ -33,14 +34,17 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 }
 
 func RunDownData(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
 	return nil
 }
 
 func RunDbCmd(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
 	return nil
 }
 
 func RunSpider(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeLive)
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err

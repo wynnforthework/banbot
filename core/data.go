@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	RunMode      string                           // prod/dry_run/backtest
-	RunEnv       string                           // prod/test
+	RunMode      string                           // live / backtest / other
+	RunEnv       string                           // prod / test / dry_run
 	StartAt      int64                            // 启动时间，13位时间戳
 	IsWarmUp     bool                             // 是否当前处于预热状态
-	ProdMode     bool                             // 是否是生产环境正式交易模式
+	EnvReal      bool                             // 是否是提交到交易所真实订单模式run_env:prod/test
 	LiveMode     bool                             // 是否是实时模式：实盘+模拟运行
 	TFSecs       []*TFSecTuple                    // 所有涉及的时间周期
 	ExgName      string                           // 交易所名称
@@ -55,15 +55,15 @@ const (
 )
 
 const (
-	RunModeProd     = "prod"
-	RunModeDryRun   = "dry_run"
+	RunModeLive     = "live"
 	RunModeBackTest = "backtest"
 	RunModeOther    = "other"
 )
 
 const (
-	RunEnvProd = "prod"
-	RunEnvTest = "test"
+	RunEnvProd   = "prod"
+	RunEnvTest   = "test"
+	RunEnvDryRun = "dry_run"
 )
 
 const (

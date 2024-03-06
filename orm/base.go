@@ -113,7 +113,7 @@ func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {
 }
 
 func GetTaskID(account string) int64 {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	if id, ok := AccTaskIDs[account]; ok {
@@ -123,7 +123,7 @@ func GetTaskID(account string) int64 {
 }
 
 func GetTask(account string) *BotTask {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	if task, ok := AccTasks[account]; ok {
@@ -140,7 +140,7 @@ func GetTaskAcc(id int64) string {
 }
 
 func GetOpenODs(account string) map[int64]*InOutOrder {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	val, ok := AccOpenODs[account]
@@ -152,7 +152,7 @@ func GetOpenODs(account string) map[int64]*InOutOrder {
 }
 
 func GetTriggerODs(account string) map[string][]*InOutOrder {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	val, ok := AccTriggerODs[account]

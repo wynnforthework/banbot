@@ -727,7 +727,7 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 }
 
 func (o *LiveOrderMgr) TrialUnMatchesForever() {
-	if !core.ProdMode || o.isTrialUnMatches {
+	if !core.EnvReal || o.isTrialUnMatches {
 		return
 	}
 	o.isTrialUnMatches = true
@@ -1547,8 +1547,8 @@ func (o *LiveOrderMgr) CleanUp() *errs.Error {
 }
 
 func StartLiveOdMgr() {
-	if !core.ProdMode {
-		panic("StartLiveOdMgr for non-ProdRunMode is forbidden:" + core.RunMode)
+	if !core.EnvReal {
+		panic("StartLiveOdMgr for FakeEnv is forbidden:" + core.RunEnv)
 	}
 	for account := range config.Accounts {
 		odMgr := GetLiveOdMgr(account)

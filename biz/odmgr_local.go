@@ -49,7 +49,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 	if err != nil {
 		return err
 	}
-	if len(allOpens) == 0 || core.ProdMode {
+	if len(allOpens) == 0 || core.EnvReal {
 		return nil
 	}
 	if core.IsContract {

@@ -67,7 +67,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 }
 
 func (t *CryptoTrader) initOdMgr() ([]string, *errs.Error) {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		biz.InitLocalOrderMgr(t.orderCB)
 		return nil, nil
 	}

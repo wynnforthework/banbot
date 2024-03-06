@@ -224,7 +224,7 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 	wg.Wait()
 	curStep(totalNum - doneNum)
 	if outErr != nil {
-		return saveNum, outErr
+		return saveNum, errs.New(core.ErrRunTime, outErr)
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {

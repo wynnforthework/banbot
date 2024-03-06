@@ -56,7 +56,6 @@ var (
 type Config struct {
 	Name            string                            `yaml:"name" mapstructure:"name"`
 	Env             string                            `yaml:"env" mapstructure:"env"`
-	RunMode         string                            `yaml:"run_mode" mapstructure:"run_mode"`
 	Leverage        int                               `yaml:"leverage" mapstructure:"leverage"`
 	LimitVolSecs    int                               `yaml:"limit_vol_secs" mapstructure:"limit_vol_secs"`
 	PutLimitSecs    int                               `yaml:"put_limit_secs" mapstructure:"put_limit_secs"`

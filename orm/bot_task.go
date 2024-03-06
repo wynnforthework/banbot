@@ -16,9 +16,8 @@ func InitTask() *errs.Error {
 	if len(AccTasks) > 0 {
 		return nil
 	}
-	isLiveMode := core.LiveMode
 	if config.NoDB {
-		if isLiveMode {
+		if core.LiveMode {
 			panic("`nodb` not available in live mode!")
 		}
 		AccTasks[config.DefAcc] = &BotTask{ID: -1, Mode: core.RunMode, CreateAt: btime.UTCStamp(),
@@ -52,7 +51,7 @@ func getAccTask(account string) (*BotTask, *errs.Error) {
 	}
 	defer conn.Release()
 	taskName := config.Name
-	if core.ProdMode {
+	if core.EnvReal {
 		taskName += "/" + account
 	}
 	task, err_ = sess.FindTask(ctx, FindTaskParams{

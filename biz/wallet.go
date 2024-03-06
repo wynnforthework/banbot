@@ -57,7 +57,7 @@ func InitFakeWallets(symbols ...string) {
 }
 
 func GetWallets(account string) *BanWallets {
-	if !core.ProdMode {
+	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	val, ok := AccWallets[account]
@@ -421,7 +421,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 }
 
 func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
-	if core.ProdMode {
+	if core.EnvReal {
 		return
 	}
 	exs := orm.GetSymbolByID(od.Sid)
@@ -449,7 +449,7 @@ func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	}
 }
 func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
-	if core.ProdMode {
+	if core.EnvReal {
 		return
 	}
 	exs := orm.GetSymbolByID(od.Sid)
@@ -485,7 +485,7 @@ func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
 }
 
 func (w *BanWallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) {
-	if core.ProdMode {
+	if core.EnvReal {
 		return
 	}
 	exs := orm.GetSymbolByID(od.Sid)
