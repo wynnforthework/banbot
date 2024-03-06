@@ -524,6 +524,9 @@ func (m *Miner) watchKLines(pairs []string) {
 		}()
 		for {
 			first := <-out
+			if first == nil {
+				continue
+			}
 			cache := map[string][]*banexg.Kline{}
 			curKey := fmt.Sprintf("%s_%s", first.Symbol, first.TimeFrame)
 			cache[curKey] = []*banexg.Kline{&first.Kline}

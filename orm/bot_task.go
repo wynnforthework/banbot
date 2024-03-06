@@ -23,6 +23,7 @@ func InitTask() *errs.Error {
 		AccTasks[config.DefAcc] = &BotTask{ID: -1, Mode: core.RunMode, CreateAt: btime.UTCStamp(),
 			StartAt: config.TimeRange.StartMS, StopAt: config.TimeRange.EndMS}
 		AccTaskIDs[config.DefAcc] = -1
+		taskIdAccMap[-1] = config.DefAcc
 		log.Info("init task ok", zap.Int64("id", -1))
 		return nil
 	}
@@ -34,6 +35,7 @@ func InitTask() *errs.Error {
 		}
 		AccTasks[account] = task
 		AccTaskIDs[account] = task.ID
+		taskIdAccMap[task.ID] = account
 		idList = append(idList, fmt.Sprintf("%s:%v", account, task.ID))
 	}
 	log.Info("init task ok", zap.String("id", strings.Join(idList, ", ")))
