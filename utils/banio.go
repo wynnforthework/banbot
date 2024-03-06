@@ -283,7 +283,7 @@ func getErrType(err error) (int, string) {
 			return core.ErrNetTimeout, "op_timeout"
 		} else if opErr.Temporary() {
 			return core.ErrNetTemporary, "op_temporary"
-		} else if opErr.Op == "dial" {
+		} else if opErr.Op == "dial" || opErr.Op == "read" {
 			return core.ErrNetConnect, "op_conn_dial"
 		} else {
 			return core.ErrNetUnknown, "op_err"

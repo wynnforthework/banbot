@@ -19,16 +19,16 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	ctx, cancel := context.WithCancel(context.Background())
 	core.Ctx = ctx
 	core.StopAll = cancel
-	err2 := config.LoadConfig(args)
-	if err2 != nil {
-		panic(err2)
+	err := config.LoadConfig(args)
+	if err != nil {
+		return err
 	}
 	var logCores []zapcore.Core
 	if core.LiveMode {
 		logCores = append(logCores, rpc.NewExcNotify())
 	}
 	log.Setup(config.Args.Debug, config.Args.Logfile, logCores...)
-	err := core.Setup()
+	err = core.Setup()
 	if err != nil {
 		return err
 	}

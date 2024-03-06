@@ -10,6 +10,14 @@ import (
 	"time"
 )
 
+const (
+	keyIntv = int64(60000) // 重复消息发送间隔，单位：秒
+)
+
+var (
+	keyLastMap = map[string]int64{}
+)
+
 func NewExcNotify() *ExcNotify {
 	level := zap.NewAtomicLevel()
 	_ = level.UnmarshalText([]byte("ERROR"))
@@ -105,23 +113,37 @@ func TrySendExc(cacheKey string, content string) {
 		}
 	}
 	ttl, valid := core.Cache.GetTTL(cacheKey)
+	var numVal int
 	if valid {
 		// 有内容，更新数量和最后的消息
-		numVal := core.GetCacheVal(cacheKey, 0)
-		core.Cache.SetWithTTL(cacheKey, numVal+1, 1, ttl)
-		core.Cache.SetWithTTL(cacheKey+"_text", content, 1, ttl)
-		return
+		numVal = core.GetCacheVal(cacheKey, 0)
 	} else {
 		// 没有内容，保存并设置发送时间
-		core.Cache.SetWithTTL(cacheKey, 1, 1, ttl)
-		core.Cache.SetWithTTL(cacheKey+"_text", content, 1, ttl)
-		// 3分钟后发送
-		sendExcAfter(180, cacheKey)
+		ttl = time.Millisecond * time.Duration(keyIntv)
 	}
+	core.Cache.SetWithTTL(cacheKey, numVal+1, 1, ttl)
+	core.Cache.SetWithTTL(cacheKey+"_text", content, 1, ttl)
+	lastMS, ok := keyLastMap[cacheKey]
+	curMS := time.Now().UnixMilli()
+	waitMS := int64(0)
+	if !ok || curMS-lastMS > keyIntv {
+		// 距离上次已超过间隔，立刻发送
+		sendExcAfter(1000, cacheKey)
+		// 更新下次执行时间
+		waitMS = keyIntv
+	} else if curMS < lastMS {
+		// 已有部署的定时器，退出
+		return
+	} else {
+		// 没有定时器，还未达到下次时间
+		waitMS = lastMS + keyIntv - 1000 - curMS
+	}
+	keyLastMap[cacheKey] = curMS + waitMS
+	sendExcAfter(waitMS, cacheKey)
 }
 
-func sendExcAfter(secs int, key string) {
-	waits := time.Second * time.Duration(secs)
+func sendExcAfter(waitMS int64, key string) {
+	waits := time.Millisecond * time.Duration(waitMS)
 	time.AfterFunc(waits, func() {
 		textKey := key + "_text"
 		num := core.GetCacheVal(key, 0)
