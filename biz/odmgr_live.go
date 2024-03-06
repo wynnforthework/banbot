@@ -827,6 +827,9 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 		if err != nil {
 			forceDelOd(err)
 			return nil
+		} else if od.Enter.Amount == 0 {
+			forceDelOd(errs.NewMsg(core.ErrRunTime, "amount too small"))
+			return nil
 		}
 	}
 	err = o.submitExgOrder(od, true)

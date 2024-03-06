@@ -814,6 +814,10 @@ func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
 	if od == nil || od.ID == 0 {
 		return nil
 	}
+	openOds := GetOpenODs(GetTaskAcc(od.TaskID))
+	delete(openOds, od.ID)
+	// 设置已完成，防止其他地方错误使用
+	od.Status = InOutStatusFullExit
 	ctx := context.Background()
 	sql := fmt.Sprintf("delete from iorder where id=%v", od.ID)
 	_, err_ := q.db.Exec(ctx, sql)

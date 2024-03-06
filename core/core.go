@@ -19,7 +19,11 @@ func SetRunMode(mode string) {
 
 func SetRunEnv(env string) {
 	RunEnv = env
-	EnvReal = RunEnv != RunEnvDryRun
+	if LiveMode {
+		EnvReal = RunEnv != RunEnvDryRun
+	} else {
+		EnvReal = false
+	}
 }
 
 /*

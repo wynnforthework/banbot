@@ -300,8 +300,10 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy
 		if err != nil {
 			return result, err
 		}
-		exitAmount -= part.Enter.Amount
-		result = append(result, part)
+		if part != nil {
+			exitAmount -= part.Enter.Amount
+			result = append(result, part)
+		}
 	}
 	return result, nil
 }

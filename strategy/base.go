@@ -24,6 +24,12 @@ func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
 	} else {
 		amount = config.StakeAmount
 	}
+	// 检查是否超出最大金额
+	if ok && acc.MaxStakeAmt > 0 && acc.MaxStakeAmt < amount {
+		amount = acc.MaxStakeAmt
+	} else if config.MaxStakeAmt > 0 && config.MaxStakeAmt < amount {
+		amount = config.MaxStakeAmt
+	}
 	// 乘以策略倍率
 	if s.StakeRate > 0 {
 		amount *= s.StakeRate
@@ -31,12 +37,6 @@ func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
 	// 乘以账户倍率
 	if ok && acc.StakeRate > 0 {
 		amount *= acc.StakeRate
-	}
-	// 检查是否超出最大金额
-	if ok && acc.MaxStakeAmt > 0 && acc.MaxStakeAmt < amount {
-		amount = acc.MaxStakeAmt
-	} else if config.MaxStakeAmt > 0 && config.MaxStakeAmt < amount {
-		amount = config.MaxStakeAmt
 	}
 	return amount
 }
