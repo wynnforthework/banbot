@@ -112,48 +112,85 @@ SyncExgOrders
 */
 func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	exchange := exg.Default
+	task := orm.GetTask(o.Account)
+	// 获取交易所挂单
+	exOdList, err := exchange.FetchOpenOrders("", task.CreateAt, 1000, map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	exgOdMap := make(map[string]*banexg.Order)
+	for _, od := range exOdList {
+		exgOdMap[od.ID] = od
+	}
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	// 从数据库加载订单
 	openOds := orm.GetOpenODs(o.Account)
-	taskId := orm.GetTaskID(o.Account)
 	orders, err := sess.GetOrders(orm.GetOrdersArgs{
-		TaskID: taskId,
+		TaskID: task.ID,
 		Status: 1,
 		Limit:  1000,
 	})
-	// 这里加载完订单就释放，防止长时间占用连接
-	conn.Release()
 	if err != nil {
+		conn.Release()
 		return nil, nil, nil, err
 	}
-	var sinceMS int64
+	var lastEntMS int64
 	var openPairs = map[string]struct{}{}
 	for _, od := range orders {
-		if od.Status < orm.InOutStatusFullExit {
-			tryOd := od.Enter
-			if od.Exit != nil {
-				tryOd = od.Exit
+		if od.Status == orm.InOutStatusFullExit {
+			continue
+		}
+		lastEntMS = max(lastEntMS, od.EnterAt)
+		tryOd := od.Enter
+		if od.Exit != nil {
+			tryOd = od.Exit
+		}
+		if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
+			// 订单未提交到交易所，且是入场订单
+			if isFarLimit(tryOd) {
+				orm.AddTriggerOd(o.Account, od)
+			} else {
+				err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单")
+				if err != nil {
+					log.Error("cancel nonEntry order fail", zap.String("key", od.Key()), zap.Error(err))
+				}
+				continue
 			}
-			if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
-				// 订单未提交到交易所，且是入场订单
-				if isFarLimit(tryOd) {
-					orm.AddTriggerOd(o.Account, od)
-				} else {
-					err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单")
-					if err != nil {
-						log.Error("cancel nonEntry order fail", zap.String("key", od.Key()), zap.Error(err))
-					}
-					continue
+		} else if tryOd.OrderID != "" {
+			// 已提交到交易所
+			exOd, ok := exgOdMap[tryOd.OrderID]
+			if !ok {
+				// 订单已取消或已成交，查询交易所订单
+				exOd, err = exchange.FetchOrder(od.Symbol, tryOd.OrderID, map[string]interface{}{
+					banexg.ParamAccount: o.Account,
+				})
+				if err != nil {
+					log.Error("get exgOrder fail", zap.String("key", od.Key()), zap.Error(err))
 				}
 			}
+			if exOd != nil {
+				err = o.updateOdByExgRes(od, tryOd.Enter, exOd)
+				if err != nil {
+					log.Error("update od with exg openOd fail", zap.String("key", od.Key()), zap.Error(err))
+				}
+			}
+		}
+		if od.Status < orm.InOutStatusFullExit {
 			openOds[od.ID] = od
-			sinceMS = max(sinceMS, od.EnterAt)
 			openPairs[od.Symbol] = struct{}{}
 		}
+		err = od.Save(sess)
+		if err != nil {
+			log.Error("save order in SyncExgOrders fail", zap.String("key", od.Key()), zap.Error(err))
+		}
 	}
+	// 这里用完就释放，防止长时间占用连接
+	conn.Release()
 	// 获取交易所仓位
 	posList, err := exchange.FetchAccountPositions(nil, map[string]interface{}{
 		banexg.ParamAccount: o.Account,
@@ -192,7 +229,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 				break
 			}
 		}
-		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, sinceMS, curOds)
+		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, lastEntMS, curOds)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -224,6 +261,10 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	}
 	if len(newList) > 0 {
 		log.Info(fmt.Sprintf("新开始跟踪%v个用户下单", len(newList)))
+	}
+	err = orm.SaveDirtyODs(o.Account)
+	if err != nil {
+		log.Error("SaveDirtyODs fail", zap.Error(err))
 	}
 	return oldList, newList, delList, nil
 }
@@ -667,6 +708,12 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 			if err != nil {
 				log.Error("ConsumeOrderQueue error", zap.String("action", item.Action), zap.Error(err))
 			}
+			if item.Order.IsDirty() {
+				err = item.Order.Save(nil)
+				if err != nil {
+					log.Error("save od for exg status fail", zap.String("key", item.Order.Key()), zap.Error(err))
+				}
+			}
 		}
 	}()
 }
@@ -722,6 +769,12 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 				log.Error("consumeUnMatches for WatchMyTrades fail", zap.String("key", iod.Key()),
 					zap.Error(err))
 			}
+			if iod.IsDirty() {
+				err = iod.Save(nil)
+				if err != nil {
+					log.Error("save od from myTrade fail", zap.String("key", iod.Key()), zap.Error(err))
+				}
+			}
 		}
 	}()
 }
@@ -759,6 +812,10 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			}
 			if unHandleNum > 0 {
 				log.Warn(fmt.Sprintf("expired unmatch orders: %v", unHandleNum))
+			}
+			err := orm.SaveDirtyODs(o.Account)
+			if err != nil {
+				log.Error("SaveDirtyODs fail", zap.Error(err))
 			}
 		}
 	}()
@@ -866,12 +923,7 @@ func (o *LiveOrderMgr) execOrderExit(od *orm.InOutOrder) *errs.Error {
 			od.Exit.Price = od.Enter.Price
 			od.DirtyMain = true
 			od.DirtyExit = true
-			sess, conn, err := orm.Conn(nil)
-			if err != nil {
-				return err
-			}
-			defer conn.Release()
-			err = o.finishOrder(od, sess)
+			err := o.finishOrder(od, nil)
 			if err != nil {
 				return err
 			}
@@ -947,16 +999,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 			subOd.Price = od.Enter.Price
 			od.DirtyExit = true
 			od.DirtyMain = true
-			sess, conn, err := orm.Conn(nil)
-			if err != nil {
-				return err
-			}
-			defer conn.Release()
-			err = od.Save(sess)
-			if err != nil {
-				return err
-			}
-			err = o.finishOrder(od, sess)
+			err = o.finishOrder(od, nil)
 			if err != nil {
 				return err
 			}
@@ -966,7 +1009,8 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 	}
 	side, amount, price := subOd.Side, subOd.Amount, subOd.Price
 	params := map[string]interface{}{
-		banexg.ParamAccount: o.Account,
+		banexg.ParamAccount:       o.Account,
+		banexg.ParamClientOrderId: od.ClientId(true),
 	}
 	if core.IsContract {
 		params["positionSide"] = "LONG"
@@ -1056,12 +1100,7 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 			od.DirtyMain = true
 		}
 		if od.Status == orm.InOutStatusFullExit {
-			sess, conn, err := orm.Conn(nil)
-			if err != nil {
-				return err
-			}
-			err = o.finishOrder(od, sess)
-			conn.Release()
+			err := o.finishOrder(od, nil)
 			if err != nil {
 				return err
 			}
@@ -1378,7 +1417,8 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 	orderId := od.GetInfoString(prefix + "OrderId")
 	account := orm.GetTaskAcc(od.TaskID)
 	params := map[string]interface{}{
-		banexg.ParamAccount: account,
+		banexg.ParamAccount:       account,
+		banexg.ParamClientOrderId: od.ClientId(true),
 	}
 	if core.IsContract {
 		params[banexg.ParamPositionSide] = "LONG"
@@ -1445,6 +1485,11 @@ func cancelTriggerOds(od *orm.InOutOrder) {
 	}
 }
 
+/*
+finishOrder
+sess 可为nil
+实盘时，内部会保存到数据库
+*/
 func (o *LiveOrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	if od.Enter != nil && od.Enter.OrderID != "" {
 		o.doneKeys[od.Symbol+od.Enter.OrderID] = true

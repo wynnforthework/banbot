@@ -15,6 +15,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"math/rand"
 	"slices"
 	"strconv"
 	"strings"
@@ -237,6 +238,7 @@ func (i *InOutOrder) SetExit(tag, orderType string, limit float64) {
 /*
 LocalExit
 在本地强制退出订单，立刻生效，无需等到下一个bar。这里不涉及钱包更新，钱包需要自行更新。
+实盘时调用此函数会保存到数据库
 */
 func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Error {
 	if price == 0 {
@@ -316,10 +318,15 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 			StgVer:    i.StgVer,
 			Info:      i.IOrder.Info,
 		},
+		DirtyMain:  true,
+		DirtyEnter: true,
+		DirtyInfo:  true,
 	}
 	// 原来订单的enter_at需要+1，防止和拆分的子订单冲突。
 	i.EnterAt += 1
 	i.QuoteCost -= part.QuoteCost
+	i.DirtyMain = true
+	i.DirtyEnter = true
 	partEnter := part.Enter.CutPart(enterRate, true)
 	partEnter.InoutID = part.ID
 	part.Enter = partEnter
@@ -327,6 +334,8 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 		exitRate = (i.Exit.Amount - i.Enter.Amount) / i.Exit.Amount
 	}
 	if exitRate > 0 && i.Exit != nil {
+		i.DirtyExit = true
+		part.DirtyExit = true
 		part.ExitAt = i.ExitAt
 		part.ExitTag = i.ExitTag
 		partExit := i.Exit.CutPart(exitRate, true)
@@ -334,6 +343,10 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 		part.Exit = partExit
 	}
 	return part
+}
+
+func (i *InOutOrder) IsDirty() bool {
+	return i.DirtyExit || i.DirtyMain || i.DirtyEnter || i.DirtyInfo
 }
 
 func (i *InOutOrder) Save(sess *Queries) *errs.Error {
@@ -448,6 +461,17 @@ func (i *InOutOrder) GetInfoText() (string, *errs.Error) {
 		return infoText, nil
 	}
 	return "", nil
+}
+
+/*
+ClientId
+生成交易所的ClientOrderId
+*/
+func (i *InOutOrder) ClientId(random bool) string {
+	if random {
+		return fmt.Sprintf("%s_%v_%v", config.Name, i.ID, rand.Intn(1000))
+	}
+	return fmt.Sprintf("%s_%v", config.Name, i.ID)
 }
 
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {

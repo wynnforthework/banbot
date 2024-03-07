@@ -330,6 +330,10 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 		wallets.CutPart(srcKey, tgtKey, base, 1-req.ExitRate)
 		wallets.CutPart(srcKey, tgtKey, quote, 1-req.ExitRate)
 		req.ExitRate = 1
+		err := od.Save(sess)
+		if err != nil {
+			log.Error("save cutPart parent order fail", zap.String("key", od.Key()), zap.Error(err))
+		}
 		return o.ExitOrder(sess, part, req)
 	}
 	odType := core.OrderTypeEnums[req.OrderType]
@@ -361,6 +365,11 @@ func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKli
 	return nil
 }
 
+/*
+finishOrder
+sess 可为nil
+实盘时内部会保存到数据库。
+*/
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	od.UpdateProfits(0)
 	return od.Save(sess)

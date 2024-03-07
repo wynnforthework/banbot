@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 )
 
 var (
@@ -113,11 +114,9 @@ func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {
 }
 
 func GetTaskID(account string) int64 {
-	if !core.EnvReal {
-		account = config.DefAcc
-	}
-	if id, ok := AccTaskIDs[account]; ok {
-		return id
+	task := GetTask(account)
+	if task != nil {
+		return task.ID
 	}
 	return 0
 }
@@ -182,4 +181,42 @@ func OpenNum(account string, status int16) int {
 		}
 	}
 	return openNum
+}
+
+/*
+SaveDirtyODs
+从打开的订单中查找未保存的订单，全部保存到数据库
+*/
+func SaveDirtyODs(account string) *errs.Error {
+	var dirtyOds []*InOutOrder
+	for accKey, ods := range AccOpenODs {
+		if account != "" && accKey != account {
+			continue
+		}
+		for key, od := range ods {
+			if od.IsDirty() {
+				dirtyOds = append(dirtyOds, od)
+			}
+			if od.Status == InOutStatusFullExit {
+				delete(ods, key)
+			}
+		}
+	}
+	if len(dirtyOds) == 0 {
+		return nil
+	}
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	var odErr *errs.Error
+	for _, od := range dirtyOds {
+		err = od.Save(sess)
+		if err != nil {
+			odErr = err
+			log.Error("save unMatch od fail", zap.String("key", od.Key()), zap.Error(err))
+		}
+	}
+	return odErr
 }

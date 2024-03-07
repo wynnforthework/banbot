@@ -17,13 +17,11 @@ func bnbApplyMyTrade(o *LiveOrderMgr) FuncApplyMyTrade {
 			// 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
 			return nil
 		}
-		defer func() {
-			if subOd.Enter {
-				od.DirtyEnter = true
-			} else {
-				od.DirtyExit = true
-			}
-		}()
+		if subOd.Enter {
+			od.DirtyEnter = true
+		} else {
+			od.DirtyExit = true
+		}
 		subOd.UpdateAt = trade.Timestamp
 		subOd.Amount = trade.Amount
 		state := trade.State
@@ -53,12 +51,7 @@ func bnbApplyMyTrade(o *LiveOrderMgr) FuncApplyMyTrade {
 			log.Error(fmt.Sprintf("unknown bnb order status: %s", state))
 		}
 		if od.Status == orm.InOutStatusFullExit {
-			sess, conn, err := orm.Conn(nil)
-			if err != nil {
-				return err
-			}
-			defer conn.Release()
-			err = o.finishOrder(od, sess)
+			err := o.finishOrder(od, nil)
 			if err != nil {
 				return err
 			}
