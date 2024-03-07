@@ -12,7 +12,6 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
-	"github.com/dgraph-io/ristretto"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gonum.org/v1/gonum/floats"
@@ -26,20 +25,7 @@ var (
 	filters      = make([]IFilter, 0, 10)
 	lastRefresh  = int64(0)
 	needTickers  = false
-	cache        *ristretto.Cache
 )
-
-func init() {
-	var err_ error
-	cache, err_ = ristretto.NewCache(&ristretto.Config{
-		NumCounters: 1e5,
-		MaxCost:     1 << 26,
-		BufferItems: 64,
-	})
-	if err_ != nil {
-		log.Error("init cache fail", zap.Error(err_))
-	}
-}
 
 func Setup() *errs.Error {
 	if len(config.PairFilters) == 0 {
@@ -107,9 +93,8 @@ func RefreshPairList(addPairs []string) *errs.Error {
 		allowFilter = true
 		exchange := exg.Default
 		if needTickers && core.LiveMode {
-			tikCache, ok := cache.Get("tickers")
-			if !ok {
-				tickersMap = make(map[string]*banexg.Ticker)
+			tickersMap = core.GetCacheVal("tickers", map[string]*banexg.Ticker{})
+			if len(tickersMap) == 0 {
 				tickers, err := exchange.FetchTickers(nil, nil)
 				if err != nil {
 					return err
@@ -118,14 +103,18 @@ func RefreshPairList(addPairs []string) *errs.Error {
 					tickersMap[t.Symbol] = t
 				}
 				expires := time.Second * 3600
-				cache.SetWithTTL("tickers", tickersMap, 1, expires)
-			} else {
-				tickersMap, _ = tikCache.(map[string]*banexg.Ticker)
+				core.Cache.SetWithTTL("tickers", tickersMap, 1, expires)
 			}
 		}
-		pairs, err = pairProducer.GenSymbols(tickersMap)
+		genPairs, err := pairProducer.GenSymbols(tickersMap)
 		if err != nil {
 			return err
+		}
+		for _, pair := range genPairs {
+			_, quote, _, _ := core.SplitSymbol(pair)
+			if _, ok := config.StakeCurrencyMap[quote]; ok {
+				pairs = append(pairs, pair)
+			}
 		}
 		log.Info(fmt.Sprintf("gen symbols from %s, num: %d", pairProducer.GetName(), len(pairs)))
 	}

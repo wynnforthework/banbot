@@ -30,26 +30,11 @@ func GetStagyDir() string {
 	return result
 }
 
-func GetRunEnv() string {
-	runEnv := os.Getenv("BanRunEnv")
-	if runEnv == "" {
-		return core.RunEnvTest
-	} else if runEnv != core.RunEnvTest && runEnv != core.RunEnvProd {
-		log.Error(fmt.Sprintf("invalid run env: %v", runEnv))
-		return core.RunEnvTest
-	}
-	return runEnv
-}
-
 func LoadConfig(args *CmdArgs) *errs.Error {
 	if Loaded {
 		return nil
 	}
 	Args = args
-	runEnv := GetRunEnv()
-	if runEnv != core.RunEnvProd {
-		log.Info("Running in test, Please set `BanRunEnv=prod` in production running")
-	}
 	DataDir = args.DataDir
 	var paths []string
 	if !args.NoDefault {
@@ -121,14 +106,10 @@ func apply(args *CmdArgs) *errs.Error {
 		Data.ContractType = banexg.MarketSwap
 	}
 	core.ContractType = Data.ContractType
-	MaxMarketRate = Data.MaxMarketRate
 	if Data.OdBookTtl == 0 {
 		Data.OdBookTtl = 500
 	}
 	OdBookTtl = Data.OdBookTtl
-	if Data.StopEnterBars == 0 {
-		Data.StopEnterBars = 20
-	}
 	StopEnterBars = Data.StopEnterBars
 	OrderType = Data.OrderType
 	PreFire = Data.PreFire
@@ -137,7 +118,6 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	MarginAddRate = Data.MarginAddRate
 	ChargeOnBomb = Data.ChargeOnBomb
-	AutoEditLimit = Data.AutoEditLimit
 	TakeOverStgy = Data.TakeOverStgy
 	if args.StakeAmount > 0 {
 		Data.StakeAmount = args.StakeAmount
@@ -156,6 +136,13 @@ func apply(args *CmdArgs) *errs.Error {
 	WalletAmounts = Data.WalletAmounts
 	DrawBalanceOver = Data.DrawBalanceOver
 	StakeCurrency = Data.StakeCurrency
+	if len(StakeCurrency) == 0 {
+		panic("config `stake_currency` cannot be empty")
+	}
+	StakeCurrencyMap = make(map[string]bool)
+	for _, curr := range Data.StakeCurrency {
+		StakeCurrencyMap[curr] = true
+	}
 	FatalStop = make(map[int]float64)
 	if len(Data.FatalStop) > 0 {
 		for text, rate := range Data.FatalStop {
@@ -171,12 +158,10 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	FatalStopHours = Data.FatalStopHours
 	TimeRange = Data.TimeRange
-	WsStamp = Data.WsStamp
 	if len(args.TimeFrames) > 0 {
 		Data.RunTimeframes = args.TimeFrames
 	}
 	RunTimeframes = Data.RunTimeframes
-	KlineSource = Data.KlineSource
 	WatchJobs = Data.WatchJobs
 	RunPolicy = Data.RunPolicy
 	if len(args.Pairs) > 0 {
@@ -187,7 +172,6 @@ func apply(args *CmdArgs) *errs.Error {
 	PairFilters = Data.PairFilters
 	Exchange = Data.Exchange
 	initExgAccs()
-	ExgDataMap = Data.ExgDataMap
 	Database = Data.Database
 	SpiderAddr = Data.SpiderAddr
 	APIServer = Data.APIServer

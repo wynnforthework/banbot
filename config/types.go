@@ -6,50 +6,47 @@ var (
 	Accounts map[string]*AccountConfig // 交易所账户
 	DefAcc   = "default"               // 非实盘交易时，账户默认的key（回测、模拟交易）
 
-	Name            string
-	Loaded          bool
-	Debug           bool
-	NoDB            bool
-	FixTFKline      bool
-	Leverage        int
-	LimitVolSecs    int // 限价单预期等待多长时间成交，单位秒
-	PutLimitSecs    int // 在此预期时间内成交的限价单，才提交到交易所
-	MaxMarketRate   float64
-	OdBookTtl       int64
-	StopEnterBars   int // 入场限价单超过多少个蜡烛未成交则取消
-	OrderType       string
-	PreFire         float64
-	MarginAddRate   float64 // 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
-	ChargeOnBomb    bool
-	AutoEditLimit   bool
-	TakeOverStgy    string
-	StakeAmount     float64 // 单笔开单金额，优先级低于StakePct
-	StakePct        float64 // 单笔开单金额百分比
-	MaxStakeAmt     float64 // 单笔最大开单金额
-	MinOpenRate     float64 // 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
-	MaxOpenOrders   int
-	WalletAmounts   map[string]float64
-	DrawBalanceOver float64
-	StakeCurrency   []string
-	FatalStop       map[int]float64
-	FatalStopHours  int
-	TimeRange       *TimeTuple
-	WsStamp         *string
-	RunTimeframes   []string
-	KlineSource     string
-	WatchJobs       map[string][]string
-	RunPolicy       []*RunPolicyConfig
-	Pairs           []string
-	PairMgr         *PairMgrConfig
-	PairFilters     []*CommonPairFilter
-	Exchange        *ExchangeConfig
-	DataDir         string
-	ExgDataMap      map[string]string
-	Database        *DatabaseConfig
-	SpiderAddr      string
-	APIServer       *APIServerConfig
-	RPCChannels     map[string]map[string]interface{}
-	Webhook         map[string]map[string]string
+	Name             string
+	Loaded           bool
+	Debug            bool
+	NoDB             bool
+	FixTFKline       bool
+	Leverage         int
+	LimitVolSecs     int // 限价单预期等待多长时间成交，单位秒
+	PutLimitSecs     int // 在此预期时间内成交的限价单，才提交到交易所
+	OdBookTtl        int64
+	StopEnterBars    int // 入场限价单超过多少个蜡烛未成交则取消
+	OrderType        string
+	PreFire          float64
+	MarginAddRate    float64 // 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
+	ChargeOnBomb     bool
+	TakeOverStgy     string
+	StakeAmount      float64 // 单笔开单金额，优先级低于StakePct
+	StakePct         float64 // 单笔开单金额百分比
+	MaxStakeAmt      float64 // 单笔最大开单金额
+	MinOpenRate      float64 // 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
+	MaxOpenOrders    int
+	WalletAmounts    map[string]float64
+	DrawBalanceOver  float64
+	StakeCurrency    []string
+	StakeCurrencyMap map[string]bool
+	FatalStop        map[int]float64
+	FatalStopHours   int
+	TimeRange        *TimeTuple
+	RunTimeframes    []string
+	KlineSource      string
+	WatchJobs        map[string][]string
+	RunPolicy        []*RunPolicyConfig
+	Pairs            []string
+	PairMgr          *PairMgrConfig
+	PairFilters      []*CommonPairFilter
+	Exchange         *ExchangeConfig
+	DataDir          string
+	Database         *DatabaseConfig
+	SpiderAddr       string
+	APIServer        *APIServerConfig
+	RPCChannels      map[string]map[string]interface{}
+	Webhook          map[string]map[string]string
 )
 
 // Config 是根配置结构体
@@ -61,14 +58,12 @@ type Config struct {
 	PutLimitSecs    int                               `yaml:"put_limit_secs" mapstructure:"put_limit_secs"`
 	MarketType      string                            `yaml:"market_type" mapstructure:"market_type"`
 	ContractType    string                            `yaml:"contract_type" mapstructure:"contract_type"`
-	MaxMarketRate   float64                           `yaml:"max_market_rate" mapstructure:"max_market_rate"`
 	OdBookTtl       int64                             `yaml:"odbook_ttl" mapstructure:"odbook_ttl"`
 	StopEnterBars   int                               `json:"stop_enter_bars" mapstructure:"stop_enter_bars"`
 	OrderType       string                            `yaml:"order_type" mapstructure:"order_type"`
 	PreFire         float64                           `yaml:"prefire" mapstructure:"prefire"`
 	MarginAddRate   float64                           `yaml:"margin_add_rate" mapstructure:"margin_add_rate"`
 	ChargeOnBomb    bool                              `yaml:"charge_on_bomb" mapstructure:"charge_on_bomb"`
-	AutoEditLimit   bool                              `yaml:"auto_edit_limit" mapstructure:"auto_edit_limit"`
 	TakeOverStgy    string                            `yaml:"take_over_stgy" mapstructure:"take_over_stgy"`
 	StakeAmount     float64                           `yaml:"stake_amount" mapstructure:"stake_amount"`
 	StakePct        float64                           `yaml:"stake_pct" mapstructure:"stake_pct"`
@@ -82,7 +77,6 @@ type Config struct {
 	FatalStopHours  int                               `yaml:"fatal_stop_hours" mapstructure:"fatal_stop_hours"`
 	TimeRangeRaw    string                            `yaml:"timerange" mapstructure:"timerange"`
 	TimeRange       *TimeTuple                        `json:"-" mapstructure:"-"`
-	WsStamp         *string                           `yaml:"ws_stamp" mapstructure:"ws_stamp"`
 	RunTimeframes   []string                          `yaml:"run_timeframes" mapstructure:"run_timeframes"`
 	KlineSource     string                            `yaml:"kline_source" mapstructure:"kline_source"`
 	WatchJobs       map[string][]string               `yaml:"watch_jobs" mapstructure:"watch_jobs"`
@@ -91,7 +85,6 @@ type Config struct {
 	PairMgr         *PairMgrConfig                    `yaml:"pairmgr" mapstructure:"pairmgr"`
 	PairFilters     []*CommonPairFilter               `yaml:"pairlists" mapstructure:"pairlists"`
 	Exchange        *ExchangeConfig                   `yaml:"exchange" mapstructure:"exchange"`
-	ExgDataMap      map[string]string                 `yaml:"exg_data_map" mapstructure:"exg_data_map"`
 	Database        *DatabaseConfig                   `yaml:"database" mapstructure:"database"`
 	SpiderAddr      string                            `yaml:"spider_addr" mapstructure:"spider_addr"`
 	APIServer       *APIServerConfig                  `yaml:"api_server" mapstructure:"api_server"`
