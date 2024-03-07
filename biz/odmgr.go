@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	AccOdMgrs     = make(map[string]IOrderMgr)
-	AccLiveOdMgrs = make(map[string]*LiveOrderMgr)
+	accOdMgrs     = make(map[string]IOrderMgr)
+	accLiveOdMgrs = make(map[string]*LiveOrderMgr)
 )
 
 type IOrderMgr interface {
@@ -53,7 +53,7 @@ func GetOdMgr(account string) IOrderMgr {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
-	val, _ := AccOdMgrs[account]
+	val, _ := accOdMgrs[account]
 	return val
 }
 
@@ -61,7 +61,7 @@ func GetLiveOdMgr(account string) *LiveOrderMgr {
 	if !core.EnvReal {
 		panic("call GetLiveOdMgr in FakeEnv is forbidden: " + core.RunEnv)
 	}
-	val, _ := AccLiveOdMgrs[account]
+	val, _ := accLiveOdMgrs[account]
 	return val
 }
 
@@ -70,11 +70,11 @@ func CleanUpOdMgr() *errs.Error {
 	for account := range config.Accounts {
 		var curErr *errs.Error
 		if core.EnvReal {
-			if mgr, ok := AccLiveOdMgrs[account]; ok {
+			if mgr, ok := accLiveOdMgrs[account]; ok {
 				curErr = mgr.CleanUp()
 			}
 		} else {
-			if mgr, ok := AccOdMgrs[account]; ok {
+			if mgr, ok := accOdMgrs[account]; ok {
 				curErr = mgr.CleanUp()
 			}
 		}
@@ -97,8 +97,11 @@ func allowOrderEnter(account string, env *banta.BarEnv) bool {
 		// 不涉及订单模式，禁止开单
 		return false
 	}
-	openOds := orm.GetOpenODs(account)
-	if len(openOds) >= config.MaxOpenOrders {
+	openOds, lock := orm.GetOpenODs(account)
+	lock.Lock()
+	numOver := len(openOds) >= config.MaxOpenOrders
+	lock.Unlock()
+	if numOver {
 		return false
 	}
 	if btime.TimeMS() < core.NoEnterUntil {
@@ -218,10 +221,12 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy.ExitReq) ([]*orm.InOutOrder, *errs.Error) {
 	// 筛选匹配的订单
 	var matches []*orm.InOutOrder
-	openOds := orm.GetOpenODs(o.Account)
+	openOds, lock := orm.GetOpenODs(o.Account)
 	if req.OrderID > 0 {
 		// 精确指定退出的订单ID
+		lock.Lock()
 		od, ok := openOds[req.OrderID]
+		lock.Unlock()
 		if !ok {
 			return nil, errs.NewMsg(errs.CodeParamInvalid, "req orderId not found: %d", req.OrderID)
 		}
@@ -237,6 +242,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy
 		}
 		dirtBoth := req.Dirt == core.OdDirtBoth
 		isShort := req.Dirt == core.OdDirtShort
+		lock.Lock()
 		for _, od := range openOds {
 			if req.StgyName != "" && od.Strategy != req.StgyName {
 				continue
@@ -264,6 +270,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy
 			}
 			matches = append(matches, od)
 		}
+		lock.Unlock()
 	}
 	if len(matches) == 0 {
 		return nil, nil

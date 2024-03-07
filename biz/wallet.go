@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	AccWallets = make(map[string]*BanWallets)
+	accWallets = make(map[string]*BanWallets)
 )
 
 type ItemWallet struct {
@@ -60,13 +60,13 @@ func GetWallets(account string) *BanWallets {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
-	val, ok := AccWallets[account]
+	val, ok := accWallets[account]
 	if !ok {
 		val = &BanWallets{
 			Items:   map[string]*ItemWallet{},
 			Account: account,
 		}
-		AccWallets[account] = val
+		accWallets[account] = val
 	}
 	return val
 }

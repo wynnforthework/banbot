@@ -17,6 +17,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -27,7 +28,6 @@ type LiveOrderMgr struct {
 	OrderMgr
 	queue            chan *OdQItem
 	doneKeys         map[string]bool // 已完成的订单：symbol+orderId
-	volPrices        map[string]*VolPrice
 	exgIdMap         map[string]*orm.InOutOrder
 	doneTrades       map[string]bool            // 已处理的交易：symbol+tradeId
 	isWatchMyTrade   bool                       // 是否正在监听账户交易流
@@ -50,7 +50,10 @@ const (
 )
 
 var (
-	pairVolMap = map[string]*PairValItem{}
+	pairVolMap     = map[string]*PairValItem{}
+	volPrices      = map[string]*VolPrice{}
+	lockPairVolMap sync.Mutex
+	lockVolPrices  sync.Mutex
 )
 
 type PairValItem struct {
@@ -61,11 +64,11 @@ type PairValItem struct {
 
 func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 	for account := range config.Accounts {
-		mgr, ok := AccLiveOdMgrs[account]
+		mgr, ok := accLiveOdMgrs[account]
 		if !ok {
 			odMgr := newLiveOrderMgr(account, callBack)
-			AccLiveOdMgrs[account] = odMgr
-			AccOdMgrs[account] = odMgr
+			accLiveOdMgrs[account] = odMgr
+			accOdMgrs[account] = odMgr
 		} else {
 			mgr.callBack = callBack
 		}
@@ -80,7 +83,6 @@ func newLiveOrderMgr(account string, callBack func(od *orm.InOutOrder, isEnter b
 		},
 		queue:         make(chan *OdQItem, 1000),
 		doneKeys:      map[string]bool{},
-		volPrices:     map[string]*VolPrice{},
 		exgIdMap:      map[string]*orm.InOutOrder{},
 		doneTrades:    map[string]bool{},
 		unMatchTrades: map[string]*banexg.MyTrade{},
@@ -129,7 +131,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		return nil, nil, nil, err
 	}
 	// 从数据库加载订单
-	openOds := orm.GetOpenODs(o.Account)
+	openOds, lock := orm.GetOpenODs(o.Account)
 	orders, err := sess.GetOrders(orm.GetOrdersArgs{
 		TaskID: task.ID,
 		Status: 1,
@@ -141,8 +143,9 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	}
 	var lastEntMS int64
 	var openPairs = map[string]struct{}{}
+	var curMS = btime.TimeMS()
 	for _, od := range orders {
-		if od.Status == orm.InOutStatusFullExit {
+		if od.Status >= orm.InOutStatusFullExit {
 			continue
 		}
 		lastEntMS = max(lastEntMS, od.EnterAt)
@@ -152,7 +155,9 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		}
 		if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
 			// 订单未提交到交易所，且是入场订单
-			if isFarLimit(tryOd) {
+			tfMSecs := int64(utils.TFToSecs(od.Timeframe) * 1000)
+			notReachLimit := config.StopEnterBars == 0 || int((curMS-od.EnterAt)/tfMSecs) < config.StopEnterBars
+			if notReachLimit && isFarLimit(tryOd) {
 				orm.AddTriggerOd(o.Account, od)
 			} else {
 				err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单")
@@ -181,7 +186,9 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 			}
 		}
 		if od.Status < orm.InOutStatusFullExit {
+			lock.Lock()
 			openOds[od.ID] = od
+			lock.Unlock()
 			openPairs[od.Symbol] = struct{}{}
 		}
 		err = od.Save(sess)
@@ -202,14 +209,18 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		openPairs[v.Symbol] = struct{}{}
 		return v.Symbol
 	})
+	lock.Lock()
 	var resOdList = make([]*orm.InOutOrder, 0, len(openOds))
+	lock.Unlock()
 	for pair := range openPairs {
 		curOds := make([]*orm.InOutOrder, 0, 2)
+		lock.Lock()
 		for _, od := range openOds {
 			if od.Symbol == pair {
 				curOds = append(curOds, od)
 			}
 		}
+		lock.Unlock()
 		curPos, _ := posMap[pair]
 		if len(curPos) == 0 && len(curOds) == 0 {
 			continue
@@ -241,6 +252,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	resMap := utils.ArrToMap(resOdList, func(od *orm.InOutOrder) int64 {
 		return od.ID
 	})
+	lock.Lock()
 	for key, od := range openOds {
 		_, newHas := resMap[key]
 		if !newHas {
@@ -256,6 +268,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 			openOds[key] = od[0]
 		}
 	}
+	lock.Unlock()
 	if len(oldList) > 0 {
 		log.Info(fmt.Sprintf("恢复%v个未平仓订单", len(oldList)))
 	}
@@ -314,6 +327,9 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			odAmt := iod.Enter.Filled
 			if iod.Exit != nil {
 				odAmt -= iod.Exit.Filled
+			}
+			if odAmt == 0 {
+				continue
 			}
 			if odAmt*iod.InitPrice < 1 {
 				// TODO: 这里计算的quote价值，后续需要改为法币价值
@@ -656,6 +672,7 @@ func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enter
 
 func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
+		log.Info("NEW Enter", zap.String("key", order.Key()))
 		if isFarLimit(order.Enter) {
 			// 长时间难以成交的限价单，先不提交到交易所，防止资金占用
 			orm.AddTriggerOd(o.Account, order)
@@ -671,6 +688,7 @@ func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 
 func makeAfterExit(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
+		log.Info("Exit Order", zap.String("key", order.Key()), zap.String("exitTag", order.ExitTag))
 		o.queue <- &OdQItem{
 			Order:  order,
 			Action: "exit",
@@ -697,21 +715,35 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 				break
 			}
 			var err *errs.Error
+			var od = item.Order
 			switch item.Action {
 			case "enter":
-				err = o.execOrderEnter(item.Order)
+				err = o.execOrderEnter(od)
 			case "exit":
-				err = o.execOrderExit(item.Order)
+				err = o.execOrderExit(od)
 			default:
-				editTriggerOd(item.Order, item.Action)
+				editTriggerOd(od, item.Action)
 			}
 			if err != nil {
 				log.Error("ConsumeOrderQueue error", zap.String("action", item.Action), zap.Error(err))
 			}
-			if item.Order.IsDirty() {
-				err = item.Order.Save(nil)
+			if od.IsDirty() {
+				err = od.Save(nil)
 				if err != nil {
-					log.Error("save od for exg status fail", zap.String("key", item.Order.Key()), zap.Error(err))
+					log.Error("save od for exg status fail", zap.String("key", od.Key()), zap.Error(err))
+				}
+			}
+			if item.Action == "enter" {
+				if od.Enter.OrderID != "" && od.Status < orm.InOutStatusFullExit {
+					log.Info("Enter Order Submitted", zap.String("key", od.Key()))
+				} else if od.Status >= orm.InOutStatusFullExit {
+					log.Info("Enter Order Closed", zap.String("key", od.Key()), zap.String("exitTag", od.ExitTag))
+				}
+			} else if item.Action == "exit" {
+				if od.Exit.OrderID != "" {
+					log.Info("Exit Order Submitted", zap.String("key", od.Key()), zap.Int16("state", od.Status))
+				} else if od.Status >= orm.InOutStatusFullExit {
+					log.Info("Exit Order Closed", zap.String("key", od.Key()), zap.String("exitTag", od.ExitTag))
 				}
 			}
 		}
@@ -865,7 +897,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 				wallets := GetWallets(o.Account)
 				od.QuoteCost = wallets.GetAmountByLegal(quote, legalCost)
 				if od.QuoteCost == 0 {
-					core.ForbidPairs[od.Symbol] = true
+					// core.ForbidPairs[od.Symbol] = true
 					forceDelOd(errs.NewMsg(core.ErrRunTime, "no available"))
 					return nil
 				}
@@ -1053,14 +1085,14 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 	} else {
 		od.DirtyExit = true
 	}
-	if subOd.OrderID != "" {
+	if subOd.OrderID != "" && subOd.OrderID != res.ID {
 		// 如修改订单价格，order_id会变化
 		o.doneKeys[od.Symbol+subOd.OrderID] = true
 	}
 	subOd.OrderID = res.ID
 	idKey := od.Symbol + subOd.OrderID
 	o.exgIdMap[idKey] = od
-	if o.hasNewTrades(res) && subOd.UpdateAt < res.Timestamp {
+	if o.hasNewTrades(res) && subOd.UpdateAt <= res.Timestamp {
 		subOd.UpdateAt = res.Timestamp
 		subOd.Amount = res.Amount
 		if res.Filled > 0 {
@@ -1159,7 +1191,9 @@ getLimitPrice
 */
 func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float64) {
 	key := fmt.Sprintf("%s_%s", pair, strconv.Itoa(waitSecs))
-	cache, ok := o.volPrices[key]
+	lockVolPrices.Lock()
+	cache, ok := volPrices[key]
+	lockVolPrices.Unlock()
 	if ok && cache.ExpireMS > btime.TimeMS() {
 		return cache.BuyPrice, cache.SellPrice
 	}
@@ -1182,11 +1216,13 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 	}
 	// 价格缓存最长3s，最短传入的1/10
 	expMS := min(3000, int64(waitSecs)*100)
-	o.volPrices[key] = &VolPrice{
+	lockVolPrices.Lock()
+	volPrices[key] = &VolPrice{
 		BuyPrice:  buyPrice,
 		SellPrice: sellPrice,
 		ExpireMS:  btime.TimeMS() + expMS,
 	}
+	lockVolPrices.Unlock()
 	return buyPrice, sellPrice
 }
 
@@ -1197,7 +1233,9 @@ getPairMinsVol
 */
 func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 	cacheKey := fmt.Sprintf("%s_%v", pair, num)
+	lockPairVolMap.Lock()
 	cache, ok := pairVolMap[cacheKey]
+	lockPairVolMap.Unlock()
 	curMs := btime.TimeMS()
 	if ok && cache.ExpireMS > curMs {
 		return cache.AvgVol, cache.LastVol, nil
@@ -1222,7 +1260,9 @@ func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 	}
 	avg, last, err := calc()
 	expireMS := utils.AlignTfMSecs(curMs+60000, 60000)
+	lockPairVolMap.Lock()
 	pairVolMap[cacheKey] = &PairValItem{AvgVol: avg, LastVol: last, ExpireMS: expireMS}
+	lockPairVolMap.Unlock()
 	return avg, last, err
 }
 
@@ -1258,12 +1298,21 @@ func VerifyTriggerOds() {
 }
 
 func verifyAccountTriggerOds(account string) {
-	triggerOds := orm.GetTriggerODs(account)
-	if len(triggerOds) == 0 {
+	triggerOds, lock := orm.GetTriggerODs(account)
+	lock.Lock()
+	isEmpty := len(triggerOds) == 0
+	lock.Unlock()
+	if isEmpty {
 		return
 	}
 	var resOds []*orm.InOutOrder
-	for pair, ods := range triggerOds {
+	var copyTriggers = make(map[string][]*orm.InOutOrder)
+	lock.Lock()
+	for key, val := range triggerOds {
+		copyTriggers[key] = val
+	}
+	lock.Unlock()
+	for pair, ods := range copyTriggers {
 		if len(ods) == 0 {
 			continue
 		}
@@ -1286,7 +1335,7 @@ func verifyAccountTriggerOds(account string) {
 		}
 		var leftOds = make([]*orm.InOutOrder, 0, len(ods))
 		for _, od := range ods {
-			if od.Status == orm.InOutStatusFullExit {
+			if od.Status >= orm.InOutStatusFullExit {
 				continue
 			}
 			subOd := od.Enter
@@ -1303,11 +1352,13 @@ func verifyAccountTriggerOds(account string) {
 				leftOds = append(leftOds, od)
 			}
 		}
+		lock.Lock()
 		triggerOds[pair] = leftOds
+		lock.Unlock()
 	}
 	odMgr := GetLiveOdMgr(account)
 	for _, od := range resOds {
-		if od.Status == orm.InOutStatusFullExit {
+		if od.Status >= orm.InOutStatusFullExit {
 			continue
 		}
 		tag := "enter"
@@ -1356,9 +1407,12 @@ func cancelAccountOldLimits(account string) {
 	curMS := btime.TimeMS()
 	exchange := exg.Default
 	var saveOds []*orm.InOutOrder
-	openOds := orm.GetOpenODs(account)
+	openOds, lock := orm.GetOpenODs(account)
+	lock.Lock()
+	openArr := utils.ValsOfMap(openOds)
+	lock.Unlock()
 	odMgr := GetLiveOdMgr(account)
-	for _, od := range openOds {
+	for _, od := range openArr {
 		if od.Status > orm.InOutStatusPartEnter || od.Enter.Price == 0 ||
 			!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
 			// 跳过已完全入场，或者非限价单
@@ -1497,6 +1551,7 @@ func (o *LiveOrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.
 	if od.Exit != nil && od.Exit.OrderID != "" {
 		o.doneKeys[od.Symbol+od.Exit.OrderID] = true
 	}
+	log.Info("Finish Order", zap.String("key", od.Key()), zap.String("tag", od.ExitTag))
 	return o.OrderMgr.finishOrder(od, sess)
 }
 

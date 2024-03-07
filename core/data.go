@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/banbox/banexg"
 	"github.com/robfig/cron/v3"
+	"sync"
 )
 
 var (
@@ -93,11 +94,13 @@ const (
 )
 
 var (
-	barPrices  = make(map[string]float64) //# 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
-	prices     = make(map[string]float64) //交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
-	Ctx        context.Context            // 用于全部goroutine同时停止
-	StopAll    func()                     // 停止全部机器人线程
-	BotRunning bool                       // 机器人是否正在运行
+	barPrices     = make(map[string]float64) //# 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
+	prices        = make(map[string]float64) //交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
+	lockPrices    sync.RWMutex
+	lockBarPrices sync.RWMutex
+	Ctx           context.Context // 用于全部goroutine同时停止
+	StopAll       func()          // 停止全部机器人线程
+	BotRunning    bool            // 机器人是否正在运行
 )
 
 var (

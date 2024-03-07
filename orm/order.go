@@ -350,17 +350,22 @@ func (i *InOutOrder) IsDirty() bool {
 }
 
 func (i *InOutOrder) Save(sess *Queries) *errs.Error {
+	if i.Status == InOutStatusDelete {
+		return nil
+	}
 	if core.LiveMode {
 		err := i.saveToDb(sess)
 		if err != nil {
 			return err
 		}
-		openOds := GetOpenODs(GetTaskAcc(i.TaskID))
+		openOds, lock := GetOpenODs(GetTaskAcc(i.TaskID))
+		lock.Lock()
 		if i.Status < InOutStatusFullExit {
 			openOds[i.ID] = i
 		} else {
 			delete(openOds, i.ID)
 		}
+		lock.Unlock()
 	} else {
 		i.saveToMem()
 	}
@@ -372,7 +377,8 @@ func (i *InOutOrder) saveToMem() {
 		i.ID = FakeOdId
 		FakeOdId += 1
 	}
-	openOds := GetOpenODs(GetTaskAcc(i.TaskID))
+	openOds, lock := GetOpenODs(GetTaskAcc(i.TaskID))
+	lock.Lock()
 	if i.Status < InOutStatusFullExit {
 		openOds[i.ID] = i
 	} else {
@@ -381,9 +387,13 @@ func (i *InOutOrder) saveToMem() {
 			HistODs = append(HistODs, i)
 		}
 	}
+	lock.Unlock()
 }
 
 func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
+	if i.Status == InOutStatusDelete {
+		return nil
+	}
 	var err *errs.Error
 	i.IOrder.Info, err = i.GetInfoText()
 	if err != nil {
@@ -628,7 +638,7 @@ func (q *Queries) DumpOrdersToDb() *errs.Error {
 	if config.NoDB {
 		return nil
 	}
-	for _, orders := range AccOpenODs {
+	for _, orders := range accOpenODs {
 		allOrders := append(HistODs, utils.ValsOfMap(orders)...)
 		for _, od := range allOrders {
 			od.ID = 0
@@ -838,10 +848,12 @@ func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
 	if od == nil || od.ID == 0 {
 		return nil
 	}
-	openOds := GetOpenODs(GetTaskAcc(od.TaskID))
+	openOds, lock := GetOpenODs(GetTaskAcc(od.TaskID))
+	lock.Lock()
 	delete(openOds, od.ID)
+	lock.Unlock()
 	// 设置已完成，防止其他地方错误使用
-	od.Status = InOutStatusFullExit
+	od.Status = InOutStatusDelete
 	ctx := context.Background()
 	sql := fmt.Sprintf("delete from iorder where id=%v", od.ID)
 	_, err_ := q.db.Exec(ctx, sql)

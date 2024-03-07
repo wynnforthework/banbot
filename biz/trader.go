@@ -77,9 +77,11 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 	if len(jobs) == 0 && len(infoJobs) == 0 {
 		return nil
 	}
-	openOds := orm.GetOpenODs(account)
+	openOds, lock := orm.GetOpenODs(account)
 	// 更新非生产模式的订单
+	lock.Lock()
 	allOrders := utils.ValsOfMap(openOds)
+	lock.Unlock()
 	odMgr := GetOdMgr(account)
 	var err *errs.Error
 	if !core.IsWarmUp {

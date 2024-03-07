@@ -9,12 +9,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"sync"
 )
 
 var (
 	pool         *pgxpool.Pool
-	AccTaskIDs   = make(map[string]int64)
-	AccTasks     = make(map[string]*BotTask)
+	accTasks     = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
 )
 
@@ -125,7 +125,7 @@ func GetTask(account string) *BotTask {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
-	if task, ok := AccTasks[account]; ok {
+	if task, ok := accTasks[account]; ok {
 		return task
 	}
 	return nil
@@ -138,34 +138,42 @@ func GetTaskAcc(id int64) string {
 	return ""
 }
 
-func GetOpenODs(account string) map[int64]*InOutOrder {
+func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
-	val, ok := AccOpenODs[account]
+	val, ok := accOpenODs[account]
+	lock, _ := lockOpenMap[account]
 	if !ok {
 		val = make(map[int64]*InOutOrder)
-		AccOpenODs[account] = val
+		accOpenODs[account] = val
+		lock = &sync.Mutex{}
+		lockOpenMap[account] = lock
 	}
-	return val
+	return val, lock
 }
 
-func GetTriggerODs(account string) map[string][]*InOutOrder {
+func GetTriggerODs(account string) (map[string][]*InOutOrder, *sync.Mutex) {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
-	val, ok := AccTriggerODs[account]
+	val, ok := accTriggerODs[account]
+	lock, _ := lockTriggerMap[account]
 	if !ok {
 		val = make(map[string][]*InOutOrder)
-		AccTriggerODs[account] = val
+		accTriggerODs[account] = val
+		lock = &sync.Mutex{}
+		lockOpenMap[account] = lock
 	}
-	return val
+	return val, lock
 }
 
 func AddTriggerOd(account string, od *InOutOrder) {
-	triggerOds := GetTriggerODs(account)
+	triggerOds, lock := GetTriggerODs(account)
+	lock.Lock()
 	ods, _ := triggerOds[od.Symbol]
 	triggerOds[od.Symbol] = append(ods, od)
+	lock.Unlock()
 }
 
 /*
@@ -174,12 +182,14 @@ OpenNum
 */
 func OpenNum(account string, status int16) int {
 	openNum := 0
-	openOds := GetOpenODs(account)
+	openOds, lock := GetOpenODs(account)
+	lock.Lock()
 	for _, od := range openOds {
 		if od.Status >= status {
 			openNum += 1
 		}
 	}
+	lock.Unlock()
 	return openNum
 }
 
@@ -189,18 +199,21 @@ SaveDirtyODs
 */
 func SaveDirtyODs(account string) *errs.Error {
 	var dirtyOds []*InOutOrder
-	for accKey, ods := range AccOpenODs {
+	for accKey, ods := range accOpenODs {
 		if account != "" && accKey != account {
 			continue
 		}
+		lock, _ := lockOpenMap[accKey]
+		lock.Lock()
 		for key, od := range ods {
 			if od.IsDirty() {
 				dirtyOds = append(dirtyOds, od)
 			}
-			if od.Status == InOutStatusFullExit {
+			if od.Status >= InOutStatusFullExit {
 				delete(ods, key)
 			}
 		}
+		lock.Unlock()
 	}
 	if len(dirtyOds) == 0 {
 		return nil

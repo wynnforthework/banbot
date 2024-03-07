@@ -79,11 +79,13 @@ func (t *CryptoTrader) initOdMgr() ([]string, *errs.Error) {
 		if err != nil {
 			return nil, err
 		}
-		openOds := orm.GetOpenODs(account)
+		openOds, lock := orm.GetOpenODs(account)
+		lock.Lock()
 		for _, od := range openOds {
 			addPairs[od.Symbol] = true
 		}
 		msg := fmt.Sprintf("订单恢复%d，删除%d，新增%d，已开启%d单", len(oldList), len(delList), len(newList), len(openOds))
+		lock.Unlock()
 		rpc.SendMsg(map[string]interface{}{
 			"type":    rpc.MsgTypeStatus,
 			"account": account,

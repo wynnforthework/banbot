@@ -69,13 +69,15 @@ func bnbExitByMyTrade(o *LiveOrderMgr) FuncHandleMyTrade {
 		}
 		isShort := trade.PosSide == banexg.PosSideShort
 		var openOds []*orm.InOutOrder
-		accOpenOds := orm.GetOpenODs(o.Account)
+		accOpenOds, lock := orm.GetOpenODs(o.Account)
+		lock.Lock()
 		for _, od := range accOpenOds {
 			if od.Short != isShort || od.Symbol != trade.Symbol || od.Enter.Side == trade.Side {
 				continue
 			}
 			openOds = append(openOds, od)
 		}
+		lock.Unlock()
 		if len(openOds) == 0 {
 			// 没有同方向，相反操作的可平仓订单
 			return false
@@ -148,8 +150,10 @@ func (o *LiveOrderMgr) makeInOutOd(sess *orm.Queries, pair string, short bool, a
 		log.Error("save third order fail", zap.String("key", iod.Key()), zap.Error(err))
 		return nil
 	}
-	openOds := orm.GetOpenODs(o.Account)
+	openOds, lock := orm.GetOpenODs(o.Account)
+	lock.Lock()
 	openOds[iod.ID] = iod
+	lock.Unlock()
 	return iod
 }
 

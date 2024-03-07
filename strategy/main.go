@@ -160,8 +160,9 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 func initStagyJobs() {
 	// 更新job的EnterNum
 	for account := range config.Accounts {
-		openOds := orm.GetOpenODs(account)
+		openOds, lock := orm.GetOpenODs(account)
 		var enterNums = make(map[string]int)
+		lock.Lock()
 		for _, od := range openOds {
 			key := fmt.Sprintf("%s_%s_%s", od.Symbol, od.Timeframe, od.Strategy)
 			num, ok := enterNums[key]
@@ -171,6 +172,7 @@ func initStagyJobs() {
 				enterNums[key] = 1
 			}
 		}
+		lock.Unlock()
 		accJobs := GetJobs(account)
 		for _, jobs := range accJobs {
 			for _, job := range jobs {

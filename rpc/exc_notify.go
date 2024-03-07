@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,7 @@ const (
 
 var (
 	keyLastMap = map[string]int64{}
+	lockExcKey sync.Mutex
 )
 
 func NewExcNotify() *ExcNotify {
@@ -123,7 +125,9 @@ func TrySendExc(cacheKey string, content string) {
 	}
 	core.Cache.SetWithTTL(cacheKey, numVal+1, 1, ttl)
 	core.Cache.SetWithTTL(cacheKey+"_text", content, 1, ttl)
+	lockExcKey.Lock()
 	lastMS, ok := keyLastMap[cacheKey]
+	lockExcKey.Unlock()
 	curMS := time.Now().UnixMilli()
 	waitMS := int64(0)
 	if !ok || curMS-lastMS > keyIntv {
@@ -138,7 +142,9 @@ func TrySendExc(cacheKey string, content string) {
 		// 没有定时器，还未达到下次时间
 		waitMS = lastMS + keyIntv - 1000 - curMS
 	}
+	lockExcKey.Lock()
 	keyLastMap[cacheKey] = curMS + waitMS
+	lockExcKey.Unlock()
 	sendExcAfter(waitMS, cacheKey)
 }
 

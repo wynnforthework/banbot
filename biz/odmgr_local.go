@@ -26,7 +26,7 @@ type LocalOrderMgr struct {
 
 func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 	for account := range config.Accounts {
-		mgr, ok := AccOdMgrs[account]
+		mgr, ok := accOdMgrs[account]
 		if !ok {
 			mgr = &LocalOrderMgr{
 				OrderMgr{
@@ -34,7 +34,7 @@ func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 					Account:  account,
 				},
 			}
-			AccOdMgrs[account] = mgr
+			accOdMgrs[account] = mgr
 		}
 	}
 }
