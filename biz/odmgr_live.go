@@ -141,49 +141,25 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		conn.Release()
 		return nil, nil, nil, err
 	}
+	// 查询任务的最近使用时间周期
+	var pairLastTfs = make(map[string]string)
+	if config.TakeOverStgy != "" {
+		pairLastTfs, err = sess.GetHistOrderTfs(task.ID, config.TakeOverStgy)
+		if err != nil {
+			conn.Release()
+			return nil, nil, nil, err
+		}
+	}
 	var lastEntMS int64
 	var openPairs = map[string]struct{}{}
-	var curMS = btime.TimeMS()
 	for _, od := range orders {
 		if od.Status >= orm.InOutStatusFullExit {
 			continue
 		}
 		lastEntMS = max(lastEntMS, od.EnterAt)
-		tryOd := od.Enter
-		if od.Exit != nil {
-			tryOd = od.Exit
-		}
-		if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
-			// 订单未提交到交易所，且是入场订单
-			tfMSecs := int64(utils.TFToSecs(od.Timeframe) * 1000)
-			notReachLimit := config.StopEnterBars == 0 || int((curMS-od.EnterAt)/tfMSecs) < config.StopEnterBars
-			if notReachLimit && isFarLimit(tryOd) {
-				orm.AddTriggerOd(o.Account, od)
-			} else {
-				err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单")
-				if err != nil {
-					log.Error("cancel nonEntry order fail", zap.String("key", od.Key()), zap.Error(err))
-				}
-				continue
-			}
-		} else if tryOd.OrderID != "" {
-			// 已提交到交易所
-			exOd, ok := exgOdMap[tryOd.OrderID]
-			if !ok {
-				// 订单已取消或已成交，查询交易所订单
-				exOd, err = exchange.FetchOrder(od.Symbol, tryOd.OrderID, map[string]interface{}{
-					banexg.ParamAccount: o.Account,
-				})
-				if err != nil {
-					log.Error("get exgOrder fail", zap.String("key", od.Key()), zap.Error(err))
-				}
-			}
-			if exOd != nil {
-				err = o.updateOdByExgRes(od, tryOd.Enter, exOd)
-				if err != nil {
-					log.Error("update od with exg openOd fail", zap.String("key", od.Key()), zap.Error(err))
-				}
-			}
+		err = o.restoreInOutOrder(od, exgOdMap)
+		if err != nil {
+			log.Error("restoreInOutOrder fail", zap.String("key", od.Key()), zap.Error(err))
 		}
 		if od.Status < orm.InOutStatusFullExit {
 			lock.Lock()
@@ -233,13 +209,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 				shortPos = pos
 			}
 		}
-		var prevTF string
-		for _, od := range orm.HistODs {
-			if od.Symbol == pair {
-				prevTF = od.Timeframe
-				break
-			}
-		}
+		prevTF, _ := pairLastTfs[pair]
 		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, lastEntMS, curOds)
 		if err != nil {
 			return nil, nil, nil, err
@@ -280,6 +250,73 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		log.Error("SaveDirtyODs fail", zap.Error(err))
 	}
 	return oldList, newList, delList, nil
+}
+
+/*
+restoreInOutOrder
+恢复订单状态
+*/
+func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string]*banexg.Order) *errs.Error {
+	tryOd := od.Enter
+	if od.Exit != nil {
+		tryOd = od.Exit
+	}
+	var err *errs.Error
+	if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
+		// 订单未提交到交易所，且是入场订单
+		tfMSecs := int64(utils.TFToSecs(od.Timeframe) * 1000)
+		curMS := btime.TimeMS()
+		notReachLimit := config.StopEnterBars == 0 || int((curMS-od.EnterAt)/tfMSecs) < config.StopEnterBars
+		if notReachLimit && isFarLimit(tryOd) {
+			orm.AddTriggerOd(o.Account, od)
+		} else {
+			return od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单")
+		}
+	} else if tryOd.OrderID != "" && tryOd.Status != orm.OdStatusClosed {
+		// 已提交到交易所，尚未完成
+		exOd, ok := exgOdMap[tryOd.OrderID]
+		if !ok {
+			// 订单已取消或已成交，查询交易所订单
+			exOd, err = exg.Default.FetchOrder(od.Symbol, tryOd.OrderID, map[string]interface{}{
+				banexg.ParamAccount: o.Account,
+			})
+			if err != nil {
+				return err
+			}
+		}
+		if exOd != nil {
+			err = o.updateOdByExgRes(od, tryOd.Enter, exOd)
+			if err != nil {
+				return err
+			}
+		}
+	} else if !tryOd.Enter {
+		// 平仓订单，这里不可能是已提交到交易所尚未完成，属于上一个else if
+		err = o.tryExitEnter(od)
+		if err != nil {
+			return err
+		}
+		if od.Status >= orm.InOutStatusFullExit {
+			// 订单已退出
+			return nil
+		}
+		if tryOd.Status == orm.OdStatusClosed {
+			od.Status = orm.InOutStatusFullExit
+			od.DirtyMain = true
+			return nil
+		} else if tryOd.Status > orm.OdStatusInit {
+			// 这里不应该走到
+			log.Error("Exit Status Invalid", zap.String("key", od.Key()), zap.Int16("sta", tryOd.Status),
+				zap.String("orderId", tryOd.OrderID))
+		} else {
+			// 这里OrderID一定为空，并且入场单数量一定有成交的。
+			o.queue <- &OdQItem{
+				Action: "exit",
+				Order:  od,
+			}
+		}
+	}
+	return nil
 }
 
 /*
@@ -933,36 +970,57 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 	return nil
 }
 
-func (o *LiveOrderMgr) execOrderExit(od *orm.InOutOrder) *errs.Error {
-	odKey := od.Key()
-	if (od.Enter.Amount == 0 || od.Enter.Filled < od.Enter.Amount) && od.Enter.Status < orm.OdStatusClosed {
-		// 可能尚未入场，或未完全入场
-		if od.Enter.OrderID != "" {
-			order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, map[string]interface{}{
-				banexg.ParamAccount: o.Account,
-			})
+func (o *LiveOrderMgr) tryExitEnter(od *orm.InOutOrder) *errs.Error {
+	if od.Enter.Status == orm.OdStatusClosed {
+		return nil
+	}
+	// 可能尚未入场，或未完全入场
+	if od.Enter.OrderID != "" {
+		order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, map[string]interface{}{
+			banexg.ParamAccount: o.Account,
+		})
+		if err != nil {
+			log.Error("cancel order fail", zap.String("key", od.Key()), zap.String("err", err.Short()))
+		} else {
+			err = o.updateOdByExgRes(od, true, order)
 			if err != nil {
-				log.Error("cancel order fail", zap.String("key", odKey), zap.String("err", err.Short()))
-			} else {
-				err = o.updateOdByExgRes(od, true, order)
-				if err != nil {
-					log.Error("apply cancel res fail", zap.String("key", odKey), zap.Error(err))
-				}
+				log.Error("apply cancel res fail", zap.String("key", od.Key()), zap.Error(err))
 			}
 		}
-		if od.Enter.Filled == 0 {
-			od.Status = orm.InOutStatusFullExit
-			od.Exit.Price = od.Enter.Price
-			od.DirtyMain = true
-			od.DirtyExit = true
-			err := o.finishOrder(od, nil)
-			if err != nil {
-				return err
-			}
-			cancelTriggerOds(od)
-			return nil
+	}
+	if od.Enter.Filled == 0 {
+		od.Status = orm.InOutStatusFullExit
+		if od.Enter.Status < orm.OdStatusClosed {
+			od.Enter.Status = orm.OdStatusClosed
+			od.DirtyEnter = true
 		}
+		od.SetExit(core.ExitTagForceExit, "", od.Enter.Price)
+		od.Exit.Status = orm.OdStatusClosed
+		od.DirtyMain = true
+		od.DirtyExit = true
+		err := o.finishOrder(od, nil)
+		if err != nil {
+			return err
+		}
+		cancelTriggerOds(od)
+		return nil
+	} else if od.Enter.Status < orm.OdStatusClosed {
+		od.Enter.Status = orm.OdStatusClosed
+		od.DirtyEnter = true
+	}
+	if od.Enter.Filled > 0 {
 		o.callBack(od, true)
+	}
+	return nil
+}
+
+func (o *LiveOrderMgr) execOrderExit(od *orm.InOutOrder) *errs.Error {
+	err := o.tryExitEnter(od)
+	if err != nil {
+		return err
+	}
+	if od.Status >= orm.InOutStatusFullExit {
+		return nil
 	}
 	return o.submitExgOrder(od, false)
 }

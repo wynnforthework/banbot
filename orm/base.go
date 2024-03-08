@@ -163,7 +163,7 @@ func GetTriggerODs(account string) (map[string][]*InOutOrder, *sync.Mutex) {
 		val = make(map[string][]*InOutOrder)
 		accTriggerODs[account] = val
 		lock = &sync.Mutex{}
-		lockOpenMap[account] = lock
+		lockTriggerMap[account] = lock
 	}
 	return val, lock
 }

@@ -318,9 +318,13 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 			StgVer:    i.StgVer,
 			Info:      i.IOrder.Info,
 		},
+		Info:       make(map[string]interface{}),
 		DirtyMain:  true,
 		DirtyEnter: true,
 		DirtyInfo:  true,
+	}
+	for key, val := range i.Info {
+		part.Info[key] = val
 	}
 	// 原来订单的enter_at需要+1，防止和拆分的子订单冲突。
 	i.EnterAt += 1
@@ -341,6 +345,12 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 		partExit := i.Exit.CutPart(exitRate, true)
 		partExit.InoutID = part.ID
 		part.Exit = partExit
+		if part.Status < InOutStatusFullEnter {
+			part.Status = InOutStatusFullEnter
+		}
+	} else if part.Status > InOutStatusFullEnter {
+		// 无Exit，状态不应该为退出
+		part.Status = InOutStatusFullEnter
 	}
 	return part
 }
@@ -878,4 +888,28 @@ func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
 		return delExOrder(od.Exit.ID)
 	}
 	return nil
+}
+
+/*
+GetHistOrderTfs
+获取指定任务，指定策略的最新使用的时间周期
+*/
+func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string, *errs.Error) {
+	ctx := context.Background()
+	sql := fmt.Sprintf("select DISTINCT ON (symbol) symbol,timeframe from iorder where task_id=%v and strategy=? ORDER BY symbol, enter_at DESC", taskId)
+	rows, err_ := q.db.Query(ctx, sql, stagy)
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	defer rows.Close()
+	var result = make(map[string]string)
+	for rows.Next() {
+		var symbol, timeFrame string
+		err_ = rows.Scan(&symbol, &timeFrame)
+		if err_ != nil {
+			return result, errs.New(core.ErrDbReadFail, err_)
+		}
+		result[symbol] = timeFrame
+	}
+	return result, nil
 }
