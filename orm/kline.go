@@ -70,16 +70,18 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 select time,open,high,low,close,volume from $tbl
 where sid=%d and time >= %v and time < %v
 order by time`, sid, startMs, finishEndMS)
-	genGpSql := func() string {
-		return fmt.Sprintf(`
-				select %s from $tbl
-                where sid=%d and time >= %v and time < %v
-                group by gtime order by gtime`, colAggFields(timeframe, tfSecs), sid, startMs, finishEndMS)
-	}
-	rows, err_ := queryHyper(q, timeframe, dctSql, genGpSql)
+	subTF, rows, err_ := queryHyper(q, timeframe, dctSql)
 	klines, err_ := mapToKlines(rows, err_)
 	if err_ != nil {
 		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	if subTF != "" && len(klines) > 0 {
+		fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
+		var lastFinish bool
+		klines, lastFinish = utils.BuildOHLCV(klines, tfSecs, 0, nil, fromTfMSecs)
+		if !lastFinish {
+			klines = klines[:len(klines)-1]
+		}
 	}
 	if len(klines) == 0 && maxEndMs-endMs > tfMSecs {
 		return q.QueryOHLCV(sid, timeframe, endMs, maxEndMs, limit, withUnFinish)
@@ -121,13 +123,7 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 select time,open,high,low,close,volume,sid from $tbl
 where time >= %v and time < %v and sid in (%v)
 order by sid,time`, startMs, finishEndMS, sidText)
-	genGpSql := func() string {
-		return fmt.Sprintf(`
-				select %s,sid from $tbl
-                where time >= %v and time < %v and sid in (%v)
-                group by sid, gtime order by sid, gtime`, colAggFields(timeframe, tfSecs), startMs, finishEndMS, sidText)
-	}
-	rows, err_ := queryHyper(q, timeframe, dctSql, genGpSql)
+	subTF, rows, err_ := queryHyper(q, timeframe, dctSql)
 	arrs, err_ := mapToItems(rows, err_, func() (*KlineSid, []any) {
 		var i KlineSid
 		return &i, []any{&i.Time, &i.Open, &i.High, &i.Low, &i.Close, &i.Volume, &i.Sid}
@@ -136,21 +132,37 @@ order by sid,time`, startMs, finishEndMS, sidText)
 		return errs.New(core.ErrDbReadFail, err_)
 	}
 	initCap := max(len(arrs)/len(sids), 16)
-	var kline []*banexg.Kline
+	var klineArr []*banexg.Kline
 	curSid := int32(0)
+	fromTfMSecs := int64(0)
+	if subTF != "" {
+		fromTfMSecs = int64(utils.TFToSecs(subTF) * 1000)
+	}
+	callBack := func() {
+		if fromTfMSecs > 0 {
+			var lastDone bool
+			klineArr, lastDone = utils.BuildOHLCV(klineArr, tfSecs, 0, nil, fromTfMSecs)
+			if !lastDone {
+				klineArr = klineArr[:len(klineArr)-1]
+			}
+		}
+		if len(klineArr) > 0 {
+			handle(curSid, klineArr)
+		}
+	}
 	for _, k := range arrs {
 		if k.Sid != curSid {
-			if curSid > 0 && len(kline) > 0 {
-				handle(curSid, kline)
+			if curSid > 0 && len(klineArr) > 0 {
+				callBack()
 			}
 			curSid = k.Sid
-			kline = make([]*banexg.Kline, 0, initCap)
+			klineArr = make([]*banexg.Kline, 0, initCap)
 		}
-		kline = append(kline, &banexg.Kline{Time: k.Time, Open: k.Open, High: k.High, Low: k.Low,
+		klineArr = append(klineArr, &banexg.Kline{Time: k.Time, Open: k.Open, High: k.High, Low: k.Low,
 			Close: k.Close, Volume: k.Volume})
 	}
-	if curSid > 0 && len(kline) > 0 {
-		handle(curSid, kline)
+	if curSid > 0 && len(klineArr) > 0 {
+		callBack()
 	}
 	return nil
 }
@@ -176,23 +188,18 @@ order by time`, tblName, sid, startMs, endMs)
 	return resList, nil
 }
 
-func colAggFields(timeFrame string, tfSecs int) string {
-	origin, _ := utils.GetTfAlignOrigin(tfSecs)
-	return fmt.Sprintf("(extract(epoch from time_bucket('%s', time, origin => '%s')) * 1000)::bigint AS gtime,%s", timeFrame, origin, aggFields)
-}
-
-func queryHyper(sess *Queries, timeFrame, sql string, genSql func() string, args ...interface{}) (pgx.Rows, error) {
+func queryHyper(sess *Queries, timeFrame, sql string, args ...interface{}) (string, pgx.Rows, error) {
 	agg, ok := aggMap[timeFrame]
-	var table string
+	var subTF, table string
 	if ok {
 		table = agg.Table
 	} else {
 		// 时间帧没有直接符合的，从最接近的子timeframe聚合
-		_, table = getSubTf(timeFrame)
-		sql = genSql()
+		subTF, table = getSubTf(timeFrame)
 	}
 	sql = strings.Replace(sql, "$tbl", table, 1)
-	return sess.db.Query(context.Background(), sql, args...)
+	rows, err := sess.db.Query(context.Background(), sql, args...)
+	return subTF, rows, err
 }
 
 func mapToKlines(rows pgx.Rows, err_ error) ([]*banexg.Kline, error) {

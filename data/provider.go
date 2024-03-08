@@ -90,7 +90,10 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 	sinceMap := make(map[string]int64)
 	exchange := exg.Default
 	curTimeMS := btime.TimeMS()
-	log.Info(fmt.Sprintf("warmup for %d pairs", len(warmJobs)))
+	jobNum := len(warmJobs)
+	log.Info(fmt.Sprintf("warmup for %d pairs", jobNum))
+	pBar := progressbar.Default(int64(jobNum))
+	defer pBar.Close()
 	for _, job := range warmJobs {
 		symbol := job.hold.getSymbol()
 		exs, err := orm.GetExSymbol(exchange, symbol)
@@ -111,6 +114,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 			key := fmt.Sprintf("%s|%s", symbol, tf)
 			sinceMap[key] = job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
 		}
+		_ = pBar.Add(1)
 	}
 	return newHolds, sinceMap, err
 }

@@ -384,15 +384,17 @@ func makeSetNext(f *DBKlineFeeder) func() {
 		}
 		defer conn.Release()
 		if f.TotalLen < 0 {
-			f.TotalLen = 0
+			f.TotalLen = 1
 			startMS, stopMS := sess.GetKlineRange(f.exs.ID, state.TimeFrame)
 			if startMS > 0 && stopMS > 0 {
 				startMS = max(startMS, f.TimeRange.StartMS)
 				stopMS = min(stopMS, f.TimeRange.EndMS)
-				if startMS < stopMS {
-					f.TotalLen = int((stopMS-startMS)/1000)/state.TFSecs + 1
-				}
-				//f.TimeRange.EndMS = utils.AlignTfMSecs(stopMS, tfMSecs)
+			} else {
+				startMS = f.TimeRange.StartMS
+				stopMS = f.TimeRange.EndMS
+			}
+			if startMS < stopMS {
+				f.TotalLen = int((stopMS-startMS)/1000)/state.TFSecs + 1
 			}
 		}
 		if f.nextMS+tfMSecs >= f.TimeRange.EndMS {
