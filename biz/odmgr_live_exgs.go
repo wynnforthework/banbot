@@ -116,7 +116,8 @@ func bnbExitByMyTrade(o *LiveOrderMgr) FuncHandleMyTrade {
 			if err != nil {
 				log.Error("finish order fail", zap.String("key", part.Key()), zap.Error(err))
 			}
-			log.Info("exit order by third", zap.String("key", part.Key()), zap.String("id", trade.ID))
+			log.Info("exit order by third", zap.String("acc", o.Account),
+				zap.String("key", part.Key()), zap.String("id", trade.ID))
 			o.callBack(part, false)
 		}
 		if createInv {

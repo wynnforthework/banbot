@@ -799,7 +799,7 @@ func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 		msgList = append(msgList, fmt.Sprintf("%s: %.5f/%.5f", it.Code, it.Free, it.Used))
 	}
 	if len(msgList) > 0 {
-		log.Info("update balances: " + strings.Join(msgList, "  "))
+		log.Info(fmt.Sprintf("update balances %s: %s", wallets.Account, strings.Join(msgList, "  ")))
 	}
 }
 

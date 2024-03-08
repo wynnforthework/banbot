@@ -99,7 +99,9 @@ func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 		}
 		return
 	}
-	b.logState(btime.TimeMS())
+	if !core.IsWarmUp {
+		b.logState(btime.TimeMS())
+	}
 }
 
 func (b *BackTest) Run() {

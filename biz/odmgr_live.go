@@ -240,10 +240,10 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	}
 	lock.Unlock()
 	if len(oldList) > 0 {
-		log.Info(fmt.Sprintf("恢复%v个未平仓订单", len(oldList)))
+		log.Info(fmt.Sprintf("%s: 恢复%v个未平仓订单", o.Account, len(oldList)))
 	}
 	if len(newList) > 0 {
-		log.Info(fmt.Sprintf("新开始跟踪%v个用户下单", len(newList)))
+		log.Info(fmt.Sprintf("%s: 新开始跟踪%v个用户下单", o.Account, len(newList)))
 	}
 	err = orm.SaveDirtyODs(o.Account)
 	if err != nil {
@@ -473,8 +473,8 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 		if isShort {
 			tag = "开空"
 		}
-		log.Info(fmt.Sprintf("%s: price:%.5f, amount: %.5f, %v, fee: %.5f, %v id:%v",
-			tag, price, amount, od.Type, feeCost, odTime, od.ID))
+		log.Info(fmt.Sprintf("%s %s: price:%.5f, amount: %.5f, %v, fee: %.5f, %v id:%v",
+			o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
 		iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, orm.OdStatusClosed,
 			od.ID, defTF)
 		err = iod.Save(sess)
@@ -499,8 +499,8 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 			if isShort {
 				tag = "平空"
 			}
-			log.Info(fmt.Sprintf("%v: price:%.5f, amount: %.5f, %v, %v id: %v",
-				tag, price, part.Exit.Filled, od.Type, odTime, od.ID))
+			log.Info(fmt.Sprintf("%s %v: price:%.5f, amount: %.5f, %v, %v id: %v",
+				o.Account, tag, price, part.Exit.Filled, od.Type, odTime, od.ID))
 			if iod.Status < orm.InOutStatusFullExit {
 				err = iod.Save(sess)
 				if err != nil {
@@ -522,8 +522,8 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 			if isShort {
 				tag = "开空"
 			}
-			log.Info(fmt.Sprintf("%v: price:%.5f, amount: %.5f, %v, fee: %.5f %v id: %v",
-				tag, price, amount, od.Type, feeCost, odTime, od.ID))
+			log.Info(fmt.Sprintf("%s %v: price:%.5f, amount: %.5f, %v, fee: %.5f %v id: %v",
+				o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
 			iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, orm.OdStatusClosed,
 				od.ID, defTF)
 			err = iod.Save(sess)
@@ -609,7 +609,7 @@ func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*orm
 	if isShort {
 		tag = "开空"
 	}
-	log.Info(fmt.Sprintf("[仓]%v: price:%.5f, amount:%.5f, fee: %.5f", tag, average, filled, feeCost))
+	log.Info(fmt.Sprintf("%s [仓]%v: price:%.5f, amount:%.5f, fee: %.5f", o.Account, tag, average, filled, feeCost))
 	enterAt := btime.TimeMS()
 	entStatus := orm.OdStatusClosed
 	iod := o.createInOutOd(exs, isShort, average, filled, entOdType, feeCost, feeName, enterAt, entStatus, "", defTF)
@@ -709,7 +709,7 @@ func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enter
 
 func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
-		log.Info("NEW Enter", zap.String("key", order.Key()))
+		log.Info("NEW Enter", zap.String("acc", o.Account), zap.String("key", order.Key()))
 		if isFarLimit(order.Enter) {
 			// 长时间难以成交的限价单，先不提交到交易所，防止资金占用
 			orm.AddTriggerOd(o.Account, order)
@@ -725,7 +725,8 @@ func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 
 func makeAfterExit(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
-		log.Info("Exit Order", zap.String("key", order.Key()), zap.String("exitTag", order.ExitTag))
+		log.Info("Exit Order", zap.String("acc", o.Account), zap.String("key", order.Key()),
+			zap.String("exitTag", order.ExitTag))
 		o.queue <- &OdQItem{
 			Order:  order,
 			Action: "exit",
@@ -772,15 +773,19 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 			}
 			if item.Action == "enter" {
 				if od.Enter.OrderID != "" && od.Status < orm.InOutStatusFullExit {
-					log.Info("Enter Order Submitted", zap.String("key", od.Key()))
+					log.Info("Enter Order Submitted", zap.String("acc", o.Account),
+						zap.String("key", od.Key()))
 				} else if od.Status >= orm.InOutStatusFullExit {
-					log.Info("Enter Order Closed", zap.String("key", od.Key()), zap.String("exitTag", od.ExitTag))
+					log.Info("Enter Order Closed", zap.String("acc", o.Account),
+						zap.String("key", od.Key()), zap.String("exitTag", od.ExitTag))
 				}
 			} else if item.Action == "exit" {
 				if od.Exit.OrderID != "" {
-					log.Info("Exit Order Submitted", zap.String("key", od.Key()), zap.Int16("state", od.Status))
+					log.Info("Exit Order Submitted", zap.String("acc", o.Account),
+						zap.String("key", od.Key()), zap.Int16("state", od.Status))
 				} else if od.Status >= orm.InOutStatusFullExit {
-					log.Info("Exit Order Closed", zap.String("key", od.Key()), zap.String("exitTag", od.ExitTag))
+					log.Info("Exit Order Closed", zap.String("acc", o.Account),
+						zap.String("key", od.Key()), zap.String("exitTag", od.ExitTag))
 				}
 			}
 		}
@@ -1609,7 +1614,8 @@ func (o *LiveOrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.
 	if od.Exit != nil && od.Exit.OrderID != "" {
 		o.doneKeys[od.Symbol+od.Exit.OrderID] = true
 	}
-	log.Info("Finish Order", zap.String("key", od.Key()), zap.String("tag", od.ExitTag))
+	log.Info("Finish Order", zap.String("acc", o.Account), zap.String("key", od.Key()),
+		zap.String("tag", od.ExitTag))
 	return o.OrderMgr.finishOrder(od, sess)
 }
 
