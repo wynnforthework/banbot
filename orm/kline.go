@@ -55,6 +55,7 @@ func init() {
 func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
 	tfSecs := utils.TFToSecs(timeframe)
 	tfMSecs := int64(tfSecs * 1000)
+	revRead := startMs == 0 && limit > 0
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, withUnFinish)
 	maxEndMs := endMs
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
@@ -66,14 +67,27 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 			finishEndMS = unFinishMS
 		}
 	}
-	dctSql := fmt.Sprintf(`
+	var dctSql string
+	if revRead {
+		// 未提供开始时间，提供了数量限制，按时间倒序搜索
+		dctSql = fmt.Sprintf(`
+select time,open,high,low,close,volume from $tbl
+where sid=%d and time < %v
+order by time desc limit %v`, sid, finishEndMS, limit)
+	} else {
+		dctSql = fmt.Sprintf(`
 select time,open,high,low,close,volume from $tbl
 where sid=%d and time >= %v and time < %v
 order by time`, sid, startMs, finishEndMS)
+	}
 	subTF, rows, err_ := queryHyper(q, timeframe, dctSql)
 	klines, err_ := mapToKlines(rows, err_)
 	if err_ != nil {
 		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	if revRead {
+		// 倒序读取的，再次逆序，使时间升序
+		utils.ReverseArr(klines)
 	}
 	if subTF != "" && len(klines) > 0 {
 		fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)

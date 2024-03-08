@@ -72,6 +72,12 @@ func UnionArr[T comparable](arrs ...[]T) []T {
 	return result
 }
 
+func ReverseArr[T any](s []T) {
+	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
+		s[i], s[j] = s[j], s[i]
+	}
+}
+
 func ConvertArr[T1, T2 any](arr []T1, doMap func(T1) T2) []T2 {
 	var res = make([]T2, len(arr))
 	for i, item := range arr {

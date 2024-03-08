@@ -97,7 +97,8 @@ func CronKlineSummary() {
 				hitMap[num] = append(arr, pair)
 			}
 			for num, arr := range hitMap {
-				res[fmt.Sprintf("%s_%v", tf, num)] = strings.Join(arr, ", ")
+				arrLen := len(arr)
+				res[fmt.Sprintf("%s_%v: %v", tf, num, arrLen)] = strings.Join(arr, ", ")
 			}
 			core.TfPairHits[tf] = make(map[string]int)
 		}

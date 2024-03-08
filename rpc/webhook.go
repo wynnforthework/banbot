@@ -20,7 +20,6 @@ import (
 type WebHook struct {
 	webHookItem
 	name       string
-	client     *http.Client
 	wg         sync.WaitGroup
 	doSendMsgs func([]map[string]string) int
 	Config     map[string]interface{}
@@ -47,6 +46,10 @@ const (
 	MsgTypeEntry  = "entry"
 	MsgTypeExit   = "exit"
 	MsgTypeMarket = "market"
+)
+
+var (
+	client *http.Client
 )
 
 type IWebHook interface {
@@ -132,8 +135,8 @@ func (h *WebHook) SendMsg(msgType string, account string, payload map[string]str
 func (h *WebHook) CleanUp() {
 	h.Disable = true
 	h.wg.Wait()
-	if h.client != nil {
-		h.client = nil
+	if client != nil {
+		client = nil
 	}
 	close(h.Queue)
 }
@@ -173,9 +176,9 @@ func (h *WebHook) doSendRetry(msgList []map[string]string) {
 	h.wg.Add(sentNum - totalNum)
 }
 
-func (h *WebHook) request(method, url, body string) *banexg.HttpRes {
-	if h.client == nil {
-		h.client = &http.Client{}
+func request(method, url, body string) *banexg.HttpRes {
+	if client == nil {
+		client = &http.Client{}
 	}
 	var reqBody io.Reader
 	if body != "" {
@@ -185,5 +188,5 @@ func (h *WebHook) request(method, url, body string) *banexg.HttpRes {
 	if err_ != nil {
 		return &banexg.HttpRes{Error: errs.New(core.ErrRunTime, err_)}
 	}
-	return utils2.DoHttp(h.client, req)
+	return utils2.DoHttp(client, req)
 }
