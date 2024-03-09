@@ -87,36 +87,82 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 		}
 	}
 	// 加载数据预热
+	sinceMap, err := p.warmJobs(warmJobs)
+	return newHolds, sinceMap, err
+}
+
+func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64, *errs.Error) {
 	sinceMap := make(map[string]int64)
+	lockMap := sync.Mutex{}
 	exchange := exg.Default
 	curTimeMS := btime.TimeMS()
-	jobNum := len(warmJobs)
-	log.Info(fmt.Sprintf("warmup for %d pairs", jobNum))
-	pBar := progressbar.Default(int64(jobNum))
-	defer pBar.Close()
+	jobNum := 0
+	var retErr *errs.Error
+	// 预热所需的必要数据
 	for _, job := range warmJobs {
-		symbol := job.hold.getSymbol()
-		exs, err := orm.GetExSymbol(exchange, symbol)
-		if err != nil {
-			return newHolds, sinceMap, err
-		}
-		for tf, warmNum := range job.tfWarms {
-			tfMSecs := int64(utils.TFToSecs(tf) * 1000)
-			if tfMSecs < int64(60000) {
-				continue
-			}
-			endMS := utils.AlignTfMSecs(curTimeMS, tfMSecs)
-			startMS := endMS - tfMSecs*int64(warmNum)
-			bars, err := orm.AutoFetchOHLCV(exchange, exs, tf, startMS, endMS, 0, false)
-			if err != nil {
-				return newHolds, sinceMap, err
-			}
-			key := fmt.Sprintf("%s|%s", symbol, tf)
-			sinceMap[key] = job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
-		}
-		_ = pBar.Add(1)
+		jobNum += len(job.tfWarms)
 	}
-	return newHolds, sinceMap, err
+	log.Info(fmt.Sprintf("warmup for %d pairs, %v jobs", len(warmJobs), jobNum))
+	doneNum := 0
+	barTotalNum := int64(jobNum * core.StepTotal)
+	pBar := progressbar.Default(barTotalNum)
+	defer pBar.Close()
+	stepCB := func(num int) {
+		doneNum += num
+		err := pBar.Add(num)
+		if err != nil {
+			log.Error("add pBar fail for warmup", zap.Error(err))
+		}
+	}
+	// 控制同时预热下载的标的数量
+	guard := make(chan struct{}, core.ConcurNum)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	for _, job_ := range warmJobs {
+		// 如果达到并发限制，这里会阻塞等待
+		guard <- struct{}{}
+		if retErr != nil {
+			// 下载出错，终端返回
+			break
+		}
+		wg.Add(1)
+		go func(job *WarmJob) {
+			defer func() {
+				// 完成一个任务，从chan弹出一个
+				<-guard
+				wg.Done()
+			}()
+			symbol := job.hold.getSymbol()
+			exs, err := orm.GetExSymbol(exchange, symbol)
+			if err != nil {
+				retErr = err
+				stepCB(core.StepTotal * len(job.tfWarms))
+				return
+			}
+			for tf, warmNum := range job.tfWarms {
+				tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+				if tfMSecs < int64(60000) {
+					continue
+				}
+				endMS := utils.AlignTfMSecs(curTimeMS, tfMSecs)
+				startMS := endMS - tfMSecs*int64(warmNum)
+				bars, err := orm.AutoFetchOHLCV(exchange, exs, tf, startMS, endMS, 0, false, stepCB)
+				if err != nil {
+					retErr = err
+					break
+				}
+				key := fmt.Sprintf("%s|%s", symbol, tf)
+				sinceVal := job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
+				lockMap.Lock()
+				sinceMap[key] = sinceVal
+				lockMap.Unlock()
+			}
+		}(job_)
+	}
+	if barTotalNum-int64(doneNum) > 0 {
+		stepCB(int(barTotalNum) - doneNum)
+	}
+	return sinceMap, retErr
 }
 
 type HistProvider[T IHistKlineFeeder] struct {

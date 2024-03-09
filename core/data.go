@@ -32,6 +32,8 @@ var (
 	OdBooks      = map[string]*banexg.OrderBook{} // 缓存所有从爬虫收到的订单簿
 	NumTaCache   = 1500                           // 指标计算时缓存的历史值数量，默认1500
 	Cron         = cron.New(cron.WithSeconds())   // 使用cron定时运行任务
+
+	ConcurNum = 2 // 最大同时下载K线任务数，过大会出现429限流
 )
 
 const (
@@ -48,11 +50,10 @@ const (
 )
 
 const (
-	MinStakeAmount    = 10 // 最小开单金额
-	DownOHLCVParallel = 2  // 最大同时下载K线任务数，过大会出现429限流
-	StepTotal         = 1000
-	KBatchSize        = 900 // 单次请求交易所最大返回K线数量, 1000时api权重过大
-	DefaultDateFmt    = "2006-01-02 15:04:05"
+	MinStakeAmount = 10 // 最小开单金额
+	StepTotal      = 1000
+	KBatchSize     = 900 // 单次请求交易所最大返回K线数量, 1000时api权重过大
+	DefaultDateFmt = "2006-01-02 15:04:05"
 )
 
 const (

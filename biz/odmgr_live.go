@@ -1308,7 +1308,7 @@ func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 		if err != nil {
 			return 0, 0, err
 		}
-		bars, err := orm.AutoFetchOHLCV(exg.Default, exs, "1m", 0, 0, num, false)
+		bars, err := orm.AutoFetchOHLCV(exg.Default, exs, "1m", 0, 0, num, false, nil)
 		if err != nil {
 			return 0, 0, err
 		} else if len(bars) == 0 {

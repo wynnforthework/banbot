@@ -2,17 +2,11 @@
 ## 生成linux可执行文件
 在Windows的Powershell中生成：
 ```shell
--- 生成banbot.o用于启动爬虫
-cd [项目路径]/banbot
-$env:GOOS="linux"
-$env:GOARCH="amd64"
-go build -o banbot.o
-
--- 生成banstagy.o包含了策略，用于启动机器人
+-- 生成banbot.o包含了策略，用于启动机器人，爬虫
 cd [项目路径]/banstagy
 $env:GOOS="linux"
 $env:GOARCH="amd64"
-go build -o banstagy.o
+go build -o banbot.o
 ```
 ## 服务器环境准备
 ### 授予可执行权限
@@ -20,7 +14,6 @@ go build -o banstagy.o
 赋予可执行权限：
 ```shell
 chmod +x /app/banbot.o
-chmod +x /app/banstagy.o
 mkdir -p /app/bandata
 mkdir -p /app/banstagy
 ```
@@ -47,8 +40,8 @@ source ~/.bashrc
 ### 启动爬虫和机器人
 ```shell
 -- 启动爬虫
-nohup /app/banbot.o spider > spider.log 2>&1 &
+nohup /app/banbot.o spider > /app/spider.log 2>&1 &
 
 -- 启动机器人
-nohup /app/banstagy.o trade > bot.log 2>&1 &
+nohup /app/banbot.o trade > /app/bot.log 2>&1 &
 ```

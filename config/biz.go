@@ -111,6 +111,10 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	OdBookTtl = Data.OdBookTtl
 	StopEnterBars = Data.StopEnterBars
+	if Data.ConcurNum == 0 {
+		Data.ConcurNum = 2
+	}
+	core.ConcurNum = Data.ConcurNum
 	OrderType = Data.OrderType
 	PreFire = Data.PreFire
 	if Data.MarginAddRate == 0 {

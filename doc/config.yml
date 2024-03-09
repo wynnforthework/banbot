@@ -6,6 +6,7 @@ put_limit_secs: 120  # 在此预期时间内能成交的限价单，才提交到
 market_type: spot  # 市场：spot现货，linear：U本位合约，inverse：币本位合约，option：期权合约
 contract_type: swap # swao永续合约，future到期合约
 odbook_ttl: 1000  # 订单簿过期时间，单位毫秒，默认500
+concur_num: 2  # 标的K线并发下载数，默认2个标的
 order_type: market  # 下单类型：market市价单  limit限价单
 stop_enter_bars: 20  # 限价入场单超过多少个蜡烛未成交则取消入场，默认0不启用
 prefire: 0  # 是否在bar即将完成时，提前10%时间触发

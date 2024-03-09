@@ -75,6 +75,18 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	return nil
 }
 
+func DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
+	stepCB func(num int)) (int, *errs.Error) {
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return 0, err
+	}
+	oldStart, oldEnd := sess.GetKlineRange(exs.ID, timeFrame)
+	conn.Release()
+	startMS = exs.GetValidStart(startMS)
+	return downOHLCV2DBRange(exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
+}
+
 /*
 DownOHLCV2DB
 下载K线到数据库，应在事务中调用此方法，否则查询更新相关数据会有错误
@@ -242,20 +254,27 @@ AutoFetchOHLCV
 	先尝试从本地读取，不存在时从交易所下载，然后返回。
 */
 func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
-	limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
+	limit int, withUnFinish bool, stepCB func(num int)) ([]*banexg.Kline, *errs.Error) {
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, withUnFinish)
 	downTF, err := GetDownTF(timeFrame)
 	if err != nil {
+		if stepCB != nil {
+			stepCB(core.StepTotal)
+		}
 		return nil, err
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
+		if stepCB != nil {
+			stepCB(core.StepTotal)
+		}
 		return nil, err
 	}
 	defer conn.Release()
-	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS, nil)
+	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS, stepCB)
 	if err != nil {
+		// DownOHLCV2DB 内部已处理stepCB，这里无需处理
 		return nil, err
 	}
 	return sess.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
@@ -272,7 +291,7 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	if err != nil {
 		return err
 	}
-	guard := make(chan struct{}, core.DownOHLCVParallel)
+	guard := make(chan struct{}, core.ConcurNum)
 	var retErr *errs.Error
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -332,13 +351,9 @@ FastBulkOHLCV
 */
 func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame string,
 	startMS, endMS int64, limit int, handler func(string, string, []*banexg.Kline)) *errs.Error {
-	var exsMap = make(map[int32]*ExSymbol)
-	for _, pair := range symbols {
-		exs, err := GetExSymbol(exchange, pair)
-		if err != nil {
-			return err
-		}
-		exsMap[exs.ID] = exs
+	var exsMap, err = MapExSymbols(exchange, symbols)
+	if err != nil {
+		return err
 	}
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, false)
@@ -375,6 +390,18 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		handler(exs.Symbol, timeFrame, kline)
 	}
 	return nil
+}
+
+func MapExSymbols(exchange banexg.BanExchange, symbols []string) (map[int32]*ExSymbol, *errs.Error) {
+	var exsMap = make(map[int32]*ExSymbol)
+	for _, pair := range symbols {
+		exs, err := GetExSymbol(exchange, pair)
+		if err != nil {
+			return exsMap, err
+		}
+		exsMap[exs.ID] = exs
+	}
+	return exsMap, nil
 }
 
 func parseDownArgs(tfMSecs int64, startMS, endMS int64, limit int, withUnFinish bool) (int64, int64) {

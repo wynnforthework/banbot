@@ -29,7 +29,7 @@ func TestAutoFetchOhlcv(t *testing.T) {
 	}
 	stop := btime.TimeMS()
 	start := int64(0)
-	klines, err := AutoFetchOHLCV(exchange, exs, "1m", start, stop, 1000, false)
+	klines, err := AutoFetchOHLCV(exchange, exs, "1m", start, stop, 1000, false, nil)
 	if err != nil {
 		panic(err)
 	}

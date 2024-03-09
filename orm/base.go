@@ -53,7 +53,7 @@ func Setup() *errs.Error {
 	if err != nil {
 		return errs.New(core.ErrDbReadFail, err)
 	}
-	log.Info("connect db ok")
+	log.Info("connect db ok", zap.String("url", dbCfg.Url))
 	return nil
 }
 

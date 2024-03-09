@@ -60,6 +60,7 @@ type Config struct {
 	ContractType    string                            `yaml:"contract_type" mapstructure:"contract_type"`
 	OdBookTtl       int64                             `yaml:"odbook_ttl" mapstructure:"odbook_ttl"`
 	StopEnterBars   int                               `json:"stop_enter_bars" mapstructure:"stop_enter_bars"`
+	ConcurNum       int                               `json:"concur_num" mapstructure:"concur_num"`
 	OrderType       string                            `yaml:"order_type" mapstructure:"order_type"`
 	PreFire         float64                           `yaml:"prefire" mapstructure:"prefire"`
 	MarginAddRate   float64                           `yaml:"margin_add_rate" mapstructure:"margin_add_rate"`
