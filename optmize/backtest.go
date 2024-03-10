@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"os"
+	"slices"
 )
 
 const (
@@ -190,16 +191,24 @@ func (b *BackTest) logState(timeMS int64) {
 }
 
 func (b *BackTest) logPlot(timeMS int64) {
+	odNum := orm.OpenNum("", orm.InOutStatusPartEnter)
 	if b.BarNum%b.PlotEvery != 0 {
+		if odNum > b.Plots.tmpOdNum {
+			b.Plots.tmpOdNum = odNum
+		}
 		return
 	}
+	if b.Plots.tmpOdNum > odNum {
+		odNum = b.Plots.tmpOdNum
+	}
+	b.Plots.tmpOdNum = 0
 	splStep := 5
 	if len(b.Plots.Real) >= ShowNum*splStep {
 		// 检查数据是否太多，超过采样总数5倍时，进行重采样
 		b.PlotEvery *= splStep
 		oldNum := len(b.Plots.Real)
 		newNum := oldNum / splStep
-		plots := PlotData{
+		plots := &PlotData{
 			Labels:        make([]string, 0, newNum),
 			OdNum:         make([]int, 0, newNum),
 			Real:          make([]float64, 0, newNum),
@@ -209,7 +218,7 @@ func (b *BackTest) logPlot(timeMS int64) {
 		}
 		for i := 0; i < oldNum; i += splStep {
 			plots.Labels = append(plots.Labels, b.Plots.Labels[i])
-			plots.OdNum = append(plots.OdNum, b.Plots.OdNum[i])
+			plots.OdNum = append(plots.OdNum, slices.Max(b.Plots.OdNum[i:i+splStep]))
 			plots.Real = append(plots.Real, b.Plots.Real[i])
 			plots.Available = append(plots.Available, b.Plots.Available[i])
 			plots.UnrealizedPOL = append(plots.UnrealizedPOL, b.Plots.UnrealizedPOL[i])
@@ -225,7 +234,7 @@ func (b *BackTest) logPlot(timeMS int64) {
 	drawLegal := wallets.GetWithdrawLegal(nil)
 	curDate := btime.ToDateStr(timeMS, "")
 	b.Plots.Labels = append(b.Plots.Labels, curDate)
-	b.Plots.OdNum = append(b.Plots.OdNum, orm.OpenNum("", orm.InOutStatusPartEnter))
+	b.Plots.OdNum = append(b.Plots.OdNum, odNum)
 	b.Plots.Real = append(b.Plots.Real, totalLegal)
 	b.Plots.Available = append(b.Plots.Available, avaLegal)
 	b.Plots.UnrealizedPOL = append(b.Plots.UnrealizedPOL, profitLegal)

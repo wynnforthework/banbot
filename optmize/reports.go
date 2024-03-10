@@ -32,7 +32,7 @@ type BTResult struct {
 	MaxReal        float64 // 最大资产
 	MaxDrawDownPct float64 // 最大回撤百分比
 	BarNum         int
-	Plots          PlotData
+	Plots          *PlotData
 	StartMS        int64
 	EndMS          int64
 	PlotEvery      int
@@ -47,6 +47,7 @@ type PlotData struct {
 	Available     []float64
 	UnrealizedPOL []float64
 	WithDraw      []float64
+	tmpOdNum      int
 }
 
 type RowPart struct {
@@ -65,7 +66,7 @@ type RowItem struct {
 
 func NewBTResult() *BTResult {
 	res := &BTResult{
-		Plots:     PlotData{},
+		Plots:     &PlotData{},
 		PlotEvery: 1,
 	}
 	return res
@@ -166,7 +167,10 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	}
 	table.Append([]string{"Max Assets", strconv.FormatFloat(r.MaxReal, 'f', 1, 64)})
 	table.Append([]string{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)})
-	table.Append([]string{"Max DrawDown", strconv.FormatFloat(r.MaxDrawDownPct, 'f', 1, 64) + "%"})
+	// 计算图表上的最大回撤
+	drawDownRate := strconv.FormatFloat(r.Plots.calcDrawDown()*100, 'f', 1, 64) + "%"
+	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 1, 64) + "%"
+	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
 	table.Render()
 	return b.String()
 }
@@ -658,4 +662,23 @@ func (r *BTResult) dumpGraph() {
 	if err_ != nil {
 		log.Error("save assets.html fail", zap.Error(err_))
 	}
+}
+
+func (p *PlotData) calcDrawDown() float64 {
+	var drawDownRate, maxReal float64
+	if len(p.Real) > 0 {
+		reals := p.Real
+		maxReal = reals[0]
+		for _, val := range reals {
+			if val > maxReal {
+				maxReal = val
+			} else {
+				curDown := math.Abs(val/maxReal - 1)
+				if curDown > drawDownRate {
+					drawDownRate = curDown
+				}
+			}
+		}
+	}
+	return drawDownRate
 }
