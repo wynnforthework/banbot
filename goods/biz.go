@@ -165,7 +165,7 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
 	wsModeTf := ""
 	for _, v := range allowTfs {
 		tfSecs := utils.TFToSecs(v)
-		if tfSecs <= 60 {
+		if tfSecs < 60 {
 			wsModeTf = v
 			break
 		}

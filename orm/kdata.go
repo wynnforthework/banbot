@@ -132,7 +132,7 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 		}
 	}
 	if stepCB == nil && totalNum > 10000 {
-		var pBar = progressbar.Default(int64(core.StepTotal))
+		var pBar = progressbar.Default(int64(core.StepTotal), exs.Symbol)
 		defer pBar.Close()
 		var m sync.Mutex
 		stepCB = func(num int) {

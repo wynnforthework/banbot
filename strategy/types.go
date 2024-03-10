@@ -14,7 +14,7 @@ type TradeStagy struct {
 	Name          string
 	Version       int
 	WarmupNum     int
-	MinTfScore    float64
+	MinTfScore    float64 // 最小时间周期质量，默认0.8
 	WatchBook     bool
 	DrawDownExit  bool
 	StakeRate     float64 // 相对基础金额开单倍率

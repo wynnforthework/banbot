@@ -58,6 +58,10 @@ SubWarmPairs
 	返回最小周期变化的交易对(新增/旧对新周期)、预热任务
 */
 func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) ([]IKlineFeeder, map[string]int64, *errs.Error) {
+	core.IsWarmUp = true
+	defer func() {
+		core.IsWarmUp = false
+	}()
 	var newHolds []IKlineFeeder
 	var warmJobs []*WarmJob
 	var err *errs.Error
@@ -105,7 +109,7 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	log.Info(fmt.Sprintf("warmup for %d pairs, %v jobs", len(warmJobs), jobNum))
 	doneNum := 0
 	barTotalNum := int64(jobNum * core.StepTotal)
-	pBar := progressbar.Default(barTotalNum)
+	pBar := progressbar.Default(barTotalNum, "warmup")
 	defer pBar.Close()
 	stepCB := func(num int) {
 		doneNum += num
@@ -193,7 +197,7 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 		return err
 	}
 	defer conn.Release()
-	var pBar = progressbar.Default(int64(len(p.holders) * core.StepTotal))
+	var pBar = progressbar.Default(int64(len(p.holders)*core.StepTotal), "DownHist")
 	defer pBar.Close()
 	var m sync.Mutex
 	stepCB := func(num int) {
@@ -216,6 +220,7 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 
 func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[string]int) *errs.Error {
 	_, sinceMap, err := p.Provider.SubWarmPairs(items)
+	// 检查回测期间数据是否需要下载，如需要自动下载
 	err = p.downIfNeed()
 	if err != nil {
 		return err
@@ -288,7 +293,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			for _, h := range holds {
 				sumTotal += h.getTotalLen()
 			}
-			pBar = progressbar.Default(int64(sumTotal))
+			pBar = progressbar.Default(int64(sumTotal), "RunHist")
 		}
 		err_ := pBar.Add(count)
 		if err_ != nil {

@@ -42,6 +42,7 @@ type BTResult struct {
 
 type PlotData struct {
 	Labels        []string
+	OdNum         []int
 	Real          []float64
 	Available     []float64
 	UnrealizedPOL []float64
@@ -619,9 +620,10 @@ func (r *BTResult) dumpGraph() {
 		return
 	}
 	content := string(fileData)
-	content = strings.Replace(content, "$title", "实时资产/余额/未实现盈亏/提现", 1)
+	content = strings.Replace(content, "$title", "实时资产/余额/未实现盈亏/提现/并发订单数", 1)
 	items := map[string]interface{}{
 		"\"$labels\"":    r.Plots.Labels,
+		"\"$odNum\"":     r.Plots.OdNum,
 		"\"$real\"":      r.Plots.Real,
 		"\"$available\"": r.Plots.Available,
 		"\"$profit\"":    r.Plots.UnrealizedPOL,
@@ -640,6 +642,13 @@ func (r *BTResult) dumpGraph() {
 				b.WriteString(strconv.FormatFloat(it, 'f', 2, 64))
 				b.WriteString(",")
 			}
+		} else if vals, ok := v.([]int); ok {
+			for _, it := range vals {
+				b.WriteString(strconv.Itoa(it))
+				b.WriteString(",")
+			}
+		} else {
+			log.Error("unsupport plot type", zap.String("key", k), zap.String("type", fmt.Sprintf("%T", v)))
 		}
 		content = strings.Replace(content, k, b.String(), 1)
 	}

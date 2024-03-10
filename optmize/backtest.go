@@ -201,6 +201,7 @@ func (b *BackTest) logPlot(timeMS int64) {
 		newNum := oldNum / splStep
 		plots := PlotData{
 			Labels:        make([]string, 0, newNum),
+			OdNum:         make([]int, 0, newNum),
 			Real:          make([]float64, 0, newNum),
 			Available:     make([]float64, 0, newNum),
 			UnrealizedPOL: make([]float64, 0, newNum),
@@ -208,6 +209,7 @@ func (b *BackTest) logPlot(timeMS int64) {
 		}
 		for i := 0; i < oldNum; i += splStep {
 			plots.Labels = append(plots.Labels, b.Plots.Labels[i])
+			plots.OdNum = append(plots.OdNum, b.Plots.OdNum[i])
 			plots.Real = append(plots.Real, b.Plots.Real[i])
 			plots.Available = append(plots.Available, b.Plots.Available[i])
 			plots.UnrealizedPOL = append(plots.UnrealizedPOL, b.Plots.UnrealizedPOL[i])
@@ -223,6 +225,7 @@ func (b *BackTest) logPlot(timeMS int64) {
 	drawLegal := wallets.GetWithdrawLegal(nil)
 	curDate := btime.ToDateStr(timeMS, "")
 	b.Plots.Labels = append(b.Plots.Labels, curDate)
+	b.Plots.OdNum = append(b.Plots.OdNum, orm.OpenNum("", orm.InOutStatusPartEnter))
 	b.Plots.Real = append(b.Plots.Real, totalLegal)
 	b.Plots.Available = append(b.Plots.Available, avaLegal)
 	b.Plots.UnrealizedPOL = append(b.Plots.UnrealizedPOL, profitLegal)

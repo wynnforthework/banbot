@@ -117,8 +117,7 @@ func (i *InOutOrder) CalcProfit(price float64) float64 {
 			price = i.Enter.Price
 		}
 	}
-	entQuoteVal := i.Enter.Average * i.Enter.Filled
-	profitVal := i.Enter.Filled*price - entQuoteVal
+	profitVal := i.Enter.Filled * (price - i.Enter.Average)
 	if i.Short {
 		profitVal = 0 - profitVal
 	}

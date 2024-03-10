@@ -25,14 +25,24 @@ var (
 func Get(stagyName string) *TradeStagy {
 	obj, ok := StagyMap[stagyName]
 	if ok {
-		obj.Name = stagyName
+		if obj.Name == "" {
+			initStrategy(stagyName, obj)
+		}
 		return obj
 	}
 	obj = loadNative(stagyName)
+	initStrategy(stagyName, obj)
 	if obj != nil {
 		StagyMap[stagyName] = obj
 	}
 	return obj
+}
+
+func initStrategy(name string, stgy *TradeStagy) {
+	stgy.Name = name
+	if stgy.MinTfScore == 0 {
+		stgy.MinTfScore = 0.8
+	}
 }
 
 func loadNative(stagyName string) *TradeStagy {

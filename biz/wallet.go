@@ -639,11 +639,9 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 		}
 		odKey := od.Key()
 		isGood := (curPrice - od.Enter.Average) * odDirt
-		if isGood < 0 {
+		if isGood < 0 && od.Profit < 0 {
+			// 一般来说isGood < 0时应该od.Profit < 0，但有时候价格更新了，订单利润尚未更新导致od.Profit > 0
 			// 价格走势不同，产生亏损，判断是否自动补充保证金
-			if od.Profit > 0 {
-				panic(fmt.Sprintf("od profit should < 0: %+v, profit: %f", od, od.Profit))
-			}
 			// 计算维持保证金
 			minMargin, err := exchange.CalcMaintMargin(od.Symbol, quoteValue) // 要求的最低保证金
 			if err != nil {

@@ -196,7 +196,6 @@ WarmTfs
 返回结束的时间戳（即下一个bar开始时间戳）
 */
 func (f *KlineFeeder) WarmTfs(tfBars map[string][]*banexg.Kline) int64 {
-	core.IsWarmUp = true
 	maxEndMS := int64(0)
 	for tf, bars := range tfBars {
 		if len(bars) == 0 {
@@ -213,7 +212,6 @@ func (f *KlineFeeder) WarmTfs(tfBars map[string][]*banexg.Kline) int64 {
 		}
 		maxEndMS = max(maxEndMS, lastMS)
 	}
-	core.IsWarmUp = false
 	return maxEndMS
 }
 
