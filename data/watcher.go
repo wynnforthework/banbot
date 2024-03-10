@@ -26,13 +26,13 @@ type WatchJob struct {
 	Since     int64
 }
 
-func (c *PairTFCache) getFinishes(ohlcvs []*banexg.Kline, lastFinish bool) []*banexg.Kline {
+func (j *PairTFCache) getFinishes(ohlcvs []*banexg.Kline, lastFinish bool) []*banexg.Kline {
 	if len(ohlcvs) == 0 {
 		return ohlcvs
 	}
-	c.WaitBar = nil
+	j.WaitBar = nil
 	if !lastFinish {
-		c.WaitBar = ohlcvs[len(ohlcvs)-1]
+		j.WaitBar = ohlcvs[len(ohlcvs)-1]
 		ohlcvs = ohlcvs[:len(ohlcvs)-1]
 	}
 	return ohlcvs
@@ -158,7 +158,8 @@ func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 	// 更新收到的时间戳
 	lastBarMS := bars.Arr[len(bars.Arr)-1].Time
 	tfMSecs := int64(bars.TFSecs * 1000)
-	core.SetPairMs(pair, lastBarMS+tfMSecs, tfMSecs)
+	nextBarMS := lastBarMS + tfMSecs
+	core.SetPairMs(pair, nextBarMS, tfMSecs)
 	var msg = &KLineMsg{
 		NotifyKLines: bars,
 		ExgName:      exgName,
@@ -169,11 +170,15 @@ func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 		w.OnKLineMsg(msg)
 		return
 	}
+	olds, err := job.fillLacks(pair, bars.TFSecs, bars.Arr[0].Time, nextBarMS)
+	if err != nil {
+		log.Error("fillLacks fail", zap.String("pair", pair), zap.Error(err))
+		return
+	}
 	// 归集更新指定的周期
 	var finishes []*banexg.Kline
 	if bars.TFSecs < job.TFSecs {
 		//和旧的bar_row合并更新，判断是否有完成的bar
-		var olds []*banexg.Kline
 		if job.WaitBar != nil {
 			olds = append(olds, job.WaitBar)
 		}

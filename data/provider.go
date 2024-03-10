@@ -313,7 +313,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 
 type LiveProvider[T IKlineFeeder] struct {
 	Provider[T]
-	KLineWatcher
+	*KLineWatcher
 }
 
 func InitLiveProvider(callBack FnPairKline) *errs.Error {
@@ -330,7 +330,7 @@ func InitLiveProvider(callBack FnPairKline) *errs.Error {
 				return feeder, nil
 			},
 		},
-		KLineWatcher: *watcher,
+		KLineWatcher: watcher,
 	}
 	watcher.OnKLineMsg = makeOnKlineMsg(provider)
 	// 立刻订阅实时价格

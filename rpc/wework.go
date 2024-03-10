@@ -166,7 +166,7 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 				continue
 			}
 			if res.ErrCode > 0 {
-				log.Error("wework send msg fail", zap.String("content", content),
+				log.Warn("wework send msg fail", zap.String("content", content),
 					zap.String("body", rsp.Content))
 				continue
 			}

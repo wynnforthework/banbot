@@ -39,15 +39,16 @@ type IBanConn interface {
 }
 
 type BanConn struct {
-	Conn       net.Conn          // 原始的socket连接
-	Tags       map[string]bool   // 消息订阅列表
-	Remote     string            // 远端名称
-	Listens    map[string]ConnCB // 消息处理函数
-	RefreshMS  int64             // 连接就绪的时间戳
-	Ready      bool
-	m          sync.Mutex
-	DoConnect  func(conn *BanConn) // 重新连接函数，未提供不尝试重新连接
-	ReInitConn func()              // 重新连接成功后初始化回调函数
+	Conn        net.Conn          // 原始的socket连接
+	Tags        map[string]bool   // 消息订阅列表
+	Remote      string            // 远端名称
+	Listens     map[string]ConnCB // 消息处理函数
+	RefreshMS   int64             // 连接就绪的时间戳
+	Ready       bool
+	lockConnect sync.Mutex
+	lockWrite   sync.Mutex
+	DoConnect   func(conn *BanConn) // 重新连接函数，未提供不尝试重新连接
+	ReInitConn  func()              // 重新连接成功后初始化回调函数
 }
 
 type IOMsg struct {
@@ -75,8 +76,8 @@ func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
 	if err != nil {
 		return err
 	}
-	c.m.Lock()
-	defer c.m.Unlock()
+	c.lockWrite.Lock()
+	defer c.lockWrite.Unlock()
 	return c.Write(compressed)
 }
 
@@ -90,7 +91,7 @@ func (c *BanConn) Write(data []byte) *errs.Error {
 		errCode, errType := getErrType(err_)
 		if c.DoConnect != nil && errCode == core.ErrNetConnect {
 			log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
-			c.connect(false)
+			c.connect()
 			return c.Write(data)
 		}
 		return errs.New(errCode, err_)
@@ -127,7 +128,7 @@ func (c *BanConn) Read() ([]byte, *errs.Error) {
 		errCode, errType := getErrType(err_)
 		if c.DoConnect != nil && errCode == core.ErrNetConnect {
 			log.Warn("read fail, wait 3s and retry", zap.String("type", errType))
-			c.connect(true)
+			c.connect()
 			return c.Read()
 		}
 		return nil, errs.New(errCode, err_)
@@ -189,14 +190,16 @@ func (c *BanConn) RunForever() *errs.Error {
 	}
 }
 
-func (c *BanConn) connect(lock bool) {
-	if lock {
-		c.m.Lock()
-		defer c.m.Unlock()
-		if c.Ready && btime.TimeMS()-c.RefreshMS < 2000 {
-			// 连接已经刷新，跳过本次重试
-			return
-		}
+/*
+connect
+用于重新连接的函数。
+*/
+func (c *BanConn) connect() {
+	c.lockConnect.Lock()
+	defer c.lockConnect.Unlock()
+	if c.Ready && btime.TimeMS()-c.RefreshMS < 2000 {
+		// 连接已经刷新，跳过本次重试
+		return
 	}
 	c.Ready = false
 	if c.Conn != nil {
@@ -498,6 +501,7 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 			out <- val.Val
 		}
 	}
+	// 这里只负责连接，无需初始化，交给connect初始化
 	res.DoConnect = func(c *BanConn) {
 		for {
 			cn, err_ := net.Dial("tcp", addr)
