@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
@@ -94,14 +95,23 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		}
 		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
 	}
+	curPrice := core.GetPrice(symbol)
 	if req.Amount == 0 && req.LegalCost == 0 {
 		if req.CostRate == 0 {
 			req.CostRate = 1
 		}
 		req.LegalCost = s.Stagy.GetStakeAmount(s) * req.CostRate
+		avgVol := s.avgVolume(5) // 最近5个蜡烛成交量
+		reqAmt := req.LegalCost / curPrice
+		if reqAmt/avgVol > config.OpenVolRate {
+			req.LegalCost = avgVol * config.OpenVolRate * curPrice
+			if core.LiveMode {
+				log.Info(fmt.Sprintf("%v open amt rate: %.1f > open_vol_rate(%.1f), cut to cost: %.1f",
+					symbol, reqAmt/avgVol, config.OpenVolRate, req.LegalCost))
+			}
+		}
 	}
 	// 检查价格是否有效
-	curPrice := core.GetPrice(symbol)
 	dirFlag := 1
 	if req.Short {
 		dirFlag = -1
@@ -198,6 +208,22 @@ func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
 	}
 	s.Exits = append(s.Exits, req)
 	return nil
+}
+
+/*
+avgVolume
+计算最近num个K线的平均成交量
+*/
+func (s *StagyJob) avgVolume(num int) float64 {
+	arr := s.Env.Volume.Range(0, num)
+	if len(arr) == 0 {
+		return 0
+	}
+	sumVal := float64(0)
+	for _, val := range arr {
+		sumVal += val
+	}
+	return sumVal / float64(len(arr))
 }
 
 /*

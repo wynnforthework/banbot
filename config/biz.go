@@ -132,6 +132,10 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	StakePct = Data.StakePct
 	MaxStakeAmt = Data.MaxStakeAmt
+	if Data.OpenVolRate == 0 {
+		Data.OpenVolRate = 1
+	}
+	OpenVolRate = Data.OpenVolRate
 	MinOpenRate = Data.MinOpenRate
 	if Data.MaxOpenOrders == 0 {
 		Data.MaxOpenOrders = 30

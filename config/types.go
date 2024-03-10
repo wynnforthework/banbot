@@ -24,6 +24,7 @@ var (
 	StakeAmount      float64 // 单笔开单金额，优先级低于StakePct
 	StakePct         float64 // 单笔开单金额百分比
 	MaxStakeAmt      float64 // 单笔最大开单金额
+	OpenVolRate      float64 // 未指定数量开单时，最大允许开单数量/平均蜡烛成交量的倍数，默认1
 	MinOpenRate      float64 // 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
 	MaxOpenOrders    int
 	WalletAmounts    map[string]float64
@@ -69,6 +70,7 @@ type Config struct {
 	StakeAmount     float64                           `yaml:"stake_amount" mapstructure:"stake_amount"`
 	StakePct        float64                           `yaml:"stake_pct" mapstructure:"stake_pct"`
 	MaxStakeAmt     float64                           `yaml:"max_stake_amt" mapstructure:"max_stake_amt"`
+	OpenVolRate     float64                           `yaml:"open_vol_rate" mapstructure:"open_vol_rate"`
 	MinOpenRate     float64                           `yaml:"min_open_rate" mapstructure:"min_open_rate"`
 	MaxOpenOrders   int                               `yaml:"max_open_orders" mapstructure:"max_open_orders"`
 	WalletAmounts   map[string]float64                `yaml:"wallet_amounts" mapstructure:"wallet_amounts"`
