@@ -58,14 +58,14 @@ func NewWeWork(name string, item map[string]interface{}) *WeWork {
 }
 
 func getWeCred(item map[string]interface{}) *WeCred {
-	corpId := utils.GetMapVal(item, "corp_id", "")
-	cred, ok := creds[corpId]
+	itemKey := utils.GetMapVal(item, "agent_id", "")
+	cred, ok := creds[itemKey]
 	if !ok {
 		cred = &WeCred{
-			corpId:     corpId,
+			corpId:     utils.GetMapVal(item, "corp_id", ""),
 			corpSecret: utils.GetMapVal(item, "corp_secret", ""),
 		}
-		creds[corpId] = cred
+		creds[itemKey] = cred
 	}
 	return cred
 }
