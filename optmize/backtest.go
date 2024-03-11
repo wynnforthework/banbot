@@ -8,9 +8,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
-	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -77,16 +75,7 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = goods.RefreshPairList(nil)
-	if err != nil {
-		return err
-	}
-	var warms map[string]map[string]int
-	warms, err = strategy.LoadStagyJobs(core.Pairs, core.PairTfScores)
-	if err != nil {
-		return err
-	}
-	return data.Main.SubWarmPairs(warms)
+	return biz.LoadRefreshPairs(nil)
 }
 
 func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {

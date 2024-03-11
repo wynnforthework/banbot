@@ -15,10 +15,12 @@ Quote: Base1 Base2 ...
 */
 func GroupStagyPairs() map[string]map[string][]string {
 	groups := make(map[string][]string)
-	for _, item := range StgPairTfs {
-		key := fmt.Sprintf("%s_%s", item.Stagy, item.TimeFrame)
-		arr, _ := groups[key]
-		groups[key] = append(arr, item.Pair)
+	for stagy, pairMap := range StgPairTfs {
+		for pair, tf := range pairMap {
+			key := fmt.Sprintf("%s_%s", stagy, tf)
+			arr, _ := groups[key]
+			groups[key] = append(arr, pair)
+		}
 	}
 	res := make(map[string]map[string][]string)
 	for key, arr := range groups {

@@ -56,15 +56,15 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 		if stagyMaxNum == 0 {
 			stagyMaxNum = 999
 		}
-		stagJobs := core.GetStagyJobs(pol.Name)
-		holdNum := len(stagJobs)
+		pairTfMap, hasStg := core.StgPairTfs[pol.Name]
+		if !hasStg {
+			pairTfMap = make(map[string]string)
+			core.StgPairTfs[pol.Name] = pairTfMap
+		}
+		holdNum := len(pairTfMap)
 		for _, exs := range exsList {
 			if holdNum > stagyMaxNum {
 				break
-			}
-			if _, ok := stagJobs[exs.Symbol]; ok {
-				// 跳过此策略已有的交易对
-				continue
 			}
 			scores, ok := tfScores[exs.Symbol]
 			if !ok {
@@ -77,67 +77,22 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 					zap.String("stagy", stagy.Name), zap.String("scores", scoreText))
 				continue
 			}
+			if oldTf, ok := pairTfMap[exs.Symbol]; ok && tf == oldTf {
+				// 此策略+币种有旧tf，如果一致则跳过初始化
+				continue
+			}
 			holdNum += 1
 			tfs[tf] = true
-			core.StgPairTfs = append(core.StgPairTfs, &core.StgPairTf{Stagy: pol.Name, Pair: exs.Symbol, TimeFrame: tf})
+			pairTfMap[exs.Symbol] = tf
 			if stagy.WatchBook {
 				core.BookPairs[exs.Symbol] = true
 			}
 			// 初始化BarEnv
-			envKey := strings.Join([]string{exs.Symbol, tf}, "_")
-			tfMSecs := int64(utils.TFToSecs(tf) * 1000)
-			env, ok := Envs[envKey]
-			if !ok {
-				env = &ta.BarEnv{
-					Exchange:   core.ExgName,
-					MarketType: core.Market,
-					Symbol:     exs.Symbol,
-					TimeFrame:  tf,
-					TFMSecs:    tfMSecs,
-					MaxCache:   core.NumTaCache,
-					Data:       map[string]interface{}{"sid": exs.ID},
-				}
-				Envs[envKey] = env
-			}
+			envKey, env := initBarEnv(exs, tf)
 			// 记录需要预热的数据；记录订阅信息
 			logWarm(exs.Symbol, tf, stagy.WarmupNum)
 			for account := range config.Accounts {
-				jobs := GetJobs(account)
-				infoJobs := GetInfoJobs(account)
-				// 初始化交易任务
-				job := &StagyJob{
-					Stagy:         stagy,
-					Env:           env,
-					Symbol:        exs,
-					TimeFrame:     tf,
-					Account:       account,
-					TPMaxs:        make(map[int64]float64),
-					OpenLong:      true,
-					OpenShort:     true,
-					CloseLong:     true,
-					CloseShort:    true,
-					ExgStopLoss:   true,
-					ExgTakeProfit: true,
-				}
-				if envJobs, ok := jobs[envKey]; ok {
-					jobs[envKey] = append(envJobs, job)
-				} else {
-					jobs[envKey] = []*StagyJob{job}
-				}
-				if stagy.OnStartUp != nil {
-					stagy.OnStartUp(job)
-				}
-				if stagy.OnPairInfos != nil {
-					for _, s := range stagy.OnPairInfos(job) {
-						logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
-						jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
-						items, ok := infoJobs[jobKey]
-						if !ok {
-							items = make([]*StagyJob, 0)
-						}
-						infoJobs[jobKey] = append(items, job)
-					}
-				}
+				newStagyJob(stagy, account, tf, envKey, exs, env, logWarm)
 			}
 			items, ok := PairTFStags[envKey]
 			if !ok {
@@ -155,6 +110,65 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 		return a.Secs - b.Secs
 	})
 	return pairTfWarms, nil
+}
+
+func initBarEnv(exs *orm.ExSymbol, tf string) (string, *ta.BarEnv) {
+	envKey := strings.Join([]string{exs.Symbol, tf}, "_")
+	env, ok := Envs[envKey]
+	if !ok {
+		tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+		env = &ta.BarEnv{
+			Exchange:   core.ExgName,
+			MarketType: core.Market,
+			Symbol:     exs.Symbol,
+			TimeFrame:  tf,
+			TFMSecs:    tfMSecs,
+			MaxCache:   core.NumTaCache,
+			Data:       map[string]interface{}{"sid": exs.ID},
+		}
+		Envs[envKey] = env
+	}
+	return envKey, env
+}
+
+func newStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSymbol, env *ta.BarEnv,
+	logWarm func(pair, tf string, num int)) {
+	jobs := GetJobs(account)
+	infoJobs := GetInfoJobs(account)
+	// 初始化交易任务
+	job := &StagyJob{
+		Stagy:         stagy,
+		Env:           env,
+		Symbol:        exs,
+		TimeFrame:     tf,
+		Account:       account,
+		TPMaxs:        make(map[int64]float64),
+		OpenLong:      true,
+		OpenShort:     true,
+		CloseLong:     true,
+		CloseShort:    true,
+		ExgStopLoss:   true,
+		ExgTakeProfit: true,
+	}
+	if envJobs, ok := jobs[envKey]; ok {
+		jobs[envKey] = append(envJobs, job)
+	} else {
+		jobs[envKey] = []*StagyJob{job}
+	}
+	if stagy.OnStartUp != nil {
+		stagy.OnStartUp(job)
+	}
+	if stagy.OnPairInfos != nil {
+		for _, s := range stagy.OnPairInfos(job) {
+			logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
+			jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
+			items, ok := infoJobs[jobKey]
+			if !ok {
+				items = make([]*StagyJob, 0)
+			}
+			infoJobs[jobKey] = append(items, job)
+		}
+	}
 }
 
 func initStagyJobs() {

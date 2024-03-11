@@ -174,6 +174,11 @@ func (c *BanConn) RunForever() *errs.Error {
 	for {
 		msg, err := c.ReadMsg()
 		if err != nil {
+			if err.Code == core.ErrDeCompressFail {
+				// 无效消息，解压缩失败，忽略
+				log.Error("invalid banIO msg, deCompress fail", zap.Error(err))
+				continue
+			}
 			return err
 		}
 		isMatch := false
@@ -270,7 +275,7 @@ func deCompress(compressed []byte) ([]byte, *errs.Error) {
 	// 将解压后的数据复制到 result 中
 	_, err = io.Copy(&result, r)
 	if err != nil {
-		return nil, errs.New(core.ErrDeCompressFail, err)
+		return nil, errs.New(core.ErrIOReadFail, err)
 	}
 
 	return result.Bytes(), nil

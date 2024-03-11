@@ -19,7 +19,7 @@ var (
 	Market       string                           // 当前市场
 	IsContract   bool                             // 当前市场是否是合约市场, linear/inverse/option
 	ContractType string                           // 当前合约类型
-	StgPairTfs   []*StgPairTf                     // 策略、标的、周期
+	StgPairTfs   map[string]map[string]string     // 策略: 标的: 周期
 	Pairs        []string                         // 全局所有的标的
 	PairsMap     = make(map[string]bool)          // 全局所有的标的
 	PairTfScores = make(map[string][]*TfScore)    // tf scores for pairs

@@ -573,12 +573,8 @@ func (r *BTResult) dumpConfig() {
 
 func (r *BTResult) dumpStrategy() {
 	stagyDir := config.GetStagyDir()
-	stagyNames := make(map[string]bool)
-	for _, item := range core.StgPairTfs {
-		stagyNames[item.Stagy] = true
-	}
 	taskId := orm.GetTaskID("")
-	for name := range stagyNames {
+	for name := range core.StgPairTfs {
 		srcPath := fmt.Sprintf("%s/%s/main.go", stagyDir, name)
 		fileData, err_ := os.ReadFile(srcPath)
 		if err_ != nil {

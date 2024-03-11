@@ -330,7 +330,7 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 	i.QuoteCost -= part.QuoteCost
 	i.DirtyMain = true
 	i.DirtyEnter = true
-	partEnter := part.Enter.CutPart(enterRate, true)
+	partEnter := i.Enter.CutPart(enterRate, true)
 	partEnter.InoutID = part.ID
 	part.Enter = partEnter
 	if exitRate == 0 && i.Exit != nil && i.Exit.Amount > i.Enter.Amount {

@@ -1,11 +1,5 @@
 package core
 
-type StgPairTf struct {
-	Stagy     string
-	Pair      string
-	TimeFrame string
-}
-
 type DownRange struct {
 	Start   int64
 	End     int64

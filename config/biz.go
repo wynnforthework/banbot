@@ -196,9 +196,9 @@ func GetExgConfig() *ExgItemConfig {
 }
 
 func GetTakeOverTF(pair, defTF string) string {
-	for _, item := range core.StgPairTfs {
-		if item.Stagy == TakeOverStgy && item.Pair == pair {
-			return item.TimeFrame
+	if pairMap, ok := core.StgPairTfs[TakeOverStgy]; ok {
+		if tf, ok := pairMap[pair]; ok {
+			return tf
 		}
 	}
 	return defTF

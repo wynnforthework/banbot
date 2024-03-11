@@ -7,7 +7,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
-	"github.com/banbox/banbot/goods"
+	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
@@ -19,7 +19,16 @@ import (
 func CronRefreshPairs() {
 	if config.PairMgr != nil && config.PairMgr.Cron != "" {
 		_, err_ := core.Cron.AddFunc(config.PairMgr.Cron, func() {
-			err := goods.RefreshPairList(nil)
+			var addPairs = make(map[string]bool)
+			for account := range config.Accounts {
+				openOds, lock := orm.GetOpenODs(account)
+				lock.Lock()
+				for _, od := range openOds {
+					addPairs[od.Symbol] = true
+				}
+				lock.Unlock()
+			}
+			err := biz.LoadRefreshPairs(utils.KeysOfMap(addPairs))
 			if err != nil {
 				log.Error("refresh pairs fail", zap.Error(err))
 			}

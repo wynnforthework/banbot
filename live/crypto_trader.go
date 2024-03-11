@@ -7,10 +7,8 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
-	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
-	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -54,16 +52,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = goods.RefreshPairList(addPairs)
-	if err != nil {
-		return err
-	}
-	var warms map[string]map[string]int
-	warms, err = strategy.LoadStagyJobs(core.Pairs, core.PairTfScores)
-	if err != nil {
-		return err
-	}
-	return data.Main.SubWarmPairs(warms)
+	return biz.LoadRefreshPairs(addPairs)
 }
 
 func (t *CryptoTrader) initOdMgr() ([]string, *errs.Error) {
