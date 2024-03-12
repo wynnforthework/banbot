@@ -139,7 +139,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 				if req.Short {
 					rel = ">"
 				}
-				return errs.NewMsg(errs.CodeParamInvalid, "%s stoploss %f must %s %f for %s order",
+				return errs.NewMsg(errs.CodeParamInvalid, "%s stoploss %f must %s %f for %v order",
 					symbol, curSLPrice, rel, curPrice, dirType)
 			}
 			req.StopLoss = curSLPrice

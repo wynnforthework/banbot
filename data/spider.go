@@ -80,9 +80,6 @@ type SaveKline struct {
 }
 
 func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
-	initMutex.Lock()
-	initSids[save.Sid] = true
-	initMutex.Unlock()
 	if save.SkipFirst {
 		save.Arr = save.Arr[1:]
 	}
@@ -90,17 +87,21 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
 	if len(save.Arr) == 0 {
 		return endMS, nil
 	}
+	initMutex.Lock()
+	initSids[save.Sid] = true
+	initMutex.Unlock()
 	fetchEndMS := save.Arr[0].Time
 
 	var err *errs.Error
 	if endMS == 0 || fetchEndMS <= endMS {
 		// 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
+		log.Info("first fetch ok", zap.Int32("sid", save.Sid), zap.Int64("end", endMS))
 		return endMS, nil
 	}
 	exs := orm.GetSymbolByID(save.Sid)
 	tfMSecs := int64(utils.TFToSecs(save.TimeFrame) * 1000)
 	tryCount := 0
-	log.Info("start first fetch", zap.String("pair", exs.Symbol), zap.Int64("s", endMS), zap.Int64("e", fetchEndMS))
+	log.Debug("start first fetch", zap.String("pair", exs.Symbol), zap.Int64("s", endMS), zap.Int64("e", fetchEndMS))
 	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
 	if err != nil {
 		return endMS, err

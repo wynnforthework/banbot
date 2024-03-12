@@ -1,8 +1,10 @@
 package rpc
 
 import (
+	"errors"
 	"fmt"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
@@ -99,7 +101,12 @@ func (e *ExcEncoder) addFields(fields []zapcore.Field) {
 		if f.Type == zapcore.ErrorType {
 			e.Buf.AppendByte(' ')
 			err := f.Interface.(error)
-			e.AddString(f.Key, err.Error())
+			var err2 *errs.Error
+			if errors.As(err, &err2) {
+				e.AddString(f.Key, err2.Short())
+			} else {
+				e.AddString(f.Key, err.Error())
+			}
 			continue
 		}
 		f.AddTo(e)
