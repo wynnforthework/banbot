@@ -9,18 +9,26 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	ta "github.com/banbox/banta"
-	"github.com/bytedance/sonic"
 	"go.uber.org/zap"
-	"slices"
 	"strings"
 )
 
 /*
 LoadStagyJobs 加载策略和交易对
 
+更新以下全局变量：
+core.TFSecs
+core.StgPairTfs
+core.BookPairs
+strategy.Versions
+strategy.Envs
+strategy.PairTFStags
+strategy.AccJobs
+strategy.AccInfoJobs
+
 	返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
 */
-func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[string]map[string]int, *errs.Error) {
+func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[string]map[string]int, *errs.Error) {
 	if len(pairs) == 0 || len(tfScores) == 0 {
 		return nil, errs.NewMsg(errs.CodeParamRequired, "`pairs` and `tfScores` are required for LoadStagyJobs")
 	}
@@ -32,8 +40,13 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 		}
 		exsList = append(exsList, exs)
 	}
-	exgName := config.Exchange.Name
-	tfs := make(map[string]bool)
+	// 将涉及的全局变量置为空，下面会更新
+	core.TFSecs = make(map[string]int)
+	core.BookPairs = make(map[string]bool)
+	PairTFStags = make(map[string]map[string]*TradeStagy)
+	for account := range AccInfoJobs {
+		AccInfoJobs[account] = make(map[string]map[string]*StagyJob)
+	}
 	pairTfWarms := make(map[string]map[string]int)
 	logWarm := func(pair, tf string, num int) {
 		if warms, ok := pairTfWarms[pair]; ok {
@@ -56,63 +69,89 @@ func LoadStagyJobs(pairs []string, tfScores map[string][]*core.TfScore) (map[str
 		if stagyMaxNum == 0 {
 			stagyMaxNum = 999
 		}
-		pairTfMap, hasStg := core.StgPairTfs[pol.Name]
-		if !hasStg {
-			pairTfMap = make(map[string]string)
-			core.StgPairTfs[pol.Name] = pairTfMap
-		}
-		holdNum := len(pairTfMap)
+		holdNum := 0
+		newPairMap := make(map[string]string)
 		for _, exs := range exsList {
 			if holdNum > stagyMaxNum {
 				break
 			}
-			scores, ok := tfScores[exs.Symbol]
-			if !ok {
-				scores = make([]*core.TfScore, 0)
-			}
-			tf := stagy.pickTimeFrame(exgName, exs.Symbol, scores)
+			tf := pickTimeFrame(stagy, exs, tfScores)
 			if tf == "" {
-				scoreText, _ := sonic.MarshalString(scores)
-				log.Warn("filter pair by tfScore", zap.String("pair", exs.Symbol),
-					zap.String("stagy", stagy.Name), zap.String("scores", scoreText))
-				continue
-			}
-			if oldTf, ok := pairTfMap[exs.Symbol]; ok && tf == oldTf {
-				// 此策略+币种有旧tf，如果一致则跳过初始化
 				continue
 			}
 			holdNum += 1
-			tfs[tf] = true
-			pairTfMap[exs.Symbol] = tf
+			if _, ok := core.TFSecs[tf]; !ok {
+				core.TFSecs[tf] = utils.TFToSecs(tf)
+			}
+			newPairMap[exs.Symbol] = tf
+			envKey := strings.Join([]string{exs.Symbol, tf}, "_")
 			if stagy.WatchBook {
 				core.BookPairs[exs.Symbol] = true
 			}
+			items, ok := PairTFStags[envKey]
+			if !ok {
+				items = make(map[string]*TradeStagy)
+				PairTFStags[envKey] = items
+			}
+			items[pol.Name] = stagy
 			// 初始化BarEnv
-			envKey, env := initBarEnv(exs, tf)
+			env := initBarEnv(exs, tf)
 			// 记录需要预热的数据；记录订阅信息
 			logWarm(exs.Symbol, tf, stagy.WarmupNum)
 			for account := range config.Accounts {
-				newStagyJob(stagy, account, tf, envKey, exs, env, logWarm)
+				ensureStagyJob(stagy, account, tf, envKey, exs, env, logWarm)
 			}
-			items, ok := PairTFStags[envKey]
-			if !ok {
-				items = make([]*TradeStagy, 0)
-			}
-			PairTFStags[envKey] = append(items, stagy)
 		}
+		core.StgPairTfs[pol.Name] = newPairMap
 	}
 	initStagyJobs()
-	core.TFSecs = nil
-	for tf, _ := range tfs {
-		core.TFSecs = append(core.TFSecs, &core.TFSecTuple{TF: tf, Secs: utils.TFToSecs(tf)})
+	// 确保所有pair、tf都在返回的中有记录，防止被数据订阅端移除
+	for _, pairMap := range core.StgPairTfs {
+		for pair, tf := range pairMap {
+			tfMap, ok := pairTfWarms[pair]
+			if !ok {
+				tfMap = make(map[string]int)
+				pairTfWarms[pair] = tfMap
+			}
+			if _, ok := tfMap[tf]; !ok {
+				tfMap[tf] = 0
+			}
+		}
 	}
-	slices.SortFunc(core.TFSecs, func(a, b *core.TFSecTuple) int {
-		return a.Secs - b.Secs
-	})
+	// 从Envs, AccJobs中删除无用的项
+	for envKey := range Envs {
+		if _, ok := PairTFStags[envKey]; !ok {
+			delete(Envs, envKey)
+		}
+	}
+	for _, jobs := range AccJobs {
+		for envKey := range jobs {
+			if _, ok := PairTFStags[envKey]; !ok {
+				delete(AccJobs, envKey)
+			}
+		}
+	}
 	return pairTfWarms, nil
 }
 
-func initBarEnv(exs *orm.ExSymbol, tf string) (string, *ta.BarEnv) {
+func pickTimeFrame(stagy *TradeStagy, exs *orm.ExSymbol, tfScores map[string]map[string]float64) string {
+	scores, ok := tfScores[exs.Symbol]
+	var tf string
+	if ok {
+		tf = stagy.pickTimeFrame(exs.Symbol, scores)
+	}
+	if tf == "" {
+		scoreStrs := make([]string, 0, len(scores))
+		for tf_, score := range scores {
+			scoreStrs = append(scoreStrs, fmt.Sprintf("%v: %.3f", tf_, score))
+		}
+		log.Warn("filter pair by tfScore", zap.String("pair", exs.Symbol),
+			zap.String("stagy", stagy.Name), zap.String("scores", strings.Join(scoreStrs, ", ")))
+	}
+	return tf
+}
+
+func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 	envKey := strings.Join([]string{exs.Symbol, tf}, "_")
 	env, ok := Envs[envKey]
 	if !ok {
@@ -128,45 +167,50 @@ func initBarEnv(exs *orm.ExSymbol, tf string) (string, *ta.BarEnv) {
 		}
 		Envs[envKey] = env
 	}
-	return envKey, env
+	return env
 }
 
-func newStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSymbol, env *ta.BarEnv,
+func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSymbol, env *ta.BarEnv,
 	logWarm func(pair, tf string, num int)) {
 	jobs := GetJobs(account)
-	infoJobs := GetInfoJobs(account)
-	// 初始化交易任务
-	job := &StagyJob{
-		Stagy:         stagy,
-		Env:           env,
-		Symbol:        exs,
-		TimeFrame:     tf,
-		Account:       account,
-		TPMaxs:        make(map[int64]float64),
-		OpenLong:      true,
-		OpenShort:     true,
-		CloseLong:     true,
-		CloseShort:    true,
-		ExgStopLoss:   true,
-		ExgTakeProfit: true,
+	envJobs, ok := jobs[envKey]
+	if !ok {
+		envJobs = make(map[string]*StagyJob)
+		jobs[envKey] = envJobs
 	}
-	if envJobs, ok := jobs[envKey]; ok {
-		jobs[envKey] = append(envJobs, job)
-	} else {
-		jobs[envKey] = []*StagyJob{job}
+	job, ok := envJobs[stagy.Name]
+	if !ok {
+		job = &StagyJob{
+			Stagy:         stagy,
+			Env:           env,
+			Symbol:        exs,
+			TimeFrame:     tf,
+			Account:       account,
+			TPMaxs:        make(map[int64]float64),
+			OpenLong:      true,
+			OpenShort:     true,
+			CloseLong:     true,
+			CloseShort:    true,
+			ExgStopLoss:   true,
+			ExgTakeProfit: true,
+		}
+		if stagy.OnStartUp != nil {
+			stagy.OnStartUp(job)
+		}
+		envJobs[stagy.Name] = job
 	}
-	if stagy.OnStartUp != nil {
-		stagy.OnStartUp(job)
-	}
+	// 加载订阅其他标的信息
 	if stagy.OnPairInfos != nil {
+		infoJobs := GetInfoJobs(account)
 		for _, s := range stagy.OnPairInfos(job) {
 			logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
 			jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
 			items, ok := infoJobs[jobKey]
 			if !ok {
-				items = make([]*StagyJob, 0)
+				items = make(map[string]*StagyJob)
+				infoJobs[jobKey] = items
 			}
-			infoJobs[jobKey] = append(items, job)
+			items[stagy.Name] = job
 		}
 	}
 }

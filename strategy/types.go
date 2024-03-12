@@ -8,7 +8,7 @@ import (
 )
 
 type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64
-type PickTimeFrameFunc func(exg string, symbol string, tfScores []*core.TfScore) string
+type PickTimeFrameFunc func(symbol string, tfScores []*core.TfScore) string
 
 type TradeStagy struct {
 	Name          string

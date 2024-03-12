@@ -145,7 +145,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 	return nil
 }
 
-func (t *Trader) onStagyEnterCB(ents []*orm.InOutOrder, jobs []*strategy.StagyJob) {
+func (t *Trader) onStagyEnterCB(ents []*orm.InOutOrder, jobs map[string]*strategy.StagyJob) {
 	if len(ents) == 0 {
 		return
 	}

@@ -89,7 +89,6 @@ func (t *CryptoTrader) Run() *errs.Error {
 	if err != nil {
 		return err
 	}
-	core.PrintStagyGroups()
 	t.startJobs()
 	err = data.Main.LoopMain()
 	if err != nil {

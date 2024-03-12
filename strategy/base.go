@@ -10,6 +10,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"math"
+	"slices"
 )
 
 /*
@@ -45,20 +46,23 @@ func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
 /*
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
-func (s *TradeStagy) pickTimeFrame(exg string, symbol string, tfScores []*core.TfScore) string {
+func (s *TradeStagy) pickTimeFrame(symbol string, tfScores map[string]float64) string {
 	// 过滤当前需要的时间周期
 	useTfs := make(map[string]bool)
 	for _, tf := range s.AllowTFs {
 		useTfs[tf] = true
 	}
 	curScores := make([]*core.TfScore, 0, len(tfScores))
-	for _, item := range tfScores {
-		if _, ok := useTfs[item.TF]; ok {
-			curScores = append(curScores, item)
+	for tf, score := range tfScores {
+		if _, ok := useTfs[tf]; ok {
+			curScores = append(curScores, &core.TfScore{TF: tf, Score: score})
 		}
 	}
+	slices.SortFunc(curScores, func(a, b *core.TfScore) int {
+		return int((a.Score - b.Score) * 1000)
+	})
 	if s.PickTimeFrame != nil {
-		return s.PickTimeFrame(exg, symbol, curScores)
+		return s.PickTimeFrame(symbol, curScores)
 	}
 	for _, tfs := range curScores {
 		if tfs.Score >= s.MinTfScore {

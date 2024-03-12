@@ -25,7 +25,7 @@ var (
 
 type IProvider interface {
 	LoopMain() *errs.Error
-	SubWarmPairs(items map[string]map[string]int) *errs.Error
+	SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error
 	UnSubPairs(pairs ...string) *errs.Error
 }
 
@@ -57,7 +57,7 @@ SubWarmPairs
 	items: pair[timeFrame]warmNum
 	返回最小周期变化的交易对(新增/旧对新周期)、预热任务
 */
-func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) ([]IKlineFeeder, map[string]int64, *errs.Error) {
+func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool) ([]IKlineFeeder, map[string]int64, []string, *errs.Error) {
 	core.IsWarmUp = true
 	defer func() {
 		core.IsWarmUp = false
@@ -70,14 +70,14 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 		if !ok {
 			hold, err = p.newFeeder(pair, utils.KeysOfMap(tfWarms))
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 			p.holders[pair] = hold
 			newHolds = append(newHolds, hold)
 			warmJobs = append(warmJobs, &WarmJob{hold: hold, tfWarms: tfWarms})
 		} else {
 			oldMinTf := hold.getStates()[0].TimeFrame
-			newTfs := hold.subTfs(utils.KeysOfMap(tfWarms)...)
+			newTfs := hold.subTfs(utils.KeysOfMap(tfWarms), delOther)
 			curMinTf := hold.getStates()[0].TimeFrame
 			if oldMinTf != curMinTf {
 				newHolds = append(newHolds, hold)
@@ -90,9 +90,18 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) (
 			}
 		}
 	}
+	var delPairs []string
+	if delOther {
+		for pair := range p.holders {
+			if _, ok := items[pair]; !ok {
+				delete(p.holders, pair)
+				delPairs = append(delPairs, pair)
+			}
+		}
+	}
 	// 加载数据预热
 	sinceMap, err := p.warmJobs(warmJobs)
-	return newHolds, sinceMap, err
+	return newHolds, sinceMap, delPairs, err
 }
 
 func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64, *errs.Error) {
@@ -182,7 +191,7 @@ func InitHistProvider(callBack FnPairKline) {
 				if err != nil {
 					return nil, err
 				}
-				feeder.subTfs(tfs...)
+				feeder.subTfs(tfs, false)
 				return feeder, nil
 			},
 		},
@@ -218,8 +227,8 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 	return nil
 }
 
-func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[string]int) *errs.Error {
-	_, sinceMap, err := p.Provider.SubWarmPairs(items)
+func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
+	_, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther)
 	// 检查回测期间数据是否需要下载，如需要自动下载
 	err = p.downIfNeed()
 	if err != nil {
@@ -253,7 +262,15 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 	if len(p.holders) == 0 {
 		return errs.NewMsg(core.ErrBadConfig, "no pairs to run")
 	}
-	var pBar *progressbar.ProgressBar
+	totalMS := (config.TimeRange.EndMS - config.TimeRange.StartMS) / 1000
+	var pbarTo = config.TimeRange.StartMS
+	var pBar = progressbar.Default(totalMS, "RunHist")
+	defer func() {
+		err_ := pBar.Close()
+		if err_ != nil {
+			log.Error("procBar close fail", zap.Error(err_))
+		}
+	}()
 	log.Info("run data loop for backtest..")
 	for {
 		if !core.BotRunning {
@@ -279,7 +296,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			break
 		}
 		// 触发回调
-		count, err := hold.invoke()
+		err := hold.invoke()
 		if err != nil {
 			if err.Code == core.ErrEOF {
 				break
@@ -288,24 +305,14 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			return err
 		}
 		// 更新进度条
-		if pBar == nil {
-			var sumTotal int
-			for _, h := range holds {
-				sumTotal += h.getTotalLen()
+		pBarAdd := (btime.TimeMS() - pbarTo) / 1000
+		if pBarAdd > 0 {
+			err_ := pBar.Add64(pBarAdd)
+			pbarTo = btime.TimeMS()
+			if err_ != nil {
+				log.Error("procBar add fail", zap.Error(err_))
+				return errs.New(core.ErrRunTime, err_)
 			}
-			pBar = progressbar.Default(int64(sumTotal), "RunHist")
-		}
-		err_ := pBar.Add(count)
-		if err_ != nil {
-			log.Error("procBar add fail", zap.Error(err_))
-			return errs.New(core.ErrRunTime, err_)
-		}
-	}
-	if pBar != nil {
-		err_ := pBar.Close()
-		if err_ != nil {
-			log.Error("procBar close fail", zap.Error(err_))
-			return errs.New(core.ErrRunTime, err_)
 		}
 	}
 	return nil
@@ -326,7 +333,7 @@ func InitLiveProvider(callBack FnPairKline) *errs.Error {
 			holders: make(map[string]IKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IKlineFeeder, *errs.Error) {
 				feeder := NewKlineFeeder(pair, callBack)
-				feeder.subTfs(tfs...)
+				feeder.subTfs(tfs, false)
 				return feeder, nil
 			},
 		},
@@ -344,8 +351,8 @@ func InitLiveProvider(callBack FnPairKline) *errs.Error {
 	return nil
 }
 
-func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int) *errs.Error {
-	newHolds, sinceMap, err := p.Provider.SubWarmPairs(items)
+func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
+	newHolds, sinceMap, delPairs, err := p.Provider.SubWarmPairs(items, delOther)
 	if err != nil {
 		return err
 	}
@@ -375,6 +382,12 @@ func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]in
 			if err != nil {
 				return err
 			}
+		}
+	}
+	if len(delPairs) > 0 {
+		err = p.UnWatchJobs(core.ExgName, core.Market, "ohlcv", delPairs)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

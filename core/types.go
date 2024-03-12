@@ -10,8 +10,3 @@ type TfScore struct {
 	TF    string
 	Score float64
 }
-
-type TFSecTuple struct {
-	TF   string
-	Secs int
-}

@@ -205,25 +205,25 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 	return res, nil
 }
 
-func GetJobs(account string) map[string][]*StagyJob {
+func GetJobs(account string) map[string]map[string]*StagyJob {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	jobs, ok := AccJobs[account]
 	if !ok {
-		jobs = map[string][]*StagyJob{}
+		jobs = map[string]map[string]*StagyJob{}
 		AccJobs[account] = jobs
 	}
 	return jobs
 }
 
-func GetInfoJobs(account string) map[string][]*StagyJob {
+func GetInfoJobs(account string) map[string]map[string]*StagyJob {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	jobs, ok := AccInfoJobs[account]
 	if !ok {
-		jobs = map[string][]*StagyJob{}
+		jobs = map[string]map[string]*StagyJob{}
 		AccInfoJobs[account] = jobs
 	}
 	return jobs

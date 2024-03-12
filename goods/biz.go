@@ -81,7 +81,7 @@ func Setup() *errs.Error {
 	return nil
 }
 
-func RefreshPairList(addPairs []string) *errs.Error {
+func RefreshPairList(addPairs []string) (map[string]map[string]float64, *errs.Error) {
 	lastRefresh = btime.TimeMS()
 	var pairs []string
 	var allowFilter = false
@@ -97,7 +97,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 			if len(tickersMap) == 0 {
 				tickers, err := exchange.FetchTickers(nil, nil)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				for _, t := range tickers {
 					tickersMap[t.Symbol] = t
@@ -108,7 +108,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 		}
 		genPairs, err := pairProducer.GenSymbols(tickersMap)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, pair := range genPairs {
 			_, quote, _, _ := core.SplitSymbol(pair)
@@ -120,7 +120,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	}
 	err = orm.EnsureCurSymbols(pairs)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if allowFilter {
 		for _, flt := range filters {
@@ -130,7 +130,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 			oldNum := len(pairs)
 			pairs, err = flt.Filter(pairs, tickersMap)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if oldNum > len(pairs) {
 				log.Info(fmt.Sprintf("left %d symbols after %s", len(pairs), flt.GetName()))
@@ -141,7 +141,7 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	if len(adds) > 0 {
 		err = orm.EnsureCurSymbols(adds)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		pairs = utils.UnionArr(pairs, adds)
 	}
@@ -157,10 +157,11 @@ func RefreshPairList(addPairs []string) *errs.Error {
 	return calcPairTfScales(exg.Default, pairs)
 }
 
-func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
+func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]map[string]float64, *errs.Error) {
+	pairTfScores := make(map[string]map[string]float64)
 	allowTfs := allAllowTFs()
 	if len(allowTfs) == 0 {
-		return errs.NewMsg(core.ErrBadConfig, "run_timeframes is required in config")
+		return pairTfScores, errs.NewMsg(core.ErrBadConfig, "run_timeframes is required in config")
 	}
 	wsModeTf := ""
 	for _, v := range allowTfs {
@@ -171,16 +172,16 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
 		}
 	}
 	if wsModeTf != "" {
-		core.PairTfScores = make(map[string][]*core.TfScore)
 		for _, pair := range pairs {
-			core.PairTfScores[pair] = []*core.TfScore{{wsModeTf, 1.0}}
+			pairTfScores[pair] = map[string]float64{wsModeTf: 1.0}
 		}
-		return nil
+		return pairTfScores, nil
 	}
 	handle := func(pair, timeFrame string, arr []*banexg.Kline) {
-		items, ok := core.PairTfScores[pair]
+		tfScores, ok := pairTfScores[pair]
 		if !ok {
-			items = make([]*core.TfScore, 0, len(allowTfs))
+			tfScores = make(map[string]float64)
+			pairTfScores[pair] = tfScores
 		}
 		pipChg, err := exchange.PriceOnePip(pair)
 		if err != nil {
@@ -191,17 +192,16 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) *errs.Error {
 		if len(arr) > 0 && pipChg > 0 {
 			score = calcKlineScore(arr, pipChg)
 		}
-		items = append(items, &core.TfScore{TF: timeFrame, Score: score})
-		core.PairTfScores[pair] = items
+		tfScores[timeFrame] = score
 	}
 	backNum := 300
 	for _, tf := range allowTfs {
 		err := orm.FastBulkOHLCV(exchange, pairs, tf, 0, 0, backNum, handle)
 		if err != nil {
-			return err
+			return pairTfScores, err
 		}
 	}
-	return nil
+	return pairTfScores, nil
 }
 
 /*

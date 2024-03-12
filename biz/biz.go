@@ -13,6 +13,7 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -50,14 +51,31 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 }
 
 func LoadRefreshPairs(addPairs []string) *errs.Error {
-	err := goods.RefreshPairList(addPairs)
+	pairTfScores, err := goods.RefreshPairList(addPairs)
 	if err != nil {
 		return err
 	}
 	var warms map[string]map[string]int
-	warms, err = strategy.LoadStagyJobs(core.Pairs, core.PairTfScores)
+	warms, err = strategy.LoadStagyJobs(core.Pairs, pairTfScores)
 	if err != nil {
 		return err
 	}
-	return data.Main.SubWarmPairs(warms)
+	core.PrintStagyGroups()
+	return data.Main.SubWarmPairs(warms, true)
+}
+
+func AutoRefreshPairs() {
+	var addPairs = make(map[string]bool)
+	for account := range config.Accounts {
+		openOds, lock := orm.GetOpenODs(account)
+		lock.Lock()
+		for _, od := range openOds {
+			addPairs[od.Symbol] = true
+		}
+		lock.Unlock()
+	}
+	err := LoadRefreshPairs(utils.KeysOfMap(addPairs))
+	if err != nil {
+		log.Error("refresh pairs fail", zap.Error(err))
+	}
 }

@@ -37,12 +37,12 @@ Feeder
 */
 type Feeder struct {
 	Symbol   string
-	States   []PairTFCache
+	States   []*PairTFCache
 	WaitBar  *banexg.Kline
 	CallBack FnPairKline
 }
 
-func (f *Feeder) getStates() []PairTFCache {
+func (f *Feeder) getStates() []*PairTFCache {
 	return f.States
 }
 
@@ -62,43 +62,75 @@ func (f *Feeder) setWaitBar(bar *banexg.Kline) {
 subTfs
 添加监听到States中，返回新增的TimeFrames
 */
-func (f *Feeder) subTfs(timeFrames ...string) []string {
+func (f *Feeder) subTfs(timeFrames []string, delOther bool) []string {
 	var oldTfs = make(map[string]bool)
+	var stateMap = make(map[string]*PairTFCache)
+	var minTfSecs = 0 // 记录最小时间周期
 	if len(f.States) > 0 {
 		for _, sta := range f.States {
 			oldTfs[sta.TimeFrame] = true
+			stateMap[sta.TimeFrame] = sta
+			if minTfSecs == 0 || sta.TFSecs < minTfSecs {
+				minTfSecs = sta.TFSecs
+			}
 		}
 	}
+	// 新增的记录到adds中，已有的从oldTfs中删除，stateMap保留全部的
 	adds := make([]string, 0, len(timeFrames))
 	for _, tf := range timeFrames {
 		if _, ok := oldTfs[tf]; ok {
+			delete(oldTfs, tf)
 			continue
 		}
-		f.States = append(f.States, PairTFCache{
+		sta := &PairTFCache{
 			TimeFrame: tf,
 			TFSecs:    utils.TFToSecs(tf),
-		})
+		}
+		stateMap[tf] = sta
+		if minTfSecs == 0 || sta.TFSecs < minTfSecs {
+			minTfSecs = sta.TFSecs
+		}
 		adds = append(adds, tf)
 	}
-	slices.SortFunc(f.States, func(a, b PairTFCache) int {
+	// 如果需要删除未传入的，记录下最小周期的state，防止再次从空白重建
+	var minDel *PairTFCache
+	if delOther && len(oldTfs) > 0 {
+		// 删除此次为传入的时间周期
+		for tf := range oldTfs {
+			if sta, ok := stateMap[tf]; ok {
+				if sta.TFSecs == minTfSecs {
+					minDel = sta
+				}
+				delete(stateMap, tf)
+			}
+		}
+	}
+	var newStates = utils.ValsOfMap(stateMap)
+	// 对所有周期从小到大排序，第一个必须是后续所有states的最小公倍数，以便能从第一个更新后续所有
+	slices.SortFunc(newStates, func(a, b *PairTFCache) int {
 		return a.TFSecs - b.TFSecs
 	})
-	secs := make([]int, len(f.States))
-	for i, v := range f.States {
+	secs := make([]int, len(newStates))
+	for i, v := range newStates {
 		secs[i] = v.TFSecs
 	}
 	minSecs := utils.GcdInts(secs)
-	if minSecs != f.States[0].TFSecs {
-		minTf := utils.SecsToTF(minSecs)
-		f.States = append([]PairTFCache{{TFSecs: minSecs, TimeFrame: minTf}}, f.States...)
+	if minSecs != newStates[0].TFSecs {
+		if minDel != nil && minDel.TFSecs == minSecs {
+			newStates = append([]*PairTFCache{minDel}, newStates...)
+		} else {
+			minTf := utils.SecsToTF(minSecs)
+			newStates = append([]*PairTFCache{{TFSecs: minSecs, TimeFrame: minTf}}, newStates...)
+		}
 	}
+	f.States = newStates
 	return adds
 }
 
 /*
 更新State并触发回调
 */
-func (f *Feeder) onStateOhlcvs(state PairTFCache, bars []*banexg.Kline, lastOk, doFire bool) []*banexg.Kline {
+func (f *Feeder) onStateOhlcvs(state *PairTFCache, bars []*banexg.Kline, lastOk, doFire bool) []*banexg.Kline {
 	if len(bars) == 0 {
 		return nil
 	}
@@ -153,10 +185,10 @@ type IKlineFeeder interface {
 	getSymbol() string
 	getWaitBar() *banexg.Kline
 	setWaitBar(bar *banexg.Kline)
-	subTfs(timeFrames ...string) []string
+	subTfs(timeFrames []string, delOther bool) []string
 	WarmTfs(tfBars map[string][]*banexg.Kline) int64
 	onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *errs.Error)
-	getStates() []PairTFCache
+	getStates() []*PairTFCache
 }
 
 /*
@@ -266,8 +298,7 @@ type IHistKlineFeeder interface {
 	IKlineFeeder
 	getNextMS() int64
 	initNext(since int64)
-	getTotalLen() int
-	invoke() (int, *errs.Error)
+	invoke() *errs.Error
 	downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, stepCB func(num int)) *errs.Error
 }
 
@@ -280,7 +311,6 @@ HistKLineFeeder
 type HistKLineFeeder struct {
 	KlineFeeder
 	TimeRange *config.TimeTuple
-	TotalLen  int
 	rowIdx    int             // 缓存中下一个Bar的索引，-1表示已结束
 	caches    []*banexg.Kline // 缓存的Bar，逐个fire，读取完重新加载
 	nextMS    int64           // 下一个bar的13位毫秒时间戳，math.MaxInt32表示结束
@@ -295,23 +325,15 @@ func (f *HistKLineFeeder) initNext(since int64) {
 	f.setNext()
 }
 
-func (f *HistKLineFeeder) getTotalLen() int {
-	return f.TotalLen
-}
-
-func (f *HistKLineFeeder) invoke() (int, *errs.Error) {
+func (f *HistKLineFeeder) invoke() *errs.Error {
 	if f.rowIdx >= len(f.caches) {
-		return 0, errs.NewMsg(core.ErrEOF, fmt.Sprintf("%s no more bars", f.Symbol))
+		return errs.NewMsg(core.ErrEOF, fmt.Sprintf("%s no more bars", f.Symbol))
 	}
 	bar := f.caches[f.rowIdx]
 	tfMSecs := f.caches[1].Time - f.caches[0].Time
 	_, err := f.onNewBars(tfMSecs, []*banexg.Kline{bar})
 	f.setNext()
-	count := 1
-	if f.rowIdx >= 0 {
-		count = int((f.nextMS - bar.Time) / tfMSecs)
-	}
-	return count, err
+	return err
 }
 
 /*
@@ -333,7 +355,6 @@ func NewDBKlineFeeder(symbol string, callBack FnPairKline) (*DBKlineFeeder, *err
 		HistKLineFeeder: HistKLineFeeder{
 			KlineFeeder: *NewKlineFeeder(symbol, callBack),
 			TimeRange:   config.TimeRange,
-			TotalLen:    -1,
 		},
 		exs: exs,
 	}
@@ -381,20 +402,6 @@ func makeSetNext(f *DBKlineFeeder) func() {
 			return
 		}
 		defer conn.Release()
-		if f.TotalLen < 0 {
-			f.TotalLen = 1
-			startMS, stopMS := sess.GetKlineRange(f.exs.ID, state.TimeFrame)
-			if startMS > 0 && stopMS > 0 {
-				startMS = max(startMS, f.TimeRange.StartMS)
-				stopMS = min(stopMS, f.TimeRange.EndMS)
-			} else {
-				startMS = f.TimeRange.StartMS
-				stopMS = f.TimeRange.EndMS
-			}
-			if startMS < stopMS {
-				f.TotalLen = int((stopMS-startMS)/1000)/state.TFSecs + 1
-			}
-		}
 		if f.nextMS+tfMSecs >= f.TimeRange.EndMS {
 			f.rowIdx = -1
 			f.nextMS = math.MaxInt64

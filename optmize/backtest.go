@@ -12,10 +12,12 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 	"math"
 	"os"
 	"slices"
+	"time"
 )
 
 const (
@@ -26,6 +28,11 @@ type BackTest struct {
 	biz.Trader
 	*BTResult
 }
+
+var (
+	nextRefresh int64 // 下一次刷新交易对的时间
+	schedule    cron.Schedule
+)
 
 func NewBackTest() *BackTest {
 	p := &BackTest{
@@ -92,6 +99,11 @@ func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 	if !core.IsWarmUp {
 		b.logState(btime.TimeMS())
 	}
+	if nextRefresh > 0 && bar.Time >= nextRefresh {
+		// 刷新交易对
+		nextRefresh = schedule.Next(time.UnixMilli(bar.Time)).UnixMilli()
+		biz.AutoRefreshPairs()
+	}
 }
 
 func (b *BackTest) Run() {
@@ -100,7 +112,11 @@ func (b *BackTest) Run() {
 		log.Error("backtest init fail", zap.Error(err))
 		return
 	}
-	core.PrintStagyGroups()
+	err = initRefreshCron()
+	if err != nil {
+		log.Error("init pair cron fail", zap.Error(err))
+		return
+	}
 	btStart := btime.UTCTime()
 	err = data.Main.LoopMain()
 	if err != nil {
@@ -228,4 +244,18 @@ func (b *BackTest) logPlot(timeMS int64) {
 	b.Plots.Available = append(b.Plots.Available, avaLegal)
 	b.Plots.UnrealizedPOL = append(b.Plots.UnrealizedPOL, profitLegal)
 	b.Plots.WithDraw = append(b.Plots.WithDraw, drawLegal)
+}
+
+func initRefreshCron() *errs.Error {
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	if config.PairMgr != nil && config.PairMgr.Cron != "" {
+		var err_ error
+		schedule, err_ = parser.Parse(config.PairMgr.Cron)
+		if err_ != nil {
+			return errs.New(core.ErrBadConfig, err_)
+		}
+		startTime := time.UnixMilli(config.TimeRange.StartMS)
+		nextRefresh = schedule.Next(startTime).UnixMilli()
+	}
+	return nil
 }

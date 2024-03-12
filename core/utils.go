@@ -42,7 +42,7 @@ func GroupStagyPairs() map[string]map[string][]string {
 
 /*
 PrintStagyGroups
-输出策略+时间周期的币种信息到控制台
+从core.StgPairTfs输出策略+时间周期的币种信息到控制台
 */
 func PrintStagyGroups() {
 	items := GroupStagyPairs()
