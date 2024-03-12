@@ -9,7 +9,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	ta "github.com/banbox/banta"
-	"go.uber.org/zap"
 	"strings"
 )
 
@@ -71,12 +70,15 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		}
 		holdNum := 0
 		newPairMap := make(map[string]string)
+		failTfScores := make(map[string]map[string]float64)
 		for _, exs := range exsList {
 			if holdNum > stagyMaxNum {
 				break
 			}
-			tf := pickTimeFrame(stagy, exs, tfScores)
+			scores, ok := tfScores[exs.Symbol]
+			tf := stagy.pickTimeFrame(exs.Symbol, scores)
 			if tf == "" {
+				failTfScores[exs.Symbol] = scores
 				continue
 			}
 			holdNum += 1
@@ -103,6 +105,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			}
 		}
 		core.StgPairTfs[pol.Name] = newPairMap
+		printFailTfScores(pol.Name, failTfScores)
 	}
 	initStagyJobs()
 	// 确保所有pair、tf都在返回的中有记录，防止被数据订阅端移除
@@ -134,21 +137,23 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	return pairTfWarms, nil
 }
 
-func pickTimeFrame(stagy *TradeStagy, exs *orm.ExSymbol, tfScores map[string]map[string]float64) string {
-	scores, ok := tfScores[exs.Symbol]
-	var tf string
-	if ok {
-		tf = stagy.pickTimeFrame(exs.Symbol, scores)
+func printFailTfScores(stagyName string, pairTfScores map[string]map[string]float64) {
+	if len(pairTfScores) == 0 {
+		return
 	}
-	if tf == "" {
-		scoreStrs := make([]string, 0, len(scores))
-		for tf_, score := range scores {
+	lines := make([]string, 0, len(pairTfScores))
+	for pair, tfScores := range pairTfScores {
+		if len(tfScores) == 0 {
+			lines = append(lines, fmt.Sprintf("%v: ", pair))
+			continue
+		}
+		scoreStrs := make([]string, 0, len(pairTfScores))
+		for tf_, score := range tfScores {
 			scoreStrs = append(scoreStrs, fmt.Sprintf("%v: %.3f", tf_, score))
 		}
-		log.Warn("filter pair by tfScore", zap.String("pair", exs.Symbol),
-			zap.String("stagy", stagy.Name), zap.String("scores", strings.Join(scoreStrs, ", ")))
+		lines = append(lines, fmt.Sprintf("%v: %v", pair, strings.Join(scoreStrs, ", ")))
 	}
-	return tf
+	log.Info(fmt.Sprintf("%v filter pairs by tfScore: \n%v", stagyName, strings.Join(lines, "\n")))
 }
 
 func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {

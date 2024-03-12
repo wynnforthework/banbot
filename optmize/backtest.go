@@ -129,6 +129,7 @@ func (b *BackTest) Run() {
 		log.Error("backtest clean orders fail", zap.Error(err))
 		return
 	}
+	b.logPlot(biz.GetWallets(""), btime.TimeMS(), -1, -1)
 	log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
 	b.printBtResult()
 }
@@ -183,19 +184,15 @@ func (b *BackTest) logState(timeMS int64) {
 		b.StartMS = timeMS
 	}
 	b.EndMS = timeMS
-	b.logPlot(timeMS)
 	wallets := biz.GetWallets("")
-	quoteLegal := wallets.TotalLegal(config.StakeCurrency, true)
-	b.MinReal = min(b.MinReal, quoteLegal)
-	if quoteLegal >= b.MaxReal {
-		b.MaxReal = quoteLegal
+	totalLegal := wallets.TotalLegal(nil, true)
+	b.MinReal = min(b.MinReal, totalLegal)
+	if totalLegal >= b.MaxReal {
+		b.MaxReal = totalLegal
 	} else {
-		drawDownPct := (b.MaxReal - quoteLegal) * 100 / b.MaxReal
+		drawDownPct := (b.MaxReal - totalLegal) * 100 / b.MaxReal
 		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
 	}
-}
-
-func (b *BackTest) logPlot(timeMS int64) {
 	odNum := orm.OpenNum("", orm.InOutStatusPartEnter)
 	if b.BarNum%b.PlotEvery != 0 {
 		if odNum > b.Plots.tmpOdNum {
@@ -232,9 +229,17 @@ func (b *BackTest) logPlot(timeMS int64) {
 		b.Plots = plots
 		return
 	}
-	wallets := biz.GetWallets("")
+	b.logPlot(wallets, timeMS, odNum, totalLegal)
+}
+
+func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, totalLegal float64) {
+	if odNum < 0 {
+		odNum = orm.OpenNum("", orm.InOutStatusPartEnter)
+	}
+	if totalLegal < 0 {
+		totalLegal = wallets.TotalLegal(nil, true)
+	}
 	avaLegal := wallets.AvaLegal(nil)
-	totalLegal := wallets.TotalLegal(nil, true)
 	profitLegal := wallets.UnrealizedPOLLegal(nil)
 	drawLegal := wallets.GetWithdrawLegal(nil)
 	curDate := btime.ToDateStr(timeMS, "")

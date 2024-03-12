@@ -200,7 +200,6 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	if exOrder.Price == 0 {
 		exOrder.Price = entPrice
 	}
-	wallets.ConfirmOdEnter(od, entPrice)
 	updateTime := btime.TimeMS() + int64(netCost)*1000
 	exOrder.UpdateAt = updateTime
 	if exOrder.CreateAt == 0 {
@@ -213,6 +212,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	if err != nil {
 		return err
 	}
+	wallets.ConfirmOdEnter(od, entPrice)
 	od.Status = orm.InOutStatusFullEnter
 	od.DirtyEnter = true
 	od.DirtyMain = true

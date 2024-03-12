@@ -47,6 +47,9 @@ func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
 func (s *TradeStagy) pickTimeFrame(symbol string, tfScores map[string]float64) string {
+	if len(tfScores) == 0 {
+		return ""
+	}
 	// 过滤当前需要的时间周期
 	useTfs := make(map[string]bool)
 	for _, tf := range s.AllowTFs {
