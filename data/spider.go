@@ -145,6 +145,9 @@ func consumeWriteQ(workNum int) {
 	for save := range writeQ {
 		guard <- struct{}{}
 		go func(job *SaveKline) {
+			defer func() {
+				<-guard
+			}()
 			ctx := context.Background()
 			sess, conn, err := orm.Conn(ctx)
 			if err == nil {
@@ -186,7 +189,6 @@ func consumeWriteQ(workNum int) {
 			if err != nil {
 				log.Error("broadCast kline fail", zap.String("action", job.MsgAction), zap.Error(err))
 			}
-			<-guard
 		}(save)
 	}
 }
