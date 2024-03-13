@@ -56,7 +56,7 @@ func getAccTask(account string) (*BotTask, *errs.Error) {
 	}
 	task, err_ = sess.FindTask(ctx, FindTaskParams{
 		Mode: core.RunMode,
-		Name: config.Name,
+		Name: taskName,
 	})
 	isLiveMode := core.LiveMode
 	if err_ != nil || !isLiveMode {
@@ -66,7 +66,7 @@ func getAccTask(account string) (*BotTask, *errs.Error) {
 		}
 		task, err_ = sess.AddTask(ctx, AddTaskParams{
 			Mode:     core.RunMode,
-			Name:     config.Name,
+			Name:     taskName,
 			CreateAt: btime.UTCStamp(),
 			StartAt:  startAt,
 			StopAt:   0,
