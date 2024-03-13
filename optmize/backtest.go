@@ -103,6 +103,7 @@ func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 		// 刷新交易对
 		nextRefresh = schedule.Next(time.UnixMilli(bar.Time)).UnixMilli()
 		biz.AutoRefreshPairs()
+		log.Info("refreshed pairs at", zap.String("date", btime.ToDateStr(btime.TimeMS(), "")))
 	}
 }
 
