@@ -55,7 +55,7 @@ var lastNotifyDelay = int64(0)
 func CronKlineDelays() {
 	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {
 		curMS := btime.TimeMS()
-		var fails map[string][]string
+		var fails = make(map[string][]string)
 		for pair, wait := range core.PairCopiedMs {
 			if wait[0]+wait[1]*2 > curMS {
 				continue

@@ -122,6 +122,10 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	defer pBar.Close()
 	stepCB := func(num int) {
 		doneNum += num
+		if int64(doneNum) > barTotalNum {
+			log.Warn("warm pBar progress exceed", zap.Int64("max", barTotalNum), zap.Int("cur", doneNum))
+			return
+		}
 		err := pBar.Add(num)
 		if err != nil {
 			log.Error("add pBar fail for warmup", zap.Error(err))
