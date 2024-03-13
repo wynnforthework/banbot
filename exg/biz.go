@@ -41,18 +41,22 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 			banexg.OptApiSecret: acc.APISecret,
 		}
 	}
-	if len(accs) == 1 {
-		// 有且只有一个交易账号时，指定为默认账户
-		options[banexg.OptAccName] = utils.KeysOfMap(config.Accounts)[0]
-	}
+	var defAcc string
 	for key, acc := range config.BakAccounts {
 		accs[key] = map[string]interface{}{
 			banexg.OptApiKey:    acc.APIKey,
 			banexg.OptApiSecret: acc.APISecret,
 		}
+		if defAcc == "" {
+			// 非交易账户指定为默认账户，进行公开信息获取等
+			defAcc = key
+		}
 	}
 	if len(accs) > 0 {
 		options[banexg.OptAccCreds] = accs
+		if defAcc != "" {
+			options[banexg.OptAccName] = defAcc
+		}
 	}
 	if market != "" {
 		options[banexg.OptMarketType] = market

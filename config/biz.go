@@ -235,6 +235,5 @@ func initExgAccs() {
 		} else {
 			Accounts[name] = val
 		}
-		break
 	}
 }

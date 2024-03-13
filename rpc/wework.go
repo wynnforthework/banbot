@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banexg/utils"
 	"github.com/bytedance/sonic"
 	"go.uber.org/zap"
+	"sync"
 )
 
 /**
@@ -21,6 +22,7 @@ type WeCred struct {
 	corpSecret  string
 	accessToken string
 	expireAt    int64
+	lock        *sync.Mutex
 }
 
 type WeWork struct {
@@ -64,6 +66,7 @@ func getWeCred(item map[string]interface{}) *WeCred {
 		cred = &WeCred{
 			corpId:     utils.GetMapVal(item, "corp_id", ""),
 			corpSecret: utils.GetMapVal(item, "corp_secret", ""),
+			lock:       &sync.Mutex{},
 		}
 		creds[itemKey] = cred
 	}
@@ -86,6 +89,8 @@ func (w *WeCred) valid() bool {
 }
 
 func (w *WeCred) getToken() string {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	curTime := btime.TimeMS()
 	if w.expireAt > curTime {
 		// 这里accessToken可能有效，也可能为空。为空表示上次获取失败，当前处于等待禁止重试阶段
@@ -129,6 +134,9 @@ type WeWorkSendRes struct {
 func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 	return func(msgList []map[string]string) int {
 		token := h.cred.getToken()
+		if token == "" {
+			return 0
+		}
 		url := fmt.Sprintf("%s/cgi-bin/message/send?access_token=%s", urlBase, token)
 		sentNum := 0
 		for _, msg := range msgList {

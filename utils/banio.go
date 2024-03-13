@@ -219,6 +219,7 @@ func (c *BanConn) connect() {
 			c.ReInitConn()
 		}
 		c.Ready = true
+		log.Info("reconnect ok", zap.String("remote", c.Remote))
 	}
 }
 

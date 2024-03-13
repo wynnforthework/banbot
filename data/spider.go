@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
@@ -564,9 +565,11 @@ func (m *Miner) watchKLines(pairs []string) {
 }
 
 func RunSpider(addr string) *errs.Error {
-	err := orm.SyncKlineTFs()
-	if err != nil {
-		return err
+	if config.FixTFKline {
+		err := orm.SyncKlineTFs()
+		if err != nil {
+			return err
+		}
 	}
 	server := utils.NewBanServer(addr, "spider")
 	Spider = &LiveSpider{
