@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -54,16 +55,17 @@ var lastNotifyDelay = int64(0)
 func CronKlineDelays() {
 	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {
 		curMS := btime.TimeMS()
-		var fails []string
+		var fails map[string][]string
 		for pair, wait := range core.PairCopiedMs {
 			if wait[0]+wait[1]*2 > curMS {
 				continue
 			}
-			timeoutMin := (curMS - wait[0]) / 60000
-			fails = append(fails, fmt.Sprintf("%s: %v", pair, timeoutMin))
+			timeoutMin := strconv.Itoa(int((curMS - wait[0]) / 60000))
+			arr, _ := fails[timeoutMin]
+			fails[timeoutMin] = append(arr, pair)
 		}
 		if len(fails) > 0 {
-			failText := strings.Join(fails, ", ")
+			failText := core.GroupByPairQuotes(fails)
 			msgText := "监听爬虫K线超时：" + failText
 			log.Warn(msgText)
 			if curMS-lastNotifyDelay > 600000 {

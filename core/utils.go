@@ -9,21 +9,14 @@ import (
 )
 
 /*
-GroupStagyPairs
-【Stagy_TimeFrame】
+GroupByPairQuotes
+将[key]:pairs...输出为下面字符串
+【key】
 Quote: Base1 Base2 ...
 */
-func GroupStagyPairs() map[string]map[string][]string {
-	groups := make(map[string][]string)
-	for stagy, pairMap := range StgPairTfs {
-		for pair, tf := range pairMap {
-			key := fmt.Sprintf("%s_%s", stagy, tf)
-			arr, _ := groups[key]
-			groups[key] = append(arr, pair)
-		}
-	}
+func GroupByPairQuotes(items map[string][]string) string {
 	res := make(map[string]map[string][]string)
-	for key, arr := range groups {
+	for key, arr := range items {
 		slices.Sort(arr)
 		quoteMap := make(map[string][]string)
 		for _, pair := range arr {
@@ -37,7 +30,15 @@ func GroupStagyPairs() map[string]map[string][]string {
 		}
 		res[key] = quoteMap
 	}
-	return res
+	var b strings.Builder
+	for key, quoteMap := range res {
+		b.WriteString(fmt.Sprintf("【%s】\n", key))
+		for quoteCode, arr := range quoteMap {
+			baseStr := strings.Join(arr, " ")
+			b.WriteString(fmt.Sprintf("%s(%d): %s\n", quoteCode, len(arr), baseStr))
+		}
+	}
+	return b.String()
 }
 
 /*
@@ -45,16 +46,16 @@ PrintStagyGroups
 从core.StgPairTfs输出策略+时间周期的币种信息到控制台
 */
 func PrintStagyGroups() {
-	items := GroupStagyPairs()
-	var b strings.Builder
-	for key, quoteMap := range items {
-		b.WriteString(fmt.Sprintf("【%s】\n", key))
-		for quoteCode, arr := range quoteMap {
-			baseStr := strings.Join(arr, " ")
-			b.WriteString(fmt.Sprintf("%s(%d): %s\n", quoteCode, len(arr), baseStr))
+	groups := make(map[string][]string)
+	for stagy, pairMap := range StgPairTfs {
+		for pair, tf := range pairMap {
+			key := fmt.Sprintf("%s_%s", stagy, tf)
+			arr, _ := groups[key]
+			groups[key] = append(arr, pair)
 		}
 	}
-	log.Info("group pairs by stagy_tf:\n" + b.String())
+	text := GroupByPairQuotes(groups)
+	log.Info("group pairs by stagy_tf:\n" + text)
 }
 
 var (
