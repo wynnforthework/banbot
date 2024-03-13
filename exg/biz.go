@@ -30,19 +30,28 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 		return nil, errs.NewMsg(core.ErrBadConfig, "exchange is required")
 	}
 	var cfg = config.GetExgConfig()
-	var accounts = config.Accounts
 	var options = map[string]interface{}{}
 	for key, val := range cfg.Options {
 		options[utils.SnakeToCamel(key)] = val
 	}
-	if len(accounts) > 0 {
-		accs := map[string]map[string]interface{}{}
-		for key, acc := range accounts {
-			accs[key] = map[string]interface{}{
-				banexg.OptApiKey:    acc.APIKey,
-				banexg.OptApiSecret: acc.APISecret,
-			}
+	accs := map[string]map[string]interface{}{}
+	for key, acc := range config.Accounts {
+		accs[key] = map[string]interface{}{
+			banexg.OptApiKey:    acc.APIKey,
+			banexg.OptApiSecret: acc.APISecret,
 		}
+	}
+	if len(accs) == 1 {
+		// 有且只有一个交易账号时，指定为默认账户
+		options[banexg.OptAccName] = utils.KeysOfMap(config.Accounts)[0]
+	}
+	for key, acc := range config.BakAccounts {
+		accs[key] = map[string]interface{}{
+			banexg.OptApiKey:    acc.APIKey,
+			banexg.OptApiSecret: acc.APISecret,
+		}
+	}
+	if len(accs) > 0 {
 		options[banexg.OptAccCreds] = accs
 	}
 	if market != "" {

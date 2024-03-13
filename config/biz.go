@@ -222,16 +222,19 @@ func initExgAccs() {
 		accs = exgCfg.AccountTests
 	}
 	Accounts = make(map[string]*AccountConfig)
+	BakAccounts = make(map[string]*AccountConfig)
 	if len(accs) == 0 {
 		return
 	}
-	if !core.EnvReal {
-		// 非生产环境，只启用一个账号
-		for _, val := range accs {
+	for name, val := range accs {
+		if val.NoTrade {
+			BakAccounts[name] = val
+		} else if !core.EnvReal {
+			// 非生产环境，只启用一个账号
 			Accounts[DefAcc] = val
-			break
+		} else {
+			Accounts[name] = val
 		}
-		return
+		break
 	}
-	Accounts = accs
 }

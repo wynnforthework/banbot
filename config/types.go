@@ -1,10 +1,11 @@
 package config
 
 var (
-	Data     Config
-	Args     *CmdArgs
-	Accounts map[string]*AccountConfig // 交易所账户
-	DefAcc   = "default"               // 非实盘交易时，账户默认的key（回测、模拟交易）
+	Data        Config
+	Args        *CmdArgs
+	Accounts    map[string]*AccountConfig // 交易所可交易账户
+	BakAccounts map[string]*AccountConfig // 交易所账户，不可交易
+	DefAcc      = "default"               // 非实盘交易时，账户默认的key（回测、模拟交易）
 
 	Name             string
 	Loaded           bool
@@ -172,6 +173,7 @@ type ExgItemConfig struct {
 type AccountConfig struct {
 	APIKey      string  `yaml:"api_key" mapstructure:"api_key"`
 	APISecret   string  `yaml:"api_secret" mapstructure:"api_secret"`
+	NoTrade     bool    `yaml:"no_trade" mapstructure:"no_trade"`
 	MaxStakeAmt float64 `yaml:"max_stake_amt" mapstructure:"max_stake_amt"` // 允许的单笔最大金额
 	StakeRate   float64 `yaml:"stake_rate" mapstructure:"stake_rate"`       // 相对基准的开单金额倍数
 	StakePctAmt float64 // 按百分比开单时，当前允许的金额

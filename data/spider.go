@@ -328,7 +328,9 @@ func (m *Miner) watchTrades(pairs []string) {
 	go func() {
 		defer func() {
 			m.TradeReady = false
-			log.Info("watch trades stopped", zap.String("exg", m.ExgName))
+			log.Info("watch trades stopped, retry after 3s", zap.String("exg", m.ExgName))
+			time.Sleep(time.Millisecond * 3200)
+			m.watchTrades(utils.KeysOfMap(m.TradePairs))
 		}()
 		for item := range out {
 			err = m.spider.Broadcast(&utils.IOMsg{
@@ -360,7 +362,9 @@ func (m *Miner) watchPrices() {
 	go func() {
 		defer func() {
 			m.IsWatchPrice = false
-			log.Info("watch prices stopped", zap.String("exg", m.ExgName))
+			log.Info("watch prices stopped, retry after 3s", zap.String("exg", m.ExgName))
+			time.Sleep(time.Millisecond * 2900)
+			m.watchPrices()
 		}()
 		for item := range out {
 			err = m.spider.Broadcast(&utils.IOMsg{
@@ -397,7 +401,9 @@ func (m *Miner) watchOdBooks(pairs []string) {
 	go func() {
 		defer func() {
 			m.BookReady = false
-			log.Info("watch odBook stopped", zap.String("exg", m.ExgName))
+			log.Info("watch odBook stopped, retry after 3s", zap.String("exg", m.ExgName))
+			time.Sleep(time.Second * 3)
+			m.watchOdBooks(utils.KeysOfMap(m.BookPairs))
 		}()
 		for book := range out {
 			err = m.spider.Broadcast(&utils.IOMsg{
@@ -521,7 +527,9 @@ func (m *Miner) watchKLines(pairs []string) {
 	go func() {
 		defer func() {
 			m.KlineReady = false
-			log.Info("watch kline stopped", zap.String("exg", m.ExgName))
+			log.Info("watch kline stopped, retry after 3s", zap.String("exg", m.ExgName))
+			time.Sleep(time.Millisecond * 3100)
+			m.watchKLines(utils.KeysOfMap(m.KlinePairs))
 		}()
 		for {
 			first := <-out
