@@ -79,6 +79,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 	cmd.BoolVar(&args.FixTFKline, "fixtf", false, "sync kline data between TimeFrames")
 	cmd.BoolVar(&args.NoCompress, "no-compress", false, "disable compress for hyper table")
 	cmd.BoolVar(&args.NoDefault, "no-default", false, "ignore default: config.yml, config.local.yml")
+	cmd.IntVar(&args.MaxPoolSize, "max-pool-size", 0, "max pool size for db")
 
 	for _, key := range opts {
 		switch key {
@@ -107,7 +108,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "task_hash":
 			cmd.StringVar(&args.TaskHash, "task-hash", "", "hash code to use")
 		case "task_id":
-			cmd.IntVar(&args.TakId, "task-id", 0, "task")
+			cmd.IntVar(&args.TaskId, "task-id", 0, "task")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

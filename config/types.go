@@ -104,8 +104,9 @@ type RunPolicyConfig struct {
 }
 
 type DatabaseConfig struct {
-	Url       string `yaml:"url"`
-	Retention string `yaml:"retention"`
+	Url         string `yaml:"url"`
+	Retention   string `yaml:"retention"`
+	MaxPoolSize int    `yaml:"max_pool_size"`
 }
 
 type APIServerConfig struct {

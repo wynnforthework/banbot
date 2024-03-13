@@ -9,11 +9,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"runtime"
 	"sync"
 )
 
 var (
 	pool         *pgxpool.Pool
+	connUsed     int
+	dbLock       sync.Mutex
 	accTasks     = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
 )
@@ -31,14 +34,25 @@ func Setup() *errs.Error {
 	if err_ != nil {
 		return errs.New(core.ErrBadConfig, err_)
 	}
-	//poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
-	//	log.Info(fmt.Sprintf("get conn: %v", conn))
-	//	return true
-	//}
-	//poolCfg.AfterRelease = func(conn *pgx.Conn) bool {
-	//	log.Info(fmt.Sprintf("del conn: %v", conn))
-	//	return true
-	//}
+	if dbCfg.MaxPoolSize == 0 {
+		dbCfg.MaxPoolSize = max(4, runtime.NumCPU())
+	}
+	poolCfg.MaxConns = int32(dbCfg.MaxPoolSize)
+	poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+		dbLock.Lock()
+		defer dbLock.Unlock()
+		if connUsed >= dbCfg.MaxPoolSize {
+			log.Error("all db conn are in used", zap.Int("num", connUsed))
+		}
+		connUsed += 1
+		return true
+	}
+	poolCfg.AfterRelease = func(conn *pgx.Conn) bool {
+		dbLock.Lock()
+		defer dbLock.Unlock()
+		connUsed -= 1
+		return true
+	}
 	//poolCfg.BeforeClose = func(conn *pgx.Conn) {
 	//	log.Info(fmt.Sprintf("close conn: %v", conn))
 	//}
@@ -53,7 +67,7 @@ func Setup() *errs.Error {
 	if err != nil {
 		return errs.New(core.ErrDbReadFail, err)
 	}
-	log.Info("connect db ok", zap.String("url", dbCfg.Url))
+	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize))
 	return nil
 }
 

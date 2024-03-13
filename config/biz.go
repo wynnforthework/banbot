@@ -82,6 +82,9 @@ func apply(args *CmdArgs) *errs.Error {
 	if args.TimeRange != "" {
 		Data.TimeRangeRaw = args.TimeRange
 	}
+	if args.MaxPoolSize > 0 {
+		Data.Database.MaxPoolSize = args.MaxPoolSize
+	}
 	cutLen := len(Data.TimeRangeRaw) / 2
 	Data.TimeRange = &TimeTuple{
 		btime.ParseTimeMS(Data.TimeRangeRaw[:cutLen]),

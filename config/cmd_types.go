@@ -35,5 +35,6 @@ type CmdArgs struct {
 	WithSpider    bool
 	Medium        string
 	TaskHash      string
-	TakId         int
+	TaskId        int
+	MaxPoolSize   int
 }

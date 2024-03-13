@@ -143,8 +143,22 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
 func consumeWriteQ(workNum int) {
 	guard := make(chan struct{}, workNum)
 	defer close(guard)
+	setOne := func() {
+		logged := false
+		for {
+			select {
+			case guard <- struct{}{}:
+				return
+			case <-time.After(20 * time.Second):
+				if !logged {
+					log.Error("wait save in spider timeout")
+					logged = true
+				}
+			}
+		}
+	}
 	for save := range writeQ {
-		guard <- struct{}{}
+		setOne()
 		go func(job *SaveKline) {
 			defer func() {
 				<-guard

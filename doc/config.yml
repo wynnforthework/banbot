@@ -85,6 +85,7 @@ exchange:  # 交易所配置
         api_secret: bbb
 database:  # 数据库配置
   retention: all
+  max_pool_size: 10  # 连接池最大大小
   url: postgresql://postgres:123@[127.0.0.1]:5432/bantd3
 spider_addr: 127.0.0.1:6789  # 爬虫监听的端口和地址
 rpc_channels:  # 支持的全部rpc渠道

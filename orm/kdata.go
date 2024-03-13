@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 	"sync"
@@ -81,10 +82,10 @@ func DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, 
 	if err != nil {
 		return 0, err
 	}
+	defer conn.Release()
 	oldStart, oldEnd := sess.GetKlineRange(exs.ID, timeFrame)
-	conn.Release()
 	startMS = exs.GetValidStart(startMS)
-	return downOHLCV2DBRange(exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
+	return downOHLCV2DBRange(sess, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
 }
 
 /*
@@ -95,7 +96,7 @@ func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeF
 	stepCB func(num int)) (int, *errs.Error) {
 	startMS = exs.GetValidStart(startMS)
 	oldStart, oldEnd := q.GetKlineRange(exs.ID, timeFrame)
-	return downOHLCV2DBRange(exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
+	return downOHLCV2DBRange(q, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
 }
 
 /*
@@ -103,7 +104,7 @@ downOHLCV2DBRange
 此函数会用于多线程下载，一个数据库会话只能用于一个线程，所以不能传入Queries
 stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传入区间
 */
-func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
+func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
 	oldStart, oldEnd int64, stepCB func(num int)) (int, *errs.Error) {
 	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs {
 		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
@@ -111,6 +112,15 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 			stepCB(core.StepTotal)
 		}
 		return 0, nil
+	}
+	var err *errs.Error
+	if sess == nil {
+		var conn *pgxpool.Conn
+		sess, conn, err = Conn(nil)
+		if err != nil {
+			return 0, err
+		}
+		defer conn.Release()
 	}
 	tfSecs := utils.TFToSecs(timeFrame)
 	var totalNum int
@@ -191,7 +201,7 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 					endText := btime.ToDateStr(job.End, "")
 					log.Info(fmt.Sprintf("fetch %s %s  %s - %s, num: %d", exs.Symbol, timeFrame, startText, endText, barNum))
 				}
-				err := FetchApiOHLCV(ctx, exchange, exs.Symbol, timeFrame, start, stop, chanKline)
+				err = FetchApiOHLCV(ctx, exchange, exs.Symbol, timeFrame, start, stop, chanKline)
 				if err != nil {
 					outErr = err
 					cancel()
@@ -204,13 +214,6 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 	go func() {
 		defer wg.Done()
 		var num int64
-		sess, conn, err := Conn(nil)
-		if err != nil {
-			log.Error("get db sess fail to save klines", zap.Error(err))
-			cancel()
-			return
-		}
-		defer conn.Release()
 		for {
 			select {
 			case <-ctx.Done():
@@ -238,11 +241,6 @@ func downOHLCV2DBRange(exchange banexg.BanExchange, exs *ExSymbol, timeFrame str
 	if outErr != nil {
 		return saveNum, errs.New(core.ErrRunTime, outErr)
 	}
-	sess, conn, err := Conn(nil)
-	if err != nil {
-		return saveNum, err
-	}
-	defer conn.Release()
 	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS, nil)
 	return saveNum, err
 }
@@ -336,7 +334,7 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 			if krange, ok := kRanges[exs_.ID]; ok {
 				oldStart, oldEnd = krange[0], krange[1]
 			}
-			_, retErr = downOHLCV2DBRange(exchange, exs_, downTF, startMS, endMS, oldStart, oldEnd, downStep)
+			_, retErr = downOHLCV2DBRange(nil, exchange, exs_, downTF, startMS, endMS, oldStart, oldEnd, downStep)
 		}(exs)
 	}
 	wg.Wait()
