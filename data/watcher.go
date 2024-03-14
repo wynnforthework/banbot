@@ -197,6 +197,8 @@ func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 		finishes = bars.Arr
 	}
 	if len(finishes) > 0 {
+		msg.TFSecs = job.TFSecs
+		msg.Interval = job.TFSecs
 		msg.Arr = finishes
 		w.OnKLineMsg(msg)
 	}
