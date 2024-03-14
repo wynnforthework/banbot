@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/errs"
@@ -20,6 +21,7 @@ var (
 	connUsed     int
 	connStacks   = make(map[string]string)
 	dbLock       sync.Mutex
+	lastShowUsed int64
 	accTasks     = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
 )
@@ -44,7 +46,10 @@ func Setup() *errs.Error {
 	poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
 		dbLock.Lock()
 		defer dbLock.Unlock()
-		if connUsed >= dbCfg.MaxPoolSize {
+		curMS := btime.TimeMS()
+		if connUsed >= dbCfg.MaxPoolSize && curMS-lastShowUsed > 300000 {
+			// 5分钟显示一次数据库连接占用情况
+			lastShowUsed = curMS
 			var b strings.Builder
 			b.WriteString("\n")
 			for key, stack := range connStacks {
