@@ -100,6 +100,8 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 		}
 		pairs = append(pairs, j.Symbol)
 		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since}
+		// 尽早启动延迟监听
+		core.SetPairMs(j.Symbol, j.Since, int64(tfSecs*1000))
 	}
 	err := w.SendMsg("subscribe", tags)
 	if err != nil {
