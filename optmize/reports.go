@@ -573,16 +573,10 @@ func (r *BTResult) dumpConfig() {
 
 func (r *BTResult) dumpStrategy() {
 	stagyDir := config.GetStagyDir()
-	taskId := orm.GetTaskID("")
 	for name := range core.StgPairTfs {
-		srcPath := fmt.Sprintf("%s/%s/main.go", stagyDir, name)
-		fileData, err_ := os.ReadFile(srcPath)
-		if err_ != nil {
-			log.Warn("read fail, skip backup", zap.String("path", srcPath), zap.Error(err_))
-			continue
-		}
-		tgtPath := fmt.Sprintf("%s/%s_%v.go", r.OutDir, name, taskId)
-		err_ = os.WriteFile(tgtPath, fileData, 0644)
+		srcDir := fmt.Sprintf("%s/%s", stagyDir, name)
+		tgtDir := fmt.Sprintf("%s/stagy_%s", r.OutDir, name)
+		err_ := utils.CopyDir(srcDir, tgtDir)
 		if err_ != nil {
 			log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))
 		}

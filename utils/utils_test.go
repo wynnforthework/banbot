@@ -2,6 +2,8 @@ package utils
 
 import (
 	"fmt"
+	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"testing"
 )
 
@@ -19,5 +21,17 @@ func TestGcdInts(t *testing.T) {
 		if res != c.Res {
 			t.Error(fmt.Sprintf("fail %v, exp: %d, res: %d", c.Nums, c.Res, res))
 		}
+	}
+}
+
+func TestCopyDir(t *testing.T) {
+	name := "h01"
+	stagyDir := "E:\\trade\\go\\banstagy"
+	outDir := "E:\\trade\\go\\bandata\\backtest\\task_-1"
+	srcDir := fmt.Sprintf("%s/%s", stagyDir, name)
+	tgtDir := fmt.Sprintf("%s/stagy_%s", outDir, name)
+	err_ := CopyDir(srcDir, tgtDir)
+	if err_ != nil {
+		log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))
 	}
 }
