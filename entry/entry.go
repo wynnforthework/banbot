@@ -45,9 +45,9 @@ func RunDbCmd(args *config.CmdArgs) *errs.Error {
 
 func RunSpider(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeLive)
-	if args.MaxPoolSize < 8 {
-		// 爬虫端至少8个数据库会话
-		args.MaxPoolSize = 8
+	if args.MaxPoolSize < 15 {
+		// 爬虫端至少15个数据库会话
+		args.MaxPoolSize = 15
 	}
 	err := biz.SetupComs(args)
 	if err != nil {
