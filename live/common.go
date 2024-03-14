@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 	"slices"
 	"strconv"
-	"strings"
 )
 
 func CronRefreshPairs() {
@@ -85,7 +84,7 @@ func CronKlineDelays() {
 
 func CronKlineSummary() {
 	_, err_ := core.Cron.AddFunc("30 1-59/5 * * * *", func() {
-		var res = make(map[string]string)
+		var pairGroups = make(map[string][]string)
 		for tf, tfMap := range core.TfPairHits {
 			hitMap := make(map[int][]string)
 			for pair, num := range tfMap {
@@ -94,20 +93,13 @@ func CronKlineSummary() {
 			}
 			for num, arr := range hitMap {
 				arrLen := len(arr)
-				res[fmt.Sprintf("%s_%v: %v", tf, num, arrLen)] = strings.Join(arr, ", ")
+				pairGroups[fmt.Sprintf("%s_%v: %v", tf, num, arrLen)] = arr
 			}
 			core.TfPairHits[tf] = make(map[string]int)
 		}
-		if len(res) > 0 {
-			var b strings.Builder
-			for key, text := range res {
-				b.WriteString("[")
-				b.WriteString(key)
-				b.WriteString("] ")
-				b.WriteString(text)
-				b.WriteString("\n")
-			}
-			log.Info(fmt.Sprintf("receive bars in 5 mins:\n%s", b.String()))
+		if len(pairGroups) > 0 {
+			staText := core.GroupByPairQuotes(pairGroups)
+			log.Info(fmt.Sprintf("receive bars in 5 mins:\n%s", staText))
 		}
 	})
 	if err_ != nil {

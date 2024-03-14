@@ -173,10 +173,11 @@ func (f *Feeder) fireCallBacks(pair, timeFrame string, tfMSecs int64, bars []*ba
 		num, _ := hits[pair]
 		hits[pair] = num + len(bars)
 		// 检查是否延迟
-		delay := btime.TimeMS() - (bars[len(bars)-1].Time + tfMSecs)
+		lastTime := bars[len(bars)-1].Time
+		delay := btime.TimeMS() - (lastTime + tfMSecs)
 		if delay > tfMSecs && tfMSecs >= 60000 {
-			minutes := delay / tfMSecs
-			log.Warn(fmt.Sprintf("%s/%s bar too late, delay %v mins", pair, timeFrame, minutes))
+			barNum := delay / tfMSecs
+			log.Warn(fmt.Sprintf("%s/%s bar too late, delay %v bars, %v", pair, timeFrame, barNum, lastTime))
 		}
 	}
 }

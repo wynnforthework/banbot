@@ -88,11 +88,12 @@ func TestStagyRun(t *testing.T) {
 			ExgStopLoss:   true,
 			ExgTakeProfit: true,
 		}
-		if jobs, ok := accJobs[envKey]; ok {
-			accJobs[envKey] = append(jobs, job)
-		} else {
-			accJobs[envKey] = []*strategy.StagyJob{job}
+		jobs, ok := accJobs[envKey]
+		if !ok {
+			jobs = make(map[string]*strategy.StagyJob)
+			accJobs[envKey] = jobs
 		}
+		jobs[job.Stagy.Name] = job
 	}
 	curTime := utils.AlignTfMSecs(btime.TimeMS(), tfMSecs) - tfMSecs*int64(barNum)
 	norBar := banexg.Kline{Time: curTime, Open: 0.1, High: 0.1, Low: 0.1, Close: 0.1, Volume: 0.1}

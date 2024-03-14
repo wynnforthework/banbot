@@ -39,13 +39,13 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	if _, ok := core.ForbidPairs[bar.Symbol]; ok {
 		return nil
 	}
-	tfMSecs := int64(utils.TFToSecs(bar.TimeFrame) * 1000)
+	tfSecs := utils.TFToSecs(bar.TimeFrame)
 	core.SetBarPrice(bar.Symbol, bar.Close)
 	// 超过1分钟且周期的一半，认为bar延迟，不可下单
-	delayMs := btime.TimeMS() - bar.Time - tfMSecs
-	barExpired := delayMs >= max(60000, tfMSecs/2)
+	delaySecs := int((btime.TimeMS()-bar.Time)/1000) - tfSecs
+	barExpired := delaySecs >= max(60, tfSecs/2)
 	if barExpired && core.LiveMode && !core.IsWarmUp {
-		log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delayMs/1000))
+		log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delaySecs))
 	}
 	// 更新指标环境
 	env, err := t.OnEnvJobs(bar)

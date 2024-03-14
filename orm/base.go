@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/errs"
@@ -10,12 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"runtime"
+	"strings"
 	"sync"
 )
 
 var (
 	pool         *pgxpool.Pool
 	connUsed     int
+	connStacks   = make(map[string]string)
 	dbLock       sync.Mutex
 	accTasks     = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
@@ -42,14 +45,23 @@ func Setup() *errs.Error {
 		dbLock.Lock()
 		defer dbLock.Unlock()
 		if connUsed >= dbCfg.MaxPoolSize {
-			log.Error("all db conn are in used", zap.Int("num", connUsed))
+			var b strings.Builder
+			b.WriteString("\n")
+			for key, stack := range connStacks {
+				b.WriteString(fmt.Sprintf("【Conn】%s\n", key))
+				b.WriteString(stack)
+				b.WriteString("\n")
+			}
+			log.Error("all db conn are in used", zap.Int("num", connUsed), zap.String("more", b.String()))
 		}
+		connStacks[fmt.Sprintf("%p", conn)] = errs.CallStack(2, 30)
 		connUsed += 1
 		return true
 	}
 	poolCfg.AfterRelease = func(conn *pgx.Conn) bool {
 		dbLock.Lock()
 		defer dbLock.Unlock()
+		delete(connStacks, fmt.Sprintf("%p", conn))
 		connUsed -= 1
 		return true
 	}
