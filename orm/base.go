@@ -2,8 +2,6 @@ package orm
 
 import (
 	"context"
-	"fmt"
-	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/errs"
@@ -12,16 +10,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"runtime"
-	"strings"
 	"sync"
 )
 
 var (
 	pool         *pgxpool.Pool
-	connUsed     int
-	connStacks   = make(map[string]string)
-	dbLock       sync.Mutex
-	lastShowUsed int64
 	accTasks     = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
 )
@@ -43,33 +36,13 @@ func Setup() *errs.Error {
 		dbCfg.MaxPoolSize = max(4, runtime.NumCPU())
 	}
 	poolCfg.MaxConns = int32(dbCfg.MaxPoolSize)
-	poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
-		dbLock.Lock()
-		defer dbLock.Unlock()
-		curMS := btime.TimeMS()
-		if connUsed >= dbCfg.MaxPoolSize && curMS-lastShowUsed > 300000 {
-			// 5分钟显示一次数据库连接占用情况
-			lastShowUsed = curMS
-			var b strings.Builder
-			b.WriteString("\n")
-			for key, stack := range connStacks {
-				b.WriteString(fmt.Sprintf("【Conn】%s\n", key))
-				b.WriteString(stack)
-				b.WriteString("\n")
-			}
-			log.Error("all db conn are in used", zap.Int("num", connUsed), zap.String("more", b.String()))
-		}
-		connStacks[fmt.Sprintf("%p", conn)] = errs.CallStack(2, 30)
-		connUsed += 1
-		return true
-	}
-	poolCfg.AfterRelease = func(conn *pgx.Conn) bool {
-		dbLock.Lock()
-		defer dbLock.Unlock()
-		delete(connStacks, fmt.Sprintf("%p", conn))
-		connUsed -= 1
-		return true
-	}
+	//poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {
+	//	return true
+	//}
+	//poolCfg.AfterRelease = func(conn *pgx.Conn) bool {
+	//  // 此函数不是在调用Release时必定被调用，连接可能直接被Destroy而不释放到池
+	//	return true
+	//}
 	//poolCfg.BeforeClose = func(conn *pgx.Conn) {
 	//	log.Info(fmt.Sprintf("close conn: %v", conn))
 	//}
