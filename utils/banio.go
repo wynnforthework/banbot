@@ -28,7 +28,7 @@ type ConnCB = func(string, interface{})
 
 type IBanConn interface {
 	WriteMsg(msg *IOMsg) *errs.Error
-	Write(data []byte) *errs.Error
+	Write(data []byte, locked bool) *errs.Error
 	ReadMsg() (*IOMsg, *errs.Error)
 	Subscribe(tags ...string)
 	UnSubscribe(tags ...string)
@@ -76,12 +76,14 @@ func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
 	if err != nil {
 		return err
 	}
-	c.lockWrite.Lock()
-	defer c.lockWrite.Unlock()
-	return c.Write(compressed)
+	return c.Write(compressed, false)
 }
 
-func (c *BanConn) Write(data []byte) *errs.Error {
+func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
+	if !locked {
+		c.lockWrite.Lock()
+		defer c.lockWrite.Unlock()
+	}
 	dataLen := uint32(len(data))
 	lenBt := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBt, dataLen)
@@ -92,7 +94,7 @@ func (c *BanConn) Write(data []byte) *errs.Error {
 		if c.DoConnect != nil && errCode == core.ErrNetConnect {
 			log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
 			c.connect()
-			return c.Write(data)
+			return c.Write(data, true)
 		}
 		return errs.New(errCode, err_)
 	}
@@ -431,7 +433,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	}
 	for _, conn := range curConns {
 		go func(c IBanConn) {
-			err = c.Write(compressed)
+			err = c.Write(compressed, false)
 			if err != nil {
 				log.Error("broadcast fail", zap.String("remote", c.GetRemote()),
 					zap.String("tag", msg.Action), zap.Error(err))
