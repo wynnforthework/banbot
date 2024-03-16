@@ -190,11 +190,11 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]m
 		}
 		score := float64(1)
 		if len(arr) > 0 && pipChg > 0 {
-			score = calcKlineScore(arr, pipChg)
+			score = calcKlineScore(arr, pipChg, 3)
 		}
 		tfScores[timeFrame] = score
 	}
-	backNum := 300
+	backNum := 600
 	for _, tf := range allowTfs {
 		err := orm.FastBulkOHLCV(exchange, pairs, tf, 0, 0, backNum, handle)
 		if err != nil {
@@ -208,40 +208,54 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]m
 calcKlineScore
 计算K线质量。用于淘汰变动太小，波动不足的交易对；或计算交易对的最佳周期。阈值取0.8较合适
 
-	价格变动：四价相同-1分；bar变动=最小变动单位-1分；70%权重
-	平均跳空占比：30%权重
-
-	改进点：目前无法量化横盘频繁密集震动。
+	价格变动：四价相同-1分；bar变动=最小变动单位-1分 40%权重
+	平均加权实体占比：30%权重
+	Bar重合比率分数，某个bar的实体部分，与前两个bar的实体范围重合区间，占当前bar实体的比率，越低分数越高，30%权重
 */
-func calcKlineScore(arr []*banexg.Kline, pipChg float64) float64 {
+func calcKlineScore(arr []*banexg.Kline, pipChg float64, prevNum int) float64 {
 	totalLen := len(arr)
-	finScore := float64(len(arr))
-	jumpRates := make([]float64, 0)
-	var pBar *banexg.Kline
-	for _, bar := range arr {
+	pipScore := float64(len(arr))
+	solidRates := make([]float64, 0, len(arr))
+	overlaps := make([]float64, 0, len(arr))
+	olWeightSum, solWeightSum := float64(0), float64(0)
+	var pRanges = make([]float64, prevNum*2)
+	var nextIdx int
+	var cMin, cMax float64
+	for i, bar := range arr {
 		chgRate := (bar.High - bar.Low) / pipChg
 		if chgRate == 0 || chgRate == 1 {
-			finScore -= 1
+			pipScore -= 1
 		} else if chgRate == 2 {
-			finScore -= 0.3
+			pipScore -= 0.3
 		}
-		if pBar != nil {
-			nerMaxChg := max(pBar.High, bar.High) - min(pBar.Low, bar.Low)
-			rate := float64(0)
-			if nerMaxChg != 0 {
-				rate = math.Abs(pBar.Close-bar.Close) / nerMaxChg
-			}
-			jumpRates = append(jumpRates, rate)
+		cMin, cMax = bar.Low, bar.High
+		barLen := cMax - cMin
+		weight := barLen / cMax
+		if cMin != cMax {
+			rate := math.Abs(bar.Open-bar.Close) / barLen
+			solidRates = append(solidRates, rate*weight)
+			solWeightSum += weight
 		}
-		pBar = bar
+		if i >= prevNum && cMin != cMax {
+			pMax, pMin := slices.Max(pRanges), slices.Min(pRanges)
+			// 计算当前bar与前面n个bar的重合率
+			olRate := max(min(cMax, pMax)-max(cMin, pMin), 0) / barLen
+			overlaps = append(overlaps, olRate*weight)
+			olWeightSum += weight
+		}
+		pRanges[nextIdx] = cMin
+		pRanges[nextIdx+1] = cMax
+		nextIdx = (nextIdx + 2) % (prevNum * 2)
 	}
-	chgScore := finScore / float64(totalLen)
-	if len(jumpRates) == 0 {
-		return chgScore
-	}
-	// 取平方，扩大分数差距
-	jRateScore := math.Pow(1-floats.Sum(jumpRates)/float64(len(jumpRates)), 2)
-	return chgScore*0.7 + jRateScore*0.3
+	// 价格变动单位分数
+	chgScore := math.Pow(pipScore/float64(totalLen), 2)
+	// 实体部分占比分数
+	jRateScore := floats.Sum(solidRates) / solWeightSum
+	jRateScore = 1 - math.Pow(1-jRateScore, 2)
+	// 计算与前面n个bar重合率分数
+	overlapScore := 1 - floats.Sum(overlaps)/olWeightSum
+	overlapScore = 1 - math.Pow(1-overlapScore, 3)
+	return chgScore*0.4 + jRateScore*0.3 + overlapScore*0.3
 }
 
 func allAllowTFs() []string {
