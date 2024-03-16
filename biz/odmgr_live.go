@@ -866,7 +866,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			if !core.Sleep(time.Second * 3) {
 				return
 			}
-			var pairTrades map[string][]*banexg.MyTrade
+			var pairTrades = make(map[string][]*banexg.MyTrade)
 			expireMS := btime.TimeMS() - 1000
 			for key, trade := range o.unMatchTrades {
 				if trade.Timestamp >= expireMS {

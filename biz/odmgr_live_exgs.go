@@ -27,6 +27,14 @@ func bnbApplyMyTrade(o *LiveOrderMgr) FuncApplyMyTrade {
 		state := trade.State
 		if state == "CANCELED" || state == "REJECTED" || state == "EXPIRED" || state == "EXPIRED_IN_MATCH" {
 			subOd.Status = orm.OdStatusClosed
+			if subOd.Enter {
+				if subOd.Filled == 0 {
+					od.Status = orm.InOutStatusFullExit
+				} else {
+					od.Status = orm.InOutStatusFullEnter
+				}
+				od.DirtyMain = true
+			}
 		} else if state == "FILLED" || state == "PARTIALLY_FILLED" {
 			odStatus := orm.OdStatusPartOK
 			subOd.OrderType = trade.Type
