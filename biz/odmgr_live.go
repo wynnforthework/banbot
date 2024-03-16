@@ -22,7 +22,7 @@ import (
 )
 
 type FuncApplyMyTrade = func(od *orm.InOutOrder, subOd *orm.ExOrder, trade *banexg.MyTrade) *errs.Error
-type FuncHandleMyTrade = func(trade *banexg.MyTrade) bool
+type FuncHandleMyOrder = func(trade *banexg.Order) bool
 
 type LiveOrderMgr struct {
 	OrderMgr
@@ -35,9 +35,9 @@ type LiveOrderMgr struct {
 	isConsumeOrderQ  bool                       // 是否正在从订单队列消费
 	isWatchAccConfig bool                       // 是否正在监听杠杆倍数变化
 	unMatchTrades    map[string]*banexg.MyTrade // 从ws收到的暂无匹配的订单的交易
-	applyMyTrade     FuncApplyMyTrade
-	exitByMyTrade    FuncHandleMyTrade
-	traceExgOrder    FuncHandleMyTrade
+	applyMyTrade     FuncApplyMyTrade           // 更新当前订单状态
+	exitByMyOrder    FuncHandleMyOrder          // 尝试使用其他端操作的交易结果，更新当前订单状态
+	traceExgOrder    FuncHandleMyOrder
 }
 
 type OdQItem struct {
@@ -91,7 +91,7 @@ func newLiveOrderMgr(account string, callBack func(od *orm.InOutOrder, isEnter b
 	res.afterExit = makeAfterExit(res)
 	if core.ExgName == "binance" {
 		res.applyMyTrade = bnbApplyMyTrade(res)
-		res.exitByMyTrade = bnbExitByMyTrade(res)
+		res.exitByMyOrder = bnbExitByMyOrder(res)
 		res.traceExgOrder = bnbTraceExgOrder(res)
 	} else {
 		panic("unsupport exchange for LiveOrderMgr: " + core.ExgName)
@@ -866,20 +866,36 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			if !core.Sleep(time.Second * 3) {
 				return
 			}
-			var oldTrades []*banexg.MyTrade
+			var pairTrades map[string][]*banexg.MyTrade
 			expireMS := btime.TimeMS() - 1000
 			for key, trade := range o.unMatchTrades {
-				if trade.Timestamp < expireMS {
-					oldTrades = append(oldTrades, trade)
-					delete(o.unMatchTrades, key)
+				if trade.Timestamp >= expireMS {
+					continue
 				}
+				odKey := trade.Symbol + trade.Order
+				if iod, ok := o.exgIdMap[odKey]; ok {
+					err := o.updateByMyTrade(iod, trade)
+					if err != nil {
+						log.Error("updateByMyTrade fail", zap.String("key", iod.Key()),
+							zap.String("trade", trade.ID), zap.Error(err))
+					}
+					continue
+				}
+				odTrades, _ := pairTrades[odKey]
+				pairTrades[odKey] = append(odTrades, trade)
+				delete(o.unMatchTrades, key)
 			}
 			unHandleNum := 0
 			allowTakeOver := config.TakeOverStgy != ""
-			for _, trade := range oldTrades {
-				if o.exitByMyTrade(trade) {
+			for _, trades := range pairTrades {
+				exOd, err := exg.Default.MergeMyTrades(trades)
+				if err != nil {
+					log.Error("MergeMyTrades fail", zap.Int("num", len(trades)), zap.Error(err))
 					continue
-				} else if allowTakeOver && o.traceExgOrder(trade) {
+				}
+				if o.exitByMyOrder(exOd) {
+					continue
+				} else if allowTakeOver && o.traceExgOrder(exOd) {
 					continue
 				}
 				unHandleNum += 1
