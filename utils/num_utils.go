@@ -2,7 +2,10 @@ package utils
 
 import (
 	"fmt"
+	"github.com/muesli/clusters"
+	"github.com/muesli/kmeans"
 	"math"
+	"slices"
 )
 
 const thresFloat64Eq = 1e-9
@@ -124,4 +127,88 @@ func GcdInts(numbers []int) int {
 		result = gcd(result, numbers[i])
 	}
 	return result
+}
+
+type Cluster struct {
+	Center float64
+	Items  []float64
+}
+
+type ClusterRes struct {
+	Clusters []Cluster
+	RowGIds  []int
+}
+
+func KMeansVals(vals []float64, num int) *ClusterRes {
+	if len(vals) == 0 {
+		return nil
+	}
+	if num == 1 {
+		sumVal := float64(0)
+		for _, v := range vals {
+			sumVal += v
+		}
+		avgVal := sumVal / float64(len(vals))
+		return &ClusterRes{
+			Clusters: []Cluster{{Center: avgVal, Items: vals}},
+			RowGIds:  make([]int, len(vals)),
+		}
+	}
+	// 输入值域在0~1之间
+	minVal := slices.Min(vals)
+	scale := 1 / (slices.Max(vals) - minVal)
+	if len(vals) == 1 {
+		scale = 1 / minVal
+	}
+	offset := 0 - minVal*scale
+	var d clusters.Observations
+	for _, val := range vals {
+		d = append(d, clusters.Coordinates{val*scale + offset})
+	}
+	// 进行聚类
+	km := kmeans.New()
+	groups, err_ := km.Partition(d, num)
+	if err_ != nil {
+		return nil
+	}
+	slices.SortFunc(groups, func(a, b clusters.Cluster) int {
+		return int((a.Center[0] - b.Center[0]) * 1000)
+	})
+	// 生成返回结果
+	resList := make([]Cluster, 0, len(groups))
+	seps := make([]float64, 0, len(groups))
+	for i, group := range groups {
+		var center = (group.Center[0] - offset) / scale
+		var items = make([]float64, 0, len(group.Observations))
+		for _, it := range group.Observations {
+			coords := it.Coordinates()
+			items = append(items, (coords[0]-offset)/scale)
+		}
+		resList = append(resList, Cluster{
+			Center: center,
+			Items:  items,
+		})
+		curMax := slices.Max(items)
+		curMin := slices.Min(items)
+		if len(seps) > 0 {
+			seps[i-1] = (seps[i-1] + curMin) / 2
+		}
+		seps = append(seps, curMax)
+	}
+	// 计算每个项所属的分组
+	rowGids := make([]int, 0, len(vals))
+	for _, v := range vals {
+		gid := len(groups) - 1
+		for i, end := range seps {
+			if v < end {
+				gid = i
+				break
+			}
+		}
+		rowGids = append(rowGids, gid)
+	}
+	return &ClusterRes{
+		Clusters: resList,
+		RowGIds:  rowGids,
+	}
 }
