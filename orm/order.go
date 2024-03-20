@@ -275,6 +275,9 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Erro
 		i.DirtyEnter = true
 	}
 	i.Exit.Status = OdStatusClosed
+	if i.Exit.Filled == 0 {
+		i.ExitAt = btime.TimeMS()
+	}
 	i.Exit.Filled = i.Enter.Filled
 	i.Exit.Average = i.Exit.Price
 	i.Status = InOutStatusFullExit

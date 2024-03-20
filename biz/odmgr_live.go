@@ -27,8 +27,8 @@ type FuncHandleMyOrder = func(trade *banexg.Order) bool
 type LiveOrderMgr struct {
 	OrderMgr
 	queue            chan *OdQItem
-	doneKeys         map[string]bool // 已完成的订单：symbol+orderId
-	exgIdMap         map[string]*orm.InOutOrder
+	doneKeys         map[string]bool            // 已完成的订单：symbol+orderId
+	exgIdMap         map[string]*orm.InOutOrder // symbol+orderId: InOutOrder
 	doneTrades       map[string]bool            // 已处理的交易：symbol+tradeId
 	isWatchMyTrade   bool                       // 是否正在监听账户交易流
 	isTrialUnMatches bool                       // 是否正在监听未匹配交易
@@ -1062,16 +1062,13 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 	if isEnter {
 		subOd = od.Enter
 	}
-	var subDirty bool
-	defer func() {
-		if subDirty {
-			if isEnter {
-				od.DirtyEnter = true
-			} else {
-				od.DirtyExit = true
-			}
+	setDirty := func() {
+		if isEnter {
+			od.DirtyEnter = true
+		} else {
+			od.DirtyExit = true
 		}
-	}()
+	}
 	var err *errs.Error
 	exchange := exg.Default
 	leverage, maxLeverage := exg.GetLeverage(od.Symbol, od.QuoteCost, o.Account)
@@ -1090,12 +1087,12 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 			subOd.Amount *= rate
 			od.QuoteCost *= rate
 			od.DirtyMain = true
-			subDirty = true
+			setDirty()
 		}
 	}
 	if subOd.OrderType == "" {
 		subOd.OrderType = config.OrderType
-		subDirty = true
+		setDirty()
 	}
 	if subOd.Price == 0 && subOd.OrderType != banexg.OdTypeMarket {
 		// 非市价单时，计算价格
@@ -1108,7 +1105,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		if err != nil {
 			return err
 		}
-		subDirty = true
+		setDirty()
 	}
 	if subOd.Amount == 0 {
 		if isEnter {
@@ -1193,6 +1190,14 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 				fillPrice = res.Price
 			}
 			subOd.Average = fillPrice
+			if subOd.Filled == 0 {
+				if isEnter {
+					od.EnterAt = res.Timestamp
+				} else {
+					od.ExitAt = res.Timestamp
+				}
+				od.DirtyMain = true
+			}
 			subOd.Filled = res.Filled
 			if res.Fee != nil && res.Fee.Cost > 0 {
 				subOd.Fee = res.Fee.Cost

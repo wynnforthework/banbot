@@ -37,6 +37,14 @@ func bnbApplyMyTrade(o *LiveOrderMgr) FuncApplyMyTrade {
 			}
 		} else if state == "FILLED" || state == "PARTIALLY_FILLED" {
 			odStatus := orm.OdStatusPartOK
+			if subOd.Filled == 0 {
+				if subOd.Enter {
+					od.EnterAt = trade.Timestamp
+				} else {
+					od.ExitAt = trade.Timestamp
+				}
+				od.DirtyMain = true
+			}
 			subOd.OrderType = trade.Type
 			subOd.Filled = trade.Filled
 			subOd.Average = trade.Average
