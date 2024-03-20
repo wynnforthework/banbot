@@ -685,12 +685,21 @@ func (w *BanWallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols [
 	amounts := make([]float64, 0)
 	coins := make([]string, 0)
 	prices := make([]float64, 0)
+	var skips []string
 
 	for key, item := range data {
-		var price = core.GetPrice(key)
+		var price = core.GetPriceSafe(key)
+		if price == -1 {
+			skips = append(skips, key)
+			continue
+		}
 		amounts = append(amounts, itemAmt(item)*price)
 		coins = append(coins, key)
 		prices = append(prices, price)
+	}
+	if len(skips) > 0 {
+		log.Info("skip pairs in wallet.calcLegal", zap.Int("num", len(skips)),
+			zap.String("pairs", strings.Join(skips, ",")))
 	}
 
 	return amounts, coins, prices
