@@ -252,7 +252,7 @@ LocalExit
 在本地强制退出订单，立刻生效，无需等到下一个bar。这里不涉及钱包更新，钱包需要自行更新。
 实盘时调用此函数会保存到数据库
 */
-func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Error {
+func (i *InOutOrder) LocalExit(tag string, price float64, msg, odType string) *errs.Error {
 	if price == 0 {
 		newPrice := core.GetPrice(i.Symbol)
 		if newPrice > 0 {
@@ -265,7 +265,10 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg string) *errs.Erro
 			price = i.InitPrice
 		}
 	}
-	i.SetExit(tag, banexg.OdTypeMarket, price)
+	if odType == "" {
+		odType = banexg.OdTypeMarket
+	}
+	i.SetExit(tag, odType, price)
 	if i.Enter.Status < OdStatusClosed {
 		i.Enter.Status = OdStatusClosed
 		err := i.UpdateFee(price, true, true)

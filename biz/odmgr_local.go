@@ -108,7 +108,8 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 			odType = exOrder.OrderType
 		}
 		price := exOrder.Price
-		fillMS := btime.TimeMS() + int64(netCost)*1000
+		odTFSecs := utils2.TFToSecs(od.Timeframe)
+		fillMS := btime.TimeMS() - int64(odTFSecs-netCost)*1000
 		if bar == nil {
 			price = core.GetPrice(od.Symbol)
 		} else if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
@@ -128,10 +129,10 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 				}
 			}
 			barRate := simMarketRate(&bar.Kline, exOrder.Price, exOrder.Side == banexg.OdSideBuy)
-			fillMS = btime.TimeMS() + int64(float64(utils2.TFToSecs(od.Timeframe))*barRate)*1000
+			fillMS = bar.Time + int64(float64(odTFSecs)*barRate)*1000
 		} else {
 			// 按网络延迟，模拟成交价格，和开盘价接近
-			rate := float64(netCost) / float64(utils2.TFToSecs(od.Timeframe))
+			rate := float64(netCost) / float64(odTFSecs)
 			price = simMarketPrice(&bar.Kline, rate)
 		}
 		var err *errs.Error
@@ -155,7 +156,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 		}
 		stopAfter := od.GetInfoInt64(orm.OdInfoStopAfter)
 		if stopAfter > 0 && stopAfter <= curMS {
-			err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars")
+			err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars", "")
 			if err != nil {
 				log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
 			}
@@ -169,7 +170,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 	_, err := wallets.EnterOd(od)
 	if err != nil {
 		if err.Code == core.ErrLowFunds {
-			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, err.Error())
+			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, err.Error(), "")
 			o.onLowFunds()
 			return err
 		}
@@ -194,7 +195,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 		exOrder.Amount, err = exchange.PrecAmount(market, entAmount)
 		if err != nil {
 			log.Warn("prec enter amount fail", zap.Float64("amt", entAmount), zap.Error(err))
-			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error())
+			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)
 			wallets.Cancel(od.Key(), quote, 0, true)
 			return err
@@ -260,13 +261,29 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 		return nil
 	}
 	var err *errs.Error
+	var rate float64
 	if slPrice > 0 && (od.Short && bar.High >= slPrice || !od.Short && bar.Low <= slPrice) {
-		err = od.LocalExit(core.ExitTagStopLoss, slPrice, "")
+		// 空单止损，最高价超过止损价触发
+		// 多单止损，最低价跌破止损价触发
+		rate = simMarketRate(bar, slPrice, od.Short)
+		err = od.LocalExit(core.ExitTagStopLoss, slPrice, "", banexg.OdTypeLimit)
 	} else if tpPrice > 0 && (od.Short && bar.Low <= tpPrice || !od.Short && bar.High >= tpPrice) {
-		err = od.LocalExit(core.ExitTagTakeProfit, tpPrice, "")
+		// 空单止盈，最低价跌破止盈价触发
+		// 多单止盈，最高价突破止盈价触发
+		rate = simMarketRate(bar, tpPrice, od.Short)
+		err = od.LocalExit(core.ExitTagTakeProfit, tpPrice, "", banexg.OdTypeLimit)
 	} else {
 		return nil
 	}
+	cutSecs := float64(utils2.TFToSecs(od.Timeframe)) * (1 - rate)
+	od.ExitAt = btime.TimeMS() - int64(cutSecs*1000)
+	od.DirtyMain = true
+	if od.Exit != nil {
+		od.Exit.UpdateAt = od.ExitAt
+		od.Exit.CreateAt = od.ExitAt
+		od.DirtyExit = true
+	}
+	_ = od.Save(nil)
 	wallets := GetWallets(o.Account)
 	wallets.ExitOd(od, od.Exit.Amount)
 	wallets.ConfirmOdExit(od, od.Exit.Price)
