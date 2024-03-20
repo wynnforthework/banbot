@@ -157,14 +157,14 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
 	return val, lock
 }
 
-func GetTriggerODs(account string) (map[string][]*InOutOrder, *sync.Mutex) {
+func GetTriggerODs(account string) (map[string]map[int64]*InOutOrder, *sync.Mutex) {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	val, ok := accTriggerODs[account]
 	lock, _ := lockTriggerMap[account]
 	if !ok {
-		val = make(map[string][]*InOutOrder)
+		val = make(map[string]map[int64]*InOutOrder)
 		accTriggerODs[account] = val
 		lock = &sync.Mutex{}
 		lockTriggerMap[account] = lock
@@ -175,8 +175,12 @@ func GetTriggerODs(account string) (map[string][]*InOutOrder, *sync.Mutex) {
 func AddTriggerOd(account string, od *InOutOrder) {
 	triggerOds, lock := GetTriggerODs(account)
 	lock.Lock()
-	ods, _ := triggerOds[od.Symbol]
-	triggerOds[od.Symbol] = append(ods, od)
+	ods, ok := triggerOds[od.Symbol]
+	if !ok {
+		ods = make(map[int64]*InOutOrder)
+		triggerOds[od.Symbol] = ods
+	}
+	ods[od.ID] = od
 	lock.Unlock()
 }
 

@@ -97,6 +97,19 @@ func (i *InOutOrder) Key() string {
 	return strings.Join([]string{i.Symbol, i.Strategy, side, i.EnterTag, enterAt}, "|")
 }
 
+func (i *InOutOrder) SetEnterLimit(price float64) *errs.Error {
+	if i.Status >= InOutStatusFullEnter {
+		return errs.NewMsg(errs.CodeRunTime, "cannot set entry limit for entered order: %s", i.Key())
+	}
+	if i.Status == InOutStatusInit {
+		i.InitPrice = price
+		i.DirtyMain = true
+	}
+	i.Enter.Price = price
+	i.DirtyEnter = true
+	return nil
+}
+
 /*
 CalcProfit
 返回利润（未扣除手续费）
@@ -491,6 +504,26 @@ func (i *InOutOrder) ClientId(random bool) string {
 		return fmt.Sprintf("%s_%v_%v", config.Name, i.ID, rand.Intn(1000))
 	}
 	return fmt.Sprintf("%s_%v", config.Name, i.ID)
+}
+
+type InOutSnap struct {
+	EnterLimit float64
+	ExitLimit  float64
+	StopLoss   float64
+	TakeProfit float64
+}
+
+func (i *InOutOrder) TakeSnap() *InOutSnap {
+	snap := &InOutSnap{}
+	if i.Status < InOutStatusFullEnter && i.Enter != nil && i.Enter.Status < OdStatusClosed {
+		snap.EnterLimit = i.Enter.Price
+	}
+	if i.Status > InOutStatusFullEnter && i.Exit != nil && i.Exit.Status < OdStatusClosed {
+		snap.ExitLimit = i.Exit.Price
+	}
+	snap.StopLoss = i.GetInfoFloat64(OdInfoStopLoss)
+	snap.TakeProfit = i.GetInfoFloat64(OdInfoTakeProfit)
+	return snap
 }
 
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {

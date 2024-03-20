@@ -108,6 +108,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 			odType = exOrder.OrderType
 		}
 		price := exOrder.Price
+		fillMS := btime.TimeMS() + int64(netCost)*1000
 		if bar == nil {
 			price = core.GetPrice(od.Symbol)
 		} else if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
@@ -126,16 +127,18 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 					price = bar.Open
 				}
 			}
+			barRate := simMarketRate(&bar.Kline, exOrder.Price, exOrder.Side == banexg.OdSideBuy)
+			fillMS = btime.TimeMS() + int64(float64(utils2.TFToSecs(od.Timeframe))*barRate)*1000
 		} else {
 			// 按网络延迟，模拟成交价格，和开盘价接近
 			rate := float64(netCost) / float64(utils2.TFToSecs(od.Timeframe))
-			price = o.simMarketPrice(&bar.Kline, rate)
+			price = simMarketPrice(&bar.Kline, rate)
 		}
 		var err *errs.Error
 		if exOrder.Enter {
-			err = o.fillPendingEnter(od, price)
+			err = o.fillPendingEnter(od, price, fillMS)
 		} else {
-			err = o.fillPendingExit(od, price)
+			err = o.fillPendingExit(od, price, fillMS)
 		}
 		if err != nil {
 			return 0, err
@@ -161,7 +164,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 	return affectNum, nil
 }
 
-func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *errs.Error {
+func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fillMS int64) *errs.Error {
 	wallets := GetWallets(o.Account)
 	_, err := wallets.EnterOd(od)
 	if err != nil {
@@ -200,10 +203,14 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	if exOrder.Price == 0 {
 		exOrder.Price = entPrice
 	}
-	updateTime := btime.TimeMS() + int64(netCost)*1000
+	updateTime := fillMS
 	exOrder.UpdateAt = updateTime
 	if exOrder.CreateAt == 0 {
 		exOrder.CreateAt = updateTime
+	}
+	if exOrder.Filled == 0 {
+		// 将EnterAt更新为实际入场时间
+		od.EnterAt = updateTime
 	}
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = entPrice
@@ -220,13 +227,15 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64) *err
 	return nil
 }
 
-func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64) *errs.Error {
+func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64, fillMS int64) *errs.Error {
 	wallets := GetWallets(o.Account)
 	exOrder := od.Exit
 	wallets.ExitOd(od, exOrder.Amount)
-	updateTime := btime.TimeMS() + int64(netCost)*1000
-	exOrder.UpdateAt = updateTime
-	exOrder.CreateAt = updateTime
+	if exOrder.Filled == 0 {
+		od.ExitAt = fillMS
+	}
+	exOrder.UpdateAt = fillMS
+	exOrder.CreateAt = fillMS
 	exOrder.Status = orm.OdStatusClosed
 	exOrder.Price = price
 	exOrder.Filled = exOrder.Amount
@@ -242,59 +251,6 @@ func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64) *errs
 	wallets.ConfirmOdExit(od, price)
 	o.callBack(od, false)
 	return nil
-}
-
-func (o *LocalOrderMgr) simMarketPrice(bar *banexg.Kline, rate float64) float64 {
-	var (
-		a, b, c, totalLen   float64
-		aEndRate, bEndRate  float64
-		start, end, posRate float64
-	)
-
-	openP := bar.Open
-	highP := bar.High
-	lowP := bar.Low
-	closeP := bar.Close
-
-	if openP <= closeP {
-		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
-		a = openP - lowP
-		b = highP - lowP
-		c = highP - closeP
-		totalLen = a + b + c
-		if totalLen == 0 {
-			return closeP
-		}
-		aEndRate = a / totalLen
-		bEndRate = (a + b) / totalLen
-		if rate <= aEndRate {
-			start, end, posRate = openP, lowP, rate/aEndRate
-		} else if rate <= bEndRate {
-			start, end, posRate = lowP, highP, (rate-aEndRate)/(bEndRate-aEndRate)
-		} else {
-			start, end, posRate = highP, closeP, (rate-bEndRate)/(1-bEndRate)
-		}
-	} else {
-		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
-		a = highP - openP
-		b = highP - lowP
-		c = closeP - lowP
-		totalLen = a + b + c
-		if totalLen == 0 {
-			return closeP
-		}
-		aEndRate = a / totalLen
-		bEndRate = (a + b) / totalLen
-		if rate <= aEndRate {
-			start, end, posRate = openP, highP, rate/aEndRate
-		} else if rate <= bEndRate {
-			start, end, posRate = highP, lowP, (rate-aEndRate)/(bEndRate-aEndRate)
-		} else {
-			start, end, posRate = lowP, closeP, (rate-bEndRate)/(1-bEndRate)
-		}
-	}
-
-	return start*(1-posRate) + end*posRate
 }
 
 func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *errs.Error {
@@ -361,4 +317,106 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 	}
 	orm.HistODs = validOds
 	return sess.DumpOrdersToDb()
+}
+
+func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
+	var (
+		a, b, c, totalLen   float64
+		aEndRate, bEndRate  float64
+		start, end, posRate float64
+	)
+
+	openP := bar.Open
+	highP := bar.High
+	lowP := bar.Low
+	closeP := bar.Close
+
+	if openP <= closeP {
+		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
+		a = openP - lowP
+		b = highP - lowP
+		c = highP - closeP
+		totalLen = a + b + c
+		if totalLen == 0 {
+			return closeP
+		}
+		aEndRate = a / totalLen
+		bEndRate = (a + b) / totalLen
+		if rate <= aEndRate {
+			start, end, posRate = openP, lowP, rate/aEndRate
+		} else if rate <= bEndRate {
+			start, end, posRate = lowP, highP, (rate-aEndRate)/(bEndRate-aEndRate)
+		} else {
+			start, end, posRate = highP, closeP, (rate-bEndRate)/(1-bEndRate)
+		}
+	} else {
+		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
+		a = highP - openP
+		b = highP - lowP
+		c = closeP - lowP
+		totalLen = a + b + c
+		if totalLen == 0 {
+			return closeP
+		}
+		aEndRate = a / totalLen
+		bEndRate = (a + b) / totalLen
+		if rate <= aEndRate {
+			start, end, posRate = openP, highP, rate/aEndRate
+		} else if rate <= bEndRate {
+			start, end, posRate = highP, lowP, (rate-aEndRate)/(bEndRate-aEndRate)
+		} else {
+			start, end, posRate = lowP, closeP, (rate-bEndRate)/(1-bEndRate)
+		}
+	}
+
+	return start*(1-posRate) + end*posRate
+}
+
+func simMarketRate(bar *banexg.Kline, price float64, isBuy bool) float64 {
+	if isBuy && price >= bar.Open || !isBuy && price <= bar.Open {
+		// 立刻成交
+		return 0
+	}
+	var (
+		a, b, c, totalLen float64
+	)
+
+	openP := bar.Open
+	highP := bar.High
+	lowP := bar.Low
+	closeP := bar.Close
+
+	if openP <= closeP {
+		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
+		a = openP - lowP   // 开盘~最低
+		b = highP - lowP   // 最低~最高
+		c = highP - closeP // 最高~收盘
+		totalLen = a + b + c
+		if totalLen == 0 {
+			return 0
+		}
+		if isBuy {
+			// 买单，在开盘~最低时触发
+			return (openP - price) / totalLen
+		} else {
+			// 卖单，在最低~最高中触发
+			return (a + price - lowP) / totalLen
+		}
+	} else {
+		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
+		a = highP - openP // 开盘~最高
+		b = highP - lowP  // 最高~最低
+		c = closeP - lowP // 最低~收盘
+		totalLen = a + b + c
+		if totalLen == 0 {
+			return 0
+		}
+		if isBuy {
+			// 买单，必然在最高~最低中触发
+			return (a + highP - price) / totalLen
+		} else {
+			// 卖单，在开盘~最高中触发
+			return (price - openP) / totalLen
+		}
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	ta "github.com/banbox/banta"
+	"go.uber.org/zap"
 	"strings"
 )
 
@@ -22,6 +23,7 @@ core.BookPairs
 strategy.Versions
 strategy.Envs
 strategy.PairTFStags
+strategy.InfoPairTFStags
 strategy.AccJobs
 strategy.AccInfoJobs
 
@@ -43,6 +45,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	core.TFSecs = make(map[string]int)
 	core.BookPairs = make(map[string]bool)
 	PairTFStags = make(map[string]map[string]*TradeStagy)
+	InfoPairTFStags = make(map[string]map[string]*TradeStagy)
 	for account := range AccInfoJobs {
 		AccInfoJobs[account] = make(map[string]map[string]*StagyJob)
 	}
@@ -122,14 +125,21 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		}
 	}
 	// 从Envs, AccJobs中删除无用的项
+	var envKeys = make(map[string]bool)
+	for key := range PairTFStags {
+		envKeys[key] = true
+	}
+	for key := range InfoPairTFStags {
+		envKeys[key] = true
+	}
 	for envKey := range Envs {
-		if _, ok := PairTFStags[envKey]; !ok {
+		if _, ok := envKeys[envKey]; !ok {
 			delete(Envs, envKey)
 		}
 	}
 	for _, jobs := range AccJobs {
 		for envKey := range jobs {
-			if _, ok := PairTFStags[envKey]; !ok {
+			if _, ok := envKeys[envKey]; !ok {
 				delete(AccJobs, envKey)
 			}
 		}
@@ -208,14 +218,33 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 	if stagy.OnPairInfos != nil {
 		infoJobs := GetInfoJobs(account)
 		for _, s := range stagy.OnPairInfos(job) {
-			logWarm(s.Pair, s.TimeFrame, s.WarmupNum)
-			jobKey := strings.Join([]string{s.Pair, s.TimeFrame}, "_")
+			pair := s.Pair
+			if pair == "_cur_" {
+				pair = exs.Symbol
+				initBarEnv(exs, s.TimeFrame)
+			} else {
+				curExs, err := orm.GetExSymbolCur(pair)
+				if err != nil {
+					log.Info("skip invalid pair", zap.String("pair", pair))
+					continue
+				}
+				initBarEnv(curExs, s.TimeFrame)
+			}
+			logWarm(pair, s.TimeFrame, s.WarmupNum)
+			jobKey := strings.Join([]string{pair, s.TimeFrame}, "_")
 			items, ok := infoJobs[jobKey]
 			if !ok {
 				items = make(map[string]*StagyJob)
 				infoJobs[jobKey] = items
 			}
 			items[stagy.Name] = job
+			// 记录到InfoPairTFStags
+			stags, ok := InfoPairTFStags[jobKey]
+			if !ok {
+				stags = make(map[string]*TradeStagy)
+				InfoPairTFStags[jobKey] = stags
+			}
+			stags[stagy.Name] = stagy
 		}
 	}
 }

@@ -104,12 +104,13 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 	var edits []*orm.InOutEdit
 	for _, job := range jobs {
 		job.InitBar(curOrders)
+		snap := job.SnapOrderStates()
 		job.Stagy.OnBar(job)
 		if !barExpired {
 			enters = append(enters, job.Entrys...)
 		}
 		if !core.IsWarmUp {
-			curEdits, err := job.CheckCustomExits()
+			curEdits, err := job.CheckCustomExits(snap)
 			if err != nil {
 				return err
 			}
@@ -119,7 +120,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 	}
 	// 更新辅助订阅数据
 	for _, job := range infoJobs {
-		job.Stagy.OnInfoBar(job, bar.Symbol, bar.TimeFrame)
+		job.Stagy.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
 	}
 	// 处理订单
 	if !core.IsWarmUp && len(enters)+len(exits)+len(edits) > 0 {

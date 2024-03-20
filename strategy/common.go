@@ -142,59 +142,64 @@ func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 	s.Exits = nil
 }
 
-func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
+func (s *StagyJob) SnapOrderStates() map[int64]*orm.InOutSnap {
+	var res = make(map[int64]*orm.InOutSnap)
+	for _, od := range s.Orders {
+		res[od.ID] = od.TakeSnap()
+	}
+	return res
+}
+
+func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOutEdit, *errs.Error) {
 	var res []*orm.InOutEdit
 	var skipSL, skipTP = 0, 0
 	for _, od := range s.Orders {
+		shot := od.TakeSnap()
+		old, ok := snap[od.ID]
 		if !od.CanClose() || od.Status < orm.InOutStatusFullEnter {
-			// 未入场的不尝试退出
-			continue
-		}
-		slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)
-		tpPrice := od.GetInfoFloat64(orm.OdInfoTakeProfit)
-		req, err := s.customExit(od)
-		if err != nil {
-			return res, err
-		}
-		if req == nil {
-			// 检查是否需要修改条件单
-			newSLPrice := s.LongSLPrice
-			newTPPrice := s.LongTPPrice
-			if od.Short {
-				newSLPrice = s.ShortSLPrice
-				newTPPrice = s.ShortTPPrice
+			// 尚未完全入场，检查限价或触发价格是否更新
+			if !ok {
+				continue
 			}
-			if newSLPrice == 0 {
-				newSLPrice = od.GetInfoFloat64(orm.OdInfoStopLoss)
+			if old.EnterLimit != shot.EnterLimit {
+				// 修改入场价格
+				res = append(res, &orm.InOutEdit{
+					Order:  od,
+					Action: "LimitEnter",
+				})
 			}
-			if newTPPrice == 0 {
-				newTPPrice = od.GetInfoFloat64(orm.OdInfoTakeProfit)
+		} else {
+			// 已完全入场的，检查是否退出
+			slEdit, tpEdit, err := s.checkOrderExit(od)
+			if err != nil {
+				return res, err
 			}
-			if newSLPrice != slPrice {
-				if s.ExgStopLoss {
-					res = append(res, &orm.InOutEdit{
-						Order:  od,
-						Action: "StopLoss",
-					})
-					od.SetInfo(orm.OdInfoStopLoss, newSLPrice)
-				} else {
+			if slEdit != nil {
+				if slEdit.Action == "" {
 					skipSL += 1
-					od.SetInfo(orm.OdInfoStopLoss, nil)
-				}
-				od.DirtyInfo = true
-			}
-			if newTPPrice != tpPrice {
-				if s.ExgTakeProfit {
-					res = append(res, &orm.InOutEdit{
-						Order:  od,
-						Action: "TakeProfit",
-					})
-					od.SetInfo(orm.OdInfoTakeProfit, newTPPrice)
 				} else {
-					skipTP += 1
-					od.SetInfo(orm.OdInfoTakeProfit, nil)
+					res = append(res, slEdit)
 				}
-				od.DirtyInfo = true
+			} else if old != nil && old.StopLoss != shot.StopLoss {
+				// 在其他地方更新了止损
+				res = append(res, &orm.InOutEdit{Order: od, Action: "StopLoss"})
+			}
+			if tpEdit != nil {
+				if tpEdit.Action == "" {
+					skipSL += 1
+				} else {
+					res = append(res, tpEdit)
+				}
+			} else if old != nil && old.TakeProfit != shot.TakeProfit {
+				// 在其他地方更新了止盈
+				res = append(res, &orm.InOutEdit{Order: od, Action: "TakeProfit"})
+			}
+			if old.ExitLimit != shot.ExitLimit {
+				// 修改出场价格
+				res = append(res, &orm.InOutEdit{
+					Order:  od,
+					Action: "LimitExit",
+				})
 			}
 		}
 	}
@@ -203,6 +208,50 @@ func (s *StagyJob) CheckCustomExits() ([]*orm.InOutEdit, *errs.Error) {
 			s.Stagy.Name, s.Symbol.Symbol, skipSL, skipTP))
 	}
 	return res, nil
+}
+
+func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOutEdit, *errs.Error) {
+	slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)
+	tpPrice := od.GetInfoFloat64(orm.OdInfoTakeProfit)
+	req, err := s.customExit(od)
+	if err != nil {
+		return nil, nil, err
+	}
+	var slEdit, tpEdit *orm.InOutEdit
+	if req == nil {
+		// 检查是否需要修改条件单
+		newSLPrice := s.LongSLPrice
+		newTPPrice := s.LongTPPrice
+		if od.Short {
+			newSLPrice = s.ShortSLPrice
+			newTPPrice = s.ShortTPPrice
+		}
+		if newSLPrice == 0 {
+			newSLPrice = od.GetInfoFloat64(orm.OdInfoStopLoss)
+		}
+		if newTPPrice == 0 {
+			newTPPrice = od.GetInfoFloat64(orm.OdInfoTakeProfit)
+		}
+		if newSLPrice != slPrice {
+			if s.ExgStopLoss {
+				slEdit = &orm.InOutEdit{Order: od, Action: "StopLoss"}
+				od.SetInfo(orm.OdInfoStopLoss, newSLPrice)
+			} else {
+				slEdit = &orm.InOutEdit{}
+				od.SetInfo(orm.OdInfoStopLoss, nil)
+			}
+		}
+		if newTPPrice != tpPrice {
+			if s.ExgTakeProfit {
+				tpEdit = &orm.InOutEdit{Order: od, Action: "TakeProfit"}
+				od.SetInfo(orm.OdInfoTakeProfit, newTPPrice)
+			} else {
+				tpEdit = &orm.InOutEdit{}
+				od.SetInfo(orm.OdInfoTakeProfit, nil)
+			}
+		}
+	}
+	return slEdit, tpEdit, nil
 }
 
 func GetJobs(account string) map[string]map[string]*StagyJob {

@@ -138,7 +138,7 @@ func (f *Feeder) onStateOhlcvs(state *PairTFCache, bars []*banexg.Kline, lastOk,
 	if !lastOk {
 		finishBars = bars[:len(bars)-1]
 	}
-	if state.WaitBar != nil && state.WaitBar.Time < finishBars[0].Time {
+	if state.WaitBar != nil && len(finishBars) > 0 && state.WaitBar.Time < finishBars[0].Time {
 		finishBars = append([]*banexg.Kline{state.WaitBar}, finishBars...)
 	}
 	last := bars[len(bars)-1]
@@ -148,9 +148,11 @@ func (f *Feeder) onStateOhlcvs(state *PairTFCache, bars []*banexg.Kline, lastOk,
 	}
 	tfMSecs := int64(state.TFSecs * 1000)
 	state.Latest = last
-	state.NextMS = last.Time + tfMSecs
-	if len(finishBars) > 0 && doFire {
-		f.fireCallBacks(f.Symbol, state.TimeFrame, tfMSecs, finishBars)
+	if len(finishBars) > 0 {
+		state.NextMS = finishBars[len(finishBars)-1].Time + tfMSecs
+		if doFire {
+			f.fireCallBacks(f.Symbol, state.TimeFrame, tfMSecs, finishBars)
+		}
 	}
 	return finishBars
 }

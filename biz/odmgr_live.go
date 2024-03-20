@@ -699,6 +699,10 @@ func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enter
 		return ents, extOrders, err
 	}
 	for _, edit := range edits {
+		if edit.Action == "LimitEnter" && isFarLimit(edit.Order.Enter) {
+			orm.AddTriggerOd(o.Account, edit.Order)
+			continue
+		}
 		o.queue <- &OdQItem{
 			Order:  edit.Order,
 			Action: edit.Action,
@@ -759,8 +763,15 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 				err = o.execOrderEnter(od)
 			case "exit":
 				err = o.execOrderExit(od)
-			default:
+			case "StopLoss":
+			case "TakeProfit":
 				editTriggerOd(od, item.Action)
+			case "LimitEnter":
+			case "LimitExit":
+				err = o.editLimitOd(od, item.Action)
+			default:
+				log.Error("unknown od action", zap.String("action", item.Action), zap.String("key", od.Key()))
+				continue
 			}
 			if err != nil {
 				log.Error("ConsumeOrderQueue error", zap.String("action", item.Action), zap.Error(err))
@@ -1385,7 +1396,7 @@ func verifyAccountTriggerOds(account string) {
 		return
 	}
 	var resOds []*orm.InOutOrder
-	var copyTriggers = make(map[string][]*orm.InOutOrder)
+	var copyTriggers = make(map[string]map[int64]*orm.InOutOrder)
 	lock.Lock()
 	for key, val := range triggerOds {
 		copyTriggers[key] = val
@@ -1409,10 +1420,12 @@ func verifyAccountTriggerOds(account string) {
 		}
 		if err != nil {
 			log.Error("VerifyTriggerOds fail", zap.String("pair", pair), zap.Error(err))
-			resOds = append(resOds, ods...)
+			for _, od := range ods {
+				resOds = append(resOds, od)
+			}
 			continue
 		}
-		var leftOds = make([]*orm.InOutOrder, 0, len(ods))
+		var leftOds = make(map[int64]*orm.InOutOrder)
 		for _, od := range ods {
 			if od.Status >= orm.InOutStatusFullExit {
 				continue
@@ -1428,7 +1441,7 @@ func verifyAccountTriggerOds(account string) {
 			if waitSecs < config.PutLimitSecs && rate >= 0.8 {
 				resOds = append(resOds, od)
 			} else {
-				leftOds = append(leftOds, od)
+				leftOds[od.ID] = od
 			}
 		}
 		lock.Lock()
@@ -1544,6 +1557,35 @@ func cancelAccountOldLimits(account string) {
 			log.Error("save od fail", zap.String("key", od.Key()), zap.Error(err))
 		}
 	}
+}
+
+func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Error {
+	subOd := od.Enter
+	if action == "LimitExit" {
+		subOd = od.Exit
+	}
+	exchange := exg.Default
+	if core.Market != banexg.MarketLinear && core.Market != banexg.MarketInverse {
+		// 现货，保证金，期权。先取消旧订单，再创建新订单
+		_, err := exchange.CancelOrder(subOd.OrderID, od.Symbol, nil)
+		if err != nil {
+			return err
+		}
+		subOd.OrderID = ""
+	}
+	if subOd.OrderID == "" {
+		if subOd.Enter {
+			return o.execOrderEnter(od)
+		} else {
+			return o.execOrderExit(od)
+		}
+	}
+	// 只有U本位 & 币本位，修改订单
+	res, err := exchange.EditOrder(od.Symbol, subOd.OrderID, subOd.Side, subOd.Amount, subOd.Price, nil)
+	if err != nil {
+		return err
+	}
+	return o.updateOdByExgRes(od, subOd.Enter, res)
 }
 
 func editTriggerOd(od *orm.InOutOrder, prefix string) {

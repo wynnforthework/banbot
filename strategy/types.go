@@ -25,7 +25,7 @@ type TradeStagy struct {
 	OnPairInfos         func(s *StagyJob) []*PairSub
 	OnStartUp           func(s *StagyJob)
 	OnBar               func(s *StagyJob)
-	OnInfoBar           func(s *StagyJob, pair, tf string)                 // 其他依赖的bar数据
+	OnInfoBar           func(s *StagyJob, e *ta.BarEnv, pair, tf string)   // 其他依赖的bar数据
 	OnTrades            func(s *StagyJob, trades []*banexg.Trade)          // 逐笔交易数据
 	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) *ExitReq     // 自定义订单退出逻辑
 	OnOrderChange       func(s *StagyJob, od *orm.InOutOrder, chgType int) // 订单更新回调
