@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func GetPrice(symbol string) float64 {
+func GetPriceSafe(symbol string) float64 {
 	if strings.Contains(symbol, "USD") && !strings.Contains(symbol, "/") {
 		return 1
 	}
@@ -22,7 +22,15 @@ func GetPrice(symbol string) float64 {
 	if ok {
 		return price
 	}
-	panic(fmt.Errorf("invalid symbol for price: %s", symbol))
+	return -1
+}
+
+func GetPrice(symbol string) float64 {
+	price := GetPriceSafe(symbol)
+	if price == -1 {
+		panic(fmt.Errorf("invalid symbol for price: %s", symbol))
+	}
+	return price
 }
 
 func setDataPrice(data map[string]float64, pair string, price float64) {

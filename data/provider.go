@@ -120,7 +120,10 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	barTotalNum := int64(jobNum * core.StepTotal)
 	pBar := progressbar.Default(barTotalNum, "warmup")
 	defer pBar.Close()
+	var m sync.Mutex
 	stepCB := func(num int) {
+		m.Lock()
+		defer m.Unlock()
 		doneNum += num
 		if int64(doneNum) > barTotalNum {
 			log.Warn("warm pBar progress exceed", zap.Int64("max", barTotalNum), zap.Int("cur", doneNum))
@@ -159,6 +162,7 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 			for tf, warmNum := range job.tfWarms {
 				tfMSecs := int64(utils.TFToSecs(tf) * 1000)
 				if tfMSecs < int64(60000) {
+					stepCB(core.StepTotal)
 					continue
 				}
 				endMS := utils.AlignTfMSecs(curTimeMS, tfMSecs)

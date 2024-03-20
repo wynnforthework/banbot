@@ -118,6 +118,9 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 		var conn *pgxpool.Conn
 		sess, conn, err = Conn(nil)
 		if err != nil {
+			if stepCB != nil {
+				stepCB(core.StepTotal)
+			}
 			return 0, err
 		}
 		defer conn.Release()
@@ -154,8 +157,8 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 			}
 		}
 	}
-	doneNum := 0
-	progressNum := 0
+	doneNum := 0     // 累计下载数量
+	progressNum := 0 // 进度值，最大StepTotal
 	curStep := func(curNum int) {
 		if stepCB == nil || curNum <= 0 {
 			return

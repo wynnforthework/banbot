@@ -801,6 +801,7 @@ func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 		}
 	}
 	var items []*banexg.Asset
+	var skips []string
 	for coin, it := range item.Assets {
 		if it.Total == 0 {
 			continue
@@ -830,11 +831,16 @@ func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 			record.Frozens["*"] = it.Used
 			record.lockFroz.Unlock()
 		}
+		coinPrice := core.GetPriceSafe(coin)
+		if coinPrice == -1 {
+			skips = append(skips, coin)
+			continue
+		}
 		items = append(items, &banexg.Asset{
 			Code:  coin,
 			Free:  it.Free,
 			Used:  it.Used,
-			Total: record.Total(false) * core.GetPrice(coin),
+			Total: record.Total(false) * coinPrice,
 		})
 	}
 	// 更新单笔开单金额
@@ -845,6 +851,9 @@ func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 	var msgList []string
 	for _, it := range items {
 		msgList = append(msgList, fmt.Sprintf("%s: %.5f/%.5f", it.Code, it.Free, it.Used))
+	}
+	if len(skips) > 0 {
+		log.Info(fmt.Sprintf("update balance skips: %s", strings.Join(skips, "  ")))
 	}
 	if len(msgList) > 0 {
 		log.Info(fmt.Sprintf("update balances %s: %s", wallets.Account, strings.Join(msgList, "  ")))
