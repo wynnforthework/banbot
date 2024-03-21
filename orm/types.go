@@ -5,10 +5,11 @@ type InOutOrder struct {
 	Enter      *ExOrder
 	Exit       *ExOrder
 	Info       map[string]interface{}
-	DirtyMain  bool // IOrder 有未保存的临时修改
-	DirtyEnter bool // Enter 有未保存的临时修改
-	DirtyExit  bool // Exit 有未保存的临时修改
-	DirtyInfo  bool // Info 有未保存的临时修改
+	DirtyMain  bool   // IOrder 有未保存的临时修改
+	DirtyEnter bool   // Enter 有未保存的临时修改
+	DirtyExit  bool   // Exit 有未保存的临时修改
+	DirtyInfo  bool   // Info 有未保存的临时修改
+	idKey      string // 区分订单的key
 }
 
 type InOutEdit struct {

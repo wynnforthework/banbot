@@ -89,12 +89,16 @@ func (i *InOutOrder) EnterCost() float64 {
 }
 
 func (i *InOutOrder) Key() string {
+	if i.idKey != "" {
+		return i.idKey
+	}
 	side := "long"
 	if i.Short {
 		side = "short"
 	}
 	enterAt := strconv.FormatInt(i.EnterAt, 10)
-	return strings.Join([]string{i.Symbol, i.Strategy, side, i.EnterTag, enterAt}, "|")
+	i.idKey = strings.Join([]string{i.Symbol, i.Strategy, side, i.EnterTag, enterAt}, "|")
+	return i.idKey
 }
 
 func (i *InOutOrder) SetEnterLimit(price float64) *errs.Error {
