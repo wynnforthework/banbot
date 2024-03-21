@@ -104,7 +104,8 @@ func allowOrderEnter(account string, env *banta.BarEnv) bool {
 	if numOver {
 		return false
 	}
-	if btime.TimeMS() < core.NoEnterUntil {
+	stopUntil, _ := core.NoEnterUntil[account]
+	if btime.TimeMS() < stopUntil {
 		log.Warn("any enter forbid", zap.String("pair", env.Symbol))
 		return false
 	}

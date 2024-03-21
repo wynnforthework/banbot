@@ -23,7 +23,7 @@ var (
 	Pairs        []string                             // 全局所有的标的
 	PairsMap     = make(map[string]bool)              // 全局所有的标的
 	ForbidPairs  = make(map[string]bool)              // 禁止交易的币种
-	NoEnterUntil int64                                // 禁止开单的截止13位时间戳
+	NoEnterUntil = make(map[string]int64)             // account: 禁止开单的截止13位时间戳
 	BookPairs    = make(map[string]bool)              // 监听交易对的币种
 	PairCopiedMs = map[string][2]int64{}              // 所有标的从爬虫收到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的。
 	TfPairHits   = map[string]map[string]int{}        // tf[pair[hits]]一段时间内各周期各币种的bar数量，用于定时输出

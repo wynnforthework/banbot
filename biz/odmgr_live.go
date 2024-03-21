@@ -1717,7 +1717,8 @@ func MakeCheckFatalStop(maxIntv int) func() {
 }
 
 func checkAccFatalStop(account string, maxIntv int) {
-	if core.NoEnterUntil >= btime.TimeMS() {
+	stopUntil, _ := core.NoEnterUntil[account]
+	if stopUntil >= btime.TimeMS() {
 		return
 	}
 	sess, conn, err := orm.Conn(nil)
@@ -1742,8 +1743,9 @@ func checkAccFatalStop(account string, maxIntv int) {
 		lossRate := calcFatalLoss(wallets, orders, backMins)
 		if lossRate >= rate {
 			lossPct := int(lossRate * 100)
-			core.NoEnterUntil = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
-			log.Error(fmt.Sprintf("%v分钟内损失%v, 禁止下单%v小时！", backMins, lossPct, config.FatalStopHours))
+			core.NoEnterUntil[account] = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
+			log.Error(fmt.Sprintf("%v: %v分钟内损失%v%%, 禁止下单%v小时！", account,
+				backMins, lossPct, config.FatalStopHours))
 			break
 		}
 	}
