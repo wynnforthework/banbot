@@ -11,7 +11,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
-	"gonum.org/v1/gonum/stat"
 	"math"
 	"math/rand"
 	"slices"
@@ -243,18 +242,11 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, cb func(string
 
 func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	return filterByOHLCV(symbols, "1d", f.BackDays, func(s string, klines []*banexg.Kline) bool {
-		var logRates = make([]float64, 0, len(klines))
-		var weights = make([]float64, 0, len(klines))
+		var data = make([]float64, 0, len(klines))
 		for i, v := range klines[1:] {
-			pc := klines[i].Close
-			logRate := math.Log(v.Close / pc)
-			logRates = append(logRates, logRate)
-			weights = append(weights, 1)
+			data = append(data, v.Close/klines[i].Close)
 		}
-		logRates = append(logRates, 0)
-		weights = append(weights, 1)
-		stdDev := stat.StdDev(logRates, weights)
-		res := stdDev * math.Sqrt(float64(len(klines)))
+		res := utils.StdDevVolatility(data, 1)
 		if res < f.Min || f.Max > 0 && res > f.Max {
 			log.Info("VolatilityFilter drop", zap.String("pair", s), zap.Float64("v", res))
 			return false

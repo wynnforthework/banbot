@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/muesli/clusters"
 	"github.com/muesli/kmeans"
+	"gonum.org/v1/gonum/stat"
 	"math"
 	"slices"
 )
@@ -211,4 +212,24 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 		Clusters: resList,
 		RowGIds:  rowGids,
 	}
+}
+
+/*
+StdDevVolatility
+计算K线的波动性标准差
+
+	data: 应该是均值为1的上下轻微浮动的一组数
+	rate: 默认1，如需要放大差异，则传入1~1000之间的值
+*/
+func StdDevVolatility(data []float64, rate float64) float64 {
+	totalNum := len(data)
+	var logRates = make([]float64, 0, totalNum)
+	var weights = make([]float64, 0, totalNum)
+	for _, v := range data {
+		logRate := math.Log(v) * rate
+		logRates = append(logRates, logRate)
+		weights = append(weights, 1)
+	}
+	stdDev := stat.StdDev(logRates, weights)
+	return stdDev * math.Sqrt(float64(totalNum))
 }

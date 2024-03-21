@@ -48,7 +48,7 @@ type PriceFilter struct {
 	Max          float64 `yaml:"max" mapstructure:"max,omitempty"`
 }
 
-// RateOfChangeFilter 结构体用于表示波动性过滤器的配置信息
+// RateOfChangeFilter 一段时间内(high-low)/low比值
 type RateOfChangeFilter struct {
 	BaseFilter
 	BackDays      int     `yaml:"back_days" mapstructure:"back_days,omitempty"`           // 回顾的K线天数
@@ -63,7 +63,7 @@ type SpreadFilter struct {
 	MaxRatio float32 `yaml:"max_ratio" mapstructure:"max_ratio,omitempty"` // 公式：1-bid/ask，买卖价差占价格的最大比率
 }
 
-// VolatilityFilter 表示波动性过滤器的配置
+// VolatilityFilter StdDev(ln(close / prev_close)) * sqrt(num)
 type VolatilityFilter struct {
 	BaseFilter
 	BackDays      int     `yaml:"back_days" mapstructure:"back_days,omitempty"`           // 回顾的K线天数

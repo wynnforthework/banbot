@@ -152,6 +152,10 @@ order by sid,time`, startMs, finishEndMS, sidText)
 	if subTF != "" {
 		fromTfMSecs = int64(utils.TFToSecs(subTF) * 1000)
 	}
+	noFired := make(map[int32]bool)
+	for _, sid := range sids {
+		noFired[sid] = true
+	}
 	callBack := func() {
 		if fromTfMSecs > 0 {
 			var lastDone bool
@@ -161,9 +165,11 @@ order by sid,time`, startMs, finishEndMS, sidText)
 			}
 		}
 		if len(klineArr) > 0 {
+			delete(noFired, curSid)
 			handle(curSid, klineArr)
 		}
 	}
+	// callBack for kline pairs
 	for _, k := range arrs {
 		if k.Sid != curSid {
 			if curSid > 0 && len(klineArr) > 0 {
@@ -177,6 +183,10 @@ order by sid,time`, startMs, finishEndMS, sidText)
 	}
 	if curSid > 0 && len(klineArr) > 0 {
 		callBack()
+	}
+	// callBack for no data sids
+	for sid := range noFired {
+		handle(sid, nil)
 	}
 	return nil
 }
