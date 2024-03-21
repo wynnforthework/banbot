@@ -14,7 +14,7 @@ import (
 	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 	"math"
-	"slices"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -285,19 +285,16 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			break
 		}
 		holds := utils.ValsOfMap(p.holders)
-		slices.SortFunc(holds, func(a, b IHistKlineFeeder) int {
+		sort.Slice(holds, func(i, j int) bool {
+			a, b := holds[i], holds[j]
 			va, vb := a.getNextMS(), b.getNextMS()
 			if va == math.MaxInt64 || vb == math.MaxInt64 {
-				if va == vb {
-					return 0
-				}
-				if va == math.MaxInt64 {
-					return int(math.MaxInt32 - int32(vb/1000))
-				} else {
-					return int(int32(va/1000) - math.MaxInt32)
-				}
+				return va < vb
 			}
-			return int((va - vb) / 1000)
+			if va != vb {
+				return va < vb
+			}
+			return a.getSymbol() < b.getSymbol()
 		})
 		hold := holds[0]
 		if hold.getNextMS() > btime.TimeMS() {

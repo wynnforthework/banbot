@@ -316,7 +316,7 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 func printGroups(groups []*RowItem, title string, extHeads []string, prcGrp func([]*orm.InOutOrder) []string) string {
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
-	heads := []string{title, "Count", "Avg Profit %", "Tot Profit %", "Sum Profit", "Duration", "Win Rate"}
+	heads := []string{title, "Count", "Avg Profit %", "Tot Profit %", "Sum Profit", "Duration(h'm)", "Win Rate"}
 	if len(extHeads) > 0 {
 		heads = append(heads, extHeads...)
 	}
