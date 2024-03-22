@@ -165,16 +165,22 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 					continue
 				}
 				endMS := utils.AlignTfMSecs(curTimeMS, tfMSecs)
-				startMS := endMS - tfMSecs*int64(warmNum)
-				bars, err := orm.AutoFetchOHLCV(exchange, exs, tf, startMS, endMS, 0, false, stepCB)
+				bars, err := orm.AutoFetchOHLCV(exchange, exs, tf, 0, endMS, warmNum, false, stepCB)
 				if err != nil {
 					retErr = err
 					break
 				}
 				if len(bars) == 0 {
-					log.Info("skip warm as empty", zap.String("pair", exs.Symbol), zap.String("tf", tf),
-						zap.Int("want", warmNum), zap.Int64("start", startMS), zap.Int64("end", endMS))
+					log.Warn("skip warm as empty", zap.String("pair", exs.Symbol), zap.String("tf", tf),
+						zap.Int("want", warmNum), zap.Int64("end", endMS))
 					continue
+				}
+				if warmNum != len(bars) {
+					barEndMs := bars[len(bars)-1].Time + tfMSecs
+					barStartMs := bars[0].Time
+					lackNum := warmNum - len(bars)
+					log.Warn(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", exs.Symbol,
+						tf, lackNum, warmNum, barStartMs, barEndMs))
 				}
 				key := fmt.Sprintf("%s|%s", symbol, tf)
 				sinceVal := job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
