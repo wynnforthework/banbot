@@ -614,8 +614,9 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 			}
 			prevTime = time
 		}
-		if endMS-prevTime > tfMSecs {
-			holes = append(holes, [2]int64{prevTime + tfMSecs, endMS})
+		maxEnd := utils.AlignTfMSecs(btime.UTCStamp(), tfMSecs) - tfMSecs
+		if maxEnd-prevTime > tfMSecs*5 && endMS-prevTime > tfMSecs {
+			holes = append(holes, [2]int64{prevTime + tfMSecs, min(endMS, maxEnd)})
 		}
 	}
 	if len(holes) == 0 {
@@ -910,6 +911,7 @@ func SyncKlineTFs() *errs.Error {
 	if err != nil {
 		return err
 	}
+	log.Info("try filling KLine Holes ...")
 	return tryFillHoles(sess)
 }
 
@@ -1137,6 +1139,11 @@ func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 			}
 			if err_ != nil {
 				return errs.New(core.ErrDbExecFail, err_)
+			}
+			// 更新KHoles，避免有空洞但未记录
+			err = q.updateKHoles(sid, agg.TimeFrame, newStart, newEnd)
+			if err != nil {
+				return err
 			}
 		} else if oldStart > 0 {
 			// 没有数据，但有范围记录
