@@ -21,6 +21,8 @@ order by id;
 
 
 
+-- name: ListExchanges :many
+select distinct exchange from exsymbol;
 
 -- name: ListSymbols :many
 select * from exsymbol

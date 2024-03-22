@@ -107,6 +107,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 	}
 	defer conn.Release()
 	if len(keySymbolMap) == 0 {
+		// 尚未加载，加载指定交易所所有标的信息
 		for exgId := range exgNames {
 			err = sess.LoadExgSymbols(exgId)
 			if err != nil {
@@ -114,6 +115,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 			}
 		}
 	}
+	// 检查需要插入的标的
 	adds := map[string]*ExSymbol{}
 	for _, exs := range symbols {
 		key := fmt.Sprintf("%s:%s:%s", exs.Exchange, exs.Market, exs.Symbol)
@@ -124,6 +126,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 	if len(adds) == 0 {
 		return nil
 	}
+	// 加锁，重新加载，然后添加需要添加的数据
 	symbolLock.Lock()
 	defer symbolLock.Unlock()
 	for exgId := range exgNames {
@@ -145,6 +148,26 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
 	for exgId := range exgNames {
+		err = sess.LoadExgSymbols(exgId)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func LoadAllExSymbols() *errs.Error {
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	ctx := context.Background()
+	exgList, err_ := sess.ListExchanges(ctx)
+	if err_ != nil {
+		return errs.New(core.ErrDbReadFail, err)
+	}
+	for _, exgId := range exgList {
 		err = sess.LoadExgSymbols(exgId)
 		if err != nil {
 			return err

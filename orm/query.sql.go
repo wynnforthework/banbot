@@ -376,6 +376,30 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (*BotTask, error) {
 	return &i, err
 }
 
+const listExchanges = `-- name: ListExchanges :many
+select distinct exchange from exsymbol
+`
+
+func (q *Queries) ListExchanges(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listExchanges)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var exchange string
+		if err := rows.Scan(&exchange); err != nil {
+			return nil, err
+		}
+		items = append(items, exchange)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listKHoles = `-- name: ListKHoles :many
 select id, sid, timeframe, start, stop from khole
 order by sid, start

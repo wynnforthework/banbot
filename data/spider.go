@@ -579,8 +579,12 @@ func (m *Miner) watchKLines(pairs []string) {
 }
 
 func RunSpider(addr string) *errs.Error {
+	err := orm.LoadAllExSymbols()
+	if err != nil {
+		return err
+	}
 	if config.FixTFKline {
-		err := orm.SyncKlineTFs()
+		err = orm.SyncKlineTFs()
 		if err != nil {
 			return err
 		}
