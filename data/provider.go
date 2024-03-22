@@ -137,7 +137,6 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	// 控制同时预热下载的标的数量
 	guard := make(chan struct{}, core.ConcurNum)
 	var wg sync.WaitGroup
-	defer wg.Wait()
 	for _, job_ := range warmJobs {
 		// 如果达到并发限制，这里会阻塞等待
 		guard <- struct{}{}
@@ -172,6 +171,11 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 					retErr = err
 					break
 				}
+				if len(bars) == 0 {
+					log.Info("skip warm as empty", zap.String("pair", exs.Symbol), zap.String("tf", tf),
+						zap.Int("want", warmNum), zap.Int64("start", startMS), zap.Int64("end", endMS))
+					continue
+				}
 				key := fmt.Sprintf("%s|%s", symbol, tf)
 				sinceVal := job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
 				lockMap.Lock()
@@ -180,6 +184,7 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 			}
 		}(job_)
 	}
+	wg.Wait()
 	if barTotalNum-int64(doneNum) > 0 {
 		stepCB(int(barTotalNum) - doneNum)
 	}

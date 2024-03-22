@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -12,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -495,17 +497,35 @@ func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64
 	return q.updateBigHyper(sid, timeFrame, startMS, endMS, klines)
 }
 
-func (q *Queries) CalcKLineRange(sid int32, timeFrame string) (int64, int64, *errs.Error) {
+/*
+CalcKLineRange
+计算指定周期K线在指定范围内，有效区间。
+*/
+func (q *Queries) CalcKLineRange(sid int32, timeFrame string, start, end int64) (int64, int64, *errs.Error) {
 	tblName := "kline_" + timeFrame
 	sql := fmt.Sprintf("select min(time),max(time) from %s where sid=%v", tblName, sid)
+	if start > 0 {
+		sql += fmt.Sprintf(" and time>=%v", start)
+	}
+	if end > 0 {
+		sql += fmt.Sprintf(" and time<%v", end)
+	}
 	ctx := context.Background()
 	row := q.db.QueryRow(ctx, sql)
-	var realStart, realEnd int64
+	var realStart, realEnd *int64
 	err_ := row.Scan(&realStart, &realEnd)
 	if err_ != nil {
 		return 0, 0, errs.New(core.ErrDbReadFail, err_)
 	}
-	return realStart, realEnd, nil
+	if realEnd == nil {
+		realStart = new(int64)
+		realEnd = new(int64)
+	}
+	if *realEnd > 0 {
+		// 修正为实际结束时间
+		*realEnd += int64(utils.TFToSecs(timeFrame) * 1000)
+	}
+	return *realStart, *realEnd, nil
 }
 
 func (q *Queries) CalcKLineRanges(timeFrame string) (map[int32][2]int64, *errs.Error) {
@@ -539,9 +559,9 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	// 更新有效区间范围
 	var err_ error
 	ctx := context.Background()
-	realStart, realEnd, err := q.CalcKLineRange(sid, timeFrame)
+	realStart, realEnd, err := q.CalcKLineRange(sid, timeFrame, 0, 0)
 	if err != nil {
-		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: int64(sid), Timeframe: timeFrame, Start: startMS, Stop: endMS})
+		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: sid, Timeframe: timeFrame, Start: startMS, Stop: endMS})
 		if err_ != nil {
 			return errs.New(core.ErrDbExecFail, err_)
 		}
@@ -552,15 +572,14 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	if realStart == 0 || realEnd == 0 {
 		realStart, realEnd = startMS, endMS
 	} else {
-		tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 		realStart = min(realStart, startMS)
-		realEnd = max(realEnd+tfMSecs, endMS)
+		realEnd = max(realEnd, endMS)
 	}
 	oldStart, _ := q.GetKlineRange(sid, timeFrame)
 	if oldStart == 0 {
-		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: int64(sid), Timeframe: timeFrame, Start: realStart, Stop: realEnd})
+		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: sid, Timeframe: timeFrame, Start: realStart, Stop: realEnd})
 	} else {
-		err_ = q.SetKInfo(ctx, SetKInfoParams{Sid: int64(sid), Timeframe: timeFrame, Start: realStart, Stop: realEnd})
+		err_ = q.SetKInfo(ctx, SetKInfoParams{Sid: sid, Timeframe: timeFrame, Start: realStart, Stop: realEnd})
 	}
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
@@ -604,7 +623,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	}
 	// 查询已记录的khole，进行合并
 	ctx := context.Background()
-	resHoles, err_ := q.GetKHoles(ctx, GetKHolesParams{Sid: int64(sid), Timeframe: timeFrame})
+	resHoles, err_ := q.GetKHoles(ctx, GetKHolesParams{Sid: sid, Timeframe: timeFrame})
 	if err_ != nil {
 		return errs.New(core.ErrDbReadFail, err_)
 	}
@@ -615,12 +634,12 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 		return int((a.Start - b.Start) / 1000)
 	})
 	merged := make([]*KHole, 0)
-	delIDs := make([]int, 0)
+	delIDs := make([]int64, 0)
 	var prev *KHole
 	for _, h := range resHoles {
 		if h.Start == h.Stop {
 			if h.ID > 0 {
-				delIDs = append(delIDs, int(h.ID))
+				delIDs = append(delIDs, h.ID)
 			}
 			continue
 		}
@@ -633,7 +652,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 				prev.Stop = h.Stop
 			}
 			if h.ID > 0 {
-				delIDs = append(delIDs, int(h.ID))
+				delIDs = append(delIDs, h.ID)
 			}
 		}
 	}
@@ -645,7 +664,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	var adds []AddKHolesParams
 	for _, h := range merged {
 		if h.ID == 0 {
-			adds = append(adds, AddKHolesParams{Sid: int64(h.Sid), Timeframe: h.Timeframe, Start: h.Start, Stop: h.Stop})
+			adds = append(adds, AddKHolesParams{Sid: h.Sid, Timeframe: h.Timeframe, Start: h.Start, Stop: h.Stop})
 		} else {
 			err_ = q.SetKHole(ctx, SetKHoleParams{ID: h.ID, Start: h.Start, Stop: h.Stop})
 			if err_ != nil {
@@ -838,7 +857,7 @@ func (q *Queries) GetKlineRanges(sidList []int32, timeFrame string) map[int32][2
 	return res
 }
 
-func (q *Queries) DelKHoles(ids ...int) *errs.Error {
+func (q *Queries) DelKHoles(ids ...int64) *errs.Error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -846,7 +865,7 @@ func (q *Queries) DelKHoles(ids ...int) *errs.Error {
 	builder.WriteString("delete from khole where id in (")
 	arr := make([]string, len(ids))
 	for i, id := range ids {
-		arr[i] = strconv.Itoa(id)
+		arr[i] = strconv.Itoa(int(id))
 	}
 	builder.WriteString(strings.Join(arr, ","))
 	builder.WriteString(")")
@@ -876,11 +895,6 @@ func mapToItems[T any](rows pgx.Rows, err_ error, assign func() (T, []any)) ([]T
 	return items, nil
 }
 
-type KInfoExt struct {
-	KInfo
-	TfMSecs int64
-}
-
 /*
 SyncKlineTFs
 检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
@@ -892,6 +906,165 @@ func SyncKlineTFs() *errs.Error {
 		return err
 	}
 	defer conn.Release()
+	err = syncKlineInfos(sess)
+	if err != nil {
+		return err
+	}
+	return tryFillHoles(sess)
+}
+
+type KHoleExt struct {
+	*KHole
+	TfMSecs int64
+}
+
+func tryFillHoles(sess *Queries) *errs.Error {
+	ctx := context.Background()
+	holes, err_ := sess.ListKHoles(ctx)
+	if err_ != nil {
+		return errs.New(core.ErrDbReadFail, err_)
+	}
+	rows := make([]*KHoleExt, len(holes))
+	for i, h := range holes {
+		rows[i] = &KHoleExt{
+			KHole:   h,
+			TfMSecs: int64(utils.TFToSecs(h.Timeframe) * 1000),
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a.Sid != b.Sid {
+			return a.Sid < b.Sid
+		}
+		if a.Start != b.Start {
+			return a.Start < b.Start
+		}
+		return a.TfMSecs < b.TfMSecs
+	})
+	// 已填充需要删除的khole
+	badIds := make([]int64, 0, len(rows)/10)
+	curSid := int32(0)
+	var exs *ExSymbol
+	var filleds [][3]int64  // 已填充的区间[]tfMSecs,start,stop
+	var newHoles [][4]int64 // 需要新增的记录[]sid,tfMSecs,start,stop
+	for _, row := range rows {
+		if row.Sid != curSid {
+			curSid = row.Sid
+			exs = GetSymbolByID(curSid)
+			filleds = nil
+		}
+		start, stop := row.Start, row.Stop
+		// 先检查小周期是否已填充
+		for _, f := range filleds {
+			if f[0] > row.TfMSecs {
+				continue
+			}
+			maxStart := max(f[1], start)
+			minEnd := min(f[2], stop)
+			if maxStart >= minEnd || start < maxStart && minEnd < stop {
+				continue
+			}
+			if start < f[1] {
+				// start < f1 < stop < f2
+				stop = f[1]
+			} else {
+				// f1 < start < f2 < stop
+				start = f[2]
+			}
+			if start >= stop {
+				break
+			}
+		}
+		if start >= stop {
+			badIds = append(badIds, row.ID)
+			continue
+		}
+		updateKHole := func(newStart, newStop int64) bool {
+			if newStart == 0 || newStop == 0 {
+				return false
+			}
+			filleds = append(filleds, [3]int64{row.TfMSecs, newStart, newStop})
+			if newStart == start && newStop == stop {
+				// 此区间被完全填充，添加到删除列表
+				badIds = append(badIds, row.ID)
+				return true
+			}
+			if newStart == start {
+				start = newStop
+			} else if newStop == stop {
+				stop = newStart
+			} else {
+				// 被包含，删除当前，新增前后两个KHole
+				badIds = append(badIds, row.ID)
+				newHoles = append(newHoles, [4]int64{int64(row.Sid), row.TfMSecs, start, newStart},
+					[4]int64{int64(row.Sid), row.TfMSecs, newStop, stop})
+				return true
+			}
+			return false
+		}
+		// 先检查是否已存在
+		oldStart, oldStop, err := sess.CalcKLineRange(exs.ID, row.Timeframe, start, stop)
+		if err != nil {
+			return err
+		}
+		if updateKHole(oldStart, oldStop) {
+			continue
+		}
+		saveNum, err := downOHLCV2DBRange(sess, exg.Default, exs, row.Timeframe, start, stop, 0, 0, nil)
+		if err != nil {
+			return err
+		}
+		// 查询实际更新的区间
+		if saveNum == 0 {
+			continue
+		}
+		resStart, resStop, err := sess.CalcKLineRange(exs.ID, row.Timeframe, start, stop)
+		if err != nil {
+			return err
+		}
+		if updateKHole(resStart, resStop) {
+			continue
+		}
+		if start != row.Start || stop != row.Stop {
+			// 此区间被更新
+			err_ = sess.SetKHole(ctx, SetKHoleParams{ID: row.ID, Start: start, Stop: stop})
+			if err_ != nil {
+				return errs.New(core.ErrDbExecFail, err_)
+			}
+		}
+	}
+	// 删除已填充的id
+	if len(badIds) > 0 {
+		err := sess.DelKHoles(badIds...)
+		if err != nil {
+			return err
+		}
+	}
+	// 新增kHoles
+	if len(newHoles) > 0 {
+		var items = make([]AddKHolesParams, len(newHoles))
+		for i, h := range newHoles {
+			items[i] = AddKHolesParams{
+				Sid:       int32(h[0]),
+				Timeframe: utils.SecsToTF(int(h[1] / 1000)),
+				Start:     h[2],
+				Stop:      h[3],
+			}
+		}
+		_, err_ = sess.AddKHoles(ctx, items)
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
+	}
+	return nil
+}
+
+type KInfoExt struct {
+	KInfo
+	TfMSecs int64
+}
+
+func syncKlineInfos(sess *Queries) *errs.Error {
 	infos, err_ := sess.ListKInfos(context.Background())
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
@@ -920,7 +1093,7 @@ func SyncKlineTFs() *errs.Error {
 	for _, info := range infoList {
 		if info.Sid != curSid {
 			if len(tfMap) > 0 {
-				err = sess.SyncKlineSid(curSid, tfMap, calcs)
+				err := sess.SyncKlineSid(curSid, tfMap, calcs)
 				if err != nil {
 					return err
 				}
@@ -949,14 +1122,14 @@ func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 			err_ = nil
 			if oldStart == 0 && oldEnd == 0 {
 				_, err_ = q.AddKInfo(ctx, AddKInfoParams{
-					Sid:       int64(sid),
+					Sid:       sid,
 					Timeframe: agg.TimeFrame,
 					Start:     newStart,
 					Stop:      newEnd,
 				})
 			} else if newStart != oldStart || oldEnd != newEnd {
 				err_ = q.SetKInfo(ctx, SetKInfoParams{
-					Sid:       int64(sid),
+					Sid:       sid,
 					Timeframe: agg.TimeFrame,
 					Start:     newStart,
 					Stop:      newEnd,

@@ -17,8 +17,8 @@ values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 `
 
 type AddExOrderParams struct {
-	TaskID    int32
-	InoutID   int32
+	TaskID    int64
+	InoutID   int64
 	Symbol    string
 	Enter     bool
 	OrderType string
@@ -68,9 +68,9 @@ values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
 `
 
 type AddIOrderParams struct {
-	TaskID     int32
+	TaskID     int64
 	Symbol     string
-	Sid        int64
+	Sid        int32
 	Timeframe  string
 	Short      bool
 	Status     int16
@@ -115,7 +115,7 @@ func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, er
 }
 
 type AddKHolesParams struct {
-	Sid       int64
+	Sid       int32
 	Timeframe string
 	Start     int64
 	Stop      int64
@@ -129,7 +129,7 @@ values ($1, $2, $3, $4)
 `
 
 type AddKInfoParams struct {
-	Sid       int64
+	Sid       int32
 	Timeframe string
 	Start     int64
 	Stop      int64
@@ -202,7 +202,7 @@ where sid = $1 and timeframe=$2 and start >= $3 and stop <= $4
 `
 
 type DelKHoleRangeParams struct {
-	Sid       int64
+	Sid       int32
 	Timeframe string
 	Start     int64
 	Stop      int64
@@ -250,7 +250,7 @@ select id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_
 where inout_id=$1
 `
 
-func (q *Queries) GetExOrders(ctx context.Context, inoutID int32) ([]*ExOrder, error) {
+func (q *Queries) GetExOrders(ctx context.Context, inoutID int64) ([]*ExOrder, error) {
 	rows, err := q.db.Query(ctx, getExOrders, inoutID)
 	if err != nil {
 		return nil, err
@@ -326,7 +326,7 @@ where sid = $1 and timeframe = $2
 `
 
 type GetKHolesParams struct {
-	Sid       int64
+	Sid       int32
 	Timeframe string
 }
 
@@ -374,6 +374,37 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (*BotTask, error) {
 		&i.Info,
 	)
 	return &i, err
+}
+
+const listKHoles = `-- name: ListKHoles :many
+select id, sid, timeframe, start, stop from khole
+order by sid, start
+`
+
+func (q *Queries) ListKHoles(ctx context.Context) ([]*KHole, error) {
+	rows, err := q.db.Query(ctx, listKHoles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*KHole{}
+	for rows.Next() {
+		var i KHole
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sid,
+			&i.Timeframe,
+			&i.Start,
+			&i.Stop,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listKInfos = `-- name: ListKInfos :many
@@ -446,7 +477,7 @@ and enter_at <= $3
 `
 
 type ListTaskPairsParams struct {
-	TaskID    int32
+	TaskID    int64
 	EnterAt   int64
 	EnterAt_2 int64
 }
@@ -526,8 +557,8 @@ update exorder set
 `
 
 type SetExOrderParams struct {
-	TaskID    int32
-	InoutID   int32
+	TaskID    int64
+	InoutID   int64
 	Symbol    string
 	Enter     bool
 	OrderType string
@@ -592,9 +623,9 @@ update iorder set
 `
 
 type SetIOrderParams struct {
-	TaskID     int32
+	TaskID     int64
 	Symbol     string
-	Sid        int64
+	Sid        int32
 	Timeframe  string
 	Short      bool
 	Status     int16
@@ -660,7 +691,7 @@ where sid = $1 and timeframe = $2
 `
 
 type SetKInfoParams struct {
-	Sid       int64
+	Sid       int32
 	Timeframe string
 	Start     int64
 	Stop      int64
@@ -682,7 +713,7 @@ where id = $1
 `
 
 type SetListMSParams struct {
-	ID       int64
+	ID       int32
 	ListMs   int64
 	DelistMs int64
 }

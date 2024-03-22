@@ -164,6 +164,9 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 		table.Append([]string{"Worst Order", worstVal + "  " + worstPct + "%"})
 	}
 	table.Append([]string{"Max Assets", strconv.FormatFloat(r.MaxReal, 'f', 1, 64)})
+	if r.MinReal > r.MaxReal {
+		r.MinReal = r.MaxReal
+	}
 	table.Append([]string{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)})
 	// 计算图表上的最大回撤
 	drawDownRate := strconv.FormatFloat(r.Plots.calcDrawDown()*100, 'f', 1, 64) + "%"

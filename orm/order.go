@@ -539,9 +539,9 @@ func (i *InOutOrder) TakeSnap() *InOutSnap {
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddIOrder(context.Background(), AddIOrderParams{
-		TaskID:     int32(i.TaskID),
+		TaskID:     i.TaskID,
 		Symbol:     i.Symbol,
-		Sid:        int64(i.Sid),
+		Sid:        i.Sid,
 		Timeframe:  i.Timeframe,
 		Short:      i.Short,
 		Status:     i.Status,
@@ -566,9 +566,9 @@ func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 
 func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 	err_ := sess.SetIOrder(context.Background(), SetIOrderParams{
-		TaskID:     int32(i.TaskID),
+		TaskID:     i.TaskID,
 		Symbol:     i.Symbol,
-		Sid:        int64(i.Sid),
+		Sid:        i.Sid,
 		Timeframe:  i.Timeframe,
 		Short:      i.Short,
 		Status:     i.Status,
@@ -595,8 +595,8 @@ func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddExOrder(context.Background(), AddExOrderParams{
-		TaskID:    int32(i.TaskID),
-		InoutID:   int32(i.InoutID),
+		TaskID:    i.TaskID,
+		InoutID:   i.InoutID,
 		Symbol:    i.Symbol,
 		Enter:     i.Enter,
 		OrderType: i.OrderType,
@@ -620,8 +620,8 @@ func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 
 func (i *ExOrder) saveUpdate(sess *Queries) *errs.Error {
 	err_ := sess.SetExOrder(context.Background(), SetExOrderParams{
-		TaskID:    int32(i.TaskID),
-		InoutID:   int32(i.InoutID),
+		TaskID:    i.TaskID,
+		InoutID:   i.InoutID,
 		Symbol:    i.Symbol,
 		Enter:     i.Enter,
 		OrderType: i.OrderType,

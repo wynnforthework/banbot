@@ -58,6 +58,9 @@ values ($1, $2, $3, $4)
     returning *;
 
 
+-- name: ListKHoles :many
+select * from khole
+order by sid, start;
 
 -- name: GetKHoles :many
 select * from khole

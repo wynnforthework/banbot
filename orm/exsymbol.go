@@ -179,7 +179,7 @@ func InitListDates() *errs.Error {
 		if len(klines) > 0 {
 			exs.ListMs = klines[0].Time
 			err_ := sess.SetListMS(context.Background(), SetListMSParams{
-				ID:       int64(exs.ID),
+				ID:       exs.ID,
 				ListMs:   klines[0].Time,
 				DelistMs: 0,
 			})
