@@ -204,9 +204,15 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 	od.SetInfo(orm.OdInfoLegalCost, req.LegalCost)
 	if req.StopLoss > 0 {
 		od.SetInfo(orm.OdInfoStopLoss, req.StopLoss)
+		if req.StopLossLimit > 0 {
+			od.SetInfo(orm.OdInfoStopLossLimit, req.StopLossLimit)
+		}
 	}
 	if req.TakeProfit > 0 {
 		od.SetInfo(orm.OdInfoTakeProfit, req.TakeProfit)
+		if req.TakeProfitLimit > 0 {
+			od.SetInfo(orm.OdInfoTakeProfitLimit, req.TakeProfitLimit)
+		}
 	}
 	od.DirtyInfo = true
 	err := od.Save(sess)

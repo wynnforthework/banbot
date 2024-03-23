@@ -268,31 +268,64 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 	if slPrice == 0 && tpPrice == 0 {
 		return nil
 	}
-	var stopPrice float64
-	var exitTag string
-	if slPrice > 0 && (od.Short && bar.High >= slPrice || !od.Short && bar.Low <= slPrice) {
+	slHit := od.GetInfoBool(orm.OdInfoStopLossHit)
+	tpHit := od.GetInfoBool(orm.OdInfoTakeProfitHit)
+	if !slHit {
 		// 空单止损，最高价超过止损价触发
 		// 多单止损，最低价跌破止损价触发
-		stopPrice = slPrice
-		exitTag = core.ExitTagStopLoss
-	} else if tpPrice > 0 && (od.Short && bar.Low <= tpPrice || !od.Short && bar.High >= tpPrice) {
+		slHit = slPrice > 0 && (od.Short && bar.High >= slPrice || !od.Short && bar.Low <= slPrice)
+	} else if !tpHit {
 		// 空单止盈，最低价跌破止盈价触发
 		// 多单止盈，最高价突破止盈价触发
-		stopPrice = tpPrice
-		exitTag = core.ExitTagTakeProfit
+		tpHit = tpPrice > 0 && (od.Short && bar.Low <= tpPrice || !od.Short && bar.High >= tpPrice)
+	}
+	if !slHit && !tpHit {
+		// 止损和止盈都未触发
+		return nil
+	}
+	od.SetInfo(orm.OdInfoStopLossHit, slHit)
+	od.SetInfo(orm.OdInfoTakeProfitHit, tpHit)
+	tfSecs := float64(utils2.TFToSecs(od.Timeframe))
+	odType := banexg.OdTypeMarket
+	getExcPrice := func(trigPrice, limit float64) float64 {
+		if limit > 0 {
+			if od.Short && limit < bar.Low || !od.Short && limit > bar.High {
+				// 空单，平仓限价低于bar最低，不触发
+				// 多单，平仓限价高于bar最高，不触发
+				return 0
+			}
+			if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
+				// 空单，平仓限价低于触发价，可能是限价单
+				// 多单，平仓限价高于触发价，可能是限价单
+				trigRate := simMarketRate(bar, trigPrice, od.Short)
+				rate := simMarketRate(bar, limit, od.Short)
+				if (rate-trigRate)*tfSecs > 30 {
+					// 触发后，限价单超过30s成交，认为限价单
+					odType = banexg.OdTypeLimit
+				}
+				return limit
+			}
+		}
+		return trigPrice
+	}
+	var stopPrice float64
+	var exitTag string
+	if slHit {
+		// 触发止损，计算执行价格
+		stopPrice = getExcPrice(slPrice, od.GetInfoFloat64(orm.OdInfoStopLossLimit))
+		exitTag = core.ExitTagStopLoss
 	} else {
+		// 触发止盈，计算执行价格
+		stopPrice = getExcPrice(tpPrice, od.GetInfoFloat64(orm.OdInfoTakeProfitLimit))
+		exitTag = core.ExitTagTakeProfit
+	}
+	if stopPrice == 0 {
 		return nil
 	}
 	curMS := btime.TimeMS()
-	tfSecs := utils2.TFToSecs(od.Timeframe)
-	odType := banexg.OdTypeMarket
 	rate := simMarketRate(bar, stopPrice, od.Short)
-	if int((curMS-od.Enter.UpdateAt)/1000) <= tfSecs && rate*float64(tfSecs) < 60 {
-		// 前一个bar进，当前bar立刻出。此时止损单可能市价成交而非限价
-		odType = banexg.OdTypeMarket
-	}
 	err := od.LocalExit(exitTag, stopPrice, "", odType)
-	cutSecs := float64(tfSecs) * (1 - rate)
+	cutSecs := tfSecs * (1 - rate)
 	od.ExitAt = curMS - int64(cutSecs*1000)
 	od.DirtyMain = true
 	if od.Exit != nil {

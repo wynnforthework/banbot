@@ -78,18 +78,20 @@ EnterReq
 打开一个订单。默认开多。如需开空short=False
 */
 type EnterReq struct {
-	Tag        string  // 入场信号
-	StgyName   string  // 策略名称
-	Short      bool    // 是否做空
-	OrderType  int     // 订单类型, core.OrderType*
-	Limit      float64 //限价单入场价格，指定时订单将作为限价单提交
-	CostRate   float64 //开仓倍率、默认按配置1倍。用于计算LegalCost
-	LegalCost  float64 //花费法币金额。指定时忽略CostRate
-	Leverage   int     // 杠杆倍数
-	Amount     float64 //入场标的数量，由LegalCost和price计算
-	StopLoss   float64 //止损价格，不为空时在交易所提交一个止损单
-	TakeProfit float64 //止盈价格，不为空时在交易所提交一个止盈单。
-	StopBars   int     // 入场限价单超过多少个bar未成交则取消
+	Tag             string  // 入场信号
+	StgyName        string  // 策略名称
+	Short           bool    // 是否做空
+	OrderType       int     // 订单类型, core.OrderType*
+	Limit           float64 // 限价单入场价格，指定时订单将作为限价单提交
+	CostRate        float64 // 开仓倍率、默认按配置1倍。用于计算LegalCost
+	LegalCost       float64 // 花费法币金额。指定时忽略CostRate
+	Leverage        int     // 杠杆倍数
+	Amount          float64 // 入场标的数量，由LegalCost和price计算
+	StopLoss        float64 // 止损触发价格，不为空时在交易所提交一个止损单
+	StopLossLimit   float64 // 止损限制价格，不提供使用StopLoss
+	TakeProfit      float64 // 止盈价格，不为空时在交易所提交一个止盈单。
+	TakeProfitLimit float64 // 止盈限制价格，不提供使用TakeProfit
+	StopBars        int     // 入场限价单超过多少个bar未成交则取消
 }
 
 /*

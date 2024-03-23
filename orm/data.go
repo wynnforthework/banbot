@@ -31,9 +31,13 @@ const (
 )
 
 const (
-	OdInfoStopLoss          = "StopLossPrice"
+	OdInfoStopLoss          = "StopLossPrice" // 止损触发价格
+	OdInfoStopLossHit       = "StopLossHit"   // 止损是否已触发
+	OdInfoStopLossLimit     = "StopLossLimit" // 止损限制价格，未提供使用OdInfoStopLoss
 	OdInfoStopLossOrderId   = "StopLossOrderId"
-	OdInfoTakeProfit        = "TakeProfitPrice"
+	OdInfoTakeProfit        = "TakeProfitPrice" // 止盈触发价格
+	OdInfoTakeProfitHit     = "TakeProfitHit"   // 止盈是否已触发
+	OdInfoTakeProfitLimit   = "TakeProfitLimit" // 止盈限制价格，未提供使用OdInfoTakeProfit
 	OdInfoTakeProfitOrderId = "TakeProfitOrderId"
 	OdInfoLegalCost         = "LegalCost"
 	OdInfoStopAfter         = "StopAfter"

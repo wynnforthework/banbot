@@ -1146,14 +1146,8 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		return err
 	}
 	if isEnter {
-		stopLoss := od.GetInfoFloat64(orm.OdInfoStopLoss)
-		if stopLoss > 0 {
-			editTriggerOd(od, "StopLoss")
-		}
-		takeProfit := od.GetInfoFloat64(orm.OdInfoTakeProfit)
-		if takeProfit > 0 {
-			editTriggerOd(od, "TakeProfit")
-		}
+		editTriggerOd(od, "StopLoss")
+		editTriggerOd(od, "TakeProfit")
 	} else {
 		// 平仓，取消关联订单
 		cancelTriggerOds(od)
@@ -1594,8 +1588,22 @@ func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Erro
 }
 
 func editTriggerOd(od *orm.InOutOrder, prefix string) {
+	trigPrice := od.GetInfoFloat64(prefix + "Price")
 	orderId := od.GetInfoString(prefix + "OrderId")
 	account := orm.GetTaskAcc(od.TaskID)
+	if trigPrice <= 0 {
+		// 未设置止损/止盈，或需要撤销
+		if orderId != "" {
+			_, err := exg.Default.CancelOrder(orderId, od.Symbol, map[string]interface{}{
+				banexg.ParamAccount: account,
+			})
+			if err != nil {
+				log.Error("cancel old trigger fail", zap.String("key", od.Key()), zap.Error(err))
+			}
+			od.SetInfo(prefix+"OrderId", nil)
+		}
+		return
+	}
 	params := map[string]interface{}{
 		banexg.ParamAccount:       account,
 		banexg.ParamClientOrderId: od.ClientId(true),
@@ -1606,33 +1614,27 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 			params[banexg.ParamPositionSide] = "SHORT"
 		}
 	}
-	trigPrice := od.GetInfoFloat64(prefix + "Price")
-	if trigPrice <= 0 {
-		log.Error("invalid trigger price", zap.String("key", od.Key()), zap.Float64("price", trigPrice),
-			zap.String("type", prefix))
-		return
-	}
-	var odType = config.OrderType
-	if od.Status >= orm.InOutStatusFullEnter {
-		// 订单已完全入场时，使用相反方向的限价单取代止损单，降低手续费
+	limitPrice := od.GetInfoFloat64(prefix + "Limit")
+	var odType = banexg.OdTypeMarket
+	if limitPrice > 0 {
 		odType = banexg.OdTypeLimit
 	} else {
-		// 尚未完全入场，使用触发订单
-		params[banexg.ParamClosePosition] = true
-		if prefix == "StopLoss" {
-			params[banexg.ParamStopLossPrice] = trigPrice
-		} else if prefix == "TakeProfit" {
-			params[banexg.ParamTakeProfitPrice] = trigPrice
-		} else {
-			log.Error("invalid trigger ", zap.String("prefix", prefix))
-			return
-		}
+		limitPrice = trigPrice
+	}
+	params[banexg.ParamClosePosition] = true
+	if prefix == "StopLoss" {
+		params[banexg.ParamStopLossPrice] = trigPrice
+	} else if prefix == "TakeProfit" {
+		params[banexg.ParamTakeProfitPrice] = trigPrice
+	} else {
+		log.Error("invalid trigger ", zap.String("prefix", prefix))
+		return
 	}
 	side := banexg.OdSideSell
 	if od.Short {
 		side = banexg.OdSideBuy
 	}
-	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, od.Enter.Amount, trigPrice, params)
+	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, od.Enter.Amount, limitPrice, params)
 	if err != nil {
 		log.Error("put trigger order fail", zap.String("key", od.Key()), zap.Error(err))
 	}

@@ -68,6 +68,16 @@ func (i *InOutOrder) GetInfoInt64(key string) int64 {
 	return utils.ConvertInt64(val)
 }
 
+func (i *InOutOrder) GetInfoBool(key string) bool {
+	i.loadInfo()
+	val, ok := i.Info[key]
+	if !ok {
+		return false
+	}
+	resVal, _ := val.(bool)
+	return resVal
+}
+
 func (i *InOutOrder) GetInfoString(key string) string {
 	i.loadInfo()
 	return utils2.GetMapVal(i.Info, key, "")
@@ -517,10 +527,12 @@ func (i *InOutOrder) ClientId(random bool) string {
 }
 
 type InOutSnap struct {
-	EnterLimit float64
-	ExitLimit  float64
-	StopLoss   float64
-	TakeProfit float64
+	EnterLimit      float64
+	ExitLimit       float64
+	StopLoss        float64
+	TakeProfit      float64
+	StopLossLimit   float64
+	TakeProfitLimit float64
 }
 
 func (i *InOutOrder) TakeSnap() *InOutSnap {
@@ -533,6 +545,8 @@ func (i *InOutOrder) TakeSnap() *InOutSnap {
 	}
 	snap.StopLoss = i.GetInfoFloat64(OdInfoStopLoss)
 	snap.TakeProfit = i.GetInfoFloat64(OdInfoTakeProfit)
+	snap.StopLossLimit = i.GetInfoFloat64(OdInfoStopLossLimit)
+	snap.TakeProfitLimit = i.GetInfoFloat64(OdInfoTakeProfitLimit)
 	return snap
 }
 
