@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/jackc/pgx/v5"
+	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 	"slices"
 	"sort"
@@ -947,45 +948,20 @@ func tryFillHoles(sess *Queries) *errs.Error {
 	badIds := make([]int64, 0, len(rows)/10)
 	curSid := int32(0)
 	var exs *ExSymbol
-	var filleds [][3]int64  // 已填充的区间[]tfMSecs,start,stop
+	var editNum int
 	var newHoles [][4]int64 // 需要新增的记录[]sid,tfMSecs,start,stop
 	for _, row := range rows {
 		if row.Sid != curSid {
 			curSid = row.Sid
 			exs = GetSymbolByID(curSid)
-			filleds = nil
 		}
 		start, stop := row.Start, row.Stop
-		// 先检查小周期是否已填充
-		for _, f := range filleds {
-			if f[0] > row.TfMSecs {
-				continue
-			}
-			maxStart := max(f[1], start)
-			minEnd := min(f[2], stop)
-			if maxStart >= minEnd || start < maxStart && minEnd < stop {
-				continue
-			}
-			if start < f[1] {
-				// start < f1 < stop < f2
-				stop = f[1]
-			} else {
-				// f1 < start < f2 < stop
-				start = f[2]
-			}
-			if start >= stop {
-				break
-			}
-		}
-		if start >= stop {
-			badIds = append(badIds, row.ID)
-			continue
-		}
+		// 这里本来有从小周期检查已填充则跳过大周期KHole的逻辑，但因较大周期无法从特小周期归集，故这里取消。
+		// 每个周期应独立检索实际K线范围，确保范围正确
 		updateKHole := func(newStart, newStop int64) bool {
 			if newStart == 0 || newStop == 0 {
 				return false
 			}
-			filleds = append(filleds, [3]int64{row.TfMSecs, newStart, newStop})
 			if newStart == start && newStop == stop {
 				// 此区间被完全填充，添加到删除列表
 				badIds = append(badIds, row.ID)
@@ -1012,6 +988,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		if updateKHole(oldStart, oldStop) {
 			continue
 		}
+		// 下载K线，同时也会归集更高周期K线
 		saveNum, err := downOHLCV2DBRange(sess, exg.Default, exs, row.Timeframe, start, stop, 0, 0, nil)
 		if err != nil {
 			return err
@@ -1029,6 +1006,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		}
 		if start != row.Start || stop != row.Stop {
 			// 此区间被更新
+			editNum += 1
 			err_ = sess.SetKHole(ctx, SetKHoleParams{ID: row.ID, Start: start, Stop: stop})
 			if err_ != nil {
 				return errs.New(core.ErrDbExecFail, err_)
@@ -1058,6 +1036,8 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			return errs.New(core.ErrDbExecFail, err_)
 		}
 	}
+	log.Info(fmt.Sprintf("find kHoles %v, filled: %v, add: %v, edit: %v", len(holes),
+		len(badIds), len(newHoles), editNum))
 	return nil
 }
 
@@ -1071,6 +1051,10 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
+	// 显示进度条
+	pgTotal := int64(len(infos)) + int64(len(aggList))*10
+	pBar := progressbar.Default(pgTotal, "sync tf")
+	defer pBar.Close()
 	// 加载计算的区间
 	calcs := make(map[string]map[int32][2]int64)
 	for _, agg := range aggList {
@@ -1079,6 +1063,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 			return err
 		}
 		calcs[agg.TimeFrame] = ranges
+		_ = pBar.Add(10)
 	}
 	infoList := make([]*KInfoExt, 0, len(infos))
 	for _, info := range infos {
@@ -1104,6 +1089,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 			curSid = info.Sid
 		}
 		tfMap[info.Timeframe] = info
+		_ = pBar.Add(1)
 	}
 	return sess.SyncKlineSid(curSid, tfMap, calcs)
 }
