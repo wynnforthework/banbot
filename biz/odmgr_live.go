@@ -1607,12 +1607,22 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 		}
 	}
 	trigPrice := od.GetInfoFloat64(prefix + "Price")
-	if trigPrice > 0 {
-		params["closePosition"] = true
+	if trigPrice <= 0 {
+		log.Error("invalid trigger price", zap.String("key", od.Key()), zap.Float64("price", trigPrice),
+			zap.String("type", prefix))
+		return
+	}
+	var odType = config.OrderType
+	if od.Status >= orm.InOutStatusFullEnter {
+		// 订单已完全入场时，使用相反方向的限价单取代止损单，降低手续费
+		odType = banexg.OdTypeLimit
+	} else {
+		// 尚未完全入场，使用触发订单
+		params[banexg.ParamClosePosition] = true
 		if prefix == "StopLoss" {
-			params["stopLossPrice"] = trigPrice
+			params[banexg.ParamStopLossPrice] = trigPrice
 		} else if prefix == "TakeProfit" {
-			params["takeProfitPrice"] = trigPrice
+			params[banexg.ParamTakeProfitPrice] = trigPrice
 		} else {
 			log.Error("invalid trigger ", zap.String("prefix", prefix))
 			return
@@ -1622,7 +1632,7 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 	if od.Short {
 		side = banexg.OdSideBuy
 	}
-	res, err := exg.Default.CreateOrder(od.Symbol, config.OrderType, side, od.Enter.Amount, trigPrice, params)
+	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, od.Enter.Amount, trigPrice, params)
 	if err != nil {
 		log.Error("put trigger order fail", zap.String("key", od.Key()), zap.Error(err))
 	}

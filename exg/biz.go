@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/bex"
 	"github.com/banbox/banexg/errs"
+	"github.com/mitchellh/mapstructure"
 )
 
 func Setup() *errs.Error {
@@ -32,7 +33,17 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	var cfg = config.GetExgConfig()
 	var options = map[string]interface{}{}
 	for key, val := range cfg.Options {
-		options[utils.SnakeToCamel(key)] = val
+		key = utils.SnakeToCamel(key)
+		if key == banexg.OptFees {
+			var target = make(map[string]map[string]float64)
+			err_ := mapstructure.Decode(val, &target)
+			if err_ != nil {
+				return nil, errs.New(core.ErrBadConfig, err_)
+			}
+			options[key] = target
+		} else {
+			options[key] = val
+		}
 	}
 	accs := map[string]map[string]interface{}{}
 	for key, acc := range config.Accounts {
