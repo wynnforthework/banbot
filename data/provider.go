@@ -257,7 +257,8 @@ func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[strin
 	for key, val := range sinceMap {
 		pair := strings.Split(key, "|")[0]
 		if oldVal, ok := pairSince[pair]; ok && oldVal > 0 {
-			pairSince[pair] = min(oldVal, val)
+			// 大周期的sinceMS可能小于小周期的，这里应该取最大时间。
+			pairSince[pair] = max(oldVal, val)
 		} else {
 			pairSince[pair] = val
 		}
