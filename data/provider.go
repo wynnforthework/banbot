@@ -263,13 +263,16 @@ func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[strin
 			pairSince[pair] = val
 		}
 	}
+	maxSince := int64(0)
 	for pair, since := range pairSince {
 		hold, ok := p.holders[pair]
 		if !ok {
 			continue
 		}
 		hold.initNext(since)
+		maxSince = max(maxSince, since)
 	}
+	btime.CurTimeMS = maxSince
 	return err
 }
 
@@ -309,7 +312,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			return a.getSymbol() < b.getSymbol()
 		})
 		hold := holds[0]
-		if hold.getNextMS() > btime.TimeMS() {
+		if hold.getNextMS() == math.MaxInt64 {
 			break
 		}
 		// 触发回调

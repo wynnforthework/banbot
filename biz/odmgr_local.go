@@ -138,6 +138,10 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 		var err *errs.Error
 		if exOrder.Enter {
 			err = o.fillPendingEnter(od, price, fillMS)
+			if err == nil {
+				// 入场后可能立刻触发止损/止盈
+				err = o.tryFillTriggers(od, &bar.Kline)
+			}
 		} else {
 			err = o.fillPendingExit(od, price, fillMS)
 		}
@@ -209,6 +213,10 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 	if exOrder.CreateAt == 0 {
 		exOrder.CreateAt = updateTime
 	}
+	if exOrder.OrderType == banexg.OdTypeLimit && updateTime-od.EnterAt < 60000 {
+		// 以限价单入场，但很快成交的话，认为是市价单成交
+		exOrder.OrderType = banexg.OdTypeMarket
+	}
 	if exOrder.Filled == 0 {
 		// 将EnterAt更新为实际入场时间
 		od.EnterAt = updateTime
@@ -260,23 +268,32 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 	if slPrice == 0 && tpPrice == 0 {
 		return nil
 	}
-	var err *errs.Error
-	var rate float64
+	var stopPrice float64
+	var exitTag string
 	if slPrice > 0 && (od.Short && bar.High >= slPrice || !od.Short && bar.Low <= slPrice) {
 		// 空单止损，最高价超过止损价触发
 		// 多单止损，最低价跌破止损价触发
-		rate = simMarketRate(bar, slPrice, od.Short)
-		err = od.LocalExit(core.ExitTagStopLoss, slPrice, "", banexg.OdTypeLimit)
+		stopPrice = slPrice
+		exitTag = core.ExitTagStopLoss
 	} else if tpPrice > 0 && (od.Short && bar.Low <= tpPrice || !od.Short && bar.High >= tpPrice) {
 		// 空单止盈，最低价跌破止盈价触发
 		// 多单止盈，最高价突破止盈价触发
-		rate = simMarketRate(bar, tpPrice, od.Short)
-		err = od.LocalExit(core.ExitTagTakeProfit, tpPrice, "", banexg.OdTypeLimit)
+		stopPrice = tpPrice
+		exitTag = core.ExitTagTakeProfit
 	} else {
 		return nil
 	}
-	cutSecs := float64(utils2.TFToSecs(od.Timeframe)) * (1 - rate)
-	od.ExitAt = btime.TimeMS() - int64(cutSecs*1000)
+	curMS := btime.TimeMS()
+	tfSecs := utils2.TFToSecs(od.Timeframe)
+	odType := banexg.OdTypeMarket
+	rate := simMarketRate(bar, stopPrice, od.Short)
+	if int((curMS-od.Enter.UpdateAt)/1000) <= tfSecs && rate*float64(tfSecs) < 60 {
+		// 前一个bar进，当前bar立刻出。此时止损单可能市价成交而非限价
+		odType = banexg.OdTypeMarket
+	}
+	err := od.LocalExit(exitTag, stopPrice, "", odType)
+	cutSecs := float64(tfSecs) * (1 - rate)
+	od.ExitAt = curMS - int64(cutSecs*1000)
 	od.DirtyMain = true
 	if od.Exit != nil {
 		od.Exit.UpdateAt = od.ExitAt
