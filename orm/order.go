@@ -19,6 +19,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 const (
@@ -31,6 +33,11 @@ func (i *InOutOrder) SetInfo(key string, val interface{}) {
 	if val == nil {
 		delete(i.Info, key)
 	} else {
+		oldVal, _ := i.Info[key]
+		if val == oldVal {
+			// 无需修改
+			return
+		}
 		i.Info[key] = val
 	}
 	i.DirtyInfo = true
@@ -408,6 +415,7 @@ func (i *InOutOrder) Save(sess *Queries) *errs.Error {
 			delete(openOds, i.ID)
 		}
 		lock.Unlock()
+		delete(lockOds, i.Key())
 	} else {
 		i.saveToMem()
 	}
@@ -548,6 +556,31 @@ func (i *InOutOrder) TakeSnap() *InOutSnap {
 	snap.StopLossLimit = i.GetInfoFloat64(OdInfoStopLossLimit)
 	snap.TakeProfitLimit = i.GetInfoFloat64(OdInfoTakeProfitLimit)
 	return snap
+}
+
+/*
+返回修改当前订单的锁，返回成功表示已获取锁
+*/
+func (i *InOutOrder) Lock() *sync.Mutex {
+	odKey := i.Key()
+	lock, ok := lockOds[odKey]
+	if !ok {
+		lock = &sync.Mutex{}
+		lockOds[odKey] = lock
+	}
+	var got = false
+	if core.LiveMode {
+		// 实时模式，增加死锁检测
+		time.AfterFunc(time.Second*5, func() {
+			if got {
+				return
+			}
+			log.Error("order DeadLock found", zap.String("key", odKey))
+		})
+	}
+	lock.Lock()
+	got = true
+	return lock
 }
 
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
