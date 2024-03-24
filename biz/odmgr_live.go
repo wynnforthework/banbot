@@ -770,11 +770,9 @@ func (o *LiveOrderMgr) handleOrderQueue(od *orm.InOutOrder, action string) {
 		err = o.execOrderEnter(od)
 	case orm.OdActionExit:
 		err = o.execOrderExit(od)
-	case orm.OdActionStopLoss:
-	case orm.OdActionTakeProfit:
-		editTriggerOd(od, action)
-	case orm.OdActionLimitEnter:
-	case orm.OdActionLimitExit:
+	case orm.OdActionStopLoss, orm.OdActionTakeProfit:
+		o.editTriggerOd(od, action)
+	case orm.OdActionLimitEnter, orm.OdActionLimitExit:
 		err = o.editLimitOd(od, action)
 	default:
 		log.Error("unknown od action", zap.String("action", action), zap.String("key", od.Key()))
@@ -870,8 +868,8 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	if iod.IsDirty() {
 		if iod.Status == orm.InOutStatusFullEnter {
 			// 仅在完全入场后，下止损止盈单
-			editTriggerOd(iod, orm.OdActionStopLoss)
-			editTriggerOd(iod, orm.OdActionTakeProfit)
+			o.editTriggerOd(iod, orm.OdActionStopLoss)
+			o.editTriggerOd(iod, orm.OdActionTakeProfit)
 		}
 		err = iod.Save(nil)
 		if err != nil {
@@ -1166,8 +1164,8 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 	if isEnter {
 		if od.Status == orm.InOutStatusFullEnter {
 			// 仅在完全入场后，下止损止盈单
-			editTriggerOd(od, orm.OdActionStopLoss)
-			editTriggerOd(od, orm.OdActionTakeProfit)
+			o.editTriggerOd(od, orm.OdActionStopLoss)
+			o.editTriggerOd(od, orm.OdActionTakeProfit)
 		}
 	} else {
 		// 平仓，取消关联订单
@@ -1615,12 +1613,20 @@ func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Erro
 	return o.updateOdByExgRes(od, subOd.Enter, res)
 }
 
-func editTriggerOd(od *orm.InOutOrder, prefix string) {
-	if !od.DirtyInfo {
-		// 未修改，跳过
+func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
+	if od.Status >= orm.InOutStatusFullExit {
 		return
 	}
 	trigPrice := od.GetInfoFloat64(prefix + "Price")
+	limitPrice := od.GetInfoFloat64(prefix + "Limit")
+	oldTrigPrice := od.GetInfoFloat64(prefix + "PriceOld")
+	oldLimitPrice := od.GetInfoFloat64(prefix + "LimitOld")
+	if trigPrice == oldTrigPrice && limitPrice == oldLimitPrice {
+		// 和上次完全一样，无需重新提交
+		return
+	}
+	od.SetInfo(prefix+"PriceOld", trigPrice)
+	od.SetInfo(prefix+"LimitOld", limitPrice)
 	orderId := od.GetInfoString(prefix + "OrderId")
 	account := orm.GetTaskAcc(od.TaskID)
 	if trigPrice <= 0 {
@@ -1646,7 +1652,6 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 			params[banexg.ParamPositionSide] = "SHORT"
 		}
 	}
-	limitPrice := od.GetInfoFloat64(prefix + "Limit")
 	var odType = banexg.OdTypeMarket
 	if limitPrice > 0 {
 		odType = banexg.OdTypeLimit
@@ -1668,7 +1673,23 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 	}
 	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, od.Enter.Amount, limitPrice, params)
 	if err != nil {
-		log.Error("put trigger order fail", zap.String("key", od.Key()), zap.Error(err))
+		if err.BizCode == -2021 {
+			// 止损止盈立刻成交，则市价平仓
+			log.Warn("Order would immediately trigger, exit", zap.String("key", od.Key()))
+			od.SetExit(prefix, banexg.OdTypeMarket, 0)
+			err = o.execOrderExit(od)
+			if err != nil {
+				log.Error("exit order by trigger fail", zap.String("key", od.Key()), zap.Error(err))
+			}
+			err = od.Save(nil)
+			if err != nil {
+				log.Error("save order by trigger fail", zap.String("key", od.Key()), zap.Error(err))
+			}
+		} else {
+			// 更新止损止盈失败时，不取消旧的止盈止损
+			log.Error("put trigger order fail", zap.String("key", od.Key()), zap.Error(err))
+		}
+		return
 	}
 	if res != nil {
 		od.SetInfo(prefix+"OrderId", res.ID)
