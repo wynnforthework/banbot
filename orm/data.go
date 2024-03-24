@@ -42,3 +42,12 @@ const (
 	OdInfoLegalCost         = "LegalCost"
 	OdInfoStopAfter         = "StopAfter"
 )
+
+const (
+	OdActionEnter      = "Enter"
+	OdActionExit       = "Exit"
+	OdActionLimitEnter = "LimitEnter"
+	OdActionLimitExit  = "LimitExit"
+	OdActionStopLoss   = "StopLoss"
+	OdActionTakeProfit = "TakeProfit"
+)

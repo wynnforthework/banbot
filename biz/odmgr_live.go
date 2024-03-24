@@ -311,7 +311,7 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 		} else {
 			// 这里OrderID一定为空，并且入场单数量一定有成交的。
 			o.queue <- &OdQItem{
-				Action: "exit",
+				Action: orm.OdActionExit,
 				Order:  od,
 			}
 		}
@@ -699,7 +699,7 @@ func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enter
 		return ents, extOrders, err
 	}
 	for _, edit := range edits {
-		if edit.Action == "LimitEnter" && isFarLimit(edit.Order.Enter) {
+		if edit.Action == orm.OdActionLimitEnter && isFarLimit(edit.Order.Enter) {
 			orm.AddTriggerOd(o.Account, edit.Order)
 			continue
 		}
@@ -721,7 +721,7 @@ func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 		}
 		o.queue <- &OdQItem{
 			Order:  order,
-			Action: "enter",
+			Action: orm.OdActionEnter,
 		}
 		return nil
 	}
@@ -733,7 +733,7 @@ func makeAfterExit(o *LiveOrderMgr) FuncHandleIOrder {
 			zap.String("exitTag", order.ExitTag))
 		o.queue <- &OdQItem{
 			Order:  order,
-			Action: "exit",
+			Action: orm.OdActionExit,
 		}
 		return nil
 	}
@@ -759,15 +759,15 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 			var err *errs.Error
 			var od = item.Order
 			switch item.Action {
-			case "enter":
+			case orm.OdActionEnter:
 				err = o.execOrderEnter(od)
-			case "exit":
+			case orm.OdActionExit:
 				err = o.execOrderExit(od)
-			case "StopLoss":
-			case "TakeProfit":
+			case orm.OdActionStopLoss:
+			case orm.OdActionTakeProfit:
 				editTriggerOd(od, item.Action)
-			case "LimitEnter":
-			case "LimitExit":
+			case orm.OdActionLimitEnter:
+			case orm.OdActionLimitExit:
 				err = o.editLimitOd(od, item.Action)
 			default:
 				log.Error("unknown od action", zap.String("action", item.Action), zap.String("key", od.Key()))
@@ -782,7 +782,7 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 					log.Error("save od for exg status fail", zap.String("key", od.Key()), zap.Error(err))
 				}
 			}
-			if item.Action == "enter" {
+			if item.Action == orm.OdActionEnter {
 				if od.Enter.OrderID != "" && od.Status < orm.InOutStatusFullExit {
 					log.Info("Enter Order Submitted", zap.String("acc", o.Account),
 						zap.String("key", od.Key()))
@@ -790,7 +790,7 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 					log.Info("Enter Order Closed", zap.String("acc", o.Account),
 						zap.String("key", od.Key()), zap.String("exitTag", od.ExitTag))
 				}
-			} else if item.Action == "exit" {
+			} else if item.Action == orm.OdActionExit {
 				if od.Exit.OrderID != "" {
 					log.Info("Exit Order Submitted", zap.String("acc", o.Account),
 						zap.String("key", od.Key()), zap.Int16("state", od.Status))
@@ -1132,9 +1132,9 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		banexg.ParamClientOrderId: od.ClientId(true),
 	}
 	if core.IsContract {
-		params["positionSide"] = "LONG"
+		params[banexg.ParamPositionSide] = "LONG"
 		if od.Short {
-			params["positionSide"] = "SHORT"
+			params[banexg.ParamPositionSide] = "SHORT"
 		}
 	}
 	res, err := exchange.CreateOrder(od.Symbol, subOd.OrderType, side, amount, price, params)
@@ -1146,8 +1146,8 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		return err
 	}
 	if isEnter {
-		editTriggerOd(od, "StopLoss")
-		editTriggerOd(od, "TakeProfit")
+		editTriggerOd(od, orm.OdActionStopLoss)
+		editTriggerOd(od, orm.OdActionTakeProfit)
 	} else {
 		// 平仓，取消关联订单
 		cancelTriggerOds(od)
@@ -1452,9 +1452,9 @@ func verifyAccountTriggerOds(account string) {
 		if od.Status >= orm.InOutStatusFullExit {
 			continue
 		}
-		tag := "enter"
+		tag := orm.OdActionEnter
 		if od.Exit != nil {
-			tag = "exit"
+			tag = orm.OdActionExit
 		}
 		odMgr.queue <- &OdQItem{
 			Order:  od,
@@ -1560,7 +1560,7 @@ func cancelAccountOldLimits(account string) {
 
 func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Error {
 	subOd := od.Enter
-	if action == "LimitExit" {
+	if action == orm.OdActionLimitExit {
 		subOd = od.Exit
 	}
 	exchange := exg.Default
@@ -1622,9 +1622,9 @@ func editTriggerOd(od *orm.InOutOrder, prefix string) {
 		limitPrice = trigPrice
 	}
 	params[banexg.ParamClosePosition] = true
-	if prefix == "StopLoss" {
+	if prefix == orm.OdActionStopLoss {
 		params[banexg.ParamStopLossPrice] = trigPrice
-	} else if prefix == "TakeProfit" {
+	} else if prefix == orm.OdActionTakeProfit {
 		params[banexg.ParamTakeProfitPrice] = trigPrice
 	} else {
 		log.Error("invalid trigger ", zap.String("prefix", prefix))

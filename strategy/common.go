@@ -165,7 +165,7 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 				// 修改入场价格
 				res = append(res, &orm.InOutEdit{
 					Order:  od,
-					Action: "LimitEnter",
+					Action: orm.OdActionLimitEnter,
 				})
 			}
 		} else {
@@ -182,7 +182,7 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 				}
 			} else if old != nil && (old.StopLoss != shot.StopLoss || old.StopLossLimit != shot.StopLossLimit) {
 				// 在其他地方更新了止损
-				res = append(res, &orm.InOutEdit{Order: od, Action: "StopLoss"})
+				res = append(res, &orm.InOutEdit{Order: od, Action: orm.OdActionStopLoss})
 			}
 			if tpEdit != nil {
 				if tpEdit.Action == "" {
@@ -192,13 +192,13 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 				}
 			} else if old != nil && (old.TakeProfit != shot.TakeProfit || old.TakeProfitLimit != shot.TakeProfitLimit) {
 				// 在其他地方更新了止盈
-				res = append(res, &orm.InOutEdit{Order: od, Action: "TakeProfit"})
+				res = append(res, &orm.InOutEdit{Order: od, Action: orm.OdActionTakeProfit})
 			}
 			if old.ExitLimit != shot.ExitLimit {
 				// 修改出场价格
 				res = append(res, &orm.InOutEdit{
 					Order:  od,
-					Action: "LimitExit",
+					Action: orm.OdActionLimitExit,
 				})
 			}
 		}
@@ -238,7 +238,7 @@ func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOu
 		newTPLimit := od.GetInfoFloat64(orm.OdInfoTakeProfitLimit)
 		if newSLPrice != slPrice || slLimit != newSLLimit {
 			if s.ExgStopLoss {
-				slEdit = &orm.InOutEdit{Order: od, Action: "StopLoss"}
+				slEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionStopLoss}
 				od.SetInfo(orm.OdInfoStopLoss, newSLPrice)
 				od.SetInfo(orm.OdInfoStopLossLimit, newSLLimit)
 			} else {
@@ -249,7 +249,7 @@ func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOu
 		}
 		if newTPPrice != tpPrice || tpLimit != newTPLimit {
 			if s.ExgTakeProfit {
-				tpEdit = &orm.InOutEdit{Order: od, Action: "TakeProfit"}
+				tpEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionTakeProfit}
 				od.SetInfo(orm.OdInfoTakeProfit, newTPPrice)
 				od.SetInfo(orm.OdInfoTakeProfitLimit, newTPLimit)
 			} else {
