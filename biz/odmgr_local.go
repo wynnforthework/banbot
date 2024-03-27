@@ -69,12 +69,26 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 		}
 	}
 	var orders []*orm.InOutOrder
+	var oldStas []int16
 	for _, od := range allOpens {
 		if od.Symbol == bar.Symbol {
 			orders = append(orders, od)
+			oldStas = append(oldStas, od.Status)
 		}
 	}
 	_, err = o.fillPendingOrders(orders, bar)
+	var chgOds = make([]*orm.InOutOrder, 0, len(orders))
+	for i, od := range orders {
+		if od.Status != oldStas[i] {
+			chgOds = append(chgOds, od)
+		}
+	}
+	if len(chgOds) > 0 {
+		err = o.OrderMgr.UpdateByBar(chgOds, bar)
+		if err != nil {
+			return err
+		}
+	}
 	return err
 }
 
@@ -286,13 +300,12 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 	od.SetInfo(orm.OdInfoStopLossHit, slHit)
 	od.SetInfo(orm.OdInfoTakeProfitHit, tpHit)
 	tfSecs := float64(utils2.TFToSecs(od.Timeframe))
-	odType := banexg.OdTypeMarket
 	getExcPrice := func(trigPrice, limit float64) float64 {
 		if limit > 0 {
 			if od.Short && limit < bar.Low || !od.Short && limit > bar.High {
 				// 空单，平仓限价低于bar最低，不触发
 				// 多单，平仓限价高于bar最高，不触发
-				return 0
+				return -1
 			}
 			if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
 				// 空单，平仓限价低于触发价，可能是限价单
@@ -301,12 +314,11 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 				rate := simMarketRate(bar, limit, od.Short)
 				if (rate-trigRate)*tfSecs > 30 {
 					// 触发后，限价单超过30s成交，认为限价单
-					odType = banexg.OdTypeLimit
+					return limit
 				}
-				return limit
 			}
 		}
-		return trigPrice
+		return 0
 	}
 	var stopPrice float64
 	var exitTag string
@@ -319,11 +331,19 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 		stopPrice = getExcPrice(tpPrice, od.GetInfoFloat64(orm.OdInfoTakeProfitLimit))
 		exitTag = core.ExitTagTakeProfit
 	}
-	if stopPrice == 0 {
+	if stopPrice < 0 {
 		return nil
 	}
 	curMS := btime.TimeMS()
-	rate := simMarketRate(bar, stopPrice, od.Short)
+	rate := float64(0)
+	odType := banexg.OdTypeMarket
+	if stopPrice > 0 {
+		odType = banexg.OdTypeLimit
+		rate = simMarketRate(bar, stopPrice, od.Short)
+	} else {
+		// 市价止损，立刻卖出
+		stopPrice = bar.Open
+	}
 	err := od.LocalExit(exitTag, stopPrice, "", odType)
 	cutSecs := tfSecs * (1 - rate)
 	od.ExitAt = curMS - int64(cutSecs*1000)

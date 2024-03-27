@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/optmize"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -12,12 +13,13 @@ import (
 )
 
 var subHelp = map[string]string{
-	"trade":     "live trade",
-	"backtest":  "backtest with strategies and data",
-	"down_data": "download kline data",
-	"down_ws":   "download websocket data",
-	"dbcmd":     "run db command",
-	"spider":    "start the spider",
+	"trade":      "live trade",
+	"backtest":   "backtest with strategies and data",
+	"down_data":  "download kline data",
+	"down_ws":    "download websocket data",
+	"dbcmd":      "run db command",
+	"spider":     "start the spider",
+	"cmp_orders": "compare backTest orders with exchange orders",
 }
 
 const VERSION = "0.1.1"
@@ -29,6 +31,14 @@ func RunCmd() {
 		printAndExit()
 	}
 	cmdName := os.Args[1]
+	if cmdName == "cmp_orders" {
+		optmize.CompareExgBTOrders(os.Args[2:])
+	} else {
+		runMainEntrys(cmdName)
+	}
+}
+
+func runMainEntrys(cmdName string) {
 	var args config.CmdArgs
 
 	var sub = flag.NewFlagSet(cmdName, flag.ExitOnError)
