@@ -592,6 +592,10 @@ UpdateOds
 */
 func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 	if len(odList) == 0 {
+		for _, item := range w.Items {
+			item.UnrealizedPOL = 0
+			item.UsedUPol = 0
+		}
 		return nil
 	}
 
@@ -657,7 +661,7 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 			}
 		}
 		// 价格走势和预期相同。所需保证金增长
-		err := wallet.SetMargin(odKey, curMargin)
+		err = wallet.SetMargin(odKey, curMargin)
 		if err != nil {
 			log.Debug("cash lack, add margin fail", zap.String("od", odKey), zap.Error(err))
 		}

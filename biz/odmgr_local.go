@@ -45,12 +45,24 @@ func (o *LocalOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, ente
 }
 
 func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKline) *errs.Error {
-	err := o.OrderMgr.UpdateByBar(allOpens, bar)
+	if len(allOpens) == 0 || core.EnvReal {
+		return nil
+	}
+	// 模拟订单入场出场，入场出场一般在bar开始时执行
+	var curOrders []*orm.InOutOrder
+	for _, od := range allOpens {
+		if od.Symbol == bar.Symbol {
+			curOrders = append(curOrders, od)
+		}
+	}
+	_, err := o.fillPendingOrders(curOrders, bar)
 	if err != nil {
 		return err
 	}
-	if len(allOpens) == 0 || core.EnvReal {
-		return nil
+	// 更新所有订单在bar结束时利润
+	err = o.OrderMgr.UpdateByBar(allOpens, bar)
+	if err != nil {
+		return err
 	}
 	if core.IsContract {
 		// 为合约更新此定价币的所有订单保证金和钱包情况
@@ -58,36 +70,12 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 		var orders []*orm.InOutOrder
 		for _, od := range allOpens {
 			_, _, odSettle, _ := core.SplitSymbol(od.Symbol)
-			if odSettle == code {
+			if odSettle == code && od.Status < orm.InOutStatusFullExit {
 				orders = append(orders, od)
 			}
 		}
 		wallets := GetWallets(o.Account)
 		err = wallets.UpdateOds(orders)
-		if err != nil {
-			return err
-		}
-	}
-	var orders []*orm.InOutOrder
-	var oldStas []int16
-	for _, od := range allOpens {
-		if od.Symbol == bar.Symbol {
-			orders = append(orders, od)
-			oldStas = append(oldStas, od.Status)
-		}
-	}
-	_, err = o.fillPendingOrders(orders, bar)
-	var chgOds = make([]*orm.InOutOrder, 0, len(orders))
-	for i, od := range orders {
-		if od.Status != oldStas[i] {
-			chgOds = append(chgOds, od)
-		}
-	}
-	if len(chgOds) > 0 {
-		err = o.OrderMgr.UpdateByBar(chgOds, bar)
-		if err != nil {
-			return err
-		}
 	}
 	return err
 }
@@ -393,6 +381,12 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 		if err != nil {
 			return err
 		}
+	}
+	// 重置未实现盈亏
+	wallets := GetWallets(o.Account)
+	for _, item := range wallets.Items {
+		item.UnrealizedPOL = 0
+		item.UsedUPol = 0
 	}
 	// 过滤未入场订单
 	var validOds = make([]*orm.InOutOrder, 0, len(orm.HistODs))

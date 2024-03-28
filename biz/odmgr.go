@@ -371,7 +371,7 @@ UpdateByBar
 */
 func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKline) *errs.Error {
 	for _, od := range allOpens {
-		if od.Symbol != bar.Symbol || od.Timeframe != bar.TimeFrame {
+		if od.Symbol != bar.Symbol || od.Timeframe != bar.TimeFrame || od.Status >= orm.InOutStatusFullExit {
 			continue
 		}
 		od.UpdateProfits(bar.Close)
