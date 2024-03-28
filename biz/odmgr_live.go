@@ -976,23 +976,20 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 	var err *errs.Error
 	if od.Enter.Amount == 0 {
 		if od.QuoteCost == 0 {
-			legalCost := od.GetInfoFloat64(orm.OdInfoLegalCost)
-			if legalCost > 0 {
-				_, quote, _, _ := core.SplitSymbol(od.Symbol)
-				wallets := GetWallets(o.Account)
-				od.QuoteCost = wallets.GetAmountByLegal(quote, legalCost)
-				if od.QuoteCost == 0 {
-					// core.ForbidPairs[od.Symbol] = true
-					forceDelOd(errs.NewMsg(core.ErrRunTime, "no available"))
+			wallets := GetWallets(o.Account)
+			_, err = wallets.EnterOd(od)
+			if err != nil {
+				if err.Code == core.ErrLowFunds || err.Code == core.ErrInvalidCost {
+					forceDelOd(err)
 					return nil
+				} else {
+					msg := err.Short()
+					err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg, "")
+					if err != nil {
+						log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
+					}
+					return errs.NewMsg(core.ErrRunTime, msg+odKey)
 				}
-			} else {
-				msg := "QuoteCost is required for enter:"
-				err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg, "")
-				if err != nil {
-					log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
-				}
-				return errs.NewMsg(core.ErrRunTime, msg+odKey)
 			}
 		}
 		realPrice := core.GetPrice(od.Symbol)

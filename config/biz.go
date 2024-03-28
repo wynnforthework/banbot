@@ -139,6 +139,9 @@ func apply(args *CmdArgs) *errs.Error {
 		Data.OpenVolRate = 1
 	}
 	OpenVolRate = Data.OpenVolRate
+	if Data.MinOpenRate == 0 {
+		Data.MinOpenRate = 0.5
+	}
 	MinOpenRate = Data.MinOpenRate
 	if Data.MaxOpenOrders == 0 {
 		Data.MaxOpenOrders = 30
