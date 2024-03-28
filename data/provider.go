@@ -159,6 +159,10 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 				return
 			}
 			for tf, warmNum := range job.tfWarms {
+				key := fmt.Sprintf("%s|%s", symbol, tf)
+				lockMap.Lock()
+				sinceMap[key] = 0
+				lockMap.Unlock()
 				tfMSecs := int64(utils.TFToSecs(tf) * 1000)
 				if tfMSecs < int64(60000) {
 					stepCB(core.StepTotal)
@@ -182,7 +186,6 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 					log.Warn(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", exs.Symbol,
 						tf, lackNum, warmNum, barStartMs, barEndMs))
 				}
-				key := fmt.Sprintf("%s|%s", symbol, tf)
 				sinceVal := job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
 				lockMap.Lock()
 				sinceMap[key] = sinceVal
@@ -264,14 +267,18 @@ func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[strin
 		}
 	}
 	maxSince := int64(0)
+	holders := make(map[string]IHistKlineFeeder)
 	for pair, since := range pairSince {
 		hold, ok := p.holders[pair]
 		if !ok {
 			continue
 		}
+		holders[pair] = hold
 		hold.initNext(since)
 		maxSince = max(maxSince, since)
 	}
+	// 删除未预热的项
+	p.holders = holders
 	btime.CurTimeMS = maxSince
 	return err
 }
