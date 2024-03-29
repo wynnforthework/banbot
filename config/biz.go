@@ -143,6 +143,10 @@ func apply(args *CmdArgs) *errs.Error {
 		Data.MinOpenRate = 0.5
 	}
 	MinOpenRate = Data.MinOpenRate
+	if Data.BTNetCost == 0 {
+		Data.BTNetCost = 30
+	}
+	BTNetCost = Data.BTNetCost
 	if Data.MaxOpenOrders == 0 {
 		Data.MaxOpenOrders = 30
 	}

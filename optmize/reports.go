@@ -80,7 +80,7 @@ func (r *BTResult) printBtResult() {
 			Handle func([]*orm.InOutOrder) string
 		}{
 			{Title: " Pair Profits ", Handle: textGroupPairs},
-			{Title: " Day Profits ", Handle: textGroupDays},
+			{Title: " Date Profits ", Handle: textGroupDays},
 			{Title: " Profit Ranges ", Handle: textGroupProfitRanges},
 			{Title: " Enter Tag ", Handle: textGroupEntTags},
 			{Title: " Exit Tag ", Handle: textGroupExitTags},
@@ -238,8 +238,35 @@ func textGroupProfitRanges(orders []*orm.InOutOrder) string {
 }
 
 func textGroupDays(orders []*orm.InOutOrder) string {
+	units := []string{"1M", "1w", "1d", "6h", "1h"}
+	startMS, endMS := orders[0].EnterAt, orders[len(orders)-1].EnterAt
+	var bestTF string
+	var bestTFSecs int
+	var bestScore float64
+	// 查找分组的最佳粒度
+	for _, tf := range units {
+		tfSecs := utils.TFToSecs(tf)
+		grpNum := float64(endMS-startMS) / 1000 / float64(tfSecs)
+		numPerGp := float64(len(orders)) / grpNum
+		score1 := utils.MaxToZero(grpNum, 15)
+		score2 := utils.MaxToZero(numPerGp, 40)
+		curScore := score2 * score1
+		if curScore > bestScore {
+			bestTF = tf
+			bestTFSecs = tfSecs
+			bestScore = curScore
+		}
+	}
+	tfUnit := bestTF[1]
 	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
-		return btime.ToDateStr(od.EnterAt, "2006-01-02")
+		if tfUnit == 'M' {
+			return btime.ToDateStr(od.EnterAt, "2006-01")
+		} else if tfUnit == 'd' || tfUnit == 'w' {
+			enterMS := utils.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
+			return btime.ToDateStr(enterMS, "2006-01-02")
+		} else {
+			return btime.ToDateStr(od.EnterAt, "2006-01-02 15")
+		}
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title

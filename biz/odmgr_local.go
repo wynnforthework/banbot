@@ -16,10 +16,6 @@ import (
 	"strings"
 )
 
-const (
-	netCost = 30
-)
-
 type LocalOrderMgr struct {
 	OrderMgr
 }
@@ -111,7 +107,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 		}
 		price := exOrder.Price
 		odTFSecs := utils2.TFToSecs(od.Timeframe)
-		fillMS := btime.TimeMS() - int64(odTFSecs-netCost)*1000
+		fillMS := btime.TimeMS() - int64((float64(odTFSecs)-config.BTNetCost)*1000)
 		if bar == nil {
 			price = core.GetPrice(od.Symbol)
 		} else if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
@@ -134,7 +130,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 			fillMS = bar.Time + int64(float64(odTFSecs)*barRate)*1000
 		} else {
 			// 按网络延迟，模拟成交价格，和开盘价接近
-			rate := float64(netCost) / float64(odTFSecs)
+			rate := config.BTNetCost / float64(odTFSecs)
 			price = simMarketPrice(&bar.Kline, rate)
 		}
 		var err *errs.Error
@@ -323,7 +319,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 		return nil
 	}
 	curMS := btime.TimeMS()
-	rate := netCost / tfSecs
+	rate := config.BTNetCost / tfSecs
 	odType := banexg.OdTypeMarket
 	if stopPrice > 0 {
 		odType = banexg.OdTypeLimit

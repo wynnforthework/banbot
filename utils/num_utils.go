@@ -233,3 +233,12 @@ func StdDevVolatility(data []float64, rate float64) float64 {
 	stdDev := stat.StdDev(logRates, weights)
 	return stdDev * math.Sqrt(float64(totalNum))
 }
+
+/*
+MaxToZero
+公式：y=e^-abs(x-a)
+在给定的maxAt即a处，y取最大值1，x向两侧移动，y逐渐趋近于0，斜率由大变小
+*/
+func MaxToZero(x float64, maxAt float64) float64 {
+	return math.Exp(-math.Abs(x - maxAt))
+}

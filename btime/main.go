@@ -133,6 +133,7 @@ func dateToMS(layout, timeStr string) int64 {
 /*
 ToDateStr
 将时间戳转为时间字符串
+format为空时，默认2006-01-02 15:04:05
 */
 func ToDateStr(timestamp int64, format string) string {
 	var t time.Time
