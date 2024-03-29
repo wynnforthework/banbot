@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	netCost = 3
+	netCost = 30
 )
 
 type LocalOrderMgr struct {
@@ -323,14 +323,14 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 		return nil
 	}
 	curMS := btime.TimeMS()
-	rate := float64(0)
+	rate := netCost / tfSecs
 	odType := banexg.OdTypeMarket
 	if stopPrice > 0 {
 		odType = banexg.OdTypeLimit
 		rate = simMarketRate(bar, stopPrice, od.Short)
 	} else {
 		// 市价止损，立刻卖出
-		stopPrice = bar.Open
+		stopPrice = simMarketPrice(bar, rate)
 	}
 	err := od.LocalExit(exitTag, stopPrice, "", odType)
 	cutSecs := tfSecs * (1 - rate)

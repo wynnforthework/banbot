@@ -15,6 +15,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"go.uber.org/zap"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -78,15 +79,16 @@ func CompareExgBTOrders(args []string) {
 	defer file.Close()
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
-	heads := []string{"tag", "symbol", "timeFrame", "dirt", "entAt", "exitAt", "entPrice", "entAmt", "entFee",
-		"exitPrice", "exitAmt", "exitFee", "entDelay", "exitDelay", "priceDiff", "amtDiff", "feeDiff",
-		"profitDiff", "profitDf"}
+	heads := []string{"tag", "symbol", "timeFrame", "dirt", "entAt", "exitAt", "entPrice", "exitPrice", "Amount",
+		"Fee", "Profit", "entDelay", "exitDelay", "priceDiff %", "amtDiff %", "feeDiff %",
+		"profitDiff %", "profitDf", "reason"}
 	if err_ = writer.Write(heads); err_ != nil {
 		log.Error("write orders.csv fail", zap.Error(err_))
 		return
 	}
 	for _, iod := range btOrders {
 		tfMSecs := int64(utils.TFToSecs(iod.Timeframe) * 1000)
+		tfMSecsFlt := float64(tfMSecs)
 		entFixMS := utils.AlignTfMSecs(iod.EnterAt, tfMSecs)
 		exgOds, _ := pairExgOds[iod.Symbol]
 		dirt := "long"
@@ -96,7 +98,7 @@ func CompareExgBTOrders(args []string) {
 		// 查找是否有匹配的交易所订单
 		var matOd *orm.InOutOrder
 		for i, exod := range exgOds {
-			if exod.Short == iod.Short && exod.EnterAt-entFixMS < tfMSecs {
+			if exod.Short == iod.Short && math.Abs(float64(exod.EnterAt-entFixMS)) < tfMSecsFlt {
 				matOd = exod
 				pairExgOds[iod.Symbol] = append(exgOds[:i], exgOds[i+1:]...)
 				break
@@ -107,13 +109,12 @@ func CompareExgBTOrders(args []string) {
 			entMSStr := btime.ToDateStr(iod.EnterAt, "")
 			exitMSStr := btime.ToDateStr(iod.ExitAt, "")
 			entPriceStr := strconv.FormatFloat(iod.Enter.Price, 'f', 6, 64)
-			entAmtStr := strconv.FormatFloat(iod.Enter.Amount, 'f', 6, 64)
-			entFeeStr := strconv.FormatFloat(iod.Enter.Fee, 'f', 6, 64)
+			amtStr := strconv.FormatFloat(iod.Enter.Filled+iod.Exit.Filled, 'f', 6, 64)
+			feeStr := strconv.FormatFloat(iod.Enter.Fee+iod.Exit.Fee, 'f', 6, 64)
 			exitPriceStr := strconv.FormatFloat(iod.Exit.Price, 'f', 6, 64)
-			exitAmtStr := strconv.FormatFloat(iod.Exit.Amount, 'f', 6, 64)
-			exitFeeStr := strconv.FormatFloat(iod.Exit.Fee, 'f', 6, 64)
+			profitStr := strconv.FormatFloat(iod.Profit, 'f', 6, 64)
 			err_ = writer.Write([]string{"bt", iod.Symbol, iod.Timeframe, dirt, entMSStr, exitMSStr, entPriceStr,
-				entAmtStr, entFeeStr, exitPriceStr, exitAmtStr, exitFeeStr, "0", "0", "", "", "", "", ""})
+				exitPriceStr, amtStr, feeStr, profitStr, "0", "0", "", "", "", "", "", ""})
 			if err_ != nil {
 				log.Error("writer csv fail", zap.Error(err_))
 			}
@@ -125,13 +126,14 @@ func CompareExgBTOrders(args []string) {
 			entMSStr := btime.ToDateStr(matOd.EnterAt, "")
 			exitMSStr := btime.ToDateStr(matOd.ExitAt, "")
 			entPriceStr := strconv.FormatFloat(matOd.Enter.Average, 'f', 6, 64)
-			entAmtStr := strconv.FormatFloat(matOd.Enter.Filled, 'f', 6, 64)
-			entFeeStr := strconv.FormatFloat(matOd.Enter.Fee, 'f', 6, 64)
+			amtStr := strconv.FormatFloat(matOd.Enter.Filled+matOd.Exit.Filled, 'f', 6, 64)
+			feeStr := strconv.FormatFloat(matOd.Enter.Fee+matOd.Exit.Fee, 'f', 6, 64)
+			profitStr := strconv.FormatFloat(matOd.Profit, 'f', 6, 64)
 			exitPriceStr := strconv.FormatFloat(matOd.Exit.Average, 'f', 6, 64)
-			exitAmtStr := strconv.FormatFloat(matOd.Exit.Filled, 'f', 6, 64)
-			exitFeeStr := strconv.FormatFloat(matOd.Exit.Fee, 'f', 6, 64)
-			entDelay := strconv.FormatInt((matOd.EnterAt-iod.EnterAt)/1000, 10)
-			exitDelay := strconv.FormatInt((matOd.ExitAt-iod.ExitAt)/1000, 10)
+			entDelay := matOd.EnterAt - iod.EnterAt
+			exitDelay := matOd.ExitAt - iod.ExitAt
+			entDelayStr := strconv.FormatInt(entDelay/1000, 10)
+			exitDelayStr := strconv.FormatInt(exitDelay/1000, 10)
 			priceDf := (matOd.Enter.Average - iod.Enter.Average) - (matOd.Exit.Average - iod.Exit.Average)
 			priceDiff := strconv.FormatFloat(priceDf*100/iod.Enter.Average, 'f', 1, 64)
 			amtDf := (matOd.Enter.Filled - iod.Enter.Filled) - (matOd.Exit.Filled - iod.Exit.Filled)
@@ -139,11 +141,23 @@ func CompareExgBTOrders(args []string) {
 			feeDf := (matOd.Enter.Fee - iod.Enter.Fee) + (matOd.Exit.Fee - iod.Exit.Fee)
 			feeDiff := strconv.FormatFloat(feeDf*50/iod.Enter.Fee, 'f', 1, 64)
 			profitDf := matOd.Profit - iod.Profit
-			profitDiff := strconv.FormatFloat(profitDf*100/iod.Profit, 'f', 1, 64)
-			profitDfStr := strconv.FormatFloat(profitDf, 'f', 1, 64)
+			profitDfPct := profitDf * 100 / iod.Profit
+			profitDiff := strconv.FormatFloat(profitDfPct, 'f', 1, 64)
+			profitDfStr := strconv.FormatFloat(profitDf, 'f', 6, 64)
+			reason := "OK"
+			if math.Abs(float64(entDelay)) < tfMSecsFlt && math.Abs(float64(exitDelay)) < tfMSecsFlt {
+				// 入场和出场的时间匹配
+				if math.Abs(profitDfPct) < 20 {
+					reason = "OK"
+				} else {
+					reason = "Slop"
+				}
+			} else {
+				reason = "Wrong"
+			}
 			err_ = writer.Write([]string{"same", iod.Symbol, iod.Timeframe, dirt, entMSStr, exitMSStr, entPriceStr,
-				entAmtStr, entFeeStr, exitPriceStr, exitAmtStr, exitFeeStr, entDelay, exitDelay, priceDiff, amountDiff,
-				feeDiff, profitDiff, profitDfStr})
+				exitPriceStr, amtStr, feeStr, profitStr, entDelayStr, exitDelayStr, priceDiff, amountDiff,
+				feeDiff, profitDiff, profitDfStr, reason})
 			if err_ != nil {
 				log.Error("writer csv fail", zap.Error(err_))
 			}
@@ -161,13 +175,12 @@ func CompareExgBTOrders(args []string) {
 			entMSStr := btime.ToDateStr(iod.EnterAt, "")
 			exitMSStr := btime.ToDateStr(iod.ExitAt, "")
 			entPriceStr := strconv.FormatFloat(iod.Enter.Average, 'f', 6, 64)
-			entAmtStr := strconv.FormatFloat(iod.Enter.Filled, 'f', 6, 64)
-			entFeeStr := strconv.FormatFloat(iod.Enter.Fee, 'f', 6, 64)
+			amtStr := strconv.FormatFloat(iod.Enter.Filled+iod.Exit.Filled, 'f', 6, 64)
+			feeStr := strconv.FormatFloat(iod.Enter.Fee+iod.Exit.Fee, 'f', 6, 64)
+			profitStr := strconv.FormatFloat(iod.Profit, 'f', 6, 64)
 			exitPriceStr := strconv.FormatFloat(iod.Exit.Average, 'f', 6, 64)
-			exitAmtStr := strconv.FormatFloat(iod.Exit.Filled, 'f', 6, 64)
-			exitFeeStr := strconv.FormatFloat(iod.Exit.Fee, 'f', 6, 64)
 			err_ = writer.Write([]string{"exg", iod.Symbol, iod.Timeframe, dirt, entMSStr, exitMSStr, entPriceStr,
-				entAmtStr, entFeeStr, exitPriceStr, exitAmtStr, exitFeeStr, "0", "0", "", "", "", "", ""})
+				exitPriceStr, amtStr, feeStr, profitStr, "0", "0", "", "", "", "", "", ""})
 			if err_ != nil {
 				log.Error("writer csv fail", zap.Error(err_))
 			}
@@ -188,6 +201,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 	var exitIdx, exitPriceIdx, exitAmtIdx, exitFeeIdx, profitIdx int
 	var res []*orm.InOutOrder
 	var startMS, endMS int64
+	var maxTfSecs int
 	for {
 		row, err := reader.Read()
 		if err == io.EOF {
@@ -237,6 +251,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 		} else {
 			symbol := row[pairIdx]
 			timeFrame := row[tfIdx]
+			maxTfSecs = max(maxTfSecs, utils.TFToSecs(timeFrame))
 			isShort := row[dirtIdx] == "short"
 			leverage, _ := strconv.Atoi(row[lvgIdx])
 			enterMS := btime.ParseTimeMS(row[entIdx])
@@ -287,6 +302,8 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 			})
 		}
 	}
+	// 将结束时间，往后推移2个bar，防止交易所订单部分被过滤
+	endMS += int64(maxTfSecs*1000) * 2
 	return res, startMS, endMS
 }
 
@@ -299,55 +316,77 @@ func buildExgOrders(ods []*banexg.Order) map[string][]*orm.InOutOrder {
 		return ods[i].LastTradeTimestamp < ods[j].LastTradeTimestamp
 	})
 	var jobMap = make(map[string][]*orm.InOutOrder)
+	clientPrefix := ""
 	for _, od := range ods {
 		if od.Filled == 0 {
 			continue
 		}
 		odList, _ := jobMap[od.Symbol]
 		newList := make([]*orm.InOutOrder, 0, len(odList))
-		// 优先通过ClientOrderID匹配
-		sort.Slice(odList, func(i, j int) bool {
-			a, b := odList[i].Enter.OrderID, odList[j].Enter.OrderID
-			if a == b {
-				return false
+		if clientPrefix != "" && strings.HasPrefix(od.ClientOrderID, clientPrefix) {
+			// 优先通过ClientOrderID匹配
+			var openOd *orm.InOutOrder
+			for _, iod := range odList {
+				if od.ClientOrderID == iod.Enter.OrderID {
+					openOd = iod
+					break
+				}
 			}
-			return od.ClientOrderID == a
-		})
-		for i, iod := range odList {
-			if iod.Enter.Side == od.Side || iod.Exit != nil {
-				newList = append(newList, iod)
+			if openOd != nil {
+				openOd.ExitAt = od.LastUpdateTimestamp
+				openOd.Exit = &orm.ExOrder{
+					Symbol:   openOd.Symbol,
+					CreateAt: od.LastUpdateTimestamp,
+					UpdateAt: od.LastUpdateTimestamp,
+					Price:    od.Price,
+					Average:  od.Average,
+					Amount:   openOd.Enter.Amount,
+					Filled:   openOd.Enter.Filled,
+					Fee:      od.Fee.Cost,
+				}
+				openOd.Status = orm.InOutStatusFullExit
+				openOd.UpdateProfits(od.Average)
 				continue
 			}
-			part := iod
-			curFee := od.Fee.Cost
-			if od.Filled < iod.Enter.Amount {
-				part = iod.CutPart(od.Filled, od.Filled)
-			} else if od.Filled > iod.Enter.Amount {
-				rate := iod.Enter.Amount / od.Filled
-				curFee = od.Fee.Cost * rate
-				od.Fee.Cost -= curFee
-			}
-			part.ExitAt = od.LastUpdateTimestamp
-			part.Exit = &orm.ExOrder{
-				Symbol:   part.Symbol,
-				CreateAt: od.LastUpdateTimestamp,
-				UpdateAt: od.LastUpdateTimestamp,
-				Price:    od.Price,
-				Average:  od.Average,
-				Amount:   part.Enter.Amount,
-				Filled:   part.Enter.Filled,
-				Fee:      curFee,
-			}
-			part.Status = orm.InOutStatusFullExit
-			part.UpdateProfits(od.Average)
-			od.Filled -= iod.Enter.Amount
-			newList = append(newList, part)
-			if part != iod {
-				newList = append(newList, iod)
-			}
-			if od.Filled <= 0 {
-				newList = append(newList, odList[i+1:]...)
-				break
+			newList = odList
+		} else {
+			// 非机器人下的订单，尝试平机器人的仓
+			for i, iod := range odList {
+				if iod.Enter.Side == od.Side || iod.Exit != nil {
+					newList = append(newList, iod)
+					continue
+				}
+				part := iod
+				curFee := od.Fee.Cost
+				if od.Filled < iod.Enter.Amount {
+					part = iod.CutPart(od.Filled, od.Filled)
+				} else if od.Filled > iod.Enter.Amount {
+					rate := iod.Enter.Amount / od.Filled
+					curFee = od.Fee.Cost * rate
+					od.Fee.Cost -= curFee
+				}
+				part.ExitAt = od.LastUpdateTimestamp
+				part.Exit = &orm.ExOrder{
+					Symbol:   part.Symbol,
+					CreateAt: od.LastUpdateTimestamp,
+					UpdateAt: od.LastUpdateTimestamp,
+					Price:    od.Price,
+					Average:  od.Average,
+					Amount:   part.Enter.Amount,
+					Filled:   part.Enter.Filled,
+					Fee:      curFee,
+				}
+				part.Status = orm.InOutStatusFullExit
+				part.UpdateProfits(od.Average)
+				od.Filled -= iod.Enter.Amount
+				newList = append(newList, part)
+				if part != iod {
+					newList = append(newList, iod)
+				}
+				if od.Filled <= 0 {
+					newList = append(newList, odList[i+1:]...)
+					break
+				}
 			}
 		}
 		jobMap[od.Symbol] = newList
@@ -373,6 +412,9 @@ func buildExgOrders(ods []*banexg.Order) map[string][]*orm.InOutOrder {
 				Fee:      od.Fee.Cost,
 				OrderID:  od.ClientOrderID,
 			},
+		}
+		if clientPrefix == "" {
+			clientPrefix = strings.Split(od.ClientOrderID, "_")[0]
 		}
 		jobMap[od.Symbol] = append(newList, iod)
 	}

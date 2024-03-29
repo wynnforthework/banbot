@@ -15,6 +15,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"math"
 	"math/rand"
 	"slices"
 	"strconv"
@@ -137,7 +138,7 @@ CalcProfit
 */
 func (i *InOutOrder) CalcProfit(price float64) float64 {
 	if i.Status == InOutStatusInit || i.Enter == nil || i.Enter.Average == 0 || i.Enter.Filled == 0 {
-		return 0
+		return math.MaxFloat64
 	}
 	if price == 0 {
 		if i.Exit != nil {
@@ -160,7 +161,7 @@ func (i *InOutOrder) CalcProfit(price float64) float64 {
 
 func (i *InOutOrder) UpdateProfits(price float64) {
 	profitVal := i.CalcProfit(price)
-	if profitVal == 0 {
+	if profitVal == math.MaxFloat64 {
 		return
 	}
 	enterFee, exitFee := float64(0), float64(0)
