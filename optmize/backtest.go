@@ -97,7 +97,7 @@ func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 		return
 	}
 	if !core.IsWarmUp {
-		b.logState(btime.TimeMS())
+		b.logState(bar.Time, btime.TimeMS())
 	}
 	if nextRefresh > 0 && bar.Time >= nextRefresh {
 		// 刷新交易对
@@ -180,9 +180,9 @@ func (b *BackTest) orderCB(order *orm.InOutOrder, isEnter bool) {
 	}
 }
 
-func (b *BackTest) logState(timeMS int64) {
+func (b *BackTest) logState(startMS, timeMS int64) {
 	if b.StartMS == 0 {
-		b.StartMS = timeMS
+		b.StartMS = startMS
 	}
 	b.EndMS = timeMS
 	wallets := biz.GetWallets("")

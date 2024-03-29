@@ -257,6 +257,10 @@ func textGroupDays(orders []*orm.InOutOrder) string {
 			bestScore = curScore
 		}
 	}
+	if bestTF == "" {
+		bestTF = "1d"
+		bestTFSecs = utils.TFToSecs(bestTF)
+	}
 	tfUnit := bestTF[1]
 	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
 		if tfUnit == 'M' {
