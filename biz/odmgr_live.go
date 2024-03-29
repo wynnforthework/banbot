@@ -30,11 +30,15 @@ type LiveOrderMgr struct {
 	doneKeys         map[string]bool            // 已完成的订单：symbol+orderId
 	exgIdMap         map[string]*orm.InOutOrder // symbol+orderId: InOutOrder
 	doneTrades       map[string]bool            // 已处理的交易：symbol+tradeId
+	lockDoneKeys     sync.Mutex
+	lockExgIdMap     sync.Mutex
+	lockDoneTrades   sync.Mutex
 	isWatchMyTrade   bool                       // 是否正在监听账户交易流
 	isTrialUnMatches bool                       // 是否正在监听未匹配交易
 	isConsumeOrderQ  bool                       // 是否正在从订单队列消费
 	isWatchAccConfig bool                       // 是否正在监听杠杆倍数变化
 	unMatchTrades    map[string]*banexg.MyTrade // 从ws收到的暂无匹配的订单的交易
+	lockUnMatches    sync.Mutex                 // 防止并发读写unMatchTrades
 	applyMyTrade     FuncApplyMyTrade           // 更新当前订单状态
 	exitByMyOrder    FuncHandleMyOrder          // 尝试使用其他端操作的交易结果，更新当前订单状态
 	traceExgOrder    FuncHandleMyOrder
@@ -834,21 +838,34 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 		return
 	}
 	tradeKey := trade.Symbol + trade.ID
-	if _, ok := o.doneTrades[tradeKey]; ok {
+	o.lockDoneTrades.Lock()
+	_, ok := o.doneTrades[tradeKey]
+	o.lockDoneTrades.Unlock()
+	if ok {
 		// 交易已处理
 		return
 	}
 	odKey := trade.Symbol + trade.Order
-	if _, ok := o.exgIdMap[odKey]; !ok {
+	o.lockExgIdMap.Lock()
+	_, ok = o.exgIdMap[odKey]
+	o.lockExgIdMap.Unlock()
+	if !ok {
 		// 没有匹配订单，记录到unMatchTrades
+		o.lockUnMatches.Lock()
 		o.unMatchTrades[tradeKey] = trade
+		o.lockUnMatches.Unlock()
 		return
 	}
-	if _, ok := o.doneKeys[odKey]; ok {
+	o.lockDoneKeys.Lock()
+	_, ok = o.doneKeys[odKey]
+	o.lockDoneKeys.Unlock()
+	if ok {
 		// 订单已完成
 		return
 	}
+	o.lockExgIdMap.Lock()
 	iod := o.exgIdMap[odKey]
+	o.lockExgIdMap.Unlock()
 	lock := iod.Lock()
 	defer lock.Unlock()
 	err := o.updateByMyTrade(iod, trade)
@@ -893,12 +910,22 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			}
 			var pairTrades = make(map[string][]*banexg.MyTrade)
 			expireMS := btime.TimeMS() - 1000
+			data := make(map[string]*banexg.MyTrade)
+			o.lockUnMatches.Lock()
 			for key, trade := range o.unMatchTrades {
 				if trade.Timestamp >= expireMS {
 					continue
 				}
+				data[key] = trade
+				delete(o.unMatchTrades, key)
+			}
+			o.lockUnMatches.Unlock()
+			for _, trade := range data {
 				odKey := trade.Symbol + trade.Order
-				if iod, ok := o.exgIdMap[odKey]; ok {
+				o.lockExgIdMap.Lock()
+				iod, ok := o.exgIdMap[odKey]
+				o.lockExgIdMap.Unlock()
+				if ok {
 					lock := iod.Lock()
 					err := o.updateByMyTrade(iod, trade)
 					lock.Unlock()
@@ -910,7 +937,6 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 				}
 				odTrades, _ := pairTrades[odKey]
 				pairTrades[odKey] = append(odTrades, trade)
-				delete(o.unMatchTrades, key)
 			}
 			unHandleNum := 0
 			allowTakeOver := config.TakeOverStgy != ""
@@ -1184,11 +1210,15 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 	}
 	if subOd.OrderID != "" && subOd.OrderID != res.ID {
 		// 如修改订单价格，order_id会变化
+		o.lockDoneKeys.Lock()
 		o.doneKeys[od.Symbol+subOd.OrderID] = true
+		o.lockDoneKeys.Unlock()
 	}
 	subOd.OrderID = res.ID
 	idKey := od.Symbol + subOd.OrderID
+	o.lockExgIdMap.Lock()
 	o.exgIdMap[idKey] = od
+	o.lockExgIdMap.Unlock()
 	if o.hasNewTrades(res) && subOd.UpdateAt <= res.Timestamp {
 		subOd.UpdateAt = res.Timestamp
 		subOd.Amount = res.Amount
@@ -1256,8 +1286,13 @@ func (o *LiveOrderMgr) hasNewTrades(res *banexg.Order) bool {
 	}
 	for _, trade := range res.Trades {
 		key := res.Symbol + trade.ID
-		if _, ok := o.doneTrades[key]; !ok {
+		o.lockDoneTrades.Lock()
+		_, ok := o.doneTrades[key]
+		o.lockDoneTrades.Unlock()
+		if !ok {
+			o.lockDoneTrades.Lock()
 			o.doneTrades[key] = true
+			o.lockDoneTrades.Unlock()
 			return true
 		}
 	}
@@ -1265,15 +1300,24 @@ func (o *LiveOrderMgr) hasNewTrades(res *banexg.Order) bool {
 }
 
 func (o *LiveOrderMgr) consumeUnMatches(od *orm.InOutOrder, subOd *orm.ExOrder) *errs.Error {
+	data := make(map[string]*banexg.MyTrade)
+	o.lockUnMatches.Lock()
 	for key, trade := range o.unMatchTrades {
 		if trade.Symbol != od.Symbol || trade.Order != subOd.OrderID {
 			continue
 		}
 		delete(o.unMatchTrades, key)
+		data[key] = trade
+	}
+	o.lockUnMatches.Unlock()
+	for key, trade := range data {
 		if subOd.Status == orm.OdStatusClosed {
 			continue
 		}
-		if _, ok := o.doneTrades[key]; ok {
+		o.lockDoneTrades.Lock()
+		_, ok := o.doneTrades[key]
+		o.lockDoneTrades.Unlock()
+		if ok {
 			continue
 		}
 		err := o.updateByMyTrade(od, trade)
@@ -1734,10 +1778,14 @@ sess 可为nil
 */
 func (o *LiveOrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	if od.Enter != nil && od.Enter.OrderID != "" {
+		o.lockDoneKeys.Lock()
 		o.doneKeys[od.Symbol+od.Enter.OrderID] = true
+		o.lockDoneKeys.Unlock()
 	}
 	if od.Exit != nil && od.Exit.OrderID != "" {
+		o.lockDoneKeys.Lock()
 		o.doneKeys[od.Symbol+od.Exit.OrderID] = true
+		o.lockDoneKeys.Unlock()
 	}
 	log.Info("Finish Order", zap.String("acc", o.Account), zap.String("key", od.Key()),
 		zap.String("tag", od.ExitTag))

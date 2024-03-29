@@ -414,7 +414,10 @@ func buildExgOrders(ods []*banexg.Order) map[string][]*orm.InOutOrder {
 			},
 		}
 		if clientPrefix == "" {
-			clientPrefix = strings.Split(od.ClientOrderID, "_")[0]
+			parts := strings.Split(od.ClientOrderID, "_")
+			if len(parts) == 3 {
+				clientPrefix = parts[0]
+			}
 		}
 		jobMap[od.Symbol] = append(newList, iod)
 	}
@@ -433,6 +436,7 @@ func readBinanceOrders(f *excelize.File, start, stop int64) []*banexg.Order {
 		idMap[mar.ID] = symbol
 	}
 	reNonAl := regexp.MustCompile("[a-zA-Z\u4e00-\u9fa5]+")
+	clientPreifx := ""
 	for {
 		rowId += 1
 		rowTxt := strconv.Itoa(rowId)
@@ -464,10 +468,11 @@ func readBinanceOrders(f *excelize.File, start, stop int64) []*banexg.Order {
 			}
 			createMS := btime.ParseTimeMS(textA)
 			alignMS := utils.AlignTfMSecs(createMS, 60000)
-			if alignMS < start || alignMS >= stop {
+			clientID, _ := row["C"]
+			if alignMS < start || alignMS >= stop && strings.HasPrefix(clientID, clientPreifx) {
+				// 允许截止时间之后的非机器人订单，用于平仓
 				continue
 			}
-			clientID, _ := row["C"]
 			marketID, _ := row["D"]
 			symbol, _ := idMap[marketID]
 			side, _ := row["E"]
@@ -489,6 +494,9 @@ func readBinanceOrders(f *excelize.File, start, stop int64) []*banexg.Order {
 			oidParts := strings.Split(clientID, "_")
 			if len(oidParts) == 3 {
 				clientID = strings.Join(oidParts[:2], "_")
+				if clientPreifx == "" {
+					clientPreifx = oidParts[0]
+				}
 			}
 			order = &banexg.Order{
 				Timestamp:     createMS,
