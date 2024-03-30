@@ -37,17 +37,22 @@ func CompareExgBTOrders(args []string) {
 	if err != nil {
 		panic(err)
 	}
-	var exgPath, btPath, exgName string
+	var exgPath, btPath, exgName, botName string
 	var sub = flag.NewFlagSet("cmp", flag.ExitOnError)
-	sub.StringVar(&exgPath, "exg-path", "", "exchange order xlsx file")
 	sub.StringVar(&exgName, "exg", "binance", "exchange name")
+	sub.StringVar(&botName, "bot-name", "", "botName for live trade")
+	sub.StringVar(&exgPath, "exg-path", "", "exchange order xlsx file")
 	sub.StringVar(&btPath, "bt-path", "", "backTest order file")
 	err_ := sub.Parse(args)
 	if err_ != nil {
 		panic(err_)
 	}
 	if exgPath == "" || btPath == "" {
-		panic("both of `exg-path`, `bt-path`, `date-range` are required")
+		panic("both of `exg-path`, `bt-path` are required")
+	}
+	if botName == "" {
+		log.Error("bot-name is required")
+		return
 	}
 	btOrders, startMS, endMS := readBackTestOrders(btPath)
 	if len(btOrders) == 0 {
@@ -62,7 +67,7 @@ func CompareExgBTOrders(args []string) {
 	var exgOrders []*banexg.Order
 	switch exgName {
 	case "binance":
-		exgOrders = readBinanceOrders(f, startMS, endMS)
+		exgOrders = readBinanceOrders(f, startMS, endMS, botName)
 	default:
 		panic("unsupport exchange: " + exgName)
 	}
@@ -70,7 +75,7 @@ func CompareExgBTOrders(args []string) {
 		log.Warn("no exchange orders to compare")
 		return
 	}
-	pairExgOds := buildExgOrders(exgOrders)
+	pairExgOds := buildExgOrders(exgOrders, botName)
 	file, err_ := os.Create(fmt.Sprintf("%s/cmp_orders.csv", filepath.Dir(exgPath)))
 	if err_ != nil {
 		log.Error("create cmp_orders.csv fail", zap.Error(err_))
@@ -311,12 +316,11 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 buildExgOrders
 从交易所订单构建InOutOrder用于对比
 */
-func buildExgOrders(ods []*banexg.Order) map[string][]*orm.InOutOrder {
+func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.InOutOrder {
 	sort.Slice(ods, func(i, j int) bool {
 		return ods[i].LastTradeTimestamp < ods[j].LastTradeTimestamp
 	})
 	var jobMap = make(map[string][]*orm.InOutOrder)
-	clientPrefix := ""
 	for _, od := range ods {
 		if od.Filled == 0 {
 			continue
@@ -413,18 +417,12 @@ func buildExgOrders(ods []*banexg.Order) map[string][]*orm.InOutOrder {
 				OrderID:  od.ClientOrderID,
 			},
 		}
-		if clientPrefix == "" {
-			parts := strings.Split(od.ClientOrderID, "_")
-			if len(parts) == 3 {
-				clientPrefix = parts[0]
-			}
-		}
 		jobMap[od.Symbol] = append(newList, iod)
 	}
 	return jobMap
 }
 
-func readBinanceOrders(f *excelize.File, start, stop int64) []*banexg.Order {
+func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*banexg.Order {
 	rowId := 1 // 首个从第2行开始
 	sheet := "sheet1"
 	colEnd := 'M'
@@ -436,7 +434,6 @@ func readBinanceOrders(f *excelize.File, start, stop int64) []*banexg.Order {
 		idMap[mar.ID] = symbol
 	}
 	reNonAl := regexp.MustCompile("[a-zA-Z\u4e00-\u9fa5]+")
-	clientPreifx := ""
 	for {
 		rowId += 1
 		rowTxt := strconv.Itoa(rowId)
@@ -469,7 +466,7 @@ func readBinanceOrders(f *excelize.File, start, stop int64) []*banexg.Order {
 			createMS := btime.ParseTimeMS(textA)
 			alignMS := utils.AlignTfMSecs(createMS, 60000)
 			clientID, _ := row["C"]
-			if alignMS < start || alignMS >= stop && strings.HasPrefix(clientID, clientPreifx) {
+			if alignMS < start || alignMS >= stop && strings.HasPrefix(clientID, botName) {
 				// 允许截止时间之后的非机器人订单，用于平仓
 				continue
 			}
@@ -494,9 +491,6 @@ func readBinanceOrders(f *excelize.File, start, stop int64) []*banexg.Order {
 			oidParts := strings.Split(clientID, "_")
 			if len(oidParts) == 3 {
 				clientID = strings.Join(oidParts[:2], "_")
-				if clientPreifx == "" {
-					clientPreifx = oidParts[0]
-				}
 			}
 			order = &banexg.Order{
 				Timestamp:     createMS,

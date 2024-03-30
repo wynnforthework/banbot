@@ -126,7 +126,8 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 					price = bar.Open
 				}
 			}
-			barRate := simMarketRate(&bar.Kline, exOrder.Price, exOrder.Side == banexg.OdSideBuy)
+			odIsBuy := exOrder.Side == banexg.OdSideBuy
+			barRate := simMarketRate(&bar.Kline, exOrder.Price, odIsBuy, false)
 			fillMS = bar.Time + int64(float64(odTFSecs)*barRate)*1000
 		} else {
 			// 按网络延迟，模拟成交价格，和开盘价接近
@@ -294,8 +295,8 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 			if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
 				// 空单，平仓限价低于触发价，可能是限价单
 				// 多单，平仓限价高于触发价，可能是限价单
-				trigRate := simMarketRate(bar, trigPrice, od.Short)
-				rate := simMarketRate(bar, limit, od.Short)
+				trigRate := simMarketRate(bar, trigPrice, od.Short, true)
+				rate := simMarketRate(bar, limit, od.Short, true)
 				if (rate-trigRate)*tfSecs > 30 {
 					// 触发后，限价单超过30s成交，认为限价单
 					return limit
@@ -304,14 +305,16 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 		}
 		return 0
 	}
-	var stopPrice float64
+	var stopPrice, trigPrice float64
 	var exitTag string
 	if slHit {
 		// 触发止损，计算执行价格
+		trigPrice = slPrice
 		stopPrice = getExcPrice(slPrice, od.GetInfoFloat64(orm.OdInfoStopLossLimit))
 		exitTag = core.ExitTagStopLoss
 	} else {
 		// 触发止盈，计算执行价格
+		trigPrice = tpPrice
 		stopPrice = getExcPrice(tpPrice, od.GetInfoFloat64(orm.OdInfoTakeProfitLimit))
 		exitTag = core.ExitTagTakeProfit
 	}
@@ -319,12 +322,15 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 		return nil
 	}
 	curMS := btime.TimeMS()
-	rate := config.BTNetCost / tfSecs
+	// 模拟触发时的时间
+	var rate = config.BTNetCost / tfSecs
 	odType := banexg.OdTypeMarket
 	if stopPrice > 0 {
 		odType = banexg.OdTypeLimit
-		rate = simMarketRate(bar, stopPrice, od.Short)
+		rate += simMarketRate(bar, stopPrice, od.Short, true)
 	} else {
+		// 触发时间+网络延迟
+		rate += simMarketRate(bar, trigPrice, od.Short, true)
 		// 市价止损，立刻卖出
 		stopPrice = simMarketPrice(bar, rate)
 	}
@@ -408,6 +414,10 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 	lowP := bar.Low
 	closeP := bar.Close
 
+	if rate >= 0.999 {
+		return closeP
+	}
+
 	if openP <= closeP {
 		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
 		a = openP - lowP
@@ -449,10 +459,13 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 	return start*(1-posRate) + end*posRate
 }
 
-func simMarketRate(bar *banexg.Kline, price float64, isBuy bool) float64 {
+func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool) float64 {
 	if isBuy && price >= bar.Open || !isBuy && price <= bar.Open {
-		// 立刻成交
-		return 0
+		// 开盘立刻成交
+		if !isTrigger {
+			// 对于触发价格的订单，不是挂单，无法在开盘时立刻成交
+			return 0
+		}
 	}
 	var (
 		a, b, c, totalLen float64
@@ -470,14 +483,25 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy bool) float64 {
 		c = highP - closeP // 最高~收盘
 		totalLen = a + b + c
 		if totalLen == 0 {
-			return 0
+			return 0.5
 		}
-		if isBuy {
-			// 买单，在开盘~最低时触发
-			return (openP - price) / totalLen
+		if isTrigger {
+			// 触发价格，无需考虑买卖方向，直接比较
+			if price < openP {
+				// 触发买价低于开盘，在开盘~最低时触发
+				return (openP - price) / totalLen
+			} else {
+				// 否则在最低~最高中触发
+				return (a + price - lowP) / totalLen
+			}
 		} else {
-			// 卖单，在最低~最高中触发
-			return (a + price - lowP) / totalLen
+			if isBuy {
+				// 买单，在开盘~最低时触发
+				return (openP - price) / totalLen
+			} else {
+				// 卖单，在最低~最高中触发
+				return (a + price - lowP) / totalLen
+			}
 		}
 	} else {
 		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
@@ -486,14 +510,25 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy bool) float64 {
 		c = closeP - lowP // 最低~收盘
 		totalLen = a + b + c
 		if totalLen == 0 {
-			return 0
+			return 0.5
 		}
-		if isBuy {
-			// 买单，必然在最高~最低中触发
-			return (a + highP - price) / totalLen
+		if isTrigger {
+			// 触发价格，无需考虑买卖方向，直接比较
+			if price < openP {
+				// 触发价低于开盘，必然在最高~最低中触发
+				return (a + highP - price) / totalLen
+			} else {
+				// 触发价高于开盘，在开盘~最高中触发
+				return (price - openP) / totalLen
+			}
 		} else {
-			// 卖单，在开盘~最高中触发
-			return (price - openP) / totalLen
+			if isBuy {
+				// 买单，必然在最高~最低中触发
+				return (a + highP - price) / totalLen
+			} else {
+				// 卖单，在开盘~最高中触发
+				return (price - openP) / totalLen
+			}
 		}
 	}
 }
