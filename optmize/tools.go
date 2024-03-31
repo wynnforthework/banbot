@@ -506,7 +506,7 @@ func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*b
 				Fee:           &banexg.Fee{},
 			}
 			if stateStr == "已成交" {
-				order.Status = banexg.OdStatusClosed
+				order.Status = banexg.OdStatusFilled
 			} else if stateStr == "开放" {
 				order.Status = banexg.OdStatusOpen
 			} else {

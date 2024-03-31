@@ -39,7 +39,6 @@ type LiveOrderMgr struct {
 	isWatchAccConfig bool                       // 是否正在监听杠杆倍数变化
 	unMatchTrades    map[string]*banexg.MyTrade // 从ws收到的暂无匹配的订单的交易
 	lockUnMatches    sync.Mutex                 // 防止并发读写unMatchTrades
-	applyMyTrade     FuncApplyMyTrade           // 更新当前订单状态
 	exitByMyOrder    FuncHandleMyOrder          // 尝试使用其他端操作的交易结果，更新当前订单状态
 	traceExgOrder    FuncHandleMyOrder
 }
@@ -94,7 +93,6 @@ func newLiveOrderMgr(account string, callBack func(od *orm.InOutOrder, isEnter b
 	res.afterEnter = makeAfterEnter(res)
 	res.afterExit = makeAfterExit(res)
 	if core.ExgName == "binance" {
-		res.applyMyTrade = bnbApplyMyTrade(res)
 		res.exitByMyOrder = bnbExitByMyOrder(res)
 		res.traceExgOrder = bnbTraceExgOrder(res)
 	} else {
@@ -347,7 +345,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	defer conn.Release()
 	if len(openOds) > 0 {
 		for _, exod := range exOrders {
-			if exod.Status != banexg.OdStatusClosed {
+			if !banexg.IsOrderDone(exod.Status) {
 				// 跳过未完成订单
 				continue
 			}
@@ -827,6 +825,9 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 			o.isWatchMyTrade = false
 		}()
 		for trade := range out {
+			if trade.State == banexg.OdStatusOpen {
+				continue
+			}
 			o.handleMyTrade(trade)
 		}
 	}()
@@ -846,16 +847,6 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 		return
 	}
 	odKey := trade.Symbol + trade.Order
-	o.lockExgIdMap.Lock()
-	_, ok = o.exgIdMap[odKey]
-	o.lockExgIdMap.Unlock()
-	if !ok {
-		// 没有匹配订单，记录到unMatchTrades
-		o.lockUnMatches.Lock()
-		o.unMatchTrades[tradeKey] = trade
-		o.lockUnMatches.Unlock()
-		return
-	}
 	o.lockDoneKeys.Lock()
 	_, ok = o.doneKeys[odKey]
 	o.lockDoneKeys.Unlock()
@@ -864,8 +855,32 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 		return
 	}
 	o.lockExgIdMap.Lock()
-	iod := o.exgIdMap[odKey]
+	iod, ok := o.exgIdMap[odKey]
 	o.lockExgIdMap.Unlock()
+	if !ok {
+		// 检查是否是机器人下单
+		matches := config.ReClientID.FindStringSubmatch(trade.ClientID)
+		if len(matches) > 1 {
+			orderId, _ := strconv.ParseInt(matches[1], 10, 64)
+			if orderId > 0 {
+				openOds, lock := orm.GetOpenODs(o.Account)
+				lock.Lock()
+				iod, ok = openOds[orderId]
+				lock.Unlock()
+			}
+		}
+		if iod == nil {
+			// 没有匹配订单，记录到unMatchTrades
+			o.lockUnMatches.Lock()
+			o.unMatchTrades[tradeKey] = trade
+			o.lockUnMatches.Unlock()
+			return
+		}
+	}
+	if strings.Contains(trade.Type, banexg.OdTypeStop) || strings.Contains(trade.Type, banexg.OdTypeTakeProfit) {
+		// 忽略止损止盈订单
+		return
+	}
 	lock := iod.Lock()
 	defer lock.Unlock()
 	err := o.updateByMyTrade(iod, trade)
@@ -935,13 +950,17 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 					}
 					continue
 				}
-				odTrades, _ := pairTrades[odKey]
-				pairTrades[odKey] = append(odTrades, trade)
+				if !config.ReClientID.MatchString(trade.ClientID) {
+					// 记录非机器人订单，检查是否第三方平仓或下单
+					odTrades, _ := pairTrades[odKey]
+					pairTrades[odKey] = append(odTrades, trade)
+				}
 			}
 			unHandleNum := 0
 			allowTakeOver := config.TakeOverStgy != ""
+			// 遍历第三方订单，检查是否平仓或跟踪
 			for _, trades := range pairTrades {
-				exOd, err := exg.Default.MergeMyTrades(trades)
+				exOd, err := banexg.MergeMyTrades(trades)
 				if err != nil {
 					log.Error("MergeMyTrades fail", zap.Int("num", len(trades)), zap.Error(err))
 					continue
@@ -973,11 +992,78 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 		subOd = od.Enter
 		dirtTag = "exit"
 	}
+	if subOd == nil {
+		if trade.State != banexg.OdStatusOpen {
+			log.Warn(fmt.Sprintf("%s subOd %s nil, trade state: %s", od.Key(), dirtTag, trade.State))
+		}
+		return nil
+	}
 	if subOd.Status == orm.OdStatusClosed {
 		log.Debug(fmt.Sprintf("%s %s complete, skip trade: %v", od.Key(), dirtTag, trade.ID))
 		return nil
 	}
-	return o.applyMyTrade(od, subOd, trade)
+	if trade.State == banexg.OdStatusOpen || trade.Timestamp < subOd.UpdateAt {
+		// 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
+		return nil
+	}
+	if subOd.Enter {
+		od.DirtyEnter = true
+	} else {
+		od.DirtyExit = true
+	}
+	subOd.UpdateAt = trade.Timestamp
+	subOd.Amount = trade.Amount
+	state := trade.State
+	if state == banexg.OdStatusFilled || state == banexg.OdStatusPartFilled {
+		odStatus := orm.OdStatusPartOK
+		if subOd.Filled == 0 {
+			if subOd.Enter {
+				od.EnterAt = trade.Timestamp
+			} else {
+				od.ExitAt = trade.Timestamp
+			}
+			od.DirtyMain = true
+		}
+		subOd.OrderType = trade.Type
+		subOd.Filled = trade.Filled
+		subOd.Average = trade.Average
+		if state == banexg.OdStatusFilled {
+			odStatus = orm.OdStatusClosed
+			subOd.Price = trade.Average
+			if subOd.Enter {
+				od.Status = orm.InOutStatusFullEnter
+			} else {
+				od.Status = orm.InOutStatusFullExit
+			}
+			od.DirtyMain = true
+		}
+		subOd.Status = int16(odStatus)
+		if trade.Fee != nil {
+			subOd.FeeType = trade.Fee.Currency
+			subOd.Fee = trade.Fee.Cost
+		}
+	} else if banexg.IsOrderDone(state) {
+		subOd.Status = orm.OdStatusClosed
+		if subOd.Enter {
+			if subOd.Filled == 0 {
+				od.Status = orm.InOutStatusFullExit
+			} else {
+				od.Status = orm.InOutStatusFullEnter
+			}
+			od.DirtyMain = true
+		}
+	} else {
+		log.Error(fmt.Sprintf("unknown bnb order status: %s", state))
+	}
+	if od.Status == orm.InOutStatusFullExit {
+		err := o.finishOrder(od, nil)
+		if err != nil {
+			return err
+		}
+		cancelTriggerOds(od)
+		o.callBack(od, subOd.Enter)
+	}
+	return nil
 }
 
 func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
@@ -1310,10 +1396,10 @@ func (o *LiveOrderMgr) consumeUnMatches(od *orm.InOutOrder, subOd *orm.ExOrder) 
 		data[key] = trade
 	}
 	o.lockUnMatches.Unlock()
+	if subOd.Status == orm.OdStatusClosed {
+		return nil
+	}
 	for key, trade := range data {
-		if subOd.Status == orm.OdStatusClosed {
-			continue
-		}
 		o.lockDoneTrades.Lock()
 		_, ok := o.doneTrades[key]
 		o.lockDoneTrades.Unlock()

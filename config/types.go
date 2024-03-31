@@ -1,5 +1,7 @@
 package config
 
+import "regexp"
+
 var (
 	Data        Config
 	Args        *CmdArgs
@@ -50,6 +52,8 @@ var (
 	APIServer        *APIServerConfig
 	RPCChannels      map[string]map[string]interface{}
 	Webhook          map[string]map[string]string
+
+	ReClientID *regexp.Regexp // 正则匹配ClientID，检查是否是机器人下单
 )
 
 // Config 是根配置结构体

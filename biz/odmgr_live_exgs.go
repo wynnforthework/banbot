@@ -1,7 +1,6 @@
 package biz
 
 import (
-	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
@@ -10,73 +9,6 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 )
-
-func bnbApplyMyTrade(o *LiveOrderMgr) FuncApplyMyTrade {
-	return func(od *orm.InOutOrder, subOd *orm.ExOrder, trade *banexg.MyTrade) *errs.Error {
-		if trade.State == "NEW" || trade.Timestamp < subOd.UpdateAt {
-			// 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
-			return nil
-		}
-		if subOd.Enter {
-			od.DirtyEnter = true
-		} else {
-			od.DirtyExit = true
-		}
-		subOd.UpdateAt = trade.Timestamp
-		subOd.Amount = trade.Amount
-		state := trade.State
-		if state == "CANCELED" || state == "REJECTED" || state == "EXPIRED" || state == "EXPIRED_IN_MATCH" {
-			subOd.Status = orm.OdStatusClosed
-			if subOd.Enter {
-				if subOd.Filled == 0 {
-					od.Status = orm.InOutStatusFullExit
-				} else {
-					od.Status = orm.InOutStatusFullEnter
-				}
-				od.DirtyMain = true
-			}
-		} else if state == "FILLED" || state == "PARTIALLY_FILLED" {
-			odStatus := orm.OdStatusPartOK
-			if subOd.Filled == 0 {
-				if subOd.Enter {
-					od.EnterAt = trade.Timestamp
-				} else {
-					od.ExitAt = trade.Timestamp
-				}
-				od.DirtyMain = true
-			}
-			subOd.OrderType = trade.Type
-			subOd.Filled = trade.Filled
-			subOd.Average = trade.Average
-			if state == "FILLED" {
-				odStatus = orm.OdStatusClosed
-				subOd.Price = trade.Average
-				if subOd.Enter {
-					od.Status = orm.InOutStatusFullEnter
-				} else {
-					od.Status = orm.InOutStatusFullExit
-				}
-				od.DirtyMain = true
-			}
-			subOd.Status = int16(odStatus)
-			if trade.Fee != nil {
-				subOd.FeeType = trade.Fee.Currency
-				subOd.Fee = trade.Fee.Cost
-			}
-		} else {
-			log.Error(fmt.Sprintf("unknown bnb order status: %s", state))
-		}
-		if od.Status == orm.InOutStatusFullExit {
-			err := o.finishOrder(od, nil)
-			if err != nil {
-				return err
-			}
-			cancelTriggerOds(od)
-			o.callBack(od, subOd.Enter)
-		}
-		return nil
-	}
-}
 
 func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 	return func(od *banexg.Order) bool {
@@ -180,7 +112,7 @@ func (o *LiveOrderMgr) makeInOutOd(sess *orm.Queries, pair string, short bool, a
 
 func bnbTraceExgOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 	return func(od *banexg.Order) bool {
-		if od.ReduceOnly || od.Status != banexg.OdStatusClosed {
+		if od.ReduceOnly || od.Status != banexg.OdStatusFilled {
 			// 忽略只减仓订单  只对完全入场的尝试跟踪
 			return false
 		}

@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 )
 
@@ -91,6 +92,7 @@ func apply(args *CmdArgs) *errs.Error {
 		btime.ParseTimeMS(Data.TimeRangeRaw[cutLen+1:]),
 	}
 	Name = Data.Name
+	ReClientID = regexp.MustCompile(fmt.Sprintf("^%s_(\\d+)(_\\d+)?$", Name))
 	core.SetRunEnv(Data.Env)
 	Leverage = Data.Leverage
 	if Data.LimitVolSecs == 0 {
@@ -144,7 +146,7 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	MinOpenRate = Data.MinOpenRate
 	if Data.BTNetCost == 0 {
-		Data.BTNetCost = 30
+		Data.BTNetCost = 15
 	}
 	BTNetCost = Data.BTNetCost
 	if Data.MaxOpenOrders == 0 {
