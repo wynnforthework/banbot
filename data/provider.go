@@ -64,6 +64,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 	}()
 	var newHolds []IKlineFeeder
 	var warmJobs []*WarmJob
+	var oldSince = make(map[string]int64)
 	var err *errs.Error
 	for pair, tfWarms := range items {
 		hold, ok := p.holders[pair]
@@ -81,6 +82,8 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 			curMinTf := hold.getStates()[0].TimeFrame
 			if oldMinTf != curMinTf {
 				newHolds = append(newHolds, hold)
+			} else {
+				oldSince[fmt.Sprintf("%s|%s", pair, curMinTf)] = hold.getStates()[0].NextMS
 			}
 			if len(newTfs) > 0 {
 				warmJobs = append(warmJobs, &WarmJob{
@@ -101,6 +104,9 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 	}
 	// 加载数据预热
 	sinceMap, err := p.warmJobs(warmJobs)
+	for key, since := range oldSince {
+		sinceMap[key] = since
+	}
 	return newHolds, sinceMap, delPairs, err
 }
 
@@ -274,7 +280,10 @@ func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[strin
 			continue
 		}
 		holders[pair] = hold
-		hold.initNext(since)
+		if hold.getNextMS() == 0 || hold.getStates()[0].NextMS != since {
+			// 这里忽略刷新交易对后，仍然存在的标的
+			hold.initNext(since)
+		}
 		maxSince = max(maxSince, since)
 	}
 	// 删除未预热的项
