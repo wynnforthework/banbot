@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -13,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"slices"
+	"strings"
 )
 
 type FnPairKline = func(bar *banexg.PairTFKline)
@@ -238,6 +240,10 @@ func (f *KlineFeeder) WarmTfs(tfBars map[string][]*banexg.Kline) int64 {
 		}
 		tfMSecs := int64(utils.TFToSecs(tf) * 1000)
 		lastMS := bars[len(bars)-1].Time + tfMSecs
+		envKey := strings.Join([]string{f.Symbol, tf}, "_")
+		if env, ok := strategy.Envs[envKey]; ok {
+			env.Reset()
+		}
 		f.fireCallBacks(f.Symbol, tf, tfMSecs, bars)
 		for _, sta := range f.States {
 			if sta.TimeFrame == tf {

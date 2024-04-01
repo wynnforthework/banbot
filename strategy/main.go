@@ -140,7 +140,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	for _, jobs := range AccJobs {
 		for envKey := range jobs {
 			if _, ok := envKeys[envKey]; !ok {
-				delete(AccJobs, envKey)
+				delete(jobs, envKey)
 			}
 		}
 	}
