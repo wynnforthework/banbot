@@ -143,7 +143,17 @@ func RefreshPairList(addPairs []string) (map[string]map[string]float64, *errs.Er
 		if err != nil {
 			return nil, err
 		}
-		pairs = utils.UnionArr(pairs, adds)
+		pairs = utils.UnionArr(adds, pairs)
+	}
+	// 数量和偏移限制
+	mgrCfg := config.PairMgr
+	if mgrCfg.Offset < len(pairs) {
+		pairs = pairs[mgrCfg.Offset:]
+	} else if mgrCfg.Offset > 0 {
+		pairs = nil
+	}
+	if mgrCfg.Limit < len(pairs) {
+		pairs = pairs[mgrCfg.Limit:]
 	}
 
 	core.Pairs = nil

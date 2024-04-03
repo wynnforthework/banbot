@@ -892,10 +892,16 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	if iod.Short == (trade.Side == banexg.OdSideSell) {
 		subOd = iod.Enter
 	}
-	err = o.consumeUnMatches(iod, subOd)
-	if err != nil {
-		log.Error("consumeUnMatches for WatchMyTrades fail", zap.String("key", iod.Key()),
-			zap.Error(err))
+	if subOd != nil {
+		err = o.consumeUnMatches(iod, subOd)
+		if err != nil {
+			log.Error("consumeUnMatches for WatchMyTrades fail", zap.String("key", iod.Key()),
+				zap.Error(err))
+		}
+	} else {
+		log.Error("handleMyTrade: subOd nil", zap.String("key", iod.Key()), zap.String("trade", trade.ID),
+			zap.String("side", trade.Side), zap.String("clientId", trade.ClientID),
+			zap.String("order", trade.Order))
 	}
 	if iod.IsDirty() {
 		if iod.Status == orm.InOutStatusFullEnter {

@@ -151,6 +151,10 @@ type TelegramChannel struct {
 
 type PairMgrConfig struct {
 	Cron string `yaml:"cron" mapstructure:"cron"`
+	// 偏移限定数量选择。
+	Offset int `yaml:"offset" mapstructure:"offset,omitempty"`
+	// 限制币种数量
+	Limit int `yaml:"limit" mapstructure:"limit,omitempty"`
 }
 
 // 通用的过滤器

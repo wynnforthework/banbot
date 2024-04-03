@@ -254,7 +254,7 @@ func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, tot
 
 func initRefreshCron() *errs.Error {
 	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
-	if config.PairMgr != nil && config.PairMgr.Cron != "" {
+	if config.PairMgr.Cron != "" {
 		var err_ error
 		schedule, err_ = parser.Parse(config.PairMgr.Cron)
 		if err_ != nil {

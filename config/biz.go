@@ -188,6 +188,9 @@ func apply(args *CmdArgs) *errs.Error {
 		Data.Pairs = args.Pairs
 	}
 	Pairs = Data.Pairs
+	if Data.PairMgr == nil {
+		Data.PairMgr = &PairMgrConfig{}
+	}
 	PairMgr = Data.PairMgr
 	PairFilters = Data.PairFilters
 	Exchange = Data.Exchange

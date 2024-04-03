@@ -53,7 +53,8 @@ type StagyJob struct {
 	Env           *ta.BarEnv
 	Entrys        []*EnterReq
 	Exits         []*ExitReq
-	Orders        []*orm.InOutOrder
+	LongOrders    []*orm.InOutOrder
+	ShortOrders   []*orm.InOutOrder
 	Symbol        *orm.ExSymbol     // 当前运行的币种
 	TimeFrame     string            // 当前运行的时间周期
 	Account       string            // 当前任务所属账号

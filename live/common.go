@@ -16,7 +16,7 @@ import (
 )
 
 func CronRefreshPairs() {
-	if config.PairMgr != nil && config.PairMgr.Cron != "" {
+	if config.PairMgr.Cron != "" {
 		_, err_ := core.Cron.AddFunc(config.PairMgr.Cron, biz.AutoRefreshPairs)
 		if err_ != nil {
 			log.Error("add RefreshPairList fail", zap.Error(err_))

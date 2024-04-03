@@ -128,15 +128,21 @@ func (q *ExitReq) Clone() *ExitReq {
 func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 	s.CheckMS = btime.TimeMS()
 	if core.IsWarmUp {
-		s.Orders = nil
+		s.LongOrders = nil
+		s.ShortOrders = nil
 	} else if s.EnterNum > 0 {
-		s.Orders = nil
+		s.LongOrders = nil
+		s.ShortOrders = nil
 		for _, od := range curOrders {
 			if od.Strategy == s.Stagy.Name {
-				s.Orders = append(s.Orders, od)
+				if od.Short {
+					s.ShortOrders = append(s.ShortOrders, od)
+				} else {
+					s.LongOrders = append(s.LongOrders, od)
+				}
 			}
 		}
-		s.EnterNum = len(s.Orders)
+		s.EnterNum = len(s.LongOrders) + len(s.ShortOrders)
 	}
 	s.Entrys = nil
 	s.Exits = nil
@@ -144,7 +150,8 @@ func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 
 func (s *StagyJob) SnapOrderStates() map[int64]*orm.InOutSnap {
 	var res = make(map[int64]*orm.InOutSnap)
-	for _, od := range s.Orders {
+	orders := s.GetOrders(0)
+	for _, od := range orders {
 		res[od.ID] = od.TakeSnap()
 	}
 	return res
@@ -153,7 +160,8 @@ func (s *StagyJob) SnapOrderStates() map[int64]*orm.InOutSnap {
 func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOutEdit, *errs.Error) {
 	var res []*orm.InOutEdit
 	var skipSL, skipTP = 0, 0
-	for _, od := range s.Orders {
+	orders := s.GetOrders(0)
+	for _, od := range orders {
 		shot := od.TakeSnap()
 		old, ok := snap[od.ID]
 		if !od.CanClose() || od.Status < orm.InOutStatusFullEnter {

@@ -356,17 +356,27 @@ Position
 side long/short/空
 enterTag 入场标签，可为空
 */
-func (s *StagyJob) Position(side string, enterTag string) float64 {
+func (s *StagyJob) Position(dirt float64, enterTag string) float64 {
 	var totalCost float64
-	isShort := side == "short"
-	for _, od := range s.Orders {
+	orders := s.GetOrders(dirt)
+	for _, od := range orders {
 		if enterTag != "" && od.EnterTag != enterTag {
-			continue
-		}
-		if side != "" && od.Short != isShort {
 			continue
 		}
 		totalCost += od.EnterCost()
 	}
 	return totalCost / s.Stagy.GetStakeAmount(s)
+}
+
+func (s *StagyJob) GetOrders(dirt float64) []*orm.InOutOrder {
+	if dirt < 0 {
+		return s.ShortOrders
+	} else if dirt > 0 {
+		return s.LongOrders
+	} else {
+		res := make([]*orm.InOutOrder, 0, len(s.ShortOrders)+len(s.LongOrders))
+		res = append(res, s.ShortOrders...)
+		res = append(res, s.LongOrders...)
+		return res
+	}
 }
