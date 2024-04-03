@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -87,6 +88,17 @@ func (b *BackTest) Init() *errs.Error {
 
 func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 	b.BarNum += 1
+	if !core.IsWarmUp {
+		lastMS, _ := strategy.LastBatchMS[bar.TimeFrame]
+		if bar.Time > lastMS {
+			// 进入下一个时间帧，触发批量入场回调
+			backMS := btime.TimeMS()
+			btime.CurTimeMS = bar.Time + core.DelayEnterMS + 100
+			biz.TryFireEnters(bar.TimeFrame)
+			strategy.LastBatchMS[bar.TimeFrame] = bar.Time
+			btime.CurTimeMS = backMS
+		}
+	}
 	err := b.Trader.FeedKline(bar)
 	if err != nil {
 		if err.Code == core.ErrLiquidation {

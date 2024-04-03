@@ -14,6 +14,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"time"
 )
 
 type CryptoTrader struct {
@@ -117,7 +118,11 @@ func (t *CryptoTrader) FeedKLine(bar *banexg.PairTFKline) {
 	err := t.Trader.FeedKline(bar)
 	if err != nil {
 		log.Error("handle bar fail", zap.String("pair", bar.Symbol), zap.Error(err))
+		return
 	}
+	time.AfterFunc(time.Millisecond*core.DelayEnterMS, func() {
+		biz.TryFireEnters(bar.TimeFrame)
+	})
 }
 
 func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {

@@ -53,6 +53,7 @@ const (
 	StepTotal      = 1000
 	KBatchSize     = 900 // 单次请求交易所最大返回K线数量, 1000时api权重过大
 	DefaultDateFmt = "2006-01-02 15:04:05"
+	DelayEnterMS   = 3000 // 推迟批量入场的毫秒数
 )
 
 const (

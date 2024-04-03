@@ -346,8 +346,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			err_ := pBar.Add64(pBarAdd)
 			pbarTo = btime.TimeMS()
 			if err_ != nil {
-				log.Error("procBar add fail", zap.Error(err_))
-				return errs.New(core.ErrRunTime, err_)
+				log.Warn("procBar add fail", zap.Error(err_))
 			}
 		}
 	}

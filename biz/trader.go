@@ -107,7 +107,11 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 		snap := job.SnapOrderStates()
 		job.Stagy.OnBar(job)
 		if !barExpired {
-			enters = append(enters, job.Entrys...)
+			if job.Stagy.BatchEnter && job.Stagy.OnBatchJobs != nil {
+				AddJobEnters(account, bar.TimeFrame, job)
+			} else {
+				enters = append(enters, job.Entrys...)
+			}
 		}
 		if !core.IsWarmUp {
 			curEdits, err := job.CheckCustomExits(snap)
@@ -123,42 +127,44 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 		job.Stagy.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
 	}
 	// 处理订单
-	if !core.IsWarmUp && len(enters)+len(exits)+len(edits) > 0 {
-		var sess *orm.Queries
-		var conn *pgxpool.Conn
-		if core.LiveMode {
-			// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
-			sess, conn, err = orm.Conn(nil)
-			if err != nil {
-				log.Error("get db sess fail", zap.Error(err))
-				return err
-			}
-			defer conn.Release()
-		}
-		var ents []*orm.InOutOrder
-		ents, _, err = odMgr.ProcessOrders(sess, env, enters, exits, edits)
-		if err != nil {
-			log.Error("process orders fail", zap.Error(err))
-			return err
-		}
-		t.onStagyEnterCB(ents, jobs)
-	}
-	return nil
+	return t.ExecOrders(odMgr, jobs, env, enters, exits, edits)
 }
 
-func (t *Trader) onStagyEnterCB(ents []*orm.InOutOrder, jobs map[string]*strategy.StagyJob) {
-	if len(ents) == 0 {
-		return
+func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob, env *ta.BarEnv,
+	enters []*strategy.EnterReq, exits []*strategy.ExitReq, edits []*orm.InOutEdit) *errs.Error {
+	if core.IsWarmUp || len(enters)+len(exits)+len(edits) == 0 {
+		return nil
 	}
-	var jobMap = map[string]*strategy.StagyJob{}
-	for _, job := range jobs {
-		jobMap[job.Stagy.Name] = job
-	}
-	for _, od := range ents {
-		job, ok := jobMap[od.Strategy]
-		if !ok || job.Stagy.OnOrderChange == nil {
-			continue
+	var sess *orm.Queries
+	var conn *pgxpool.Conn
+	var err *errs.Error
+	if core.LiveMode {
+		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
+		sess, conn, err = orm.Conn(nil)
+		if err != nil {
+			log.Error("get db sess fail", zap.Error(err))
+			return err
 		}
-		job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+		defer conn.Release()
 	}
+	var ents []*orm.InOutOrder
+	ents, _, err = odMgr.ProcessOrders(sess, env, enters, exits, edits)
+	if err != nil {
+		log.Error("process orders fail", zap.Error(err))
+		return err
+	}
+	if len(ents) > 0 {
+		var jobMap = map[string]*strategy.StagyJob{}
+		for _, job := range jobs {
+			jobMap[job.Stagy.Name] = job
+		}
+		for _, od := range ents {
+			job, ok := jobMap[od.Strategy]
+			if !ok || job.Stagy.OnOrderChange == nil {
+				continue
+			}
+			job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+		}
+	}
+	return nil
 }
