@@ -590,7 +590,7 @@ UpdateOds
 	保证金比率： (仓位名义价值 * 维持保证金率 - 维持保证金速算数) / (钱包余额 + 未实现盈亏)
 	钱包余额 = 初始净划入余额（含初始保证金） + 已实现盈亏 + 净资金费用 - 手续费
 */
-func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
+func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder, currency string) *errs.Error {
 	if len(odList) == 0 {
 		for _, item := range w.Items {
 			item.UnrealizedPOL = 0
@@ -598,14 +598,8 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 		}
 		return nil
 	}
-
 	// 所有订单都是同一个定价币，提前获取此币的钱包
-	exs := orm.GetSymbolByID(odList[0].Sid)
-	if exs == nil {
-		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", odList[0].Sid))
-	}
-	_, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
-	wallet := w.Get(quoteCode)
+	wallet := w.Get(currency)
 
 	// 计算是否爆仓
 	var totProfit float64
@@ -623,10 +617,7 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 		}
 	}
 
-	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
-	if err != nil {
-		return err
-	}
+	exchange := exg.Default
 	for _, od := range odList {
 		if od.Enter == nil || od.Enter.Filled == 0 {
 			continue
@@ -661,7 +652,7 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder) *errs.Error {
 			}
 		}
 		// 价格走势和预期相同。所需保证金增长
-		err = wallet.SetMargin(odKey, curMargin)
+		err := wallet.SetMargin(odKey, curMargin)
 		if err != nil {
 			log.Debug("cash lack, add margin fail", zap.String("od", odKey), zap.Error(err))
 		}

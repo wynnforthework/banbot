@@ -19,6 +19,7 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 	core.BotRunning = true
 	b := optmize.NewBackTest()
 	b.Run()
+	core.RunExitCalls()
 	return nil
 }
 
@@ -30,7 +31,9 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 	}
 	core.BotRunning = true
 	t := live.NewCryptoTrader()
-	return t.Run()
+	err = t.Run()
+	core.RunExitCalls()
+	return err
 }
 
 func RunDownData(args *config.CmdArgs) *errs.Error {
@@ -53,5 +56,7 @@ func RunSpider(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	return data.RunSpider(config.SpiderAddr)
+	err = data.RunSpider(config.SpiderAddr)
+	core.RunExitCalls()
+	return err
 }

@@ -30,6 +30,8 @@ type BTResult struct {
 	MaxReal        float64 // 最大资产
 	MaxDrawDownPct float64 // 最大回撤百分比
 	BarNum         int
+	TimeNum        int
+	lastTime       int64 // 上次bar的时间戳
 	Plots          *PlotData
 	StartMS        int64
 	EndMS          int64

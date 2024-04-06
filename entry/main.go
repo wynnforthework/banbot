@@ -50,7 +50,7 @@ func runMainEntrys(cmdName string) {
 		options = []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"}
 		entry = RunTrade
 	case "backtest":
-		options = []string{"timerange", "stake_amount", "pairs", "stg_dir"}
+		options = []string{"timerange", "stake_amount", "pairs", "stg_dir", "cpu_profile", "mem_profile"}
 		entry = RunBackTest
 	case "down_data":
 		options = []string{"timerange", "pairs", "timeframes", "medium"}
@@ -117,6 +117,10 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.BoolVar(&args.Force, "force", false, "skip confirm")
 		case "task_hash":
 			cmd.StringVar(&args.TaskHash, "task-hash", "", "hash code to use")
+		case "cpu_profile":
+			cmd.BoolVar(&args.CPUProfile, "cpu-profile", false, "enable cpu profile")
+		case "mem_profile":
+			cmd.BoolVar(&args.MemProfile, "mem-profile", false, "enable memory profile")
 		case "task_id":
 			cmd.IntVar(&args.TaskId, "task-id", 0, "task")
 		default:

@@ -37,4 +37,6 @@ type CmdArgs struct {
 	TaskHash      string
 	TaskId        int
 	MaxPoolSize   int
+	CPUProfile    bool
+	MemProfile    bool
 }

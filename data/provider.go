@@ -27,11 +27,13 @@ type IProvider interface {
 	LoopMain() *errs.Error
 	SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error
 	UnSubPairs(pairs ...string) *errs.Error
+	SetDirty()
 }
 
 type Provider[T IKlineFeeder] struct {
 	holders   map[string]T
 	newFeeder func(pair string, tfs []string) (T, *errs.Error)
+	dirty     bool
 }
 
 func (p *Provider[IKlineFeeder]) UnSubPairs(pairs ...string) []string {
@@ -43,6 +45,10 @@ func (p *Provider[IKlineFeeder]) UnSubPairs(pairs ...string) []string {
 		}
 	}
 	return removed
+}
+
+func (p *Provider[IKlineFeeder]) SetDirty() {
+	p.dirty = true
 }
 
 type WarmJob struct {
@@ -311,26 +317,25 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 		}
 	}()
 	log.Info("run data loop for backtest..")
+	var hold IHistKlineFeeder
+	holds := utils.ValsOfMap(p.holders)
+	p.dirty = true
 	for {
 		if !core.BotRunning {
 			break
 		}
-		holds := utils.ValsOfMap(p.holders)
-		sort.Slice(holds, func(i, j int) bool {
-			a, b := holds[i], holds[j]
-			va, vb := a.getNextMS(), b.getNextMS()
-			if va == math.MaxInt64 || vb == math.MaxInt64 {
-				return va < vb
-			}
-			if va != vb {
-				return va < vb
-			}
-			return a.getSymbol() < b.getSymbol()
-		})
-		hold := holds[0]
+		if p.dirty {
+			holds = utils.ValsOfMap(p.holders)
+			holds = p.sortFeeders(holds, hold, false)
+			p.dirty = false
+		} else {
+			holds = p.sortFeeders(holds, hold, true)
+		}
+		hold = holds[0]
 		if hold.getNextMS() == math.MaxInt64 {
 			break
 		}
+		holds = holds[1:]
 		// 触发回调
 		err := hold.invoke()
 		if err != nil {
@@ -351,6 +356,40 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 		}
 	}
 	return nil
+}
+
+func (p *HistProvider[IHistKlineFeeder]) sortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) []IHistKlineFeeder {
+	if insert {
+		// 插入排序，说明holds已有序，二分查找位置，最快排序
+		vb := hold.getNextMS()
+		bSymbol := hold.getSymbol()
+		index := sort.Search(len(holds), func(i int) bool {
+			va := holds[i].getNextMS()
+			if va == math.MaxInt64 || vb == math.MaxInt64 {
+				return va > vb
+			}
+			if va != vb {
+				return va > vb
+			}
+			return holds[i].getSymbol() > bSymbol
+		})
+		holds = append(holds, hold)
+		copy(holds[index+1:], holds[index:])
+		holds[index] = hold
+		return holds
+	}
+	sort.Slice(holds, func(i, j int) bool {
+		a, b := holds[i], holds[j]
+		va, vb := a.getNextMS(), b.getNextMS()
+		if va == math.MaxInt64 || vb == math.MaxInt64 {
+			return va < vb
+		}
+		if va != vb {
+			return va < vb
+		}
+		return a.getSymbol() < b.getSymbol()
+	})
+	return holds
 }
 
 type LiveProvider[T IKlineFeeder] struct {

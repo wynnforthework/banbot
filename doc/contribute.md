@@ -64,3 +64,10 @@ strategy
     AccInfoJobs // 涉及的所有辅助信息标的
 ```
 注意：所有Acc开头的变量都是支持多账户的map
+
+# 常见问题
+### 如何进行函数性能测试？
+回测时添加`-cpu-profile`参数，启用性能测试，输出`cpu.profile`到回测目录下。然后执行下面命令可以查看结果
+```shell
+go tool pprof -http :8080 cpu.profile
+```

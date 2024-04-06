@@ -60,7 +60,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 	if err != nil {
 		return err
 	}
-	if core.IsContract {
+	if core.IsContract && core.CheckWallets {
 		// 为合约更新此定价币的所有订单保证金和钱包情况
 		_, _, code, _ := core.SplitSymbol(bar.Symbol)
 		var orders []*orm.InOutOrder
@@ -71,7 +71,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 			}
 		}
 		wallets := GetWallets(o.Account)
-		err = wallets.UpdateOds(orders)
+		err = wallets.UpdateOds(orders, code)
 	}
 	return err
 }

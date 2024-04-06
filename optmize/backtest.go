@@ -17,6 +17,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"os"
+	"runtime/pprof"
 	"slices"
 	"time"
 )
@@ -68,15 +69,10 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	taskId := orm.GetTaskID("")
-	b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), taskId)
-	err_ := os.MkdirAll(b.OutDir, 0755)
-	if err_ != nil {
-		return errs.New(core.ErrIOWriteFail, err_)
+	err = b.initTaskOut()
+	if err != nil {
+		return err
 	}
-	config.Args.Logfile = b.OutDir + "/out.log"
-	log.Setup(config.Args.Debug, config.Args.Logfile)
-	b.checkCfg()
 	// 交易对初始化
 	log.Info("loading exchange markets ...")
 	err = exg.Default.LoadLeverageBrackets(false, nil)
@@ -88,15 +84,22 @@ func (b *BackTest) Init() *errs.Error {
 
 func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 	b.BarNum += 1
+	curTime := btime.TimeMS()
+	core.CheckWallets = false
 	if !core.IsWarmUp {
 		lastMS, _ := strategy.LastBatchMS[bar.TimeFrame]
 		if bar.Time > lastMS {
 			// 进入下一个时间帧，触发批量入场回调
-			backMS := btime.TimeMS()
+			backMS := curTime
 			btime.CurTimeMS = bar.Time + core.DelayEnterMS + 100
 			biz.TryFireEnters(bar.TimeFrame)
 			strategy.LastBatchMS[bar.TimeFrame] = bar.Time
 			btime.CurTimeMS = backMS
+		}
+		if curTime > b.lastTime {
+			b.lastTime = curTime
+			b.TimeNum += 1
+			core.CheckWallets = true
 		}
 	}
 	err := b.Trader.FeedKline(bar)
@@ -108,14 +111,15 @@ func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 		}
 		return
 	}
-	if !core.IsWarmUp {
-		b.logState(bar.Time, btime.TimeMS())
+	if !core.IsWarmUp && core.CheckWallets {
+		b.logState(bar.Time, curTime)
 	}
 	if nextRefresh > 0 && bar.Time >= nextRefresh {
 		// 刷新交易对
 		nextRefresh = schedule.Next(time.UnixMilli(bar.Time)).UnixMilli()
 		biz.AutoRefreshPairs()
-		log.Info("refreshed pairs at", zap.String("date", btime.ToDateStr(btime.TimeMS(), "")))
+		log.Info("refreshed pairs at", zap.String("date", btime.ToDateStr(curTime, "")))
+		data.Main.SetDirty()
 	}
 }
 
@@ -147,7 +151,50 @@ func (b *BackTest) Run() {
 	b.printBtResult()
 }
 
-func (b *BackTest) checkCfg() {
+func (b *BackTest) initTaskOut() *errs.Error {
+	taskId := orm.GetTaskID("")
+	b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), taskId)
+	err_ := os.MkdirAll(b.OutDir, 0755)
+	if err_ != nil {
+		return errs.New(core.ErrIOWriteFail, err_)
+	}
+	config.Args.Logfile = b.OutDir + "/out.log"
+	log.Setup(config.Args.Debug, config.Args.Logfile)
+	// 检查是否profile
+	if config.Args.CPUProfile {
+		f, err_ := os.OpenFile(b.OutDir+"/cpu.profile", os.O_CREATE|os.O_RDWR, 0644)
+		if err_ != nil {
+			log.Error("write to cpu.profile fail", zap.Error(err_))
+		} else {
+			err_ = pprof.StartCPUProfile(f)
+			if err_ != nil {
+				log.Error("start cpu profile fail", zap.Error(err_))
+			} else {
+				log.Info("start profile cpu", zap.String("path", f.Name()))
+			}
+			core.ExitCalls = append(core.ExitCalls, func() {
+				pprof.StopCPUProfile()
+				err_ = f.Close()
+				if err_ != nil {
+					log.Error("save cpu.profile fail", zap.Error(err_))
+				}
+			})
+		}
+	}
+	if config.Args.MemProfile {
+		f, err_ := os.OpenFile(b.OutDir+"/mem.profile", os.O_CREATE|os.O_RDWR, 0644)
+		if err_ != nil {
+			log.Error("write to mem.profile fail", zap.Error(err_))
+		} else {
+			core.MemOut = f
+			core.ExitCalls = append(core.ExitCalls, func() {
+				err_ = f.Close()
+				if err_ != nil {
+					log.Error("save mem.profile fail", zap.Error(err_))
+				}
+			})
+		}
+	}
 	_, ok := config.Accounts[config.DefAcc]
 	if !ok {
 		panic("default Account invalid!")
@@ -155,6 +202,7 @@ func (b *BackTest) checkCfg() {
 	if config.StakePct > 0 {
 		log.Warn("stake_amt may result in inconsistent order amounts with each backtest!")
 	}
+	return nil
 }
 
 func (b *BackTest) onLiquidation(symbol string) {
@@ -207,7 +255,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
 	}
 	odNum := orm.OpenNum("", orm.InOutStatusPartEnter)
-	if b.BarNum%b.PlotEvery != 0 {
+	if b.TimeNum%b.PlotEvery != 0 {
 		if odNum > b.Plots.tmpOdNum {
 			b.Plots.tmpOdNum = odNum
 		}

@@ -2,7 +2,10 @@ package core
 
 import (
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
 	"github.com/dgraph-io/ristretto"
+	"go.uber.org/zap"
+	"runtime/pprof"
 )
 
 var (
@@ -30,4 +33,22 @@ func GetCacheVal[T any](key string, defVal T) T {
 		}
 	}
 	return defVal
+}
+
+func SnapMem(name string) {
+	if MemOut == nil {
+		log.Warn("core.MemOut is nil, skip memory snapshot")
+		return
+	}
+	err := pprof.Lookup(name).WriteTo(MemOut, 0)
+	if err != nil {
+		log.Warn("save mem snapshot fail", zap.Error(err))
+	}
+}
+
+func RunExitCalls() {
+	for _, method := range ExitCalls {
+		method()
+	}
+	ExitCalls = nil
 }

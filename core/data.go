@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/banbox/banexg"
 	"github.com/robfig/cron/v3"
+	"io"
 	"sync"
 )
 
@@ -18,6 +19,7 @@ var (
 	ExgName      string                               // 交易所名称
 	Market       string                               // 当前市场
 	IsContract   bool                                 // 当前市场是否是合约市场, linear/inverse/option
+	CheckWallets bool                                 // 当前是否应该更新钱包
 	ContractType string                               // 当前合约类型
 	StgPairTfs   = make(map[string]map[string]string) // 策略: 标的: 周期
 	Pairs        []string                             // 全局所有的标的
@@ -31,6 +33,9 @@ var (
 	OdBooks      = map[string]*banexg.OrderBook{}     // 缓存所有从爬虫收到的订单簿
 	NumTaCache   = 1500                               // 指标计算时缓存的历史值数量，默认1500
 	Cron         = cron.New(cron.WithSeconds())       // 使用cron定时运行任务
+
+	ExitCalls []func()  // 停止执行的回调
+	MemOut    io.Writer // 进行内存profile的输出
 
 	ConcurNum = 2 // 最大同时下载K线任务数，过大会出现429限流
 )

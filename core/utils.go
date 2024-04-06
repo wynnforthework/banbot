@@ -60,6 +60,7 @@ func PrintStagyGroups() {
 
 var (
 	reCoinSplit = regexp.MustCompile("[/:-]")
+	splitCache  = map[string][4]string{}
 )
 
 /*
@@ -67,6 +68,9 @@ SplitSymbol
 返回：Base，Quote，Settle，Identifier
 */
 func SplitSymbol(pair string) (string, string, string, string) {
+	if cache, ok := splitCache[pair]; ok {
+		return cache[0], cache[1], cache[2], cache[3]
+	}
 	parts := reCoinSplit.Split(pair, -1)
 	settle, ident := "", ""
 	if len(parts) > 2 {
@@ -75,5 +79,6 @@ func SplitSymbol(pair string) (string, string, string, string) {
 	if len(parts) > 3 {
 		ident = parts[3]
 	}
+	splitCache[pair] = [4]string{parts[0], parts[1], settle, ident}
 	return parts[0], parts[1], settle, ident
 }
