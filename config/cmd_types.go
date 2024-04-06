@@ -19,7 +19,6 @@ type CmdArgs struct {
 	Debug         bool
 	NoCompress    bool
 	NoDefault     bool
-	FixTFKline    bool
 	TimeRange     string
 	RawTimeFrames string
 	TimeFrames    []string

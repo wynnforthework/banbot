@@ -79,7 +79,6 @@ func apply(args *CmdArgs) *errs.Error {
 	Loaded = true
 	Debug = args.Debug
 	NoDB = args.NoDb
-	FixTFKline = args.FixTFKline
 	if args.TimeRange != "" {
 		Data.TimeRangeRaw = args.TimeRange
 	}

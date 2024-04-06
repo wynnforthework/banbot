@@ -955,6 +955,10 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			curSid = row.Sid
 			exs = GetSymbolByID(curSid)
 		}
+		if exs == nil {
+			log.Warn("symbol id invalid", zap.Int32("sid", curSid))
+			continue
+		}
 		start, stop := row.Start, row.Stop
 		// 这里本来有从小周期检查已填充则跳过大周期KHole的逻辑，但因较大周期无法从特小周期归集，故这里取消。
 		// 每个周期应独立检索实际K线范围，确保范围正确

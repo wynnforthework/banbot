@@ -57,6 +57,8 @@ func runMainEntrys(cmdName string) {
 		entry = RunDownData
 	case "down_ws":
 		break
+	case "fixtf":
+		entry = RunFixTF
 	case "dbcmd":
 		options = []string{"action", "tables", "force"}
 		entry = RunDbCmd
@@ -86,7 +88,6 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 	cmd.StringVar(&args.DataDir, "datadir", "", "Path to data dir.")
 	cmd.BoolVar(&args.NoDb, "nodb", false, "dont save orders to database")
 	cmd.BoolVar(&args.Debug, "debug", false, "set logging level to debug")
-	cmd.BoolVar(&args.FixTFKline, "fixtf", false, "sync kline data between TimeFrames")
 	cmd.BoolVar(&args.NoCompress, "no-compress", false, "disable compress for hyper table")
 	cmd.BoolVar(&args.NoDefault, "no-default", false, "ignore default: config.yml, config.local.yml")
 	cmd.IntVar(&args.MaxPoolSize, "max-pool-size", 0, "max pool size for db")

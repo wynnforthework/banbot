@@ -190,6 +190,13 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 }
 
 func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
+	if req.Dirt != core.OdDirtBoth {
+		if req.Dirt == core.OdDirtLong && len(s.LongOrders) == 0 ||
+			req.Dirt == core.OdDirtShort && len(s.ShortOrders) == 0 {
+			// 跳过无效的平仓请求
+			return nil
+		}
+	}
 	if req.Tag == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is required")
 	}

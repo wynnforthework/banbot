@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/live"
 	"github.com/banbox/banbot/optmize"
+	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg/errs"
 )
 
@@ -39,6 +40,15 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 func RunDownData(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
 	return nil
+}
+
+func RunFixTF(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := biz.SetupComs(args)
+	if err != nil {
+		return err
+	}
+	return orm.SyncKlineTFs()
 }
 
 func RunDbCmd(args *config.CmdArgs) *errs.Error {

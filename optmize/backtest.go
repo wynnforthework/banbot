@@ -59,12 +59,6 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	if config.FixTFKline {
-		err = orm.SyncKlineTFs()
-		if err != nil {
-			return err
-		}
-	}
 	err = orm.InitTask()
 	if err != nil {
 		return err
@@ -162,7 +156,14 @@ func (b *BackTest) initTaskOut() *errs.Error {
 	log.Setup(config.Args.Debug, config.Args.Logfile)
 	// 检查是否profile
 	if config.Args.CPUProfile {
-		f, err_ := os.OpenFile(b.OutDir+"/cpu.profile", os.O_CREATE|os.O_RDWR, 0644)
+		outPath := b.OutDir + "/cpu.profile"
+		if _, err_ = os.Stat(outPath); err_ == nil {
+			err_ = os.Remove(outPath)
+			if err_ != nil {
+				log.Error("del old cpu.profile fail", zap.Error(err_))
+			}
+		}
+		f, err_ := os.OpenFile(outPath, os.O_CREATE|os.O_RDWR, 0644)
 		if err_ != nil {
 			log.Error("write to cpu.profile fail", zap.Error(err_))
 		} else {

@@ -44,12 +44,6 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	if config.FixTFKline {
-		err = orm.SyncKlineTFs()
-		if err != nil {
-			return err
-		}
-	}
 	err = rpc.InitRPC()
 	if err != nil {
 		return err
