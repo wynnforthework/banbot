@@ -2,7 +2,7 @@ package goods
 
 import (
 	"fmt"
-	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
@@ -44,7 +44,7 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 	if !f.NeedTickers {
 		startMS := int64(0)
 		if !core.LiveMode {
-			startMS = config.TimeRange.StartMS
+			startMS = btime.TimeMS()
 		}
 		limit := f.BackPeriod
 		callBack := func(symbol string, _ string, klines []*banexg.Kline) {
@@ -261,10 +261,13 @@ func (f *SpreadFilter) Filter(symbols []string, tickers map[string]*banexg.Ticke
 
 func (f *OffsetFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	var res = symbols
+	if f.Reverse {
+		slices.Reverse(res)
+	}
 	if f.Offset < len(res) {
 		res = res[f.Offset:]
 	}
-	if f.Limit < len(res) {
+	if f.Limit > 0 && f.Limit < len(res) {
 		res = res[:f.Limit]
 	}
 	if len(res) < len(symbols) {

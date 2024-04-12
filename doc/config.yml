@@ -28,9 +28,14 @@ fatal_stop_hours: 8  # 触发全局止损时，禁止开单的小时；默认8
 timerange: "20230701-20230808"  # 使用的K线范围，用于回测
 run_timeframes: [5m]  # 机器人允许运行的所有时间周期。策略会从中选择适合的最小周期，此处优先级低于run_policy
 run_policy:  # 运行的策略，可以多个策略同时运行
-  - name: Demo  # 策略名称
+  Demo:  # 策略名称
     run_timeframes: [5m]  # 此策略支持的时间周期，提供时覆盖根层级的run_timeframes
+    filters:  # 可使用pairlists中的所有过滤器
+    - name: OffsetFilter  # 偏移限定数量选择。一般用在最后
+      offset: 10  # 从第10个开始取
+      limit: 30  # 最多取30个
     max_pair: 999  # 此策略允许的最大标的数量
+    max_open: 10  # 此策略最大开单数量
 pairs:  # 给定交易币种，如不为空，pairlists会被忽略
 - SOL/USDT:USDT
 - UNFI/USDT:USDT

@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	ta "github.com/banbox/banta"
@@ -33,14 +36,6 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	if len(pairs) == 0 || len(tfScores) == 0 {
 		return nil, errs.NewMsg(errs.CodeParamRequired, "`pairs` and `tfScores` are required for LoadStagyJobs")
 	}
-	var exsList []*orm.ExSymbol
-	for _, pair := range pairs {
-		exs, err := orm.GetExSymbolCur(pair)
-		if err != nil {
-			return nil, err
-		}
-		exsList = append(exsList, exs)
-	}
 	// 将涉及的全局变量置为空，下面会更新
 	core.TFSecs = make(map[string]int)
 	core.BookPairs = make(map[string]bool)
@@ -61,6 +56,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			pairTfWarms[pair] = map[string]int{tf: num}
 		}
 	}
+	stagyAdds := getStagyOpenPairs()
 	for _, pol := range config.RunPolicy {
 		stagy := Get(pol.Name)
 		if stagy == nil {
@@ -74,8 +70,21 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		holdNum := 0
 		newPairMap := make(map[string]string)
 		failTfScores := make(map[string]map[string]float64)
+		adds, _ := stagyAdds[pol.Name]
+		var curPairs, err = getPolicyPairs(pol, pairs, adds)
+		if err != nil {
+			return nil, err
+		}
+		var exsList []*orm.ExSymbol
+		for _, pair := range curPairs {
+			exs, err := orm.GetExSymbolCur(pair)
+			if err != nil {
+				return nil, err
+			}
+			exsList = append(exsList, exs)
+		}
 		for _, exs := range exsList {
-			if holdNum > stagyMaxNum {
+			if holdNum >= stagyMaxNum {
 				break
 			}
 			scores, ok := tfScores[exs.Symbol]
@@ -274,4 +283,74 @@ func initStagyJobs() {
 			}
 		}
 	}
+}
+
+var polFilters = make(map[string][]goods.IFilter)
+
+func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string, adds []string) ([]string, *errs.Error) {
+	if len(pol.Filters) == 0 || len(pairs) == 0 {
+		return pairs, nil
+	}
+	filters, ok := polFilters[pol.Name]
+	var err *errs.Error
+	if !ok {
+		filters, err = goods.GetPairFilters(pol.Filters, false)
+		if err != nil {
+			return nil, err
+		}
+		polFilters[pol.Name] = filters
+	}
+	var tickersMap map[string]*banexg.Ticker
+	if core.LiveMode {
+		for _, flt := range filters {
+			if flt.IsNeedTickers() {
+				tickersMap, err = exg.GetTickers()
+				if err != nil {
+					return nil, err
+				}
+				break
+			}
+		}
+	}
+	for _, flt := range filters {
+		pairs, err = flt.Filter(pairs, tickersMap)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(adds) > 0 {
+		err = orm.EnsureCurSymbols(adds)
+		if err != nil {
+			return nil, err
+		}
+		pairs = utils.UnionArr(adds, pairs)
+		log.Info("add pairs while refresh", zap.Strings("add", adds))
+	}
+	return pairs, nil
+}
+
+func getStagyOpenPairs() map[string][]string {
+	var data = make(map[string]map[string]bool)
+	for account := range config.Accounts {
+		openOds, lock := orm.GetOpenODs(account)
+		lock.Lock()
+		for _, od := range openOds {
+			items, ok := data[od.Strategy]
+			if !ok {
+				items = make(map[string]bool)
+				data[od.Strategy] = items
+			}
+			items[od.Symbol] = true
+		}
+		lock.Unlock()
+	}
+	var res = make(map[string][]string)
+	for name, item := range data {
+		var list = make([]string, 0, len(item))
+		for pair := range item {
+			list = append(list, pair)
+		}
+		res[name] = list
+	}
+	return res
 }

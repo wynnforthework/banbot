@@ -89,7 +89,14 @@ func EnsureCurSymbols(symbols []string) *errs.Error {
 	exsList := make([]*ExSymbol, 0, len(symbols))
 	exgId := config.Exchange.Name
 	marketType := core.Market
+	marMap, err := exg.Default.LoadMarkets(false, nil)
+	if err != nil {
+		return err
+	}
 	for _, symbol := range symbols {
+		if _, ok := marMap[symbol]; !ok {
+			return errs.NewMsg(core.ErrInvalidSymbol, symbol)
+		}
 		exsList = append(exsList, &ExSymbol{Exchange: exgId, Market: marketType, Symbol: symbol})
 	}
 	return EnsureSymbols(exsList)

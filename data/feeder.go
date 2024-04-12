@@ -340,6 +340,11 @@ func (f *HistKLineFeeder) invoke() *errs.Error {
 	}
 	bar := f.caches[f.rowIdx]
 	tfMSecs := f.caches[1].Time - f.caches[0].Time
+	if len(f.caches) > 2 {
+		idx := len(f.caches) - 1
+		msecs := f.caches[idx].Time - f.caches[idx-1].Time
+		tfMSecs = min(tfMSecs, msecs)
+	}
 	_, err := f.onNewBars(tfMSecs, []*banexg.Kline{bar})
 	f.setNext()
 	return err

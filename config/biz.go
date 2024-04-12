@@ -182,6 +182,12 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	RunTimeframes = Data.RunTimeframes
 	WatchJobs = Data.WatchJobs
+	if Data.RunPolicy == nil {
+		Data.RunPolicy = make(map[string]*RunPolicyConfig)
+	}
+	for name, pol := range Data.RunPolicy {
+		pol.Name = name
+	}
 	RunPolicy = Data.RunPolicy
 	if len(args.Pairs) > 0 {
 		Data.Pairs = args.Pairs

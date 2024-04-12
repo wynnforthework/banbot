@@ -9,7 +9,6 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
-	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -49,31 +48,27 @@ func (t *CryptoTrader) Init() *errs.Error {
 		return err
 	}
 	// 订单管理器初始化
-	addPairs, err := t.initOdMgr()
+	err = t.initOdMgr()
 	if err != nil {
 		return err
 	}
-	return biz.LoadRefreshPairs(addPairs)
+	return biz.LoadRefreshPairs()
 }
 
-func (t *CryptoTrader) initOdMgr() ([]string, *errs.Error) {
+func (t *CryptoTrader) initOdMgr() *errs.Error {
 	if !core.EnvReal {
 		biz.InitLocalOrderMgr(t.orderCB)
-		return nil, nil
+		return nil
 	}
 	biz.InitLiveOrderMgr(t.orderCB)
-	var addPairs = make(map[string]bool)
 	for account := range config.Accounts {
 		odMgr := biz.GetLiveOdMgr(account)
 		oldList, newList, delList, err := odMgr.SyncExgOrders()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		openOds, lock := orm.GetOpenODs(account)
 		lock.Lock()
-		for _, od := range openOds {
-			addPairs[od.Symbol] = true
-		}
 		msg := fmt.Sprintf("订单恢复%d，删除%d，新增%d，已开启%d单", len(oldList), len(delList), len(newList), len(openOds))
 		lock.Unlock()
 		rpc.SendMsg(map[string]interface{}{
@@ -82,7 +77,7 @@ func (t *CryptoTrader) initOdMgr() ([]string, *errs.Error) {
 			"status":  msg,
 		})
 	}
-	return utils.KeysOfMap(addPairs), nil
+	return nil
 }
 
 func (t *CryptoTrader) Run() *errs.Error {

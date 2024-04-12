@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banexg/bex"
 	"github.com/banbox/banexg/errs"
 	"github.com/mitchellh/mapstructure"
+	"time"
 )
 
 func Setup() *errs.Error {
@@ -150,4 +151,21 @@ func GetOdBook(pair string) (*banexg.OrderBook, *errs.Error) {
 		core.OdBooks[pair] = book
 	}
 	return book, nil
+}
+
+func GetTickers() (map[string]*banexg.Ticker, *errs.Error) {
+	tickersMap := core.GetCacheVal("tickers", map[string]*banexg.Ticker{})
+	if len(tickersMap) > 0 {
+		return tickersMap, nil
+	}
+	tickers, err := Default.FetchTickers(nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tickers {
+		tickersMap[t.Symbol] = t
+	}
+	expires := time.Second * 3600
+	core.Cache.SetWithTTL("tickers", tickersMap, 1, expires)
+	return tickersMap, nil
 }

@@ -22,7 +22,7 @@ var (
 	CheckWallets bool                                 // 当前是否应该更新钱包
 	ContractType string                               // 当前合约类型
 	StgPairTfs   = make(map[string]map[string]string) // 策略: 标的: 周期
-	Pairs        []string                             // 全局所有的标的
+	Pairs        []string                             // 全局所有的标的，按标的刷新后的顺序
 	PairsMap     = make(map[string]bool)              // 全局所有的标的
 	ForbidPairs  = make(map[string]bool)              // 禁止交易的币种
 	NoEnterUntil = make(map[string]int64)             // account: 禁止开单的截止13位时间戳

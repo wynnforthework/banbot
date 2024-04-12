@@ -110,7 +110,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		req.LegalCost = s.Stagy.GetStakeAmount(s) * req.CostRate
 		avgVol := s.avgVolume(5) // 最近5个蜡烛成交量
 		reqAmt := req.LegalCost / curPrice
-		if reqAmt/avgVol > config.OpenVolRate {
+		if avgVol > 0 && reqAmt/avgVol > config.OpenVolRate {
 			req.LegalCost = avgVol * config.OpenVolRate * curPrice
 			if core.LiveMode {
 				log.Info(fmt.Sprintf("%v open amt rate: %.1f > open_vol_rate(%.1f), cut to cost: %.1f",
@@ -190,12 +190,9 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 }
 
 func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
-	if req.Dirt != core.OdDirtBoth {
-		if req.Dirt == core.OdDirtLong && len(s.LongOrders) == 0 ||
-			req.Dirt == core.OdDirtShort && len(s.ShortOrders) == 0 {
-			// 跳过无效的平仓请求
-			return nil
-		}
+	orders := s.GetOrders(float64(req.Dirt))
+	if len(orders) == 0 {
+		return nil
 	}
 	if req.Tag == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is required")

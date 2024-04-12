@@ -73,7 +73,7 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	return biz.LoadRefreshPairs(nil)
+	return biz.LoadRefreshPairs()
 }
 
 func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {

@@ -89,39 +89,61 @@ func CleanUpOdMgr() *errs.Error {
 	return err
 }
 
-func allowOrderEnter(account string, env *banta.BarEnv) bool {
+func allowOrderEnter(account string, env *banta.BarEnv, enters []*strategy.EnterReq) []*strategy.EnterReq {
 	if _, ok := core.ForbidPairs[env.Symbol]; ok {
-		return false
+		return nil
 	}
 	if core.RunMode == core.RunModeOther {
 		// 不涉及订单模式，禁止开单
-		return false
+		return nil
 	}
 	openOds, lock := orm.GetOpenODs(account)
 	lock.Lock()
 	numOver := len(openOds) >= config.MaxOpenOrders
+	if !numOver && len(openOds) > 0 {
+		// 检查是否超出策略最大开单数量
+		stagyOdNum := make(map[string]int)
+		for _, od := range openOds {
+			num, _ := stagyOdNum[od.Strategy]
+			stagyOdNum[od.Strategy] = num + 1
+		}
+		res := make([]*strategy.EnterReq, 0, len(enters))
+		for _, req := range enters {
+			num, _ := stagyOdNum[req.StgyName]
+			pol, _ := config.RunPolicy[req.StgyName]
+			if pol == nil || pol.MaxOpen == 0 || num < pol.MaxOpen {
+				stagyOdNum[req.StgyName] = num + 1
+				res = append(res, req)
+			}
+		}
+		enters = res
+	}
 	lock.Unlock()
 	if numOver {
-		return false
+		return nil
 	}
 	stopUntil, _ := core.NoEnterUntil[account]
 	if btime.TimeMS() < stopUntil {
 		log.Warn("any enter forbid", zap.String("pair", env.Symbol))
-		return false
+		return nil
 	}
 	if !core.LiveMode {
 		// 回测模式，不检查延迟，直接允许
-		return true
+		return enters
 	}
 	// 实盘订单提交到交易所，检查延迟不能超过80%
 	rate := float64(btime.TimeMS()-env.TimeStop) / float64(env.TimeStop-env.TimeStart)
-	return rate <= 0.8
+	if rate <= 0.8 {
+		return enters
+	}
+	return nil
 }
 
 func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strategy.EnterReq,
 	exits []*strategy.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	var entOrders, extOrders []*orm.InOutOrder
-	if len(enters) > 0 && allowOrderEnter(o.Account, env) {
+	if len(enters) > 0 {
+		enters = allowOrderEnter(o.Account, env, enters)
 		for _, ent := range enters {
 			iorder, err := o.EnterOrder(sess, env, ent, false)
 			if err != nil {
@@ -147,8 +169,11 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 	if req.Short && isSpot {
 		return nil, errs.NewMsg(core.ErrRunTime, "short oder is invalid for spot")
 	}
-	if doCheck && !allowOrderEnter(o.Account, env) {
-		return nil, nil
+	if doCheck {
+		enters := allowOrderEnter(o.Account, env, []*strategy.EnterReq{req})
+		if len(enters) == 0 {
+			return nil, nil
+		}
 	}
 	if req.Leverage == 0 && !isSpot {
 		req.Leverage = config.GetAccLeverage(o.Account)

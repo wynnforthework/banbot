@@ -55,13 +55,17 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func LoadRefreshPairs(addPairs []string) *errs.Error {
-	pairTfScores, err := goods.RefreshPairList(addPairs)
+func LoadRefreshPairs() *errs.Error {
+	pairs, err := goods.RefreshPairList()
+	if err != nil {
+		return err
+	}
+	pairTfScores, err := calcPairTfScales(exg.Default, pairs)
 	if err != nil {
 		return err
 	}
 	var warms map[string]map[string]int
-	warms, err = strategy.LoadStagyJobs(core.Pairs, pairTfScores)
+	warms, err = strategy.LoadStagyJobs(pairs, pairTfScores)
 	if err != nil {
 		return err
 	}
@@ -70,16 +74,7 @@ func LoadRefreshPairs(addPairs []string) *errs.Error {
 }
 
 func AutoRefreshPairs() {
-	var addPairs = make(map[string]bool)
-	for account := range config.Accounts {
-		openOds, lock := orm.GetOpenODs(account)
-		lock.Lock()
-		for _, od := range openOds {
-			addPairs[od.Symbol] = true
-		}
-		lock.Unlock()
-	}
-	err := LoadRefreshPairs(utils.KeysOfMap(addPairs))
+	err := LoadRefreshPairs()
 	if err != nil {
 		log.Error("refresh pairs fail", zap.Error(err))
 	}

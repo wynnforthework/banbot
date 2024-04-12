@@ -60,14 +60,14 @@ func Check(err error) {
 
 func UnionArr[T comparable](arrs ...[]T) []T {
 	hit := make(map[T]struct{})
+	result := make([]T, 0, len(hit))
 	for _, arr := range arrs {
 		for _, text := range arr {
-			hit[text] = struct{}{}
+			if _, ok := hit[text]; !ok {
+				result = append(result, text)
+				hit[text] = struct{}{}
+			}
 		}
-	}
-	result := make([]T, 0, len(hit))
-	for key := range hit {
-		result = append(result, key)
 	}
 	return result
 }

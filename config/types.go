@@ -40,7 +40,7 @@ var (
 	RunTimeframes    []string
 	KlineSource      string
 	WatchJobs        map[string][]string
-	RunPolicy        []*RunPolicyConfig
+	RunPolicy        map[string]*RunPolicyConfig
 	Pairs            []string
 	PairMgr          *PairMgrConfig
 	PairFilters      []*CommonPairFilter
@@ -89,7 +89,7 @@ type Config struct {
 	RunTimeframes   []string                          `yaml:"run_timeframes" mapstructure:"run_timeframes"`
 	KlineSource     string                            `yaml:"kline_source" mapstructure:"kline_source"`
 	WatchJobs       map[string][]string               `yaml:"watch_jobs" mapstructure:"watch_jobs"`
-	RunPolicy       []*RunPolicyConfig                `yaml:"run_policy" mapstructure:"run_policy"`
+	RunPolicy       map[string]*RunPolicyConfig       `yaml:"run_policy" mapstructure:"run_policy"`
 	Pairs           []string                          `yaml:"pairs" mapstructure:"pairs"`
 	PairMgr         *PairMgrConfig                    `yaml:"pairmgr" mapstructure:"pairmgr"`
 	PairFilters     []*CommonPairFilter               `yaml:"pairlists" mapstructure:"pairlists"`
@@ -103,9 +103,11 @@ type Config struct {
 
 // 运行的策略，可以多个策略同时运行
 type RunPolicyConfig struct {
-	Name          string   `yaml:"name" mapstructure:"name"`
-	RunTimeframes []string `yaml:"run_timeframes" mapstructure:"run_timeframes"`
-	MaxPair       int      `yaml:"max_pair" mapstructure:"max_pair"`
+	Name          string              `yaml:"name" mapstructure:"name"`
+	Filters       []*CommonPairFilter `yaml:"filters" mapstructure:"filters"`
+	RunTimeframes []string            `yaml:"run_timeframes" mapstructure:"run_timeframes"`
+	MaxPair       int                 `yaml:"max_pair" mapstructure:"max_pair"`
+	MaxOpen       int                 `yaml:"max_open" mapstructure:"max_open"`
 }
 
 type DatabaseConfig struct {
@@ -175,8 +177,6 @@ type ExgItemConfig struct {
 	AccountProds map[string]*AccountConfig `yaml:"account_prods,omitempty" mapstructure:"account_prods,omitempty"`
 	AccountTests map[string]*AccountConfig `yaml:"account_tests,omitempty" mapstructure:"account_tests,omitempty"`
 	Options      map[string]interface{}    `yaml:"options,omitempty" mapstructure:"options,omitempty"`
-	WhitePairs   []string                  `yaml:"white_pairs,omitempty" mapstructure:"white_pairs,omitempty"`
-	BlackPairs   []string                  `yaml:"black_pairs,omitempty" mapstructure:"black_pairs,omitempty"`
 }
 
 // AccountConfig 存储 API 密钥和秘密的配置
