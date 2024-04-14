@@ -828,6 +828,7 @@ func (q *Queries) getExOrders(sql string, args []interface{}) ([]*ExOrder, *errs
 type GetOrdersArgs struct {
 	Strategy    string
 	Pairs       []string
+	TimeFrame   string
 	Status      int   // 0表示所有，1表示未平仓，2表示历史订单
 	TaskID      int64 // 0表示所有，>0表示指定任务
 	CloseAfter  int64
@@ -873,6 +874,10 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 			sqlParams = append(sqlParams, pair)
 		}
 		b.WriteString(") ")
+	}
+	if args.TimeFrame != "" {
+		b.WriteString(fmt.Sprintf("and timeframe=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.TimeFrame)
 	}
 	if args.CloseAfter > 0 {
 		b.WriteString(fmt.Sprintf("and exit_at >= $%v ", len(sqlParams)+1))

@@ -40,6 +40,12 @@ func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
 	if ok && acc.StakeRate > 0 {
 		amount *= acc.StakeRate
 	}
+	// 乘以此任务的开单倍率
+	key := core.KeyStagyPairTf(j.Stagy.Name, j.Symbol.Symbol, j.TimeFrame)
+	pref, _ := core.JobPerfs[key]
+	if pref != nil {
+		amount = pref.GetAmount(amount)
+	}
 	return amount
 }
 

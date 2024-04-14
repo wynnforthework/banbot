@@ -346,6 +346,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 	_ = od.Save(nil)
 	wallets := GetWallets(o.Account)
 	wallets.ExitOd(od, od.Exit.Amount)
+	_ = o.finishOrder(od, nil)
 	wallets.ConfirmOdExit(od, od.Exit.Price)
 	return err
 }

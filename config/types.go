@@ -41,6 +41,7 @@ var (
 	KlineSource      string
 	WatchJobs        map[string][]string
 	RunPolicy        map[string]*RunPolicyConfig
+	StrtgPerf        *StrtgPerfConfig
 	Pairs            []string
 	PairMgr          *PairMgrConfig
 	PairFilters      []*CommonPairFilter
@@ -90,6 +91,7 @@ type Config struct {
 	KlineSource     string                            `yaml:"kline_source" mapstructure:"kline_source"`
 	WatchJobs       map[string][]string               `yaml:"watch_jobs" mapstructure:"watch_jobs"`
 	RunPolicy       map[string]*RunPolicyConfig       `yaml:"run_policy" mapstructure:"run_policy"`
+	StrtgPerf       *StrtgPerfConfig                  `yaml:"strtg_perf" mapstructure:"strtg_perf"`
 	Pairs           []string                          `yaml:"pairs" mapstructure:"pairs"`
 	PairMgr         *PairMgrConfig                    `yaml:"pairmgr" mapstructure:"pairmgr"`
 	PairFilters     []*CommonPairFilter               `yaml:"pairlists" mapstructure:"pairlists"`
@@ -108,6 +110,15 @@ type RunPolicyConfig struct {
 	RunTimeframes []string            `yaml:"run_timeframes" mapstructure:"run_timeframes"`
 	MaxPair       int                 `yaml:"max_pair" mapstructure:"max_pair"`
 	MaxOpen       int                 `yaml:"max_open" mapstructure:"max_open"`
+}
+
+type StrtgPerfConfig struct {
+	Disable   bool    `yaml:"disable" mapstructure:"disable"`
+	MinOdNum  int     `yaml:"min_od_num" mapstructure:"min_od_num"`
+	MaxOdNum  int     `yaml:"max_od_num" mapstructure:"max_od_num"`
+	MinJobNum int     `yaml:"min_job_num" mapstructure:"min_job_num"`
+	MidWeight float64 `yaml:"mid_weight" mapstructure:"mid_weight"`
+	BadWeight float64 `yaml:"bad_weight" mapstructure:"bad_weight"`
 }
 
 type DatabaseConfig struct {

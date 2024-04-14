@@ -18,7 +18,7 @@ data
 strategy
   orm utils
 goods
-  strategy orm exg 
+  orm exg 
 biz:
   exg orm strategy goods data
 optmize

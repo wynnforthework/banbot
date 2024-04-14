@@ -40,6 +40,7 @@ func NewBackTest() *BackTest {
 	p := &BackTest{
 		BTResult: NewBTResult(),
 	}
+	core.LoadPerfs(config.GetDataDir())
 	biz.InitFakeWallets()
 	wallets := biz.GetWallets("")
 	p.TotalInvest = wallets.TotalLegal(nil, false)

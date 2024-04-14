@@ -136,7 +136,7 @@ type Cluster struct {
 }
 
 type ClusterRes struct {
-	Clusters []Cluster
+	Clusters []*Cluster
 	RowGIds  []int
 }
 
@@ -151,7 +151,7 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 		}
 		avgVal := sumVal / float64(len(vals))
 		return &ClusterRes{
-			Clusters: []Cluster{{Center: avgVal, Items: vals}},
+			Clusters: []*Cluster{{Center: avgVal, Items: vals}},
 			RowGIds:  make([]int, len(vals)),
 		}
 	}
@@ -176,7 +176,7 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 		return int((a.Center[0] - b.Center[0]) * 1000)
 	})
 	// 生成返回结果
-	resList := make([]Cluster, 0, len(groups))
+	resList := make([]*Cluster, 0, len(groups))
 	seps := make([]float64, 0, len(groups))
 	for i, group := range groups {
 		var center = (group.Center[0] - offset) / scale
@@ -185,7 +185,7 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 			coords := it.Coordinates()
 			items = append(items, (coords[0]-offset)/scale)
 		}
-		resList = append(resList, Cluster{
+		resList = append(resList, &Cluster{
 			Center: center,
 			Items:  items,
 		})

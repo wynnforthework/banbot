@@ -25,6 +25,7 @@ func NewCryptoTrader() *CryptoTrader {
 }
 
 func (t *CryptoTrader) Init() *errs.Error {
+	core.LoadPerfs(config.GetDataDir())
 	err := data.InitLiveProvider(t.FeedKLine)
 	if err != nil {
 		return err

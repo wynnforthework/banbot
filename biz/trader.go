@@ -138,7 +138,7 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob,
 	var sess *orm.Queries
 	var conn *pgxpool.Conn
 	var err *errs.Error
-	if core.LiveMode {
+	if core.EnvReal {
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
 		sess, conn, err = orm.Conn(nil)
 		if err != nil {

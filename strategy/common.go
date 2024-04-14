@@ -12,8 +12,11 @@ import (
 	ta "github.com/banbox/banta"
 	"github.com/pkujhd/goloader"
 	"go.uber.org/zap"
+	"math"
 	"os"
 	"path"
+	"slices"
+	"sort"
 	"strings"
 	"unsafe"
 )
@@ -292,4 +295,164 @@ func GetInfoJobs(account string) map[string]map[string]*StagyJob {
 		AccInfoJobs[account] = jobs
 	}
 	return jobs
+}
+
+func CalcJobScores(pair, tf, stagy string) *errs.Error {
+	var orders []*orm.InOutOrder
+	cfg := config.StrtgPerf
+	if core.EnvReal {
+		// 从数据库查询最近订单
+		sess, conn, err := orm.Conn(nil)
+		if err != nil {
+			return err
+		}
+		defer conn.Release()
+		taskId := orm.GetTaskID(config.DefAcc)
+		orders, err = sess.GetOrders(orm.GetOrdersArgs{
+			TaskID:    taskId,
+			Strategy:  stagy,
+			TimeFrame: tf,
+			Pairs:     []string{pair},
+			Status:    2,
+			Limit:     cfg.MaxOdNum,
+		})
+		if err != nil {
+			return err
+		}
+	} else {
+		// 从HistODs查询
+		for _, od := range orm.HistODs {
+			if od.Symbol != pair || od.Timeframe != tf || od.Strategy != stagy {
+				continue
+			}
+			orders = append(orders, od)
+		}
+		if len(orders) > cfg.MaxOdNum {
+			orders = orders[len(orders)-cfg.MaxOdNum:]
+		}
+	}
+	sta := core.GetPerfSta(stagy)
+	sta.OdNum += 1
+	if len(orders) < cfg.MinOdNum {
+		return nil
+	}
+	totalPft := 0.0
+	for _, od := range orders {
+		totalPft += od.ProfitRate
+	}
+	var prefKey = core.KeyStagyPairTf(stagy, pair, tf)
+	perf, _ := core.JobPerfs[prefKey]
+	if perf == nil {
+		perf = &core.JobPerf{
+			Num:       len(orders),
+			TotProfit: totalPft,
+			Score:     1,
+		}
+		core.JobPerfs[prefKey] = perf
+	} else {
+		perf.Num = len(orders)
+	}
+	var prefs []*core.JobPerf
+	for key, p := range core.JobPerfs {
+		if strings.HasPrefix(key, stagy) {
+			prefs = append(prefs, p)
+		}
+	}
+	// 计算开单倍率
+	perf.Score = defaultCalcJobScore(stagy, perf, prefs)
+	if core.LiveMode {
+		// 实盘模式，立刻保存到数据目录
+		core.DumpPerfs(config.GetDataDir())
+	}
+	return nil
+}
+
+func defaultCalcJobScore(stagy string, p *core.JobPerf, perfs []*core.JobPerf) float64 {
+	if len(perfs) < config.StrtgPerf.MinJobNum {
+		return 1
+	}
+	// 按Job总利润分组5档
+	sta := core.GetPerfSta(stagy)
+	if sta.Spliters == nil || sta.OdNum-sta.LastGpAt >= len(perfs) {
+		// 按总收益率KMeans分组
+		perfs = append(perfs, p)
+		CalcJobPerfs(sta, perfs)
+		return p.Score
+	}
+	// 聚类结果依然有效，查找最接近的pref，使用相同的Score
+	var near *core.JobPerf
+	var minDist = 0.0
+	for _, pf := range perfs {
+		dist := math.Abs(p.TotProfit - pf.TotProfit)
+		if near == nil || dist < minDist {
+			near = pf
+			minDist = dist
+		}
+	}
+	p.Score = near.Score
+	return p.Score
+}
+
+func CalcJobPerfs(p *core.PerfSta, perfs []*core.JobPerf) {
+	sumProfit := 0.0
+	var profits = make([]float64, 0, len(perfs))
+	for _, pf := range perfs {
+		profits = append(profits, pf.TotProfit)
+		sumProfit += math.Abs(pf.TotProfit)
+	}
+	// 对收益率对数处理，使聚类更准确
+	// 将平均正收益率固定映射为log2的x=9，确保对数处理后能在合适的分布散度
+	avgProfit := sumProfit / float64(len(profits))
+	p.Delta = 9 / avgProfit
+	for i, val := range profits {
+		profits[i] = p.Log2(val)
+	}
+	res := utils.KMeansVals(profits, 5)
+	groups := res.Clusters
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].Center < groups[j].Center
+	})
+	var maxList = make([]float64, 0, len(groups))
+	for _, gp := range groups {
+		maxList = append(maxList, slices.Max(gp.Items))
+	}
+	// 计算每组的收益率上下界
+	p.Spliters = &[4]float64{maxList[0], maxList[1], maxList[2], maxList[3]}
+	p.LastGpAt = p.OdNum
+	// 重新计算每个job的权重
+	idxList := make([]int, 0, len(perfs))
+	var totalAdd, goodNum, bestNum = 0.0, 0, 0
+	for i, profit := range profits {
+		pf := perfs[i]
+		gid := p.FindGID(profit)
+		if gid == 0 {
+			pf.Score = core.PrefMinRate
+			totalAdd += 1
+		} else if gid == 1 {
+			pf.Score = config.StrtgPerf.BadWeight
+			totalAdd += 1 - config.StrtgPerf.BadWeight
+		} else if gid == 2 {
+			pf.Score = config.StrtgPerf.MidWeight
+			totalAdd += 1 - config.StrtgPerf.MidWeight
+		} else if gid == 3 {
+			pf.Score = 1
+			goodNum += 1
+		} else if gid == 4 {
+			pf.Score = 1
+			bestNum += 1
+		}
+		idxList = append(idxList, gid)
+	}
+	if totalAdd > 0 {
+		// 将亏损的权重，叠加到盈利的job上
+		totalWeight := float64(goodNum) + float64(bestNum)*2
+		unitAdd := totalAdd / totalWeight
+		for i, gid := range idxList {
+			if gid < 3 {
+				continue
+			}
+			pf := perfs[i]
+			pf.Score += unitAdd * (float64(gid) - 2)
+		}
+	}
 }

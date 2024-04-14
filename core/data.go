@@ -29,6 +29,8 @@ var (
 	BookPairs    = make(map[string]bool)              // 监听交易对的币种
 	PairCopiedMs = map[string][2]int64{}              // 所有标的从爬虫收到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的。
 	TfPairHits   = map[string]map[string]int{}        // tf[pair[hits]]一段时间内各周期各币种的bar数量，用于定时输出
+	JobPerfs     = make(map[string]*JobPerf)          // stagy_pair_tf: JobPerf 记录任务的开单金额比率，胜率低的要减少开单金额
+	StagyPerfSta = make(map[string]*PerfSta)          // stagy: Job任务状态
 	LastBarMs    int64                                // 上次收到bar的结束时间，13位时间戳
 	OdBooks      = map[string]*banexg.OrderBook{}     // 缓存所有从爬虫收到的订单簿
 	NumTaCache   = 1500                               // 指标计算时缓存的历史值数量，默认1500
@@ -58,7 +60,8 @@ const (
 	StepTotal      = 1000
 	KBatchSize     = 900 // 单次请求交易所最大返回K线数量, 1000时api权重过大
 	DefaultDateFmt = "2006-01-02 15:04:05"
-	DelayEnterMS   = 3000 // 推迟批量入场的毫秒数
+	DelayEnterMS   = 3000  // 推迟批量入场的毫秒数
+	PrefMinRate    = 0.001 // job最低开仓比率，直接使用MinStakeAmount开仓
 )
 
 const (

@@ -73,6 +73,8 @@ func NewBTResult() *BTResult {
 }
 
 func (r *BTResult) printBtResult() {
+	core.DumpPerfs(r.OutDir)
+
 	orders := orm.HistODs
 	var b strings.Builder
 	var tblText string

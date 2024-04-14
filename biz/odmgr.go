@@ -128,7 +128,7 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strategy.Enter
 		return nil
 	}
 	if !core.LiveMode {
-		// 回测模式，不检查延迟，直接允许
+		// 非实时模式，不检查延迟，直接允许
 		return enters
 	}
 	// 实盘订单提交到交易所，检查延迟不能超过80%
@@ -411,7 +411,15 @@ sess 可为nil
 */
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	od.UpdateProfits(0)
-	return od.Save(sess)
+	err := od.Save(sess)
+	if !config.StrtgPerf.Disable && o.Account == config.DefAcc {
+		err2 := strategy.CalcJobScores(od.Symbol, od.Timeframe, od.Strategy)
+		if err2 != nil {
+			log.Error("calc job performance fail", zap.Error(err2),
+				zap.Strings("job", []string{od.Symbol, od.Timeframe, od.Strategy}))
+		}
+	}
+	return err
 }
 
 func (o *OrderMgr) CleanUp() *errs.Error {

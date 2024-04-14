@@ -189,6 +189,18 @@ func apply(args *CmdArgs) *errs.Error {
 		pol.Name = name
 	}
 	RunPolicy = Data.RunPolicy
+	if Data.StrtgPerf == nil {
+		Data.StrtgPerf = &StrtgPerfConfig{
+			MinOdNum:  5,
+			MaxOdNum:  30,
+			MinJobNum: 10,
+			MidWeight: 0.3,
+			BadWeight: 0.15,
+		}
+	} else {
+		Data.StrtgPerf.Validate()
+	}
+	StrtgPerf = Data.StrtgPerf
 	if len(args.Pairs) > 0 {
 		Data.Pairs = args.Pairs
 	}
@@ -246,6 +258,9 @@ func initExgAccs() {
 	if len(accs) == 0 {
 		return
 	}
+	if core.EnvReal {
+		DefAcc = ""
+	}
 	for name, val := range accs {
 		if val.NoTrade {
 			BakAccounts[name] = val
@@ -254,6 +269,28 @@ func initExgAccs() {
 			Accounts[DefAcc] = val
 		} else {
 			Accounts[name] = val
+			if DefAcc == "" {
+				// 生产环境，第一个记录为默认账户
+				DefAcc = name
+			}
 		}
+	}
+}
+
+func (p *StrtgPerfConfig) Validate() {
+	if p.MinOdNum < 5 {
+		p.MinOdNum = 5
+	}
+	if p.MaxOdNum < 8 {
+		p.MaxOdNum = 8
+	}
+	if p.MinJobNum < 7 {
+		p.MinJobNum = 7
+	}
+	if p.MidWeight == 0 {
+		p.MidWeight = 0.4
+	}
+	if p.BadWeight == 0 {
+		p.BadWeight = 0.15
 	}
 }

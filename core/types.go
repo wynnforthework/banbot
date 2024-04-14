@@ -10,3 +10,19 @@ type TfScore struct {
 	TF    string
 	Score float64
 }
+
+type JobPerf struct {
+	Num       int
+	TotProfit float64 // 总利润
+	Score     float64 // 开单倍率，小于1表示减少开单
+}
+
+/*
+PerfSta 某个策略针对所有标的的统计信息
+*/
+type PerfSta struct {
+	OdNum    int         `yaml:"od_num" mapstructure:"od_num"`
+	LastGpAt int         `yaml:"last_gp_at" mapstructure:"last_gp_at"` // 上次执行聚类的订单数量
+	Spliters *[4]float64 `yaml:"groups" mapstructure:"groups"`
+	Delta    float64     `yaml:"delta" mapstructure:"delta"` // 对TotProfit进行对数处理前的乘数
+}
