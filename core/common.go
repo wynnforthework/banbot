@@ -89,15 +89,15 @@ func GetPerfSta(stagy string) *PerfSta {
 }
 
 func (p *PerfSta) FindGID(val float64) int {
-	if p.Spliters == nil {
-		panic("PerfSta.Spliters is empty, FindGID fail")
+	if p.Splits == nil {
+		panic("PerfSta.Splits is empty, FindGID fail")
 	}
-	for i, gp := range p.Spliters {
+	for i, gp := range p.Splits {
 		if val < gp {
 			return i
 		}
 	}
-	return len(p.Spliters)
+	return len(p.Splits)
 }
 
 func (p *PerfSta) Log2(profit float64) float64 {
@@ -126,7 +126,7 @@ func DumpPerfs(outDir string) {
 		res[name] = map[string]interface{}{
 			"od_num":     sta.OdNum,
 			"last_gp_at": sta.LastGpAt,
-			"groups":     sta.Spliters,
+			"splits":     sta.Splits,
 			"delta":      sta.Delta,
 			"perf":       perf,
 		}

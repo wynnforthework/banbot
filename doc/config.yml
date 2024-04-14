@@ -36,6 +36,10 @@ run_policy:  # 运行的策略，可以多个策略同时运行
       limit: 30  # 最多取30个
     max_pair: 999  # 此策略允许的最大标的数量
     max_open: 10  # 此策略最大开单数量
+strtg_perf:
+  enable: true # 是否启用策略币对效果追踪，自动降低亏损较多的币种开单金额
+  mid_weight: 0.2
+  bad_weight: 0.1
 pairs:  # 给定交易币种，如不为空，pairlists会被忽略
 - SOL/USDT:USDT
 - UNFI/USDT:USDT

@@ -113,7 +113,7 @@ type RunPolicyConfig struct {
 }
 
 type StrtgPerfConfig struct {
-	Disable   bool    `yaml:"disable" mapstructure:"disable"`
+	Enable    bool    `yaml:"enable" mapstructure:"enable"`
 	MinOdNum  int     `yaml:"min_od_num" mapstructure:"min_od_num"`
 	MaxOdNum  int     `yaml:"max_od_num" mapstructure:"max_od_num"`
 	MinJobNum int     `yaml:"min_job_num" mapstructure:"min_job_num"`

@@ -23,6 +23,6 @@ PerfSta 某个策略针对所有标的的统计信息
 type PerfSta struct {
 	OdNum    int         `yaml:"od_num" mapstructure:"od_num"`
 	LastGpAt int         `yaml:"last_gp_at" mapstructure:"last_gp_at"` // 上次执行聚类的订单数量
-	Spliters *[4]float64 `yaml:"groups" mapstructure:"groups"`
+	Splits   *[4]float64 `yaml:"splits" mapstructure:"splits"`
 	Delta    float64     `yaml:"delta" mapstructure:"delta"` // 对TotProfit进行对数处理前的乘数
 }

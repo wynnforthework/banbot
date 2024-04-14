@@ -373,7 +373,7 @@ func defaultCalcJobScore(stagy string, p *core.JobPerf, perfs []*core.JobPerf) f
 	}
 	// 按Job总利润分组5档
 	sta := core.GetPerfSta(stagy)
-	if sta.Spliters == nil || sta.OdNum-sta.LastGpAt >= len(perfs) {
+	if sta.Splits == nil || sta.OdNum-sta.LastGpAt >= len(perfs) {
 		// 按总收益率KMeans分组
 		perfs = append(perfs, p)
 		CalcJobPerfs(sta, perfs)
@@ -417,7 +417,7 @@ func CalcJobPerfs(p *core.PerfSta, perfs []*core.JobPerf) {
 		maxList = append(maxList, slices.Max(gp.Items))
 	}
 	// 计算每组的收益率上下界
-	p.Spliters = &[4]float64{maxList[0], maxList[1], maxList[2], maxList[3]}
+	p.Splits = &[4]float64{maxList[0], maxList[1], maxList[2], maxList[3]}
 	p.LastGpAt = p.OdNum
 	// 重新计算每个job的权重
 	idxList := make([]int, 0, len(perfs))
