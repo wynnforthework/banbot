@@ -200,7 +200,6 @@ func apply(args *CmdArgs) *errs.Error {
 	} else {
 		Data.StrtgPerf.Validate()
 	}
-	StrtgPerf = Data.StrtgPerf
 	if len(args.Pairs) > 0 {
 		Data.Pairs = args.Pairs
 	}
@@ -293,4 +292,12 @@ func (p *StrtgPerfConfig) Validate() {
 	if p.BadWeight == 0 {
 		p.BadWeight = 0.15
 	}
+}
+
+func GetStrtgPerf(strtg string) *StrtgPerfConfig {
+	pol, _ := RunPolicy[strtg]
+	if pol != nil && pol.StrtgPerf != nil {
+		return pol.StrtgPerf
+	}
+	return Data.StrtgPerf
 }

@@ -41,7 +41,6 @@ var (
 	KlineSource      string
 	WatchJobs        map[string][]string
 	RunPolicy        map[string]*RunPolicyConfig
-	StrtgPerf        *StrtgPerfConfig
 	Pairs            []string
 	PairMgr          *PairMgrConfig
 	PairFilters      []*CommonPairFilter
@@ -110,6 +109,7 @@ type RunPolicyConfig struct {
 	RunTimeframes []string            `yaml:"run_timeframes" mapstructure:"run_timeframes"`
 	MaxPair       int                 `yaml:"max_pair" mapstructure:"max_pair"`
 	MaxOpen       int                 `yaml:"max_open" mapstructure:"max_open"`
+	StrtgPerf     *StrtgPerfConfig    `yaml:"strtg_perf" mapstructure:"strtg_perf"`
 }
 
 type StrtgPerfConfig struct {

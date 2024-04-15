@@ -412,7 +412,8 @@ sess 可为nil
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	od.UpdateProfits(0)
 	err := od.Save(sess)
-	if config.StrtgPerf.Enable && o.Account == config.DefAcc {
+	cfg := config.GetStrtgPerf(od.Strategy)
+	if cfg.Enable && o.Account == config.DefAcc {
 		err2 := strategy.CalcJobScores(od.Symbol, od.Timeframe, od.Strategy)
 		if err2 != nil {
 			log.Error("calc job performance fail", zap.Error(err2),

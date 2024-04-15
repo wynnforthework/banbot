@@ -299,7 +299,7 @@ func GetInfoJobs(account string) map[string]map[string]*StagyJob {
 
 func CalcJobScores(pair, tf, stagy string) *errs.Error {
 	var orders []*orm.InOutOrder
-	cfg := config.StrtgPerf
+	cfg := config.GetStrtgPerf(stagy)
 	if core.EnvReal {
 		// 从数据库查询最近订单
 		sess, conn, err := orm.Conn(nil)
@@ -368,7 +368,8 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 }
 
 func defaultCalcJobScore(stagy string, p *core.JobPerf, perfs []*core.JobPerf) float64 {
-	if len(perfs) < config.StrtgPerf.MinJobNum {
+	cfg := config.GetStrtgPerf(stagy)
+	if len(perfs) < cfg.MinJobNum {
 		return 1
 	}
 	// 按Job总利润分组5档
@@ -376,7 +377,7 @@ func defaultCalcJobScore(stagy string, p *core.JobPerf, perfs []*core.JobPerf) f
 	if sta.Splits == nil || sta.OdNum-sta.LastGpAt >= len(perfs) {
 		// 按总收益率KMeans分组
 		perfs = append(perfs, p)
-		CalcJobPerfs(sta, perfs)
+		CalcJobPerfs(cfg, sta, perfs)
 		return p.Score
 	}
 	// 聚类结果依然有效，查找最接近的pref，使用相同的Score
@@ -393,7 +394,7 @@ func defaultCalcJobScore(stagy string, p *core.JobPerf, perfs []*core.JobPerf) f
 	return p.Score
 }
 
-func CalcJobPerfs(p *core.PerfSta, perfs []*core.JobPerf) {
+func CalcJobPerfs(cfg *config.StrtgPerfConfig, p *core.PerfSta, perfs []*core.JobPerf) {
 	sumProfit := 0.0
 	var profits = make([]float64, 0, len(perfs))
 	for _, pf := range perfs {
@@ -429,11 +430,11 @@ func CalcJobPerfs(p *core.PerfSta, perfs []*core.JobPerf) {
 			pf.Score = core.PrefMinRate
 			totalAdd += 1
 		} else if gid == 1 {
-			pf.Score = config.StrtgPerf.BadWeight
-			totalAdd += 1 - config.StrtgPerf.BadWeight
+			pf.Score = cfg.BadWeight
+			totalAdd += 1 - cfg.BadWeight
 		} else if gid == 2 {
-			pf.Score = config.StrtgPerf.MidWeight
-			totalAdd += 1 - config.StrtgPerf.MidWeight
+			pf.Score = cfg.MidWeight
+			totalAdd += 1 - cfg.MidWeight
 		} else if gid == 3 {
 			pf.Score = 1
 			goodNum += 1
