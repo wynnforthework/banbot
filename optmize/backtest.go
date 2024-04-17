@@ -88,6 +88,7 @@ func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
 			backMS := curTime
 			btime.CurTimeMS = bar.Time + core.DelayEnterMS + 100
 			biz.TryFireEnters(bar.TimeFrame)
+			biz.TryFireInfos(bar.TimeFrame)
 			strategy.LastBatchMS[bar.TimeFrame] = bar.Time
 			btime.CurTimeMS = backMS
 		}

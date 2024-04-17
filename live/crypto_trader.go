@@ -112,6 +112,7 @@ func (t *CryptoTrader) FeedKLine(bar *banexg.PairTFKline) {
 	}
 	time.AfterFunc(time.Millisecond*core.DelayEnterMS, func() {
 		biz.TryFireEnters(bar.TimeFrame)
+		biz.TryFireInfos(bar.TimeFrame)
 	})
 }
 

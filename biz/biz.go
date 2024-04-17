@@ -83,28 +83,30 @@ func AutoRefreshPairs() {
 var lockBatch = sync.Mutex{} // 防止并发修改TFEnterMS/BatchJobs
 
 /*
-AddJobEnters
+AddBatchJob
 添加批量入场任务。
 即使job没有入场任务，也应该调用此方法，用于推迟入场时间TFEnterMS
 */
-func AddJobEnters(account, tf string, job *strategy.StagyJob) {
+func AddBatchJob(account, tf string, job *strategy.StagyJob, isInfo bool) {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
+	data := strategy.BatchJobs
+	tsMap := strategy.TFEnterMS
+	if isInfo {
+		data = strategy.BatchInfos
+		tsMap = strategy.TFInfoMS
+	}
 	key := fmt.Sprintf("%s_%s_%s", tf, account, job.Stagy.Name)
-	execMS, timeOK := strategy.TFEnterMS[tf]
-	jobs, ok := strategy.BatchJobs[key]
+	execMS, timeOK := tsMap[tf]
+	jobs, ok := data[key]
 	if !ok || !timeOK || execMS < job.Env.TimeStart {
 		jobs = map[string]*strategy.StagyJob{}
-		strategy.BatchJobs[key] = jobs
+		data[key] = jobs
 	}
 	// 推迟3s等待执行
 	execMS = btime.TimeMS() + core.DelayEnterMS
-	strategy.TFEnterMS[tf] = execMS
-	if len(job.Entrys) > 0 {
-		jobs[job.Symbol.Symbol] = job
-	} else {
-		jobs[job.Symbol.Symbol] = nil
-	}
+	tsMap[tf] = execMS
+	jobs[job.Symbol.Symbol] = job
 }
 
 func TryFireEnters(tf string) {
@@ -134,13 +136,13 @@ func TryFireEnters(tf string) {
 		delete(strategy.BatchJobs, key)
 		var stagy *strategy.TradeStagy
 		var entJobs = make([]*strategy.StagyJob, 0, len(jobs)/5)
-		var noPairs = make([]string, 0, len(jobs))
-		for pair, job := range jobs {
-			if job == nil {
-				noPairs = append(noPairs, pair)
-				continue
+		var emptyJobs = make([]*strategy.StagyJob, 0, len(jobs))
+		for _, job := range jobs {
+			if len(job.Entrys) > 0 {
+				entJobs = append(entJobs, job)
+			} else {
+				emptyJobs = append(emptyJobs, job)
 			}
-			entJobs = append(entJobs, job)
 			if stagy == nil {
 				stagy = job.Stagy
 			}
@@ -149,7 +151,7 @@ func TryFireEnters(tf string) {
 			continue
 		}
 		// 检查此时间所有入场任务，过滤，返回允许入场的任务
-		entJobs = stagy.OnBatchJobs(entJobs, noPairs)
+		entJobs = stagy.OnBatchJobs(entJobs, emptyJobs)
 		if len(entJobs) == 0 {
 			continue
 		}
@@ -173,4 +175,27 @@ func TryFireEnters(tf string) {
 		}
 	}
 	delete(strategy.TFEnterMS, tf)
+}
+
+func TryFireInfos(tf string) {
+	lockBatch.Lock()
+	defer lockBatch.Unlock()
+	execMS, timeOK := strategy.TFInfoMS[tf]
+	if !timeOK || execMS > btime.TimeMS() {
+		// 没有可执行入场的。或者有新bar推迟了执行时间
+		return
+	}
+	for key, jobs := range strategy.BatchInfos {
+		if !strings.HasPrefix(key, tf) || len(jobs) == 0 {
+			continue
+		}
+		delete(strategy.BatchInfos, key)
+		var stagy *strategy.TradeStagy
+		for _, job := range jobs {
+			stagy = job.Stagy
+			break
+		}
+		stagy.OnBatchInfos(jobs)
+	}
+	delete(strategy.TFInfoMS, tf)
 }

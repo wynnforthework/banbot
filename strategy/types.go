@@ -18,6 +18,7 @@ type TradeStagy struct {
 	WatchBook     bool
 	DrawDownExit  bool
 	BatchEnter    bool    // 是否批量执行入场
+	BatchInfo     bool    // 是否对OnInfoBar后执行批量处理
 	StakeRate     float64 // 相对基础金额开单倍率
 	StopEnterBars int
 	AllowTFs      []string // 允许运行的时间周期，不提供时使用全局配置
@@ -26,14 +27,15 @@ type TradeStagy struct {
 	OnPairInfos         func(s *StagyJob) []*PairSub
 	OnStartUp           func(s *StagyJob)
 	OnBar               func(s *StagyJob)
-	OnInfoBar           func(s *StagyJob, e *ta.BarEnv, pair, tf string)    // 其他依赖的bar数据
-	OnTrades            func(s *StagyJob, trades []*banexg.Trade)           // 逐笔交易数据
-	OnBatchJobs         func(jobs []*StagyJob, blanks []string) []*StagyJob // 当前时间所有标的入场job，用于批量决定如何开单
-	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) *ExitReq      // 自定义订单退出逻辑
-	OnOrderChange       func(s *StagyJob, od *orm.InOutOrder, chgType int)  // 订单更新回调
-	GetDrawDownExitRate CalcDDExitRate                                      // 计算跟踪止盈回撤退出的比率
-	PickTimeFrame       PickTimeFrameFunc                                   // 为指定币选择适合的交易周期
-	OnShutDown          func(s *StagyJob)                                   // 机器人停止时回调
+	OnInfoBar           func(s *StagyJob, e *ta.BarEnv, pair, tf string)       // 其他依赖的bar数据
+	OnTrades            func(s *StagyJob, trades []*banexg.Trade)              // 逐笔交易数据
+	OnBatchJobs         func(jobs []*StagyJob, blanks []*StagyJob) []*StagyJob // 当前时间所有标的job，用于批量决定如何开单
+	OnBatchInfos        func(jobs map[string]*StagyJob)                        // 当前时间所有info标的job，用于批量处理
+	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) *ExitReq         // 自定义订单退出逻辑
+	OnOrderChange       func(s *StagyJob, od *orm.InOutOrder, chgType int)     // 订单更新回调
+	GetDrawDownExitRate CalcDDExitRate                                         // 计算跟踪止盈回撤退出的比率
+	PickTimeFrame       PickTimeFrameFunc                                      // 为指定币选择适合的交易周期
+	OnShutDown          func(s *StagyJob)                                      // 机器人停止时回调
 }
 
 const (

@@ -108,7 +108,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 		job.Stagy.OnBar(job)
 		if !barExpired {
 			if job.Stagy.BatchEnter && job.Stagy.OnBatchJobs != nil {
-				AddJobEnters(account, bar.TimeFrame, job)
+				AddBatchJob(account, bar.TimeFrame, job, false)
 			} else {
 				enters = append(enters, job.Entrys...)
 			}
@@ -125,6 +125,9 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.Pair
 	// 更新辅助订阅数据
 	for _, job := range infoJobs {
 		job.Stagy.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
+		if job.Stagy.BatchInfo && job.Stagy.OnBatchInfos != nil {
+			AddBatchJob(account, bar.TimeFrame, job, true)
+		}
 	}
 	// 处理订单
 	return t.ExecOrders(odMgr, jobs, env, enters, exits, edits)
