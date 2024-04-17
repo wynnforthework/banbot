@@ -171,14 +171,12 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 				if req.Short {
 					rel = "<"
 				}
-				return errs.NewMsg(errs.CodeParamInvalid, "%s takeprofit %f must %s %f for %s order",
-					symbol, curSLPrice, rel, curPrice, dirType)
+				return errs.NewMsg(errs.CodeParamInvalid, "%s takeProfit %f must %s %f for %v order",
+					symbol, curTPPrice, rel, curPrice, dirType)
 			}
 			req.TakeProfit = curTPPrice
 		} else if isLiveMode {
-			log.Warn("takeprofit disabled",
-				zap.String("strategy", s.Stagy.Name),
-				zap.String("pair", symbol))
+			log.Warn("takeProfit disabled", zap.String("stagy", s.Stagy.Name), zap.String("pair", symbol))
 		}
 	}
 	if req.Limit > 0 && req.OrderType == 0 {

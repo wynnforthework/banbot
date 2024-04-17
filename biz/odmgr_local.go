@@ -273,7 +273,8 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 		// 空单止损，最高价超过止损价触发
 		// 多单止损，最低价跌破止损价触发
 		slHit = slPrice > 0 && (od.Short && bar.High >= slPrice || !od.Short && bar.Low <= slPrice)
-	} else if !tpHit {
+	}
+	if !tpHit {
 		// 空单止盈，最低价跌破止盈价触发
 		// 多单止盈，最高价突破止盈价触发
 		tpHit = tpPrice > 0 && (od.Short && bar.Low <= tpPrice || !od.Short && bar.High >= tpPrice)
