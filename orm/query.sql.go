@@ -17,8 +17,8 @@ values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 `
 
 type AddExOrderParams struct {
-	TaskID    int64
-	InoutID   int64
+	TaskID    int32
+	InoutID   int32
 	Symbol    string
 	Enter     bool
 	OrderType string
@@ -62,30 +62,32 @@ func (q *Queries) AddExOrder(ctx context.Context, arg AddExOrderParams) (int64, 
 const addIOrder = `-- name: AddIOrder :one
 insert into iorder ("task_id", "symbol", "sid", "timeframe", "short", "status",
                     "enter_tag", "init_price", "quote_cost", "exit_tag", "leverage",
-                    "enter_at", "exit_at", "strategy", "stg_ver", "profit_rate", "profit", "info")
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                    "enter_at", "exit_at", "strategy", "stg_ver", "max_draw_down",
+                    "profit_rate", "profit", "info")
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     RETURNING id
 `
 
 type AddIOrderParams struct {
-	TaskID     int64
-	Symbol     string
-	Sid        int32
-	Timeframe  string
-	Short      bool
-	Status     int16
-	EnterTag   string
-	InitPrice  float64
-	QuoteCost  float64
-	ExitTag    string
-	Leverage   int32
-	EnterAt    int64
-	ExitAt     int64
-	Strategy   string
-	StgVer     int32
-	ProfitRate float64
-	Profit     float64
-	Info       string
+	TaskID      int32
+	Symbol      string
+	Sid         int32
+	Timeframe   string
+	Short       bool
+	Status      int16
+	EnterTag    string
+	InitPrice   float64
+	QuoteCost   float64
+	ExitTag     string
+	Leverage    int32
+	EnterAt     int64
+	ExitAt      int64
+	Strategy    string
+	StgVer      int32
+	MaxDrawDown float64
+	ProfitRate  float64
+	Profit      float64
+	Info        string
 }
 
 func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, error) {
@@ -105,6 +107,7 @@ func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, er
 		arg.ExitAt,
 		arg.Strategy,
 		arg.StgVer,
+		arg.MaxDrawDown,
 		arg.ProfitRate,
 		arg.Profit,
 		arg.Info,
@@ -250,7 +253,7 @@ select id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_
 where inout_id=$1
 `
 
-func (q *Queries) GetExOrders(ctx context.Context, inoutID int64) ([]*ExOrder, error) {
+func (q *Queries) GetExOrders(ctx context.Context, inoutID int32) ([]*ExOrder, error) {
 	rows, err := q.db.Query(ctx, getExOrders, inoutID)
 	if err != nil {
 		return nil, err
@@ -289,7 +292,7 @@ func (q *Queries) GetExOrders(ctx context.Context, inoutID int64) ([]*ExOrder, e
 }
 
 const getIOrder = `-- name: GetIOrder :one
-select id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, profit_rate, profit, info from iorder
+select id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_draw_down, profit_rate, profit, info from iorder
 where id = $1
 `
 
@@ -313,6 +316,7 @@ func (q *Queries) GetIOrder(ctx context.Context, id int64) (*IOrder, error) {
 		&i.ExitAt,
 		&i.Strategy,
 		&i.StgVer,
+		&i.MaxDrawDown,
 		&i.ProfitRate,
 		&i.Profit,
 		&i.Info,
@@ -501,7 +505,7 @@ and enter_at <= $3
 `
 
 type ListTaskPairsParams struct {
-	TaskID    int64
+	TaskID    int32
 	EnterAt   int64
 	EnterAt_2 int64
 }
@@ -581,8 +585,8 @@ update exorder set
 `
 
 type SetExOrderParams struct {
-	TaskID    int64
-	InoutID   int64
+	TaskID    int32
+	InoutID   int32
 	Symbol    string
 	Enter     bool
 	OrderType string
@@ -640,32 +644,34 @@ update iorder set
       "exit_at" = $13,
       "strategy" = $14,
       "stg_ver" = $15,
-      "profit_rate" = $16,
-      "profit" = $17,
-      "info" = $18
-    WHERE id = $19
+      "max_draw_down" = $16,
+      "profit_rate" = $17,
+      "profit" = $18,
+      "info" = $19
+    WHERE id = $20
 `
 
 type SetIOrderParams struct {
-	TaskID     int64
-	Symbol     string
-	Sid        int32
-	Timeframe  string
-	Short      bool
-	Status     int16
-	EnterTag   string
-	InitPrice  float64
-	QuoteCost  float64
-	ExitTag    string
-	Leverage   int32
-	EnterAt    int64
-	ExitAt     int64
-	Strategy   string
-	StgVer     int32
-	ProfitRate float64
-	Profit     float64
-	Info       string
-	ID         int64
+	TaskID      int32
+	Symbol      string
+	Sid         int32
+	Timeframe   string
+	Short       bool
+	Status      int16
+	EnterTag    string
+	InitPrice   float64
+	QuoteCost   float64
+	ExitTag     string
+	Leverage    int32
+	EnterAt     int64
+	ExitAt      int64
+	Strategy    string
+	StgVer      int32
+	MaxDrawDown float64
+	ProfitRate  float64
+	Profit      float64
+	Info        string
+	ID          int64
 }
 
 func (q *Queries) SetIOrder(ctx context.Context, arg SetIOrderParams) error {
@@ -685,6 +691,7 @@ func (q *Queries) SetIOrder(ctx context.Context, arg SetIOrderParams) error {
 		arg.ExitAt,
 		arg.Strategy,
 		arg.StgVer,
+		arg.MaxDrawDown,
 		arg.ProfitRate,
 		arg.Profit,
 		arg.Info,

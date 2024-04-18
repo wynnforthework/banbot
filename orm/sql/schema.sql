@@ -68,6 +68,7 @@ CREATE TABLE "public"."iorder"
     "exit_at"     int8          not null,
     "strategy"    varchar(20)   not null,
     "stg_ver"     int4          not null,
+    "max_draw_down" float8      not null,
     "profit_rate" float8        not null,
     "profit"      float8        not null,
     "info"        varchar(1024) not null

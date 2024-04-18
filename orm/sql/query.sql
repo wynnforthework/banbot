@@ -95,8 +95,9 @@ where inout_id=$1;
 -- name: AddIOrder :one
 insert into iorder ("task_id", "symbol", "sid", "timeframe", "short", "status",
                     "enter_tag", "init_price", "quote_cost", "exit_tag", "leverage",
-                    "enter_at", "exit_at", "strategy", "stg_ver", "profit_rate", "profit", "info")
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+                    "enter_at", "exit_at", "strategy", "stg_ver", "max_draw_down",
+                    "profit_rate", "profit", "info")
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     RETURNING id;
 
 -- name: SetIOrder :exec
@@ -116,10 +117,11 @@ update iorder set
       "exit_at" = $13,
       "strategy" = $14,
       "stg_ver" = $15,
-      "profit_rate" = $16,
-      "profit" = $17,
-      "info" = $18
-    WHERE id = $19;
+      "max_draw_down" = $16,
+      "profit_rate" = $17,
+      "profit" = $18,
+      "info" = $19
+    WHERE id = $20;
 
 -- name: AddExOrder :one
 insert into exorder ("task_id", "inout_id", "symbol", "enter", "order_type", "order_id", "side",

@@ -449,7 +449,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 	defer writer.Flush()
 	heads := []string{"sid", "symbol", "timeframe", "direction", "leverage", "entAt", "entTag", "entPrice",
 		"entAmount", " entCost", "entFee", "exitAt", "exitTag", "exitPrice", "exitAmount", "exitGot",
-		"exitFee", "profitRate", "profit"}
+		"exitFee", "max_draw_down", "profitRate", "profit"}
 	if err_ = writer.Write(heads); err_ != nil {
 		log.Error("write orders.csv fail", zap.Error(err_))
 		return
@@ -475,8 +475,9 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 		if od.Exit != nil {
 			row[13], row[14], row[15], row[16] = calcExOrder(od.Exit)
 		}
-		row[17] = strconv.FormatFloat(od.ProfitRate, 'f', 4, 64)
-		row[18] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
+		row[17] = strconv.FormatFloat(od.MaxDrawDown, 'f', 4, 64)
+		row[18] = strconv.FormatFloat(od.ProfitRate, 'f', 4, 64)
+		row[19] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
 		if err_ = writer.Write(row); err_ != nil {
 			log.Error("write orders.csv fail", zap.Error(err_))
 			return

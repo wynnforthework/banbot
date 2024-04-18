@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	iOrderFields  = "id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, profit_rate, profit, info"
+	iOrderFields  = "id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_draw_down, profit_rate, profit, info"
 	exOrderFields = "id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_at, price, average, amount, filled, status, fee, fee_type, update_at"
 )
 
@@ -183,6 +183,12 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 		entQuoteVal /= float64(i.Leverage)
 	}
 	i.ProfitRate = i.Profit / entQuoteVal
+	if i.ProfitRate < 0 {
+		absVal := math.Abs(i.ProfitRate)
+		if absVal > i.MaxDrawDown {
+			i.MaxDrawDown = absVal
+		}
+	}
 	i.DirtyMain = true
 }
 
@@ -587,24 +593,25 @@ func (i *InOutOrder) Lock() *sync.Mutex {
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddIOrder(context.Background(), AddIOrderParams{
-		TaskID:     i.TaskID,
-		Symbol:     i.Symbol,
-		Sid:        i.Sid,
-		Timeframe:  i.Timeframe,
-		Short:      i.Short,
-		Status:     i.Status,
-		EnterTag:   i.EnterTag,
-		InitPrice:  i.InitPrice,
-		QuoteCost:  i.QuoteCost,
-		ExitTag:    i.ExitTag,
-		Leverage:   i.Leverage,
-		EnterAt:    i.EnterAt,
-		ExitAt:     i.ExitAt,
-		Strategy:   i.Strategy,
-		StgVer:     i.StgVer,
-		ProfitRate: i.ProfitRate,
-		Profit:     i.Profit,
-		Info:       i.Info,
+		TaskID:      int32(i.TaskID),
+		Symbol:      i.Symbol,
+		Sid:         i.Sid,
+		Timeframe:   i.Timeframe,
+		Short:       i.Short,
+		Status:      i.Status,
+		EnterTag:    i.EnterTag,
+		InitPrice:   i.InitPrice,
+		QuoteCost:   i.QuoteCost,
+		ExitTag:     i.ExitTag,
+		Leverage:    i.Leverage,
+		EnterAt:     i.EnterAt,
+		ExitAt:      i.ExitAt,
+		Strategy:    i.Strategy,
+		StgVer:      i.StgVer,
+		MaxDrawDown: i.MaxDrawDown,
+		ProfitRate:  i.ProfitRate,
+		Profit:      i.Profit,
+		Info:        i.Info,
 	})
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
@@ -614,25 +621,26 @@ func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 
 func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 	err_ := sess.SetIOrder(context.Background(), SetIOrderParams{
-		TaskID:     i.TaskID,
-		Symbol:     i.Symbol,
-		Sid:        i.Sid,
-		Timeframe:  i.Timeframe,
-		Short:      i.Short,
-		Status:     i.Status,
-		EnterTag:   i.EnterTag,
-		InitPrice:  i.InitPrice,
-		QuoteCost:  i.QuoteCost,
-		ExitTag:    i.ExitTag,
-		Leverage:   i.Leverage,
-		EnterAt:    i.EnterAt,
-		ExitAt:     i.ExitAt,
-		Strategy:   i.Strategy,
-		StgVer:     i.StgVer,
-		ProfitRate: i.ProfitRate,
-		Profit:     i.Profit,
-		Info:       i.Info,
-		ID:         i.ID,
+		TaskID:      int32(i.TaskID),
+		Symbol:      i.Symbol,
+		Sid:         i.Sid,
+		Timeframe:   i.Timeframe,
+		Short:       i.Short,
+		Status:      i.Status,
+		EnterTag:    i.EnterTag,
+		InitPrice:   i.InitPrice,
+		QuoteCost:   i.QuoteCost,
+		ExitTag:     i.ExitTag,
+		Leverage:    i.Leverage,
+		EnterAt:     i.EnterAt,
+		ExitAt:      i.ExitAt,
+		Strategy:    i.Strategy,
+		StgVer:      i.StgVer,
+		MaxDrawDown: i.MaxDrawDown,
+		ProfitRate:  i.ProfitRate,
+		Profit:      i.Profit,
+		Info:        i.Info,
+		ID:          i.ID,
 	})
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
@@ -643,8 +651,8 @@ func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddExOrder(context.Background(), AddExOrderParams{
-		TaskID:    i.TaskID,
-		InoutID:   i.InoutID,
+		TaskID:    int32(i.TaskID),
+		InoutID:   int32(i.InoutID),
 		Symbol:    i.Symbol,
 		Enter:     i.Enter,
 		OrderType: i.OrderType,
@@ -668,8 +676,8 @@ func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 
 func (i *ExOrder) saveUpdate(sess *Queries) *errs.Error {
 	err_ := sess.SetExOrder(context.Background(), SetExOrderParams{
-		TaskID:    i.TaskID,
-		InoutID:   i.InoutID,
+		TaskID:    int32(i.TaskID),
+		InoutID:   int32(i.InoutID),
 		Symbol:    i.Symbol,
 		Enter:     i.Enter,
 		OrderType: i.OrderType,
@@ -777,6 +785,7 @@ func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.E
 			&iod.ExitAt,
 			&iod.Strategy,
 			&iod.StgVer,
+			&iod.MaxDrawDown,
 			&iod.ProfitRate,
 			&iod.Profit,
 			&iod.Info,

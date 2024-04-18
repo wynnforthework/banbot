@@ -46,25 +46,26 @@ type ExSymbol struct {
 }
 
 type IOrder struct {
-	ID         int64
-	TaskID     int64
-	Symbol     string
-	Sid        int32
-	Timeframe  string
-	Short      bool
-	Status     int16
-	EnterTag   string
-	InitPrice  float64
-	QuoteCost  float64
-	ExitTag    string
-	Leverage   int32
-	EnterAt    int64
-	ExitAt     int64
-	Strategy   string
-	StgVer     int32
-	ProfitRate float64
-	Profit     float64
-	Info       string
+	ID          int64
+	TaskID      int64
+	Symbol      string
+	Sid         int32
+	Timeframe   string
+	Short       bool
+	Status      int16
+	EnterTag    string
+	InitPrice   float64
+	QuoteCost   float64
+	ExitTag     string
+	Leverage    int32
+	EnterAt     int64
+	ExitAt      int64
+	Strategy    string
+	StgVer      int32
+	MaxDrawDown float64
+	ProfitRate  float64
+	Profit      float64
+	Info        string
 }
 
 type KHole struct {
