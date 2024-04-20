@@ -94,7 +94,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 		} else {
 			if od.ExitTag == "" {
 				// 已入场完成，尚未出现出场信号，检查是否触发止损
-				err := o.tryFillTriggers(od, &bar.Kline)
+				err := o.tryFillTriggers(od, &bar.Kline, 0)
 				if err != nil {
 					return 0, err
 				}
@@ -108,6 +108,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 		price := exOrder.Price
 		odTFSecs := utils2.TFToSecs(od.Timeframe)
 		fillMS := btime.TimeMS() - int64((float64(odTFSecs)-config.BTNetCost)*1000)
+		fillBarRate := 0.0
 		if bar == nil {
 			price = core.GetPrice(od.Symbol)
 		} else if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
@@ -127,8 +128,8 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 				}
 			}
 			odIsBuy := exOrder.Side == banexg.OdSideBuy
-			barRate := simMarketRate(&bar.Kline, exOrder.Price, odIsBuy, false)
-			fillMS = bar.Time + int64(float64(odTFSecs)*barRate)*1000
+			fillBarRate = simMarketRate(&bar.Kline, exOrder.Price, odIsBuy, false, 0)
+			fillMS = bar.Time + int64(float64(odTFSecs)*fillBarRate)*1000
 		} else {
 			// 按网络延迟，模拟成交价格，和开盘价接近
 			rate := config.BTNetCost / float64(odTFSecs)
@@ -139,7 +140,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.
 			err = o.fillPendingEnter(od, price, fillMS)
 			if err == nil {
 				// 入场后可能立刻触发止损/止盈
-				err = o.tryFillTriggers(od, &bar.Kline)
+				err = o.tryFillTriggers(od, &bar.Kline, fillBarRate)
 			}
 		} else {
 			err = o.fillPendingExit(od, price, fillMS)
@@ -261,7 +262,7 @@ func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64, fillM
 	return nil
 }
 
-func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *errs.Error {
+func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, afterRate float64) *errs.Error {
 	slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)
 	tpPrice := od.GetInfoFloat64(orm.OdInfoTakeProfit)
 	if slPrice == 0 && tpPrice == 0 {
@@ -296,8 +297,8 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 			if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
 				// 空单，平仓限价低于触发价，可能是限价单
 				// 多单，平仓限价高于触发价，可能是限价单
-				trigRate := simMarketRate(bar, trigPrice, od.Short, true)
-				rate := simMarketRate(bar, limit, od.Short, true)
+				trigRate := simMarketRate(bar, trigPrice, od.Short, true, afterRate)
+				rate := simMarketRate(bar, limit, od.Short, true, afterRate)
 				if (rate-trigRate)*tfSecs > 30 {
 					// 触发后，限价单超过30s成交，认为限价单
 					return limit
@@ -328,10 +329,10 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline) *
 	odType := banexg.OdTypeMarket
 	if stopPrice > 0 {
 		odType = banexg.OdTypeLimit
-		rate += simMarketRate(bar, stopPrice, od.Short, true)
+		rate += simMarketRate(bar, stopPrice, od.Short, true, afterRate)
 	} else {
 		// 触发时间+网络延迟
-		rate += simMarketRate(bar, trigPrice, od.Short, true)
+		rate += simMarketRate(bar, trigPrice, od.Short, true, afterRate)
 		// 市价止损，立刻卖出
 		stopPrice = simMarketPrice(bar, rate)
 	}
@@ -461,14 +462,20 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 	return start*(1-posRate) + end*posRate
 }
 
-func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool) float64 {
-	if isBuy && price >= bar.Open || !isBuy && price <= bar.Open {
-		// 开盘立刻成交
-		if !isTrigger {
-			// 对于触发价格的订单，不是挂单，无法在开盘时立刻成交
-			return 0
+func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minRate float64) float64 {
+	if isTrigger {
+		// 对于触发价格的订单，不是挂单，判断如果未在bar范围内，则认为立刻成交
+		if price < bar.Low || price > bar.High {
+			return minRate
+		}
+	} else {
+		// 非触发模式，直接和开盘价对比
+		if isBuy && price >= bar.Open || !isBuy && price <= bar.Open {
+			// 开盘立刻成交。
+			return minRate
 		}
 	}
+
 	var (
 		a, b, c, totalLen float64
 	)
@@ -491,18 +498,38 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool) floa
 			// 触发价格，无需考虑买卖方向，直接比较
 			if price < openP {
 				// 触发买价低于开盘，在开盘~最低时触发
-				return (openP - price) / totalLen
+				rate := (openP - price) / totalLen
+				if rate >= minRate {
+					return rate
+				}
+			}
+			// 否则在最低~最高中触发
+			rate := (a + price - lowP) / totalLen
+			if rate >= minRate {
+				return rate
 			} else {
-				// 否则在最低~最高中触发
-				return (a + price - lowP) / totalLen
+				// 在最高~收盘中触发
+				return (a + b + highP - price) / totalLen
 			}
 		} else {
 			if isBuy {
 				// 买单，在开盘~最低时触发
-				return (openP - price) / totalLen
+				rate := (openP - price) / totalLen
+				if rate >= minRate {
+					return rate
+				} else {
+					// 在最低~最高时触发
+					return (a + price - lowP) / totalLen
+				}
 			} else {
 				// 卖单，在最低~最高中触发
-				return (a + price - lowP) / totalLen
+				rate := (a + price - lowP) / totalLen
+				if rate >= minRate {
+					return rate
+				} else {
+					// 在最高~收盘中触发
+					return (a + b + highP - price) / totalLen
+				}
 			}
 		}
 	} else {
@@ -518,18 +545,42 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool) floa
 			// 触发价格，无需考虑买卖方向，直接比较
 			if price < openP {
 				// 触发价低于开盘，必然在最高~最低中触发
-				return (a + highP - price) / totalLen
+				rate := (a + highP - price) / totalLen
+				if rate >= minRate {
+					return rate
+				} else {
+					// 在最低~收盘中触发
+					return (a + b + price - lowP) / totalLen
+				}
 			} else {
 				// 触发价高于开盘，在开盘~最高中触发
-				return (price - openP) / totalLen
+				rate := (price - openP) / totalLen
+				if rate >= minRate {
+					return rate
+				} else {
+					// 在最高~最低中触发
+					return (a + highP - price) / totalLen
+				}
 			}
 		} else {
 			if isBuy {
 				// 买单，必然在最高~最低中触发
-				return (a + highP - price) / totalLen
+				rate := (a + highP - price) / totalLen
+				if rate >= minRate {
+					return rate
+				} else {
+					// 在最低~收盘中触发
+					return (a + b + price - lowP) / totalLen
+				}
 			} else {
 				// 卖单，在开盘~最高中触发
-				return (price - openP) / totalLen
+				rate := (price - openP) / totalLen
+				if rate >= minRate {
+					return rate
+				} else {
+					// 在最高~最低中触发
+					return (a + highP - price) / totalLen
+				}
 			}
 		}
 	}

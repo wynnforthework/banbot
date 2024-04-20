@@ -527,8 +527,9 @@ func (r *BTResult) dumpConfig() {
 func (r *BTResult) dumpStrategy() {
 	stagyDir := config.GetStagyDir()
 	for name := range core.StgPairTfs {
-		srcDir := fmt.Sprintf("%s/%s", stagyDir, name)
-		tgtDir := fmt.Sprintf("%s/stagy_%s", r.OutDir, name)
+		dname := strings.Split(name, ":")[0]
+		srcDir := fmt.Sprintf("%s/%s", stagyDir, dname)
+		tgtDir := fmt.Sprintf("%s/stagy_%s", r.OutDir, dname)
 		err_ := utils.CopyDir(srcDir, tgtDir)
 		if err_ != nil {
 			log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))

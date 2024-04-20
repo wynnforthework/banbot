@@ -262,24 +262,25 @@ func initStagyJobs() {
 	// 更新job的EnterNum
 	for account := range config.Accounts {
 		openOds, lock := orm.GetOpenODs(account)
-		var enterNums = make(map[string]int)
+		var orderNums = make(map[string]int)
+		var enteredNums = make(map[string]int)
 		lock.Lock()
 		for _, od := range openOds {
 			key := fmt.Sprintf("%s_%s_%s", od.Symbol, od.Timeframe, od.Strategy)
-			num, ok := enterNums[key]
-			if ok {
-				enterNums[key] = num + 1
-			} else {
-				enterNums[key] = 1
-			}
+			odNum, _ := orderNums[key]
+			orderNums[key] = odNum + 1
+			entNum, _ := enteredNums[key]
+			enteredNums[key] = entNum + 1
 		}
 		lock.Unlock()
 		accJobs := GetJobs(account)
 		for _, jobs := range accJobs {
 			for _, job := range jobs {
 				key := fmt.Sprintf("%s_%s_%s", job.Symbol.Symbol, job.TimeFrame, job.Stagy.Name)
-				num, _ := enterNums[key]
-				job.EnterNum = num
+				odNum, _ := orderNums[key]
+				job.OrderNum = odNum
+				entNum, _ := enteredNums[key]
+				job.EnteredNum = entNum
 			}
 		}
 	}

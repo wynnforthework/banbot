@@ -133,11 +133,15 @@ func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 	if core.IsWarmUp {
 		s.LongOrders = nil
 		s.ShortOrders = nil
-	} else if s.EnterNum > 0 {
+	} else if s.OrderNum > 0 {
 		s.LongOrders = nil
 		s.ShortOrders = nil
+		enteredNum := 0
 		for _, od := range curOrders {
 			if od.Strategy == s.Stagy.Name {
+				if od.Status >= orm.InOutStatusFullEnter {
+					enteredNum += 1
+				}
 				if od.Short {
 					s.ShortOrders = append(s.ShortOrders, od)
 				} else {
@@ -145,7 +149,8 @@ func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 				}
 			}
 		}
-		s.EnterNum = len(s.LongOrders) + len(s.ShortOrders)
+		s.OrderNum = len(s.LongOrders) + len(s.ShortOrders)
+		s.EnteredNum = enteredNum
 	}
 	s.Entrys = nil
 	s.Exits = nil

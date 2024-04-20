@@ -63,7 +63,8 @@ type StagyJob struct {
 	TimeFrame     string            // 当前运行的时间周期
 	Account       string            // 当前任务所属账号
 	TPMaxs        map[int64]float64 // 订单最大盈利时价格
-	EnterNum      int               // 记录已提交入场订单数量，避免访问数据库过于频繁
+	OrderNum      int               // 所有未完成订单数量
+	EnteredNum    int               // 已完全入场的订单数量
 	CheckMS       int64             // 上次处理信号的时间戳，13位毫秒
 	OpenLong      bool              // 是否允许开多
 	OpenShort     bool              // 是否允许开空

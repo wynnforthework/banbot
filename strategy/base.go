@@ -108,26 +108,31 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		}
 		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
 	}
-	curPrice := core.GetPrice(symbol)
+	// 检查价格是否有效
+	dirFlag := 1.0
+	if req.Short {
+		dirFlag = -1.0
+	}
+	enterPrice := core.GetPrice(symbol)
+	if req.Limit > 0 {
+		if (req.Limit-enterPrice)*dirFlag < 0 {
+			enterPrice = req.Limit
+		}
+	}
 	if req.Amount == 0 && req.LegalCost == 0 {
 		if req.CostRate == 0 {
 			req.CostRate = 1
 		}
 		req.LegalCost = s.Stagy.GetStakeAmount(s) * req.CostRate
 		avgVol := s.avgVolume(5) // 最近5个蜡烛成交量
-		reqAmt := req.LegalCost / curPrice
+		reqAmt := req.LegalCost / enterPrice
 		if avgVol > 0 && reqAmt/avgVol > config.OpenVolRate {
-			req.LegalCost = avgVol * config.OpenVolRate * curPrice
+			req.LegalCost = avgVol * config.OpenVolRate * enterPrice
 			if core.LiveMode {
 				log.Info(fmt.Sprintf("%v open amt rate: %.1f > open_vol_rate(%.1f), cut to cost: %.1f",
 					symbol, reqAmt/avgVol, config.OpenVolRate, req.LegalCost))
 			}
 		}
-	}
-	// 检查价格是否有效
-	dirFlag := 1
-	if req.Short {
-		dirFlag = -1
 	}
 	// 检查止损
 	curSLPrice := s.LongSLPrice
@@ -140,17 +145,17 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	req.StopLoss = 0
 	if curSLPrice > 0 {
 		if s.ExgStopLoss {
-			if (curSLPrice-curPrice)*float64(dirFlag) >= 0 {
+			if (curSLPrice-enterPrice)*dirFlag >= 0 {
 				rel := "<"
 				if req.Short {
 					rel = ">"
 				}
-				return errs.NewMsg(errs.CodeParamInvalid, "%s stoploss %f must %s %f for %v order",
-					symbol, curSLPrice, rel, curPrice, dirType)
+				return errs.NewMsg(errs.CodeParamInvalid, "%s stopLoss %f must %s %f for %v order",
+					symbol, curSLPrice, rel, enterPrice, dirType)
 			}
 			req.StopLoss = curSLPrice
 		} else if isLiveMode {
-			log.Warn("stoploss disabled",
+			log.Warn("stopLoss disabled",
 				zap.String("strategy", s.Stagy.Name),
 				zap.String("pair", symbol))
 		}
@@ -166,13 +171,13 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	req.TakeProfit = 0
 	if curTPPrice > 0 {
 		if s.ExgTakeProfit {
-			if (curTPPrice-curPrice)*float64(dirFlag) <= 0 {
+			if (curTPPrice-enterPrice)*dirFlag <= 0 {
 				rel := ">"
 				if req.Short {
 					rel = "<"
 				}
 				return errs.NewMsg(errs.CodeParamInvalid, "%s takeProfit %f must %s %f for %v order",
-					symbol, curTPPrice, rel, curPrice, dirType)
+					symbol, curTPPrice, rel, enterPrice, dirType)
 			}
 			req.TakeProfit = curTPPrice
 		} else if isLiveMode {
@@ -189,7 +194,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		}
 	}
 	s.Entrys = append(s.Entrys, req)
-	s.EnterNum += 1
+	s.OrderNum += 1
 	return nil
 }
 
