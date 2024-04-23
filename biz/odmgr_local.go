@@ -314,6 +314,9 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 		trigPrice = slPrice
 		stopPrice = getExcPrice(slPrice, od.GetInfoFloat64(orm.OdInfoStopLossLimit))
 		exitTag = core.ExitTagStopLoss
+		if od.ProfitRate >= 0 {
+			exitTag = core.ExitTagSLTake
+		}
 	} else {
 		// 触发止盈，计算执行价格
 		trigPrice = tpPrice

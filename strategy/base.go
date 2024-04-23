@@ -140,8 +140,13 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		curSLPrice = s.ShortSLPrice
 	}
 	if curSLPrice == 0 {
-		curSLPrice = req.StopLoss
+		if req.StopLossVal > 0 {
+			curSLPrice = enterPrice - req.StopLossVal*dirFlag
+		} else {
+			curSLPrice = req.StopLoss
+		}
 	}
+	req.StopLossVal = 0
 	req.StopLoss = 0
 	if curSLPrice > 0 {
 		if s.ExgStopLoss {
@@ -166,8 +171,13 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		curTPPrice = s.ShortTPPrice
 	}
 	if curTPPrice == 0 {
-		curTPPrice = req.TakeProfit
+		if req.TakeProfitVal > 0 {
+			curTPPrice = enterPrice + req.TakeProfitVal*dirFlag
+		} else {
+			curTPPrice = req.TakeProfit
+		}
 	}
+	req.TakeProfitVal = 0
 	req.TakeProfit = 0
 	if curTPPrice > 0 {
 		if s.ExgTakeProfit {
@@ -283,7 +293,7 @@ func (s *StagyJob) getMaxTp(od *orm.InOutOrder) (float64, float64, float64) {
 	return backVal / maxTPVal, entPrice, maxChg
 }
 
-func getDrawDownExitRate(maxChg float64) float64 {
+func CalcDrawDownExitRate(maxChg float64) float64 {
 	var rate float64
 	switch {
 	case maxChg > 0.1:
@@ -310,7 +320,7 @@ func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 	}
 	if stopRate < 0 {
 		// 如果策略返回负数，则表示使用默认算法
-		stopRate = getDrawDownExitRate(exmChg)
+		stopRate = CalcDrawDownExitRate(exmChg)
 	}
 	if utils.EqualNearly(stopRate, 0) {
 		return 0

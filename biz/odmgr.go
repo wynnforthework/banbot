@@ -13,6 +13,7 @@ import (
 	"github.com/banbox/banexg/utils"
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
+	"math"
 	"slices"
 	"strings"
 )
@@ -231,6 +232,9 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 		od.SetInfo(orm.OdInfoStopLoss, req.StopLoss)
 		if req.StopLossLimit > 0 {
 			od.SetInfo(orm.OdInfoStopLossLimit, req.StopLossLimit)
+			od.SetInfo(orm.OdInfoStopLossVal, math.Abs(od.InitPrice-req.StopLossLimit))
+		} else {
+			od.SetInfo(orm.OdInfoStopLossVal, math.Abs(od.InitPrice-req.StopLoss))
 		}
 	}
 	if req.TakeProfit > 0 {

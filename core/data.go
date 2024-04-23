@@ -97,6 +97,7 @@ const (
 	ExitTagFatalErr    = "fatal_err"
 	ExitTagPairDel     = "pair_del"
 	ExitTagStopLoss    = "stop_loss"
+	ExitTagSLTake      = "sl_take"
 	ExitTagTakeProfit  = "take_profit"
 	ExitTagDataStuck   = "data_stuck"
 	ExitTagLiquidation = "liquidation"

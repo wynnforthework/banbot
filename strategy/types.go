@@ -93,8 +93,10 @@ type EnterReq struct {
 	LegalCost       float64 // 花费法币金额。指定时忽略CostRate
 	Leverage        int     // 杠杆倍数
 	Amount          float64 // 入场标的数量，由LegalCost和price计算
+	StopLossVal     float64 // 入场价格到止损价格的距离
 	StopLoss        float64 // 止损触发价格，不为空时在交易所提交一个止损单
 	StopLossLimit   float64 // 止损限制价格，不提供使用StopLoss
+	TakeProfitVal   float64 // 入场价格到止盈价格的距离
 	TakeProfit      float64 // 止盈价格，不为空时在交易所提交一个止盈单。
 	TakeProfitLimit float64 // 止盈限制价格，不提供使用TakeProfit
 	StopBars        int     // 入场限价单超过多少个bar未成交则取消

@@ -33,6 +33,7 @@ const (
 
 const (
 	OdInfoStopLoss          = "StopLossPrice" // 止损触发价格
+	OdInfoStopLossVal       = "StopLossVal"   // 止损区间
 	OdInfoStopLossHit       = "StopLossHit"   // 止损是否已触发
 	OdInfoStopLossLimit     = "StopLossLimit" // 止损限制价格，未提供使用OdInfoStopLoss
 	OdInfoStopLossOrderId   = "StopLossOrderId"
