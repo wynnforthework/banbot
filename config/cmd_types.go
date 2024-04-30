@@ -38,4 +38,6 @@ type CmdArgs struct {
 	MaxPoolSize   int
 	CPUProfile    bool
 	MemProfile    bool
+	InPath        string
+	OutPath       string
 }

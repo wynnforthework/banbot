@@ -10,8 +10,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/schollz/progressbar/v3"
-	"go.uber.org/zap"
 	"sync"
 )
 
@@ -77,7 +75,7 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 }
 
 func DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
-	stepCB func(num int)) (int, *errs.Error) {
+	pBar *utils.PrgBar) (int, *errs.Error) {
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return 0, err
@@ -85,7 +83,7 @@ func DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, 
 	defer conn.Release()
 	oldStart, oldEnd := sess.GetKlineRange(exs.ID, timeFrame)
 	startMS = exs.GetValidStart(startMS)
-	return downOHLCV2DBRange(sess, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
+	return downOHLCV2DBRange(sess, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, pBar)
 }
 
 /*
@@ -93,10 +91,10 @@ DownOHLCV2DB
 下载K线到数据库，应在事务中调用此方法，否则查询更新相关数据会有错误
 */
 func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
-	stepCB func(num int)) (int, *errs.Error) {
+	pBar *utils.PrgBar) (int, *errs.Error) {
 	startMS = exs.GetValidStart(startMS)
 	oldStart, oldEnd := q.GetKlineRange(exs.ID, timeFrame)
-	return downOHLCV2DBRange(q, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, stepCB)
+	return downOHLCV2DBRange(q, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, pBar)
 }
 
 /*
@@ -105,11 +103,11 @@ downOHLCV2DBRange
 stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传入区间
 */
 func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
-	oldStart, oldEnd int64, stepCB func(num int)) (int, *errs.Error) {
+	oldStart, oldEnd int64, pBar *utils.PrgBar) (int, *errs.Error) {
 	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs {
 		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
-		if stepCB != nil {
-			stepCB(core.StepTotal)
+		if pBar != nil {
+			pBar.Add(core.StepTotal)
 		}
 		return 0, nil
 	}
@@ -118,8 +116,8 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 		var conn *pgxpool.Conn
 		sess, conn, err = Conn(nil)
 		if err != nil {
-			if stepCB != nil {
-				stepCB(core.StepTotal)
+			if pBar != nil {
+				pBar.Add(core.StepTotal)
 			}
 			return 0, err
 		}
@@ -144,32 +142,14 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 			totalNum += int((oldStart-startMS)/1000) / tfSecs
 		}
 	}
-	if stepCB == nil && totalNum > 10000 {
-		var pBar = progressbar.Default(int64(core.StepTotal), exs.Symbol)
+	if pBar == nil && totalNum > 10000 {
+		pBar = utils.NewPrgBar(core.StepTotal, exs.Symbol)
 		defer pBar.Close()
-		var m sync.Mutex
-		stepCB = func(num int) {
-			m.Lock()
-			defer m.Unlock()
-			err_ := pBar.Add(num)
-			if err_ != nil {
-				log.Error("update pBar fail", zap.Error(err_))
-			}
-		}
 	}
-	doneNum := 0     // 累计下载数量
-	progressNum := 0 // 进度值，最大StepTotal
-	curStep := func(curNum int) {
-		if stepCB == nil || curNum <= 0 {
-			return
-		}
-		doneNum += curNum
-		curProgress := min(core.StepTotal, doneNum*core.StepTotal/totalNum)
-		addNum := curProgress - progressNum
-		if addNum > 0 {
-			stepCB(addNum)
-		}
-		progressNum = curProgress
+	var bar *utils.PrgBarJob
+	if pBar != nil {
+		bar = pBar.NewJob(totalNum)
+		defer bar.Done()
 	}
 	close(chanDown)
 	chanKline := make(chan []*banexg.Kline, 1000)
@@ -232,7 +212,9 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 					return
 				} else {
 					curNum := int(num)
-					curStep(curNum)
+					if bar != nil {
+						bar.Add(curNum)
+					}
 					saveNum += curNum
 				}
 			}
@@ -240,7 +222,6 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	}()
 
 	wg.Wait()
-	curStep(totalNum - doneNum)
 	if outErr != nil {
 		return saveNum, errs.New(core.ErrRunTime, outErr)
 	}
@@ -255,25 +236,25 @@ AutoFetchOHLCV
 	先尝试从本地读取，不存在时从交易所下载，然后返回。
 */
 func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
-	limit int, withUnFinish bool, stepCB func(num int)) ([]*banexg.Kline, *errs.Error) {
+	limit int, withUnFinish bool, pBar *utils.PrgBar) ([]*banexg.Kline, *errs.Error) {
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, withUnFinish)
 	downTF, err := GetDownTF(timeFrame)
 	if err != nil {
-		if stepCB != nil {
-			stepCB(core.StepTotal)
+		if pBar != nil {
+			pBar.Add(core.StepTotal)
 		}
 		return nil, err
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
-		if stepCB != nil {
-			stepCB(core.StepTotal)
+		if pBar != nil {
+			pBar.Add(core.StepTotal)
 		}
 		return nil, err
 	}
 	defer conn.Release()
-	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS, stepCB)
+	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS, pBar)
 	if err != nil {
 		// DownOHLCV2DB 内部已处理stepCB，这里无需处理
 		return nil, err
@@ -292,56 +273,29 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	if err != nil {
 		return err
 	}
-	guard := make(chan struct{}, core.ConcurNum)
-	var retErr *errs.Error
-	var wg sync.WaitGroup
-	defer wg.Wait()
 	barNum := int((endMS - startMS) / tfMSecs)
 	startText := btime.ToDateStr(startMS, "")
 	endText := btime.ToDateStr(endMS, "")
 	log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
-	var pBar = progressbar.Default(int64(len(exsList) * core.StepTotal))
+	var pBar = utils.NewPrgBar(len(exsList)*core.StepTotal, "")
 	defer pBar.Close()
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err
 	}
-	var m sync.Mutex
-	downStep := func(num int) {
-		m.Lock()
-		defer m.Unlock()
-		err_ := pBar.Add(num)
-		if err_ != nil {
-			log.Error("add pBar fail", zap.Error(err_))
-		}
-	}
 	sidList := utils.KeysOfMap(exsList)
 	// 这里应该使用更小的downTF
 	kRanges := sess.GetKlineRanges(sidList, downTF)
 	conn.Release()
-	for _, exs := range exsList {
-		// 如果达到并发限制，这里会阻塞等待
-		guard <- struct{}{}
-		if retErr != nil {
-			// 下载出错，中断返回
-			break
+	return utils.ParallelRun(sidList, core.ConcurNum, func(i int32) *errs.Error {
+		exs, _ := exsList[i]
+		var oldStart, oldEnd = int64(0), int64(0)
+		if krange, ok := kRanges[exs.ID]; ok {
+			oldStart, oldEnd = krange[0], krange[1]
 		}
-		wg.Add(1)
-		go func(exs_ *ExSymbol) {
-			defer func() {
-				// 完成一个任务，从chan弹出一个
-				<-guard
-				wg.Done()
-			}()
-			var oldStart, oldEnd = int64(0), int64(0)
-			if krange, ok := kRanges[exs_.ID]; ok {
-				oldStart, oldEnd = krange[0], krange[1]
-			}
-			_, retErr = downOHLCV2DBRange(nil, exchange, exs_, downTF, startMS, endMS, oldStart, oldEnd, downStep)
-		}(exs)
-	}
-	wg.Wait()
-	return retErr
+		_, err = downOHLCV2DBRange(nil, exchange, exs, downTF, startMS, endMS, oldStart, oldEnd, pBar)
+		return err
+	})
 }
 
 /*

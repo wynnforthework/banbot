@@ -3,9 +3,11 @@ package utils
 import (
 	"errors"
 	"fmt"
+	"github.com/banbox/banexg/errs"
 	"github.com/jackc/pgx/v5/pgconn"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 var (
@@ -158,4 +160,32 @@ func DeepCopyMap(dst, src map[string]interface{}) {
 		}
 		dst[k] = v
 	}
+}
+
+func ParallelRun[T any](items []T, concurNum int, handle func(T) *errs.Error) *errs.Error {
+	var retErr *errs.Error
+	guard := make(chan struct{}, concurNum)
+	var wg sync.WaitGroup
+	for _, item_ := range items {
+		// 如果达到并发限制，这里会阻塞等待
+		guard <- struct{}{}
+		if retErr != nil {
+			// 出错，终止返回
+			break
+		}
+		wg.Add(1)
+		go func(item T) {
+			defer func() {
+				// 完成一个任务，从chan弹出一个
+				<-guard
+				wg.Done()
+			}()
+			err := handle(item)
+			if err != nil {
+				retErr = err
+			}
+		}(item_)
+	}
+	wg.Wait()
+	return retErr
 }

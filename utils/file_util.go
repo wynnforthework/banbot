@@ -12,7 +12,7 @@ func CopyDir(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	if err = CreateDir(dst, 0755); err != nil {
+	if err = EnsureDir(dst, 0755); err != nil {
 		return err
 	}
 	for _, entry := range entries {
@@ -26,7 +26,7 @@ func CopyDir(src, dst string) error {
 
 		switch fileInfo.Mode() & os.ModeType {
 		case os.ModeDir:
-			if err = CreateDir(destPath, 0755); err != nil {
+			if err = EnsureDir(destPath, 0755); err != nil {
 				return err
 			}
 			if err = CopyDir(sourcePath, destPath); err != nil {
@@ -85,7 +85,7 @@ func Exists(filePath string) bool {
 	return !os.IsNotExist(err)
 }
 
-func CreateDir(dir string, perm os.FileMode) error {
+func EnsureDir(dir string, perm os.FileMode) error {
 	if Exists(dir) {
 		return nil
 	}

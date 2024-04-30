@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/optmize"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -65,6 +66,12 @@ func runMainEntrys(cmdName string) {
 	case "spider":
 		entry = RunSpider
 		break
+	case "cvt_tick":
+		options = []string{"in", "out"}
+		entry = data.RunFormatTick
+	case "tick2kline":
+		options = []string{"in", "out"}
+		entry = data.Build1mWithTicks
 	default:
 		printAndExit()
 	}
@@ -124,6 +131,10 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.BoolVar(&args.MemProfile, "mem-profile", false, "enable memory profile")
 		case "task_id":
 			cmd.IntVar(&args.TaskId, "task-id", 0, "task")
+		case "in":
+			cmd.StringVar(&args.InPath, "in", "", "input file or directory")
+		case "out":
+			cmd.StringVar(&args.OutPath, "out", "", "output file or directory")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

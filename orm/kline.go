@@ -11,7 +11,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/jackc/pgx/v5"
-	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 	"slices"
 	"sort"
@@ -1056,8 +1055,8 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
 	// 显示进度条
-	pgTotal := int64(len(infos)) + int64(len(aggList))*10
-	pBar := progressbar.Default(pgTotal, "sync tf")
+	pgTotal := (len(infos) + len(aggList)) * 10
+	pBar := utils.NewPrgBar(pgTotal, "sync tf")
 	defer pBar.Close()
 	// 加载计算的区间
 	calcs := make(map[string]map[int32][2]int64)
@@ -1067,7 +1066,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 			return err
 		}
 		calcs[agg.TimeFrame] = ranges
-		_ = pBar.Add(10)
+		pBar.Add(10)
 	}
 	infoList := make([]*KInfoExt, 0, len(infos))
 	for _, info := range infos {
@@ -1093,7 +1092,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 			curSid = info.Sid
 		}
 		tfMap[info.Timeframe] = info
-		_ = pBar.Add(1)
+		pBar.Add(1)
 	}
 	return sess.SyncKlineSid(curSid, tfMap, calcs)
 }

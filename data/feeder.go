@@ -308,7 +308,7 @@ type IHistKlineFeeder interface {
 	getNextMS() int64
 	initNext(since int64)
 	invoke() *errs.Error
-	downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, stepCB func(num int)) *errs.Error
+	downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error
 }
 
 /*
@@ -384,17 +384,17 @@ func (f *DBKlineFeeder) initNext(since int64) {
 /*
 downIfNeed
 下载指定区间的数据
-stepCB 用于进度更新，总和为1000，每次更新此次的量
+pBar 用于进度更新，总和为1000，每次更新此次的量
 */
-func (f *DBKlineFeeder) downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, stepCB func(num int)) *errs.Error {
+func (f *DBKlineFeeder) downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error {
 	downTf, err := orm.GetDownTF(f.States[0].TimeFrame)
 	if err != nil {
-		if stepCB != nil {
-			stepCB(core.StepTotal)
+		if pBar != nil {
+			pBar.Add(core.StepTotal)
 		}
 		return err
 	}
-	_, err = sess.DownOHLCV2DB(exchange, f.exs, downTf, f.TimeRange.StartMS, f.TimeRange.EndMS, stepCB)
+	_, err = sess.DownOHLCV2DB(exchange, f.exs, downTf, f.TimeRange.StartMS, f.TimeRange.EndMS, pBar)
 	return err
 }
 

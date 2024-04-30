@@ -11,7 +11,6 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
-	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
 	"math"
 	"sort"
@@ -122,93 +121,54 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	exchange := exg.Default
 	curTimeMS := btime.TimeMS()
 	jobNum := 0
-	var retErr *errs.Error
 	// 预热所需的必要数据
 	for _, job := range warmJobs {
 		jobNum += len(job.tfWarms)
 	}
 	log.Info(fmt.Sprintf("warmup for %d pairs, %v jobs", len(warmJobs), jobNum))
-	doneNum := 0
-	barTotalNum := int64(jobNum * core.StepTotal)
-	pBar := progressbar.Default(barTotalNum, "warmup")
+	pBar := utils.NewPrgBar(jobNum*core.StepTotal, "warmup")
 	defer pBar.Close()
-	var m sync.Mutex
-	stepCB := func(num int) {
-		m.Lock()
-		defer m.Unlock()
-		doneNum += num
-		if int64(doneNum) > barTotalNum {
-			log.Warn("warm pBar progress exceed", zap.Int64("max", barTotalNum), zap.Int("cur", doneNum))
-			return
-		}
-		err := pBar.Add(num)
+	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(job *WarmJob) *errs.Error {
+		symbol := job.hold.getSymbol()
+		exs, err := orm.GetExSymbol(exchange, symbol)
 		if err != nil {
-			log.Error("add pBar fail for warmup", zap.Error(err))
+			pBar.Add(core.StepTotal * len(job.tfWarms))
+			return err
 		}
-	}
-	// 控制同时预热下载的标的数量
-	guard := make(chan struct{}, core.ConcurNum)
-	var wg sync.WaitGroup
-	for _, job_ := range warmJobs {
-		// 如果达到并发限制，这里会阻塞等待
-		guard <- struct{}{}
-		if retErr != nil {
-			// 下载出错，终端返回
-			break
-		}
-		wg.Add(1)
-		go func(job *WarmJob) {
-			defer func() {
-				// 完成一个任务，从chan弹出一个
-				<-guard
-				wg.Done()
-			}()
-			symbol := job.hold.getSymbol()
-			exs, err := orm.GetExSymbol(exchange, symbol)
+		for tf, warmNum := range job.tfWarms {
+			key := fmt.Sprintf("%s|%s", symbol, tf)
+			lockMap.Lock()
+			sinceMap[key] = 0
+			lockMap.Unlock()
+			tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+			if tfMSecs < int64(60000) {
+				pBar.Add(core.StepTotal)
+				continue
+			}
+			endMS := utils.AlignTfMSecs(curTimeMS, tfMSecs)
+			bars, err := orm.AutoFetchOHLCV(exchange, exs, tf, 0, endMS, warmNum, false, pBar)
 			if err != nil {
-				retErr = err
-				stepCB(core.StepTotal * len(job.tfWarms))
-				return
+				return err
 			}
-			for tf, warmNum := range job.tfWarms {
-				key := fmt.Sprintf("%s|%s", symbol, tf)
-				lockMap.Lock()
-				sinceMap[key] = 0
-				lockMap.Unlock()
-				tfMSecs := int64(utils.TFToSecs(tf) * 1000)
-				if tfMSecs < int64(60000) {
-					stepCB(core.StepTotal)
-					continue
-				}
-				endMS := utils.AlignTfMSecs(curTimeMS, tfMSecs)
-				bars, err := orm.AutoFetchOHLCV(exchange, exs, tf, 0, endMS, warmNum, false, stepCB)
-				if err != nil {
-					retErr = err
-					break
-				}
-				if len(bars) == 0 {
-					log.Warn("skip warm as empty", zap.String("pair", exs.Symbol), zap.String("tf", tf),
-						zap.Int("want", warmNum), zap.Int64("end", endMS))
-					continue
-				}
-				if warmNum != len(bars) {
-					barEndMs := bars[len(bars)-1].Time + tfMSecs
-					barStartMs := bars[0].Time
-					lackNum := warmNum - len(bars)
-					log.Warn(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", exs.Symbol,
-						tf, lackNum, warmNum, barStartMs, barEndMs))
-				}
-				sinceVal := job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
-				lockMap.Lock()
-				sinceMap[key] = sinceVal
-				lockMap.Unlock()
+			if len(bars) == 0 {
+				log.Warn("skip warm as empty", zap.String("pair", exs.Symbol), zap.String("tf", tf),
+					zap.Int("want", warmNum), zap.Int64("end", endMS))
+				continue
 			}
-		}(job_)
-	}
-	wg.Wait()
-	if barTotalNum-int64(doneNum) > 0 {
-		stepCB(int(barTotalNum) - doneNum)
-	}
+			if warmNum != len(bars) {
+				barEndMs := bars[len(bars)-1].Time + tfMSecs
+				barStartMs := bars[0].Time
+				lackNum := warmNum - len(bars)
+				log.Warn(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", exs.Symbol,
+					tf, lackNum, warmNum, barStartMs, barEndMs))
+			}
+			sinceVal := job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
+			lockMap.Lock()
+			sinceMap[key] = sinceVal
+			lockMap.Unlock()
+		}
+		return nil
+	})
 	return sinceMap, retErr
 }
 
@@ -240,19 +200,10 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 		return err
 	}
 	defer conn.Release()
-	var pBar = progressbar.Default(int64(len(p.holders)*core.StepTotal), "DownHist")
+	pBar := utils.NewPrgBar(len(p.holders)*core.StepTotal, "DownHist")
 	defer pBar.Close()
-	var m sync.Mutex
-	stepCB := func(num int) {
-		m.Lock()
-		defer m.Unlock()
-		err_ := pBar.Add(num)
-		if err_ != nil {
-			log.Error("update pBar fail", zap.Error(err_))
-		}
-	}
 	for _, h := range p.holders {
-		err = h.downIfNeed(sess, exchange, stepCB)
+		err = h.downIfNeed(sess, exchange, pBar)
 		if err != nil {
 			log.Error("download ohlcv fail", zap.String("pair", h.getSymbol()), zap.Error(err))
 			return err
@@ -309,13 +260,8 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 	}
 	totalMS := (config.TimeRange.EndMS - config.TimeRange.StartMS) / 1000
 	var pbarTo = config.TimeRange.StartMS
-	var pBar = progressbar.Default(totalMS, "RunHist")
-	defer func() {
-		err_ := pBar.Close()
-		if err_ != nil {
-			log.Error("procBar close fail", zap.Error(err_))
-		}
-	}()
+	var pBar = utils.NewPrgBar(int(totalMS), "RunHist")
+	defer pBar.Close()
 	log.Info("run data loop for backtest..")
 	var hold IHistKlineFeeder
 	holds := utils.ValsOfMap(p.holders)
@@ -348,11 +294,8 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 		// 更新进度条
 		pBarAdd := (btime.TimeMS() - pbarTo) / 1000
 		if pBarAdd > 0 {
-			err_ := pBar.Add64(pBarAdd)
+			pBar.Add(int(pBarAdd))
 			pbarTo = btime.TimeMS()
-			if err_ != nil {
-				log.Warn("procBar add fail", zap.Error(err_))
-			}
 		}
 	}
 	return nil

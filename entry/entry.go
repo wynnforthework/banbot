@@ -70,3 +70,41 @@ func RunSpider(args *config.CmdArgs) *errs.Error {
 	core.RunExitCalls()
 	return err
 }
+
+//func Load1mToDB(args *config.CmdArgs) *errs.Error {
+//	core.SetRunMode(core.RunModeOther)
+//	err := biz.SetupComs(args)
+//	if err != nil {
+//		return err
+//	}
+//	if args.InPath == "" {
+//		return errs.NewMsg(errs.CodeParamRequired, "--in is required")
+//	}
+//	names, err := data.FindPathNames(args.InPath, ".zip")
+//	if err != nil {
+//		return err
+//	}
+//	totalNum := len(names) * core.StepTotal
+//	pBar := utils.NewPrgBar(totalNum, "tickTo1m")
+//	for _, name := range names {
+//		fileInPath := filepath.Join(args.InPath, name)
+//		err = data.ReadZipCSVs(fileInPath, pBar, readCsvKline)
+//		if err != nil {
+//			return err
+//		}
+//	}
+//	pBar.Close()
+//	return nil
+//}
+
+//func readCsvKline(inPath string, file *zip.File) *errs.Error {
+//	cleanName := strings.Split(filepath.Base(file.Name), ".")[0]
+//
+//	ctx := context.Background()
+//	sess, conn, err := orm.Conn(ctx)
+//	if err != nil {
+//		return err
+//	}
+//	defer conn.Release()
+//	sess.InsertKLinesAuto("1m")
+//}
