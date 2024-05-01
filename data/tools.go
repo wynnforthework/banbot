@@ -33,7 +33,7 @@ type FuncConvert func(inPath string, file *zip.File, writer *zip.Writer) *errs.E
 
 type FuncReadZipItem func(inPath string, file *zip.File) *errs.Error
 
-type FuncTickBar func(inPath string, row []string) (string, int64, float64, float64)
+type FuncTickBar func(inPath string, row []string) (string, int64, [4]float64)
 
 func zipConvert(inPath, outPath, suffix string, convert FuncConvert, pBar *utils.PrgBar) *errs.Error {
 	r, err := zip.OpenReader(inPath)
@@ -295,7 +295,7 @@ func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeRunTime, err_)
 	}
-	tickBar := func(inPath string, row []string) (string, int64, float64, float64) {
+	tickBar := func(inPath string, row []string) (string, int64, [4]float64) {
 		if len(row) == 15 {
 			// TradingDay,InstrumentID,UpdateTime,UpdateMillisec,LastPrice,Volume,BidPrice1,BidVolume1,
 			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
@@ -303,27 +303,30 @@ func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
 			askPrice1, _ := strconv.ParseFloat(row[8], 64)
 			avgPrice, _ := strconv.ParseFloat(row[10], 64)
 			if bidPrice1 == 0 && askPrice1 == 0 && avgPrice == 0 {
-				return "", 0, 0, 0
+				return "", 0, [4]float64{0, 0, 0, 0}
 			}
 			symbol := row[1]
 			dateStr := row[0] + " " + row[2]
 			timeObj, err_ := time.ParseInLocation(layout, dateStr, loc)
 			if err_ != nil {
 				log.Error("invalid time", zap.String("date", dateStr), zap.String("name", inPath))
-				return "", 0, 0, 0
+				return "", 0, [4]float64{0, 0, 0, 0}
 			}
 			milliSecs, _ := strconv.ParseInt(row[3], 10, 64)
 			timeMS := timeObj.UnixMilli() + milliSecs
 			price, _ := strconv.ParseFloat(row[4], 64)
 			volume, _ := strconv.ParseFloat(row[5], 64)
-			return symbol, timeMS, price, volume
+			turnOver, _ := strconv.ParseFloat(row[11], 64)
+			return symbol, timeMS, [4]float64{price, volume, avgPrice, turnOver}
 		} else {
 			// InstrumentID,Time,LastPrice,Volume,BidPrice1,BidVolume1,
 			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
 			timeMS, _ := strconv.ParseInt(row[1], 10, 64)
 			price, _ := strconv.ParseFloat(row[2], 64)
 			volume, _ := strconv.ParseFloat(row[3], 64)
-			return row[0], timeMS, price, volume
+			avgPrice, _ := strconv.ParseFloat(row[8], 64)
+			turnOver, _ := strconv.ParseFloat(row[9], 64)
+			return row[0], timeMS, [4]float64{price, volume, avgPrice, turnOver}
 		}
 	}
 	// 按年对文件名分组
@@ -357,6 +360,11 @@ func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
 		totalNum := len(names) * core.StepTotal
 		pBar := utils.NewPrgBar(totalNum, "tickTo1m")
 		err = utils.ParallelRun(names, ConcurNum, func(name string) *errs.Error {
+			//cleanName := strings.Split(filepath.Base(name), ".")[0]
+			//timeObj, err_ := time.ParseInLocation("20060102", cleanName, loc)
+			//if err_ == nil && timeObj.UnixMilli() < 1383489660000 {
+			//	return nil
+			//}
 			fileInPath := filepath.Join(args.InPath, name)
 			return ReadZipCSVs(fileInPath, pBar, func(inPath string, file *zip.File) *errs.Error {
 				return build1mSymbolTick(inPath, file, tickBar)
@@ -398,10 +406,12 @@ func ReadZipCSVs(inPath string, pBar *utils.PrgBar, handle FuncReadZipItem) *err
 }
 
 type tkInfo struct {
-	symbol string
-	timeMS int64   // 13位毫秒时间戳
-	price  float64 // 最新价格
-	volume float64 // 累计日成交量
+	symbol   string
+	timeMS   int64   // 13位毫秒时间戳
+	price    float64 // 最新价格
+	volume   float64 // 累计日成交量
+	avgPrice float64 // 平均价格
+	turnOver float64 // 还手率
 }
 
 func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs.Error {
@@ -436,11 +446,12 @@ func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs
 	// 文件名内可能有多个symbol的tick信息，这里进行排序
 	ticks := make([]*tkInfo, 0, len(rows))
 	for _, row := range rows {
-		symbol, timeMS, price, volume := tickBar(inPath, row)
+		symbol, timeMS, arr := tickBar(inPath, row)
 		if timeMS == 0 || !isRawContract(symbol) {
 			continue
 		}
-		ticks = append(ticks, &tkInfo{symbol: symbol, timeMS: timeMS, price: price, volume: volume})
+		ticks = append(ticks, &tkInfo{symbol: symbol, timeMS: timeMS, price: arr[0], volume: arr[1],
+			avgPrice: arr[2], turnOver: arr[3]})
 	}
 	sort.Slice(ticks, func(i, j int) bool {
 		a, b := ticks[i], ticks[j]
@@ -450,17 +461,38 @@ func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs
 			return a.timeMS <= b.timeMS
 		}
 	})
+	minGapMSecs := int64(300000) // 间隔超过5分钟，且成交量下降，是切换盘口
 	// 对排序后的tick合并为K线
 	for _, t := range ticks {
 		curMinMS := utils.AlignTfMSecs(t.timeMS, 60000)
 		price, volume := t.price, t.volume
 		if bar1m == nil || oldMinMS == 0 || curMinMS > oldMinMS || oldSymbol != t.symbol {
 			saveBar()
-			oldSymbol = t.symbol
+			if oldSymbol != t.symbol {
+				oldSymbol = t.symbol
+				sumVol = 0
+			}
+			if volume < sumVol {
+				if curMinMS-oldMinMS >= minGapMSecs {
+					// 日盘/夜盘切换，累计成交量归0
+					sumVol = 0
+				} else {
+					log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
+						zap.Int64("time", curMinMS), zap.String("nm", oldSymbol))
+				}
+			}
 			curVol := t.volume - sumVol
 			oldMinMS = curMinMS
 			bar1m = &banexg.Kline{Time: curMinMS, Open: price, High: price, Low: price, Close: price, Volume: curVol}
 		} else {
+			if volume < sumVol {
+				if volume == 0 && t.avgPrice == 0 && t.turnOver == 0 {
+					// 部分tick，成交量、均价、换手率均为0，是无效的，需要跳过
+					continue
+				}
+				log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
+					zap.Int64("time", curMinMS), zap.String("nm", oldSymbol))
+			}
 			if price > bar1m.High {
 				bar1m.High = price
 			} else if price < bar1m.Low {
