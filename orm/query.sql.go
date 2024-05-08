@@ -9,6 +9,12 @@ import (
 	"context"
 )
 
+type AddCalendarsParams struct {
+	Name    string
+	StartMs int64
+	StopMs  int64
+}
+
 const addExOrder = `-- name: AddExOrder :one
 insert into exorder ("task_id", "inout_id", "symbol", "enter", "order_type", "order_id", "side",
                      "create_at", "price", "average", "amount", "filled", "status", "fee", "fee_type", "update_at")
@@ -157,6 +163,7 @@ func (q *Queries) AddKInfo(ctx context.Context, arg AddKInfoParams) (*KInfo, err
 
 type AddSymbolsParams struct {
 	Exchange string
+	ExgReal  string
 	Market   string
 	Symbol   string
 }
@@ -465,7 +472,7 @@ func (q *Queries) ListKInfos(ctx context.Context) ([]*KInfo, error) {
 }
 
 const listSymbols = `-- name: ListSymbols :many
-select id, exchange, market, symbol, list_ms, delist_ms from exsymbol
+select id, exchange, exg_real, market, symbol, list_ms, delist_ms from exsymbol
 where exchange = $1
 order by id
 `
@@ -482,6 +489,7 @@ func (q *Queries) ListSymbols(ctx context.Context, exchange string) ([]*ExSymbol
 		if err := rows.Scan(
 			&i.ID,
 			&i.Exchange,
+			&i.ExgReal,
 			&i.Market,
 			&i.Symbol,
 			&i.ListMs,

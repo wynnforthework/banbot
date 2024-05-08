@@ -126,8 +126,12 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 	adds := map[string]*ExSymbol{}
 	for _, exs := range symbols {
 		key := fmt.Sprintf("%s:%s:%s", exs.Exchange, exs.Market, exs.Symbol)
-		if _, ok := keySymbolMap[key]; !ok {
+		if item, ok := keySymbolMap[key]; !ok {
 			adds[key] = exs
+		} else {
+			exs.ID = item.ID
+			exs.ListMs = item.ListMs
+			exs.DelistMs = item.DelistMs
 		}
 	}
 	if len(adds) == 0 {
@@ -148,7 +152,8 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 		if _, ok := keySymbolMap[key]; ok {
 			continue
 		}
-		argList = append(argList, AddSymbolsParams{Exchange: item.Exchange, Market: item.Market, Symbol: item.Symbol})
+		argList = append(argList, AddSymbolsParams{Exchange: item.Exchange, ExgReal: item.ExgReal,
+			Market: item.Market, Symbol: item.Symbol})
 	}
 	_, err_ := sess.AddSymbols(context.Background(), argList)
 	if err_ != nil {
@@ -158,6 +163,15 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 		err = sess.LoadExgSymbols(exgId)
 		if err != nil {
 			return err
+		}
+	}
+	// 刷新Sid
+	for key, exs := range adds {
+		item, _ := keySymbolMap[key]
+		if item != nil {
+			exs.ID = item.ID
+			exs.ListMs = item.ListMs
+			exs.DelistMs = item.DelistMs
 		}
 	}
 	return nil

@@ -9,7 +9,12 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -381,4 +386,150 @@ func parseDownArgs(tfMSecs int64, startMS, endMS int64, limit int, withUnFinish 
 		startMS = endMS - tfMSecs*int64(limit)
 	}
 	return startMS, endMS
+}
+
+func (q *Queries) getCalendars(name string, startMS, stopMS int64, fields string) (pgx.Rows, error) {
+	var b strings.Builder
+	b.WriteString("select ")
+	b.WriteString(fields)
+	b.WriteString(" from calendars where name=$1 ")
+	if startMS > 0 {
+		b.WriteString(fmt.Sprintf("and stop_ms > %v ", startMS))
+	}
+	if stopMS > 0 {
+		b.WriteString(fmt.Sprintf("and start_ms < %v ", stopMS))
+	}
+	b.WriteString("order by start_ms")
+	ctx := context.Background()
+	return q.db.Query(ctx, b.String(), name)
+}
+
+func (q *Queries) GetCalendars(name string, startMS, stopMS int64) ([][2]int64, *errs.Error) {
+	rows, err_ := q.getCalendars(name, startMS, stopMS, "start_ms,stop_ms")
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	defer rows.Close()
+	result := make([][2]int64, 0)
+	for rows.Next() {
+		var start, stop int64
+		err_ = rows.Scan(&start, &stop)
+		if err_ != nil {
+			return result, errs.New(core.ErrDbReadFail, err_)
+		}
+		result = append(result, [2]int64{start, stop})
+	}
+	return result, nil
+}
+
+func (q *Queries) SetCalendars(name string, items [][2]int64) *errs.Error {
+	if len(items) == 0 {
+		return nil
+	}
+	startMS, stopMS := items[0][0], items[len(items)-1][1]
+	rows, err_ := q.getCalendars(name, startMS, stopMS, "id,start_ms,stop_ms")
+	if err_ != nil {
+		return errs.New(core.ErrDbReadFail, err_)
+	}
+	defer rows.Close()
+	olds := make([]*Calendar, 0)
+	for rows.Next() {
+		var cal = &Calendar{}
+		err_ = rows.Scan(&cal.ID, &cal.StartMs, &cal.StopMs)
+		if err_ != nil {
+			return errs.New(core.ErrDbReadFail, err_)
+		}
+		olds = append(olds, cal)
+	}
+	ctx := context.Background()
+	if len(olds) > 0 {
+		items[0][0] = olds[0].StartMs
+		items[len(items)-1][1] = olds[len(olds)-1].StopMs
+		ids := make([]string, len(olds))
+		for i, o := range olds {
+			ids[i] = strconv.Itoa(int(o.ID))
+		}
+		sql := fmt.Sprintf("delete from calendars where id in (%s)", strings.Join(ids, ","))
+		_, err_ = q.db.Exec(ctx, sql)
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
+	}
+	adds := make([]AddCalendarsParams, 0, len(items))
+	for _, tu := range items {
+		adds = append(adds, AddCalendarsParams{Name: name, StartMs: tu[0], StopMs: tu[1]})
+	}
+	_, err_ = q.AddCalendars(ctx, adds)
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	return nil
+}
+
+/*
+GetExSHoles
+获取指定Sid在某个时间段内，所有非交易时间范围。
+对于币圈365*24不休，返回空
+*/
+func (q *Queries) GetExSHoles(exchange banexg.BanExchange, exs *ExSymbol, start, stop int64, full bool) ([][2]int64, *errs.Error) {
+	exInfo := exchange.Info()
+	if exInfo.FullDay && exInfo.NoHoliday {
+		// 365天全年无休，且24小时可交易，不存在休息时间段
+		return nil, nil
+	}
+	mar, err := exchange.GetMarket(exs.Symbol)
+	if err != nil {
+		return nil, err
+	}
+	var dtList [][2]int64
+	if full {
+		// 不使用交易日过滤
+		dayMSecs := int64(utils.TFToSecs("1d") * 1000)
+		curTime := utils.AlignTfMSecs(start, dayMSecs)
+		for curTime < stop {
+			curEnd := curTime + dayMSecs
+			dtList = append(dtList, [2]int64{curTime, curEnd})
+			curTime = curEnd
+		}
+	} else {
+		// 获取交易日
+		dtList, err = q.GetCalendars(mar.ExgReal, start, stop)
+		if err != nil {
+			return nil, err
+		}
+		if len(dtList) == 0 {
+			// 给定时间段没有可交易日。整个作为hole
+			return [][2]int64{{start, stop}}, nil
+		}
+	}
+	times := make([][2]int64, 0, len(mar.DayTimes))
+	times = append(times, mar.DayTimes...)
+	times = append(times, mar.NightTimes...)
+	sort.Slice(times, func(i, j int) bool {
+		return times[i][0] < times[j][0]
+	})
+	if len(times) == 0 {
+		if !exInfo.FullDay {
+			log.Warn("day_ranges/night_ranges invalid", zap.String("id", mar.ID))
+		}
+		times = [][2]int64{{0, 24 * 60 * 60000}}
+	}
+	res := make([][2]int64, 0)
+	lastStop := int64(0)
+	if times[0][0] > 0 {
+		lastStop = dtList[0][0]
+	}
+	for _, dt := range dtList {
+		for _, rg := range times {
+			if lastStop > 0 {
+				res = append(res, [2]int64{lastStop, dt[0] + rg[0]})
+			}
+			lastStop = dt[0] + rg[1]
+		}
+	}
+	validStop := dtList[len(dtList)-1][0] + times[len(times)-1][1]
+	if validStop < stop {
+		res = append(res, [2]int64{validStop, stop})
+	}
+	return res, nil
 }

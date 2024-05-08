@@ -166,33 +166,54 @@ fromTFSecs: 传入的arr子数组间隔，未提供时计算
 func BuildOHLCV(arr []*banexg.Kline, toTFSecs int, preFire float64, resOHLCV []*banexg.Kline, fromTFMSecs int64) ([]*banexg.Kline, bool) {
 	tfMSecs := int64(toTFSecs * 1000)
 	offsetMS := int64(float64(tfMSecs) * preFire)
-	var prevKline *banexg.Kline
-	if resOHLCV == nil {
-		resOHLCV = make([]*banexg.Kline, 0)
-	} else if len(resOHLCV) > 0 {
-		prevKline = resOHLCV[len(resOHLCV)-1]
+	subNum := len(arr)
+	if fromTFMSecs == 0 && subNum >= 2 {
+		fromTFMSecs = arr[subNum-1].Time - arr[subNum-2].Time
 	}
-	rawMS := make([]int64, 0, len(arr))
-	for _, barRaw := range arr {
-		bar := barRaw.Clone() // 不修改原始数据
-		rawMS = append(rawMS, bar.Time)
-		bar.Time = AlignTfMSecs(bar.Time+offsetMS, tfMSecs)
-		if prevKline == nil || bar.Time >= prevKline.Time+tfMSecs {
-			resOHLCV = append(resOHLCV, bar)
-			prevKline = bar
+	var big *banexg.Kline
+	aggNum, cacheNum := 0, 0
+	if fromTFMSecs > 0 {
+		aggNum = toTFSecs / int(fromTFMSecs/1000) // 大周期由几个小周期组成
+		cacheNum = len(arr)/aggNum + 3
+	}
+	if resOHLCV == nil {
+		resOHLCV = make([]*banexg.Kline, 0, cacheNum)
+	} else if len(resOHLCV) > 0 {
+		big = resOHLCV[len(resOHLCV)-1]
+	}
+	aggCnt := 0 // 当前大周期bar从小周期聚合的数量
+	for _, bar := range arr {
+		timeAlign := AlignTfMSecs(bar.Time+offsetMS, tfMSecs)
+		if big != nil && big.Time == timeAlign {
+			// 属于同一个
+			if bar.High > big.High {
+				big.High = bar.High
+			}
+			if bar.Low < big.Low {
+				big.Low = bar.Low
+			}
+			big.Close = bar.Close
+			big.Volume += bar.Volume
+			aggCnt += 1
 		} else {
-			prevKline.High = max(prevKline.High, bar.High)
-			prevKline.Low = min(prevKline.Low, bar.Low)
-			prevKline.Close = bar.Close
+			if aggCnt > aggNum {
+				aggNum = aggCnt
+			}
+			if big != nil {
+				if big.Volume > 0 || aggCnt*5 > aggNum {
+					// 跳过小周期数量不足20%，且总成交量为0的
+					resOHLCV = append(resOHLCV, big)
+				}
+			}
+			big = bar.Clone() // 不修改原始数据
+			big.Time = timeAlign
+			aggCnt = 1
 		}
 	}
 	lastFinished := false
-	if fromTFMSecs == 0 && len(rawMS) >= 2 {
-		// 至少有2个，判断最后一个bar是否结束：假定arr中每个bar间隔相等，最后一个bar+间隔属于下一个规划区间，则认为最后一个bar结束
-		fromTFMSecs = rawMS[len(rawMS)-1] - rawMS[len(rawMS)-2]
-	}
-	if fromTFMSecs > 0 {
-		finishMS := AlignTfMSecs(rawMS[len(rawMS)-1]+fromTFMSecs+offsetMS, tfMSecs)
+	if fromTFMSecs > 0 && len(resOHLCV) > 0 {
+		// 判断最后一个bar是否结束：假定arr中每个bar间隔相等，最后一个bar+间隔属于下一个规划区间，则认为最后一个bar结束
+		finishMS := AlignTfMSecs(arr[subNum-1].Time+fromTFMSecs+offsetMS, tfMSecs)
 		lastFinished = finishMS > resOHLCV[len(resOHLCV)-1].Time
 	}
 	return resOHLCV, lastFinished

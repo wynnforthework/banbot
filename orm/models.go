@@ -16,6 +16,13 @@ type BotTask struct {
 	Info     string
 }
 
+type Calendar struct {
+	ID      int32
+	Name    string
+	StartMs int64
+	StopMs  int64
+}
+
 type ExOrder struct {
 	ID        int64
 	TaskID    int64
@@ -39,6 +46,7 @@ type ExOrder struct {
 type ExSymbol struct {
 	ID       int32
 	Exchange string
+	ExgReal  string
 	Market   string
 	Symbol   string
 	ListMs   int64

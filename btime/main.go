@@ -96,11 +96,11 @@ func ParseTimeMS(timeStr string) int64 {
 	textLen := len(timeStr)
 	digitNum := CountDigit(timeStr)
 	if textLen == 4 && digitNum == 4 {
-		return dateToMS("2006", timeStr)
+		return ParseTimeMSBy("2006", timeStr)
 	} else if textLen == 6 && digitNum == 6 {
-		return dateToMS("200601", timeStr)
+		return ParseTimeMSBy("200601", timeStr)
 	} else if textLen == 8 && digitNum == 8 {
-		return dateToMS("20060102", timeStr)
+		return ParseTimeMSBy("20060102", timeStr)
 	} else if textLen == 10 && digitNum == 10 {
 		// 10位时间戳
 		secs, err := strconv.ParseInt(timeStr, 10, 64)
@@ -115,14 +115,14 @@ func ParseTimeMS(timeStr string) int64 {
 		}
 		return msecs
 	} else if textLen == 16 && digitNum == 12 {
-		return dateToMS("2006-01-02 15:04", timeStr)
+		return ParseTimeMSBy("2006-01-02 15:04", timeStr)
 	} else if textLen == 19 && digitNum == 14 {
-		return dateToMS(core.DefaultDateFmt, timeStr)
+		return ParseTimeMSBy(core.DefaultDateFmt, timeStr)
 	}
 	panic(fmt.Errorf("unSupport date fmt: %s", timeStr))
 }
 
-func dateToMS(layout, timeStr string) int64 {
+func ParseTimeMSBy(layout, timeStr string) int64 {
 	t, err := time.Parse(layout, timeStr)
 	if err != nil {
 		panic(fmt.Errorf("parse %s fail: %s", layout, timeStr))

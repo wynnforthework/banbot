@@ -15,6 +15,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,16 +23,23 @@ import (
 	"time"
 )
 
+/*
+tick数据的问题
+1. 每天的压缩tick包内，一个symbol文件可能有多个symbol的数据，且和其他有效的tick重合，需要去重
+*/
+
 var (
 	ConcurNum = 5 // 并发处理的数量
 	// 下面几个在Build1mWithTicks中使用，从tick构建1m K线
 	symKLines = make(map[string][]*banexg.Kline) // 当前年的1m数据，键是合约ID
 	klineLock sync.Mutex                         //symKlines的并发读写锁
+	timeMsMin = int64(0)
+	timeMsMax = int64(0)
 )
 
 type FuncConvert func(inPath string, file *zip.File, writer *zip.Writer) *errs.Error
 
-type FuncReadZipItem func(inPath string, file *zip.File) *errs.Error
+type FuncReadZipItem func(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error
 
 type FuncTickBar func(inPath string, row []string) (string, int64, [4]float64)
 
@@ -122,25 +130,26 @@ func convertFiles(inPath, outPath, srcSuffix string, makeOutPath func(string, st
 }
 
 func isRawContract(name string) bool {
-	parts := strings.Split(name, "&")
-	if len(parts) > 1 {
+	if strings.Contains(name, "&") {
 		// 跳过价差数据
 		return false
 	}
 	// 检查是否以价差前缀开始
-	parts = strings.Split(name, " ")
-	prefix := strings.ToUpper(parts[0])
-	if prefix == "SPD" || prefix == "SPC" || prefix == "SP" || prefix == "IPS" {
-		return false
+	if name[0] == 'S' || name[0] == 'I' {
+		parts := strings.Split(name, " ")
+		prefix := strings.ToUpper(parts[0])
+		if prefix == "SPD" || prefix == "SPC" || prefix == "SP" || prefix == "IPS" {
+			return false
+		}
 	}
 	// 检查是否最后一个字母是数字
-	parts = strings.Split(name, ".")
+	parts := strings.Split(name, ".")
 	cleanName := parts[0]
 	if len(parts) > 1 {
 		cleanName = parts[len(parts)-2]
 	}
 	if cleanName == "README" || strings.HasSuffix(cleanName, "efp") {
-		// 跳过期货转现货rfp
+		// 跳过期货转现货efp
 		return false
 	}
 	if strings.HasSuffix(cleanName, "TAS") {
@@ -235,6 +244,28 @@ func RunFormatTick(args *config.CmdArgs) *errs.Error {
 }
 
 func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
+	if args.CPUProfile {
+		outPath := filepath.Join(args.OutPath, "cpu.profile")
+		f, err_ := os.OpenFile(outPath, os.O_CREATE|os.O_RDWR, 0644)
+		if err_ != nil {
+			return errs.New(errs.CodeIOWriteFail, err_)
+		}
+		err_ = pprof.StartCPUProfile(f)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		defer func() {
+			pprof.StopCPUProfile()
+			err_ = f.Close()
+			if err_ != nil {
+				log.Error("save cpu.profile fail", zap.Error(err_))
+			}
+		}()
+	}
+	return build1mWithTicks(args)
+}
+
+func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if args.InPath == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "--in is required")
 	}
@@ -245,51 +276,11 @@ func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	if timeMsMin > 0 || timeMsMax > 0 {
+		log.Info("enable time filter", zap.Int64("min", timeMsMin), zap.Int64("maz", timeMsMax))
+	}
 	// 输入：根目录下只有年份的文件夹，每个年份文件夹下每个交易日一个zip压缩包，每个zip内以合约名称存储当日tick数据
 	// 输出：根目录下每年一个zip压缩包，每个zip内以合约名称csv存储当年该合约的1m数据
-	saveYear1m := func(year string) {
-		if len(symKLines) == 0 || year == "" {
-			return
-		}
-		outPath := fmt.Sprintf("%s/%s.zip", args.OutPath, year)
-		out, err := os.Create(outPath)
-		if err != nil {
-			log.Error("create 1m zip fail", zap.String("year", year), zap.Error(err))
-			return
-		}
-		defer out.Close()
-		zipWriter := zip.NewWriter(out)
-		defer zipWriter.Close()
-		for symbol, items := range symKLines {
-			outWriter, err_ := zipWriter.Create(symbol + ".csv")
-			if err_ != nil {
-				log.Error("create in zip fail", zap.String("year", year),
-					zap.String("symbol", symbol), zap.Error(err))
-				continue
-			}
-			sort.Slice(items, func(i, j int) bool {
-				return items[i].Time < items[j].Time
-			})
-			rows := make([][]string, 0, len(items))
-			for _, bar1m := range items {
-				fltArr := []float64{bar1m.Open, bar1m.High, bar1m.Low, bar1m.Close, bar1m.Volume}
-				row := make([]string, 0, 6)
-				row = append(row, strconv.FormatInt(bar1m.Time, 10))
-				for _, val := range fltArr {
-					valStr := strconv.FormatFloat(math.Round(val*1000)/1000, 'f', -1, 64)
-					row = append(row, valStr)
-				}
-				rows = append(rows, row)
-			}
-			csvWriter := csv.NewWriter(outWriter)
-			err_ = csvWriter.WriteAll(rows)
-			if err_ != nil {
-				log.Error("write to zip fail", zap.String("year", year),
-					zap.String("symbol", symbol), zap.Int("num", len(items)), zap.Error(err))
-			}
-			csvWriter.Flush()
-		}
-	}
 	layout := "20060102 15:04:05"
 	loc, err_ := time.LoadLocation("Asia/Shanghai")
 	if err_ != nil {
@@ -360,20 +351,76 @@ func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
 		totalNum := len(names) * core.StepTotal
 		pBar := utils.NewPrgBar(totalNum, "tickTo1m")
 		err = utils.ParallelRun(names, ConcurNum, func(name string) *errs.Error {
-			//cleanName := strings.Split(filepath.Base(name), ".")[0]
-			//timeObj, err_ := time.ParseInLocation("20060102", cleanName, loc)
-			//if err_ == nil && timeObj.UnixMilli() < 1383489660000 {
-			//	return nil
-			//}
+			if timeMsMin > 0 || timeMsMax > 0 {
+				// 过滤范围之外的数据
+				cleanName := strings.Split(filepath.Base(name), ".")[0]
+				cleanName = cleanName[len(cleanName)-8:]
+				timeObj, err_ := time.ParseInLocation("20060102", cleanName, loc)
+				if err_ == nil {
+					timeMS := timeObj.UnixMilli()
+					if timeMsMin > 0 && timeMS < timeMsMin {
+						return nil
+					}
+					if timeMsMax > 0 && timeMS > timeMsMax {
+						return nil
+					}
+				}
+			}
 			fileInPath := filepath.Join(args.InPath, name)
-			return ReadZipCSVs(fileInPath, pBar, func(inPath string, file *zip.File) *errs.Error {
-				return build1mSymbolTick(inPath, file, tickBar)
-			})
+			symbolDones := make(map[string]map[string]int)
+			dayKlines := make(map[string][]*banexg.Kline)
+			err = ReadZipCSVs(fileInPath, pBar, func(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error {
+				return build1mSymbolTick(inPath, fid, file, symbolDones, dayKlines, tickBar)
+			}, nil)
+			var b strings.Builder
+			for symbol, data := range symbolDones {
+				if len(data) < 2 {
+					continue
+				}
+				b.WriteString(fmt.Sprintf("%s \t", symbol))
+				for fname, num := range data {
+					b.WriteString(fmt.Sprintf("%s:%v ", fname, num))
+				}
+				b.WriteString("\t")
+			}
+			if b.Len() > 0 {
+				fmt.Printf("check duplicate: %s  %s\n", name, b.String())
+			}
+			// 同一个标的，在同一天，tick数据可能存在于多个文件，选择成交量最高的那个
+			symbolVolMap := make(map[string]map[string]float64)
+			for key, items := range dayKlines {
+				sumVol := float64(0)
+				for _, k := range items {
+					sumVol += k.Volume
+				}
+				parts := strings.Split(key, "_")
+				symbol := strings.Join(parts[:len(parts)-1], "_")
+				data, exist := symbolVolMap[symbol]
+				if !exist {
+					data = make(map[string]float64)
+					symbolVolMap[symbol] = data
+				}
+				data[parts[len(parts)-1]] = sumVol
+			}
+			klineLock.Lock()
+			for key, data := range symbolVolMap {
+				suffix, vol := "", -1.0
+				for sf, volume := range data {
+					if volume > vol {
+						suffix = sf
+						vol = volume
+					}
+				}
+				oldData, _ := symKLines[key]
+				symKLines[key] = append(oldData, dayKlines[key+"_"+suffix]...)
+			}
+			klineLock.Unlock()
+			return err
 		})
 		pBar.Close()
 		log.Info("save 1m kline", zap.String("year", year))
 		klineLock.Lock()
-		saveYear1m(year)
+		saveYear1m(args.OutPath, year)
 		symKLines = make(map[string][]*banexg.Kline)
 		klineLock.Unlock()
 		if err != nil {
@@ -383,7 +430,74 @@ func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func ReadZipCSVs(inPath string, pBar *utils.PrgBar, handle FuncReadZipItem) *errs.Error {
+func saveYear1m(outDir, year string) {
+	if len(symKLines) == 0 || year == "" {
+		return
+	}
+	outPath := fmt.Sprintf("%s/%s.zip", outDir, year)
+	out, err := os.Create(outPath)
+	if err != nil {
+		log.Error("create 1m zip fail", zap.String("year", year), zap.Error(err))
+		return
+	}
+	defer out.Close()
+	zipWriter := zip.NewWriter(out)
+	defer zipWriter.Close()
+	sylDupMap := make(map[string][2]int)
+	for symbol, items := range symKLines {
+		outWriter, err_ := zipWriter.Create(symbol + ".csv")
+		if err_ != nil {
+			log.Error("create in zip fail", zap.String("year", year),
+				zap.String("symbol", symbol), zap.Error(err))
+			continue
+		}
+		sort.Slice(items, func(i, j int) bool {
+			return items[i].Time < items[j].Time
+		})
+		rows := make([][]string, 0, len(items))
+		duplicateNum := 0
+		lastMS := int64(0)
+		afterVol := false // 过滤前面成交量为0的K线
+		for _, bar1m := range items {
+			if bar1m.Time == lastMS {
+				duplicateNum += 1
+				continue
+			}
+			if !afterVol && bar1m.Volume == 0 {
+				continue
+			}
+			afterVol = true
+			lastMS = bar1m.Time
+			fltArr := []float64{bar1m.Open, bar1m.High, bar1m.Low, bar1m.Close, bar1m.Volume}
+			row := make([]string, 0, 6)
+			row = append(row, strconv.FormatInt(bar1m.Time, 10))
+			for _, val := range fltArr {
+				valStr := strconv.FormatFloat(math.Round(val*1000)/1000, 'f', -1, 64)
+				row = append(row, valStr)
+			}
+			rows = append(rows, row)
+		}
+		if duplicateNum > 0 {
+			sylDupMap[symbol] = [2]int{len(rows), duplicateNum}
+		}
+		csvWriter := csv.NewWriter(outWriter)
+		err_ = csvWriter.WriteAll(rows)
+		if err_ != nil {
+			log.Error("write to zip fail", zap.String("year", year),
+				zap.String("symbol", symbol), zap.Int("num", len(items)), zap.Error(err))
+		}
+		csvWriter.Flush()
+	}
+	if len(sylDupMap) > 0 {
+		var b strings.Builder
+		for syl, tup := range sylDupMap {
+			b.WriteString(fmt.Sprintf("%s num=%v dup=%v\t\t", syl, tup[0], tup[1]))
+		}
+		fmt.Printf(b.String())
+	}
+}
+
+func ReadZipCSVs(inPath string, pBar *utils.PrgBar, handle FuncReadZipItem, arg interface{}) *errs.Error {
 	r, err := zip.OpenReader(inPath)
 	if err != nil {
 		pBar.Add(core.StepTotal)
@@ -392,12 +506,12 @@ func ReadZipCSVs(inPath string, pBar *utils.PrgBar, handle FuncReadZipItem) *err
 	defer r.Close()
 	bar := pBar.NewJob(len(r.File))
 	defer bar.Done()
-	for _, f := range r.File {
+	for i, f := range r.File {
 		bar.Add(1)
 		if f.FileInfo().IsDir() || !strings.HasSuffix(f.Name, ".csv") {
 			continue
 		}
-		err2 := handle(inPath, f)
+		err2 := handle(inPath, i, f, arg)
 		if err2 != nil {
 			return err2
 		}
@@ -411,10 +525,11 @@ type tkInfo struct {
 	price    float64 // 最新价格
 	volume   float64 // 累计日成交量
 	avgPrice float64 // 平均价格
-	turnOver float64 // 还手率
+	turnOver float64 // 换手率
 }
 
-func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs.Error {
+func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]map[string]int,
+	dayKlines map[string][]*banexg.Kline, tickBar FuncTickBar) *errs.Error {
 	if !isRawContract(file.Name) {
 		return nil
 	}
@@ -429,29 +544,48 @@ func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs
 	oldMinMS := int64(0)
 	sumVol := float64(0)
 	var bar1m *banexg.Kline
-	var oldSymbol string
+	var oldKey string
 	saveBar := func() {
 		if bar1m == nil {
 			return
 		}
-		klineLock.Lock()
-		barRows, _ := symKLines[oldSymbol]
+		barRows, _ := dayKlines[oldKey]
 		if barRows == nil {
-			barRows = make([]*banexg.Kline, 0, 10000)
+			barRows = make([]*banexg.Kline, 0, 2000)
 		}
-		symKLines[oldSymbol] = append(barRows, bar1m)
-		klineLock.Unlock()
+		dayKlines[oldKey] = append(barRows, bar1m)
 		sumVol = bar1m.Volume
 	}
 	// 文件名内可能有多个symbol的tick信息，这里进行排序
+	var rawSyls = make(map[string]bool)
+	var counts = make(map[string]int)
 	ticks := make([]*tkInfo, 0, len(rows))
 	for _, row := range rows {
 		symbol, timeMS, arr := tickBar(inPath, row)
-		if timeMS == 0 || !isRawContract(symbol) {
+		if timeMS == 0 {
 			continue
 		}
+		// 检查是否是原始合约编号，跳过组合数据
+		isRaw, rawChk := rawSyls[symbol]
+		if !rawChk {
+			isRaw = isRawContract(symbol)
+			rawSyls[symbol] = isRaw
+		}
+		if !isRaw {
+			continue
+		}
+		count, _ := counts[symbol]
+		counts[symbol] = count + 1
 		ticks = append(ticks, &tkInfo{symbol: symbol, timeMS: timeMS, price: arr[0], volume: arr[1],
 			avgPrice: arr[2], turnOver: arr[3]})
+	}
+	for key, num := range counts {
+		items, _ := dones[key]
+		if items == nil {
+			items = make(map[string]int)
+			dones[key] = items
+		}
+		items[file.Name] = num
 	}
 	sort.Slice(ticks, func(i, j int) bool {
 		a, b := ticks[i], ticks[j]
@@ -466,10 +600,11 @@ func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs
 	for _, t := range ticks {
 		curMinMS := utils.AlignTfMSecs(t.timeMS, 60000)
 		price, volume := t.price, t.volume
-		if bar1m == nil || oldMinMS == 0 || curMinMS > oldMinMS || oldSymbol != t.symbol {
+		keyValid := strings.HasPrefix(oldKey, t.symbol)
+		if bar1m == nil || oldMinMS == 0 || curMinMS > oldMinMS || !keyValid {
 			saveBar()
-			if oldSymbol != t.symbol {
-				oldSymbol = t.symbol
+			if !keyValid {
+				oldKey = fmt.Sprintf("%s_%v", t.symbol, fid)
 				sumVol = 0
 			}
 			if volume < sumVol {
@@ -478,7 +613,7 @@ func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs
 					sumVol = 0
 				} else {
 					log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
-						zap.Int64("time", curMinMS), zap.String("nm", oldSymbol))
+						zap.Int64("time", curMinMS), zap.String("nm", oldKey))
 				}
 			}
 			curVol := t.volume - sumVol
@@ -491,7 +626,7 @@ func build1mSymbolTick(inPath string, file *zip.File, tickBar FuncTickBar) *errs
 					continue
 				}
 				log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
-					zap.Int64("time", curMinMS), zap.String("nm", oldSymbol))
+					zap.Int64("time", curMinMS), zap.String("nm", oldKey))
 			}
 			if price > bar1m.High {
 				bar1m.High = price

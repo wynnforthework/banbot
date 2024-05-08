@@ -9,6 +9,40 @@ import (
 	"context"
 )
 
+// iteratorForAddCalendars implements pgx.CopyFromSource.
+type iteratorForAddCalendars struct {
+	rows                 []AddCalendarsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForAddCalendars) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForAddCalendars) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].Name,
+		r.rows[0].StartMs,
+		r.rows[0].StopMs,
+	}, nil
+}
+
+func (r iteratorForAddCalendars) Err() error {
+	return nil
+}
+
+func (q *Queries) AddCalendars(ctx context.Context, arg []AddCalendarsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"calendars"}, []string{"name", "start_ms", "stop_ms"}, &iteratorForAddCalendars{rows: arg})
+}
+
 // iteratorForAddKHoles implements pgx.CopyFromSource.
 type iteratorForAddKHoles struct {
 	rows                 []AddKHolesParams
@@ -65,6 +99,7 @@ func (r *iteratorForAddSymbols) Next() bool {
 func (r iteratorForAddSymbols) Values() ([]interface{}, error) {
 	return []interface{}{
 		r.rows[0].Exchange,
+		r.rows[0].ExgReal,
 		r.rows[0].Market,
 		r.rows[0].Symbol,
 	}, nil
@@ -75,5 +110,5 @@ func (r iteratorForAddSymbols) Err() error {
 }
 
 func (q *Queries) AddSymbols(ctx context.Context, arg []AddSymbolsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"exsymbol"}, []string{"exchange", "market", "symbol"}, &iteratorForAddSymbols{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"exsymbol"}, []string{"exchange", "exg_real", "market", "symbol"}, &iteratorForAddSymbols{rows: arg})
 }

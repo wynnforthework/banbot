@@ -2,6 +2,7 @@ package optmize
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/csv"
 	"fmt"
 	"github.com/banbox/banbot/biz"
@@ -560,12 +561,15 @@ func (r *BTResult) dumpStagyOutputs() {
 	}
 }
 
+//go:embed btgraph.html
+var btGraphData []byte
+
 func (r *BTResult) dumpGraph() {
 	tplPath := fmt.Sprintf("%s/btgraph.html", config.GetDataDir())
 	fileData, err_ := os.ReadFile(tplPath)
 	if err_ != nil {
-		log.Error("btgraph.html not found", zap.String("path", tplPath), zap.Error(err_))
-		return
+		log.Warn("btgraph.html load fail, use default", zap.String("path", tplPath), zap.Error(err_))
+		fileData = btGraphData
 	}
 	content := string(fileData)
 	content = strings.Replace(content, "$title", "实时资产/余额/未实现盈亏/提现/并发订单数", 1)

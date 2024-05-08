@@ -463,6 +463,7 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 /*
 InsertKLinesAuto
 插入K线到数据库，同时调用UpdateKRange更新关联信息
+调用此方法前必须通过GetKlineRange自行判断数据库中是否已存在，避免重复插入
 */
 func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
 	num, err := q.InsertKLines(timeFrame, sid, arr)
@@ -621,6 +622,67 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	}
 	if len(holes) == 0 {
 		return nil
+	}
+	// 检查法定休息时间段，过滤非交易时间段
+	exs := GetSymbolByID(sid)
+	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+	if err != nil {
+		return err
+	}
+	// 由于历史数据中部分交易日未录入，故不适用交易日历过滤K线
+	susp, err := q.GetExSHoles(exchange, exs, startMS, endMS, true)
+	if err != nil {
+		return err
+	}
+	if len(susp) > 0 {
+		// 过滤掉非交易时间段
+		hs := make([][2]int64, 0, len(holes))
+		si, hi := 0, -1
+		for hi+1 < len(holes) {
+			hi += 1
+			h := holes[hi]
+			for si < len(susp) && susp[si][1] <= h[0] {
+				si += 1
+			}
+			if si >= len(susp) {
+				hs = append(hs, holes[hi:]...)
+				break
+			}
+			s := susp[si]
+			if s[0] > h[0] {
+				// 空洞左侧是有效区间
+				hs = append(hs, [2]int64{h[0], min(h[1], s[0])})
+			}
+			if h[1] > s[1] {
+				// 右侧有可能溢出
+				holes[hi][0] = s[1]
+				hi -= 1
+			}
+		}
+		holes = hs
+	}
+	// 过滤太小的空洞
+	if tfMSecs == 60000 {
+		exInfo := exchange.Info()
+		hs := make([][2]int64, 0, len(holes))
+		wids := make(map[int]int)
+		for _, h := range holes {
+			num := int((h[1] - h[0]) / tfMSecs)
+			if num <= exInfo.Min1mHole {
+				continue
+			}
+			cnt, _ := wids[num]
+			wids[num] = cnt + 1
+			hs = append(hs, h)
+		}
+		//if len(wids) > 0 {
+		//	var as = make([]string, 0, len(wids))
+		//	for k, v := range wids {
+		//		as = append(as, fmt.Sprintf("%v:%v", k, v))
+		//	}
+		//	log.Info("hole widths", zap.Int32("sid", sid), zap.String("d", strings.Join(as, " ")))
+		//}
+		holes = hs
 	}
 	// 查询已记录的khole，进行合并
 	ctx := context.Background()
@@ -1083,7 +1145,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 	for _, info := range infoList {
 		if info.Sid != curSid {
 			if len(tfMap) > 0 {
-				err := sess.SyncKlineSid(curSid, tfMap, calcs)
+				err := sess.syncKlineSid(curSid, tfMap, calcs)
 				if err != nil {
 					return err
 				}
@@ -1094,10 +1156,10 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 		tfMap[info.Timeframe] = info
 		pBar.Add(1)
 	}
-	return sess.SyncKlineSid(curSid, tfMap, calcs)
+	return sess.syncKlineSid(curSid, tfMap, calcs)
 }
 
-func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[string]map[int32][2]int64) *errs.Error {
+func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[string]map[int32][2]int64) *errs.Error {
 	var err *errs.Error
 	var err_ error
 	tfRanges := make(map[string][2]int64)
@@ -1173,4 +1235,8 @@ func (q *Queries) SyncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 		}
 	}
 	return nil
+}
+
+func GetKlineAggs() []*KlineAgg {
+	return aggList
 }

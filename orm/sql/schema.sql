@@ -153,6 +153,7 @@ CREATE TABLE "public"."exsymbol"
 (
     "id"        SERIAL   NOT NULL PRIMARY KEY,
     "exchange"  varchar(50) not null,
+    "exg_real"  varchar(50) not null,
     "market"    varchar(20) not null,
     "symbol"    varchar(20) not null,
     "list_ms"   int8      default 0  not null,
@@ -183,6 +184,20 @@ CREATE TABLE "public"."users"
     "inviter_id"      int4         not null
 );
 CREATE INDEX "idx_user_mobile" ON "public"."users" USING btree ("mobile");
+
+
+-- ----------------------------
+-- Table structure for calendars
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."calendars";
+CREATE TABLE "public"."calendars"
+(
+    "id"              SERIAL    NOT NULL PRIMARY KEY,
+    "name"  varchar(50) not null,
+    "start_ms"          int8 not null,
+    "stop_ms"          int8  not null
+);
+CREATE INDEX "idx_calendar_name" ON "public"."calendars" USING btree ("name");
 
 
 

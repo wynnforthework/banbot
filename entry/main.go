@@ -3,6 +3,7 @@ package entry
 import (
 	"flag"
 	"fmt"
+	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/optmize"
@@ -67,11 +68,17 @@ func runMainEntrys(cmdName string) {
 		entry = RunSpider
 		break
 	case "cvt_tick":
-		options = []string{"in", "out"}
+		options = []string{"in", "out", "cpu_profile", "mem_profile"}
 		entry = data.RunFormatTick
 	case "tick2kline":
-		options = []string{"in", "out"}
+		options = []string{"in", "out", "cpu_profile", "mem_profile"}
 		entry = data.Build1mWithTicks
+	case "load_kline":
+		options = []string{"in", "cpu_profile", "mem_profile"}
+		entry = LoadKLinesToDB
+	case "load_cal":
+		options = []string{"in"}
+		entry = biz.LoadCalendars
 	default:
 		printAndExit()
 	}

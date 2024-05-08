@@ -31,8 +31,8 @@ order by id;
 
 -- name: AddSymbols :copyfrom
 insert into exsymbol
-(exchange, market, symbol)
-values ($1, $2, $3);
+(exchange, exg_real, market, symbol)
+values ($1, $2, $3, $4);
 
 -- name: SetListMS :exec
 update exsymbol set list_ms = $2, delist_ms = $3
@@ -148,3 +148,11 @@ update exorder set
        "fee_type" = $15,
        "update_at" = $16
     where id = $17;
+
+
+
+
+-- name: AddCalendars :copyfrom
+insert into calendars
+(name, start_ms, stop_ms)
+values ($1, $2, $3);
