@@ -270,7 +270,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		if state.WaitBar != nil {
 			olds = append(olds, state.WaitBar)
 		}
-		ohlcvs, lastOk = utils.BuildOHLCV(bars, state.TFSecs, f.PreFire, olds, barTfMSecs)
+		ohlcvs, lastOk = utils.BuildOHLCV(bars, staMSecs, f.PreFire, olds, barTfMSecs)
 	} else if barTfMSecs == staMSecs {
 		ohlcvs, lastOk = bars, true
 	} else {
@@ -287,7 +287,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		// 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
 		if barTfMSecs < staMSecs {
 			// 这里应该保留最后未完成的数据
-			ohlcvs, _ = utils.BuildOHLCV(bars, state.TFSecs, f.PreFire, nil, barTfMSecs)
+			ohlcvs, _ = utils.BuildOHLCV(bars, staMSecs, f.PreFire, nil, barTfMSecs)
 		} else {
 			ohlcvs = bars
 		}
@@ -296,7 +296,8 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 			if state.WaitBar != nil {
 				olds = append(olds, state.WaitBar)
 			}
-			curOhlcvs, lastOk := utils.BuildOHLCV(ohlcvs, state.TFSecs, f.PreFire, olds, staMSecs)
+			bigTfMSecs := int64(state.TFSecs * 1000)
+			curOhlcvs, lastOk := utils.BuildOHLCV(ohlcvs, bigTfMSecs, f.PreFire, olds, staMSecs)
 			f.onStateOhlcvs(state, curOhlcvs, lastOk, true)
 		}
 	}

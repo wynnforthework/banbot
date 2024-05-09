@@ -136,7 +136,7 @@ func PrecAmount(exchange banexg.BanExchange, symbol string, amount float64) (flo
 	return precNum(exchange, symbol, amount, "amount")
 }
 
-func GetLeverage(symbol string, notional float64, account string) (int, int) {
+func GetLeverage(symbol string, notional float64, account string) (float64, float64) {
 	return Default.GetLeverage(symbol, notional, account)
 }
 
@@ -168,4 +168,18 @@ func GetTickers() (map[string]*banexg.Ticker, *errs.Error) {
 	expires := time.Second * 3600
 	core.Cache.SetWithTTL("tickers", tickersMap, 1, expires)
 	return tickersMap, nil
+}
+
+/*
+GetAlignOff 获取指定周期聚合的时间偏移，单位：秒
+*/
+func GetAlignOff(exgName string, tfSecs int) int {
+	if tfSecs < 86400 {
+		return 0
+	}
+	if exgName == "china" {
+		// 中国市场，期货夜盘属于第二天，夜盘一般21点开始，当日收盘一般15点，取中间18，即偏移6个小时得到日线
+		return -21600
+	}
+	return 0
 }

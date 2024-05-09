@@ -91,7 +91,7 @@ type EnterReq struct {
 	Limit           float64 // 限价单入场价格，指定时订单将作为限价单提交
 	CostRate        float64 // 开仓倍率、默认按配置1倍。用于计算LegalCost
 	LegalCost       float64 // 花费法币金额。指定时忽略CostRate
-	Leverage        int     // 杠杆倍数
+	Leverage        float64 // 杠杆倍数
 	Amount          float64 // 入场标的数量，由LegalCost和price计算
 	StopLossVal     float64 // 入场价格到止损价格的距离
 	StopLoss        float64 // 止损触发价格，不为空时在交易所提交一个止损单

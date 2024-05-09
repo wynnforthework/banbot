@@ -192,7 +192,8 @@ func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 		if job.WaitBar != nil {
 			olds = append(olds, job.WaitBar)
 		}
-		finishes = job.getFinishes(utils.BuildOHLCV(bars.Arr, job.TFSecs, 0, olds, tfMSecs))
+		jobMSecs := int64(job.TFSecs * 1000)
+		finishes = job.getFinishes(utils.BuildOHLCV(bars.Arr, jobMSecs, 0, olds, tfMSecs))
 	} else {
 		finishes = bars.Arr
 	}

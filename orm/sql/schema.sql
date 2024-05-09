@@ -63,7 +63,7 @@ CREATE TABLE "public"."iorder"
     "init_price"  float8        not null,
     "quote_cost"  float8        not null,
     "exit_tag"    varchar(30)   not null,
-    "leverage"    int4          not null,
+    "leverage"    float8        not null,
     "enter_at"    int8          not null,
     "exit_at"     int8          not null,
     "strategy"    varchar(20)   not null,

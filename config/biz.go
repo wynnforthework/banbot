@@ -235,7 +235,7 @@ func GetTakeOverTF(pair, defTF string) string {
 	return defTF
 }
 
-func GetAccLeverage(account string) int {
+func GetAccLeverage(account string) float64 {
 	acc, ok := Accounts[account]
 	if ok && acc.Leverage > 0 {
 		return acc.Leverage

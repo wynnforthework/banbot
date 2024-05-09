@@ -92,6 +92,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 			zap.String("path", inPath), zap.Error(err))
 		return nil
 	}
+	tfMSecs = int64(utils.TFToSecs(timeFrame) * 1000)
 	ctx := context.Background()
 	sess, conn, err := orm.Conn(ctx)
 	if err != nil {
@@ -199,7 +200,8 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 		}
 		klines = newKlines
 	}
-	num, err := sess.InsertKLinesAuto(timeFrame, exs.ID, klines)
+	// 这里不自动归集，因有些bar成交量为0，不可使用数据库默认的归集策略；应调用BuildOHLCVOff归集
+	num, err := sess.InsertKLinesAuto(timeFrame, exs.ID, klines, false)
 	if err == nil && num > 0 {
 		startDt := btime.ToDateStr(startMS, "")
 		endDt := btime.ToDateStr(endMS, "")
@@ -208,16 +210,15 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 		// 插入更大周期
 		aggList := orm.GetKlineAggs()
 		for _, agg := range aggList[1:] {
-			if agg.AggFrom != "" {
+			if agg.MSecs <= tfMSecs {
 				continue
 			}
-			tfSecs := int(agg.MSecs / 1000)
-			subMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
-			klines, _ = utils.BuildOHLCV(klines, tfSecs, 0, nil, subMSecs)
+			offMS := int64(exg.GetAlignOff(exchange.GetID(), int(agg.MSecs/1000)) * 1000)
+			klines, _ = utils.BuildOHLCVOff(klines, agg.MSecs, 0, nil, tfMSecs, offMS)
 			if len(klines) == 0 {
 				continue
 			}
-			num, err = sess.InsertKLinesAuto(agg.TimeFrame, exs.ID, klines)
+			num, err = sess.InsertKLinesAuto(agg.TimeFrame, exs.ID, klines, false)
 			if err != nil {
 				log.Error("insert kline fail", zap.String("id", mar.ID),
 					zap.String("tf", agg.TimeFrame), zap.Error(err))

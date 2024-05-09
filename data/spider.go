@@ -184,7 +184,7 @@ func consumeWriteQ(workNum int) {
 					addBars = job.Arr[cutIdx:]
 				}
 				if err == nil && len(addBars) > 0 {
-					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, addBars)
+					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, addBars, true)
 				}
 			}
 			if err != nil {

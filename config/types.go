@@ -13,7 +13,7 @@ var (
 	Loaded           bool
 	Debug            bool
 	NoDB             bool
-	Leverage         int
+	Leverage         float64
 	LimitVolSecs     int // 限价单预期等待多长时间成交，单位秒
 	PutLimitSecs     int // 在此预期时间内成交的限价单，才提交到交易所
 	OdBookTtl        int64
@@ -59,7 +59,7 @@ var (
 type Config struct {
 	Name            string                            `yaml:"name" mapstructure:"name"`
 	Env             string                            `yaml:"env" mapstructure:"env"`
-	Leverage        int                               `yaml:"leverage" mapstructure:"leverage"`
+	Leverage        float64                           `yaml:"leverage" mapstructure:"leverage"`
 	LimitVolSecs    int                               `yaml:"limit_vol_secs" mapstructure:"limit_vol_secs"`
 	PutLimitSecs    int                               `yaml:"put_limit_secs" mapstructure:"put_limit_secs"`
 	MarketType      string                            `yaml:"market_type" mapstructure:"market_type"`
@@ -198,7 +198,7 @@ type AccountConfig struct {
 	MaxStakeAmt float64 `yaml:"max_stake_amt" mapstructure:"max_stake_amt"` // 允许的单笔最大金额
 	StakeRate   float64 `yaml:"stake_rate" mapstructure:"stake_rate"`       // 相对基准的开单金额倍数
 	StakePctAmt float64 // 按百分比开单时，当前允许的金额
-	Leverage    int     `yaml:"leverage" mapstructure:"leverage"`
+	Leverage    float64 `yaml:"leverage" mapstructure:"leverage"`
 }
 
 type TimeTuple struct {

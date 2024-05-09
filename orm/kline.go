@@ -55,8 +55,7 @@ func init() {
 }
 
 func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
-	tfSecs := utils.TFToSecs(timeframe)
-	tfMSecs := int64(tfSecs * 1000)
+	tfMSecs := int64(utils.TFToSecs(timeframe) * 1000)
 	revRead := startMs == 0 && limit > 0
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, withUnFinish)
 	maxEndMs := endMs
@@ -94,7 +93,7 @@ order by time`, sid, startMs, finishEndMS)
 	if subTF != "" && len(klines) > 0 {
 		fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
 		var lastFinish bool
-		klines, lastFinish = utils.BuildOHLCV(klines, tfSecs, 0, nil, fromTfMSecs)
+		klines, lastFinish = utils.BuildOHLCV(klines, tfMSecs, 0, nil, fromTfMSecs)
 		if !lastFinish {
 			klines = klines[:len(klines)-1]
 		}
@@ -119,8 +118,7 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 	if len(sids) == 0 {
 		return nil
 	}
-	tfSecs := utils.TFToSecs(timeframe)
-	tfMSecs := int64(tfSecs * 1000)
+	tfMSecs := int64(utils.TFToSecs(timeframe) * 1000)
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, false)
 	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
 	if core.LiveMode {
@@ -161,7 +159,7 @@ order by sid,time`, startMs, finishEndMS, sidText)
 	callBack := func() {
 		if fromTfMSecs > 0 {
 			var lastDone bool
-			klineArr, lastDone = utils.BuildOHLCV(klineArr, tfSecs, 0, nil, fromTfMSecs)
+			klineArr, lastDone = utils.BuildOHLCV(klineArr, tfMSecs, 0, nil, fromTfMSecs)
 			if !lastDone {
 				klineArr = klineArr[:len(klineArr)-1]
 			}
@@ -269,7 +267,7 @@ func getUnFinish(sess *Queries, sid int32, timeFrame string, startMS, endMS int6
 		panic(fmt.Sprintf("`mode` of getUnFinish must be calc/query, current: %s", mode))
 	}
 	ctx := context.Background()
-	tfSecs := utils.TFToSecs(timeFrame)
+	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	barEndMS := int64(0)
 	fromTF := timeFrame
 	var bigKlines = make([]*banexg.Kline, 0)
@@ -284,7 +282,7 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 		if err_ != nil {
 			return nil, 0, err_
 		}
-		bigKlines, _ = utils.BuildOHLCV(klines, tfSecs, 0, nil, 0)
+		bigKlines, _ = utils.BuildOHLCV(klines, tfMSecs, 0, nil, 0)
 		if len(klines) > 0 {
 			barEndMS = klines[len(klines)-1].Time + int64(utils.TFToSecs(fromTF)*1000)
 		}
@@ -325,9 +323,9 @@ calcUnFinish
 从子周期计算大周期的未完成bar
 */
 func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr []*banexg.Kline) *KlineUn {
-	toTfSecs := utils.TFToSecs(timeFrame)
+	toTfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
-	merged, _ := utils.BuildOHLCV(arr, toTfSecs, 0, nil, fromTfMSecs)
+	merged, _ := utils.BuildOHLCV(arr, toTfMSecs, 0, nil, fromTfMSecs)
 	out := merged[len(merged)-1]
 	return &KlineUn{
 		Sid:       sid,
@@ -465,7 +463,7 @@ InsertKLinesAuto
 插入K线到数据库，同时调用UpdateKRange更新关联信息
 调用此方法前必须通过GetKlineRange自行判断数据库中是否已存在，避免重复插入
 */
-func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
+func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kline, aggBig bool) (int64, *errs.Error) {
 	num, err := q.InsertKLines(timeFrame, sid, arr)
 	if err != nil {
 		return num, err
@@ -473,7 +471,7 @@ func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kl
 	startMS := arr[0].Time
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	endMS := arr[len(arr)-1].Time + tfMSecs
-	err = q.UpdateKRange(sid, timeFrame, startMS, endMS, arr)
+	err = q.UpdateKRange(sid, timeFrame, startMS, endMS, arr, aggBig)
 	return num, err
 }
 
@@ -483,7 +481,7 @@ UpdateKRange
 2. 搜索空洞，更新Khole
 3. 更新更大周期的连续聚合
 */
-func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64, klines []*banexg.Kline) *errs.Error {
+func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64, klines []*banexg.Kline, aggBig bool) *errs.Error {
 	// 更新有效区间范围
 	err := q.updateKLineRange(sid, timeFrame, startMS, endMS)
 	if err != nil {
@@ -493,6 +491,9 @@ func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64
 	err = q.updateKHoles(sid, timeFrame, startMS, endMS)
 	if err != nil {
 		return err
+	}
+	if !aggBig {
+		return nil
 	}
 	// 更新更大的超表
 	return q.updateBigHyper(sid, timeFrame, startMS, endMS, klines)

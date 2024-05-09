@@ -22,7 +22,8 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 		return nil, err
 	}
 	fetchTF := utils.SecsToTF(subTfSecs)
-	bigStartMS := utils.AlignTfMSecs(j.NextMS, int64(j.TFSecs*1000))
+	tfMSecs := int64(j.TFSecs * 1000)
+	bigStartMS := utils.AlignTfMSecs(j.NextMS, tfMSecs)
 	preBars, err := orm.AutoFetchOHLCV(exg.Default, exs, fetchTF, bigStartMS, startMS, 0, false, nil)
 	if err != nil {
 		return nil, err
@@ -30,7 +31,7 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 	var doneBars []*banexg.Kline
 	j.WaitBar = nil
 	if len(preBars) > 0 {
-		oldBars, _ := utils.BuildOHLCV(preBars, j.TFSecs, 0, nil, int64(subTfSecs*1000))
+		oldBars, _ := utils.BuildOHLCV(preBars, tfMSecs, 0, nil, int64(subTfSecs*1000))
 		if len(oldBars) > 0 {
 			j.WaitBar = oldBars[len(oldBars)-1]
 			doneBars = oldBars[:len(oldBars)-1]

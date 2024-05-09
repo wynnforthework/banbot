@@ -85,7 +85,7 @@ delete from khole where sid=%v;`, sid, sid, sid, sid, sid, sid, sid, sid))
 		if err != nil {
 			panic(err)
 		}
-		_, err = sess.InsertKLinesAuto(timeFrame, sid, []*banexg.Kline{bar})
+		_, err = sess.InsertKLinesAuto(timeFrame, sid, []*banexg.Kline{bar}, true)
 		conn.Release()
 		if i == 8 {
 			break

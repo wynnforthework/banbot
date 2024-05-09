@@ -230,7 +230,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	if outErr != nil {
 		return saveNum, errs.New(core.ErrRunTime, outErr)
 	}
-	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS, nil)
+	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS, nil, true)
 	return saveNum, err
 }
 

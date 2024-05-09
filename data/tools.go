@@ -26,6 +26,7 @@ import (
 /*
 tick数据的问题
 1. 每天的压缩tick包内，一个symbol文件可能有多个symbol的数据，且和其他有效的tick重合，需要去重
+2. 有夜盘时，夜盘数据的日期实际是前一天
 */
 
 var (
@@ -77,6 +78,11 @@ func zipConvert(inPath, outPath, suffix string, convert FuncConvert, pBar *utils
 	return nil
 }
 
+/*
+FindPathNames 查找给定路径所有指定类型的文件路径
+
+返回路径数组，第一个是父目录，后续是相对子路径
+*/
 func FindPathNames(inPath, suffix string) ([]string, *errs.Error) {
 	inPath = filepath.Clean(inPath)
 	info, err_ := os.Stat(inPath)
@@ -85,6 +91,7 @@ func FindPathNames(inPath, suffix string) ([]string, *errs.Error) {
 	}
 	var result []string
 	if info.IsDir() {
+		result = append(result, inPath)
 		err_ = filepath.WalkDir(inPath, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -104,7 +111,7 @@ func FindPathNames(inPath, suffix string) ([]string, *errs.Error) {
 			return nil, errs.New(errs.CodeIOReadFail, err_)
 		}
 	} else if strings.HasSuffix(inPath, suffix) {
-		result = append(result, info.Name())
+		result = append(result, filepath.Dir(inPath), info.Name())
 	}
 	return result, nil
 }
@@ -114,6 +121,8 @@ func convertFiles(inPath, outPath, srcSuffix string, makeOutPath func(string, st
 	if err != nil {
 		return err
 	}
+	var dirPath = names[0]
+	names = names[1:]
 	pBar := utils.NewPrgBar(len(names)*core.StepTotal, "")
 	defer pBar.Close()
 	return utils.ParallelRun(names, ConcurNum, func(name string) *errs.Error {
@@ -124,7 +133,7 @@ func convertFiles(inPath, outPath, srcSuffix string, makeOutPath func(string, st
 			pBar.Add(core.StepTotal)
 			return nil
 		}
-		fileInPath := filepath.Join(inPath, name)
+		fileInPath := filepath.Join(dirPath, name)
 		return zipConvert(fileInPath, fileOutPath, srcSuffix, convert, pBar)
 	})
 }
@@ -276,6 +285,8 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	var dirPath = names[0]
+	names = names[1:]
 	if timeMsMin > 0 || timeMsMax > 0 {
 		log.Info("enable time filter", zap.Int64("min", timeMsMin), zap.Int64("maz", timeMsMax))
 	}
@@ -286,7 +297,13 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeRunTime, err_)
 	}
+	dayMSecs := int64(utils.TFToSecs("1d") * 1000)
+	nightMSecs := int64(3600 * 10 * 1000)  // utc时间，10小时后，即北京18:00后
+	nightZeroMs := int64(3600 * 16 * 1000) // utc时间，16小时前，即北京24:00前
 	tickBar := func(inPath string, row []string) (string, int64, [4]float64) {
+		var symbol string
+		var timeMS int64
+		var arr [4]float64
 		if len(row) == 15 {
 			// TradingDay,InstrumentID,UpdateTime,UpdateMillisec,LastPrice,Volume,BidPrice1,BidVolume1,
 			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
@@ -296,7 +313,7 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 			if bidPrice1 == 0 && askPrice1 == 0 && avgPrice == 0 {
 				return "", 0, [4]float64{0, 0, 0, 0}
 			}
-			symbol := row[1]
+			symbol = row[1]
 			dateStr := row[0] + " " + row[2]
 			timeObj, err_ := time.ParseInLocation(layout, dateStr, loc)
 			if err_ != nil {
@@ -304,21 +321,28 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 				return "", 0, [4]float64{0, 0, 0, 0}
 			}
 			milliSecs, _ := strconv.ParseInt(row[3], 10, 64)
-			timeMS := timeObj.UnixMilli() + milliSecs
+			timeMS = timeObj.UnixMilli() + milliSecs
 			price, _ := strconv.ParseFloat(row[4], 64)
 			volume, _ := strconv.ParseFloat(row[5], 64)
 			turnOver, _ := strconv.ParseFloat(row[11], 64)
-			return symbol, timeMS, [4]float64{price, volume, avgPrice, turnOver}
+			arr = [4]float64{price, volume, avgPrice, turnOver}
 		} else {
 			// InstrumentID,Time,LastPrice,Volume,BidPrice1,BidVolume1,
 			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
-			timeMS, _ := strconv.ParseInt(row[1], 10, 64)
+			symbol = row[0]
+			timeMS, _ = strconv.ParseInt(row[1], 10, 64)
 			price, _ := strconv.ParseFloat(row[2], 64)
 			volume, _ := strconv.ParseFloat(row[3], 64)
 			avgPrice, _ := strconv.ParseFloat(row[8], 64)
 			turnOver, _ := strconv.ParseFloat(row[9], 64)
-			return row[0], timeMS, [4]float64{price, volume, avgPrice, turnOver}
+			arr = [4]float64{price, volume, avgPrice, turnOver}
 		}
+		off := timeMS % dayMSecs
+		if off > nightMSecs && off < nightZeroMs {
+			// 夜盘时间，且24点前，是日前的；不一定是一天，可能是周一，需要减两天，简单起见1天
+			timeMS -= dayMSecs
+		}
+		return symbol, timeMS, arr
 	}
 	// 按年对文件名分组
 	nameGrps := make([][]string, 0)
@@ -366,7 +390,7 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 					}
 				}
 			}
-			fileInPath := filepath.Join(args.InPath, name)
+			fileInPath := filepath.Join(dirPath, name)
 			symbolDones := make(map[string]map[string]int)
 			dayKlines := make(map[string][]*banexg.Kline)
 			err = ReadZipCSVs(fileInPath, pBar, func(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error {
@@ -541,21 +565,6 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 	if err_ != nil {
 		return errs.New(errs.CodeIOReadFail, err_)
 	}
-	oldMinMS := int64(0)
-	sumVol := float64(0)
-	var bar1m *banexg.Kline
-	var oldKey string
-	saveBar := func() {
-		if bar1m == nil {
-			return
-		}
-		barRows, _ := dayKlines[oldKey]
-		if barRows == nil {
-			barRows = make([]*banexg.Kline, 0, 2000)
-		}
-		dayKlines[oldKey] = append(barRows, bar1m)
-		sumVol = bar1m.Volume
-	}
 	// 文件名内可能有多个symbol的tick信息，这里进行排序
 	var rawSyls = make(map[string]bool)
 	var counts = make(map[string]int)
@@ -587,6 +596,9 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 		}
 		items[file.Name] = num
 	}
+	if len(ticks) == 0 {
+		return nil
+	}
 	sort.Slice(ticks, func(i, j int) bool {
 		a, b := ticks[i], ticks[j]
 		if a.symbol != b.symbol {
@@ -595,6 +607,23 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 			return a.timeMS <= b.timeMS
 		}
 	})
+	sumVol := ticks[0].volume
+	var bar1m *banexg.Kline
+	var oldKey string
+	saveBar := func() {
+		if bar1m == nil {
+			return
+		}
+		barRows, _ := dayKlines[oldKey]
+		if barRows == nil {
+			barRows = make([]*banexg.Kline, 0, 2000)
+		}
+		newSumVol := bar1m.Volume
+		bar1m.Volume -= sumVol
+		dayKlines[oldKey] = append(barRows, bar1m)
+		sumVol = newSumVol
+	}
+	oldMinMS := int64(0)
 	minGapMSecs := int64(300000) // 间隔超过5分钟，且成交量下降，是切换盘口
 	// 对排序后的tick合并为K线
 	for _, t := range ticks {
@@ -605,20 +634,19 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 			saveBar()
 			if !keyValid {
 				oldKey = fmt.Sprintf("%s_%v", t.symbol, fid)
-				sumVol = 0
+				sumVol = volume
 			}
 			if volume < sumVol {
 				if curMinMS-oldMinMS >= minGapMSecs {
 					// 日盘/夜盘切换，累计成交量归0
-					sumVol = 0
+					sumVol = volume
 				} else {
 					log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
 						zap.Int64("time", curMinMS), zap.String("nm", oldKey))
 				}
 			}
-			curVol := t.volume - sumVol
 			oldMinMS = curMinMS
-			bar1m = &banexg.Kline{Time: curMinMS, Open: price, High: price, Low: price, Close: price, Volume: curVol}
+			bar1m = &banexg.Kline{Time: curMinMS, Open: price, High: price, Low: price, Close: price, Volume: volume}
 		} else {
 			if volume < sumVol {
 				if volume == 0 && t.avgPrice == 0 && t.turnOver == 0 {
@@ -628,13 +656,20 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 				log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
 					zap.Int64("time", curMinMS), zap.String("nm", oldKey))
 			}
-			if price > bar1m.High {
-				bar1m.High = price
-			} else if price < bar1m.Low {
-				bar1m.Low = price
+			if volume > bar1m.Volume {
+				if bar1m.Volume <= sumVol {
+					// 开盘价取时间段内第一次有成交量的价格
+					bar1m.Open = price
+					bar1m.High = price
+					bar1m.Low = price
+				} else if price > bar1m.High {
+					bar1m.High = price
+				} else if price < bar1m.Low {
+					bar1m.Low = price
+				}
+				bar1m.Close = price
+				bar1m.Volume = volume
 			}
-			bar1m.Close = price
-			bar1m.Volume = volume - sumVol
 		}
 	}
 	saveBar()

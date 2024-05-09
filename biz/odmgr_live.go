@@ -565,7 +565,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 			Status:    int16(status),
 			EnterTag:  core.EnterTagThird,
 			InitPrice: average,
-			QuoteCost: notional * float64(leverage),
+			QuoteCost: notional * leverage,
 			Leverage:  int32(leverage),
 			EnterAt:   enterAt,
 			Strategy:  config.TakeOverStgy,
@@ -1204,7 +1204,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 	exchange := exg.Default
 	leverage, maxLeverage := exg.GetLeverage(od.Symbol, od.QuoteCost, o.Account)
 	if isEnter && od.Leverage > 0 && od.Leverage != int32(leverage) {
-		newLeverage := min(maxLeverage, int(od.Leverage))
+		newLeverage := min(maxLeverage, float64(od.Leverage))
 		if newLeverage != leverage {
 			_, err = exchange.SetLeverage(newLeverage, od.Symbol, map[string]interface{}{
 				banexg.ParamAccount: o.Account,
@@ -1213,7 +1213,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 				return err
 			}
 			// 此币种杠杆比较小，对应缩小金额
-			rate := float64(newLeverage) / float64(od.Leverage)
+			rate := newLeverage / float64(od.Leverage)
 			od.Leverage = int32(newLeverage)
 			subOd.Amount *= rate
 			od.QuoteCost *= rate

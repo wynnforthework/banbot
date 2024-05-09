@@ -87,27 +87,28 @@ func GetTfAlignOrigin(secs int) (string, int) {
 }
 
 /*
+AlignTfSecsOffset
+将给定的10位秒级时间戳，转为指定时间周期下，的头部开始时间戳，使用指定偏移
+*/
+func AlignTfSecsOffset(timeSecs int64, tfSecs int, offset int) int64 {
+	if timeSecs > 1000000000000 {
+		panic("10 digit timestamp is require for AlignTfSecs")
+	}
+	tfSecs64 := int64(tfSecs)
+	if offset == 0 {
+		return timeSecs / tfSecs64 * tfSecs64
+	}
+	offset64 := int64(offset)
+	return (timeSecs-offset64)/tfSecs64*tfSecs64 + offset64
+}
+
+/*
 AlignTfSecs
 将给定的10位秒级时间戳，转为指定时间周期下，的头部开始时间戳
 */
 func AlignTfSecs(timeSecs int64, tfSecs int) int64 {
-	if timeSecs > 1000000000000 {
-		panic("10 digit timestamp is require for AlignTfSecs")
-	}
-	originOff := 0
-	for _, item := range tfOrigins {
-		if tfSecs < item.TFSecs {
-			break
-		}
-		if tfSecs%item.TFSecs == 0 {
-			originOff = item.OffsetSecs
-			break
-		}
-	}
-	if originOff > 0 {
-		return timeSecs / int64(tfSecs) * int64(tfSecs)
-	}
-	return (timeSecs-int64(originOff))/int64(tfSecs)*int64(tfSecs) + int64(originOff)
+	_, offset := GetTfAlignOrigin(tfSecs)
+	return AlignTfSecsOffset(timeSecs, tfSecs, offset)
 }
 
 /*
@@ -122,6 +123,16 @@ func AlignTfMSecs(timeMSecs int64, tfMSecs int64) int64 {
 		panic("milliseconds tfMSecs is require for AlignTfMSecs")
 	}
 	return AlignTfSecs(timeMSecs/1000, int(tfMSecs/1000)) * 1000
+}
+
+func AlignTfMSecsOffset(timeMSecs, tfMSecs, offset int64) int64 {
+	if timeMSecs < 1000000000000 {
+		panic("13 digit timestamp is require for AlignTfMSecs")
+	}
+	if tfMSecs < 1000 {
+		panic("milliseconds tfMSecs is require for AlignTfMSecs")
+	}
+	return AlignTfSecsOffset(timeMSecs/1000, int(tfMSecs/1000), int(offset/1000)) * 1000
 }
 
 /*
@@ -158,14 +169,28 @@ func SecsToTF(tfSecs int) string {
 BuildOHLCV
 从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
 arr: 子OHLC列表。
-toTFSecs: 指定要构建的时间粒度，单位：秒
+toTFSecs: 指定要构建的时间粒度，单位：毫秒
 preFire: 提前触发构建完成的比率；
 resOHLCV: 已有的待更新数组
-fromTFSecs: 传入的arr子数组间隔，未提供时计算
+fromTFSecs: 传入的arr子数组间隔，未提供时计算，单位：毫秒
 */
-func BuildOHLCV(arr []*banexg.Kline, toTFSecs int, preFire float64, resOHLCV []*banexg.Kline, fromTFMSecs int64) ([]*banexg.Kline, bool) {
-	tfMSecs := int64(toTFSecs * 1000)
-	offsetMS := int64(float64(tfMSecs) * preFire)
+func BuildOHLCV(arr []*banexg.Kline, toTFMSecs int64, preFire float64, resOHLCV []*banexg.Kline, fromTFMSecs int64) ([]*banexg.Kline, bool) {
+	_, offset := GetTfAlignOrigin(int(toTFMSecs / 1000))
+	return BuildOHLCVOff(arr, toTFMSecs, preFire, resOHLCV, fromTFMSecs, int64(offset*1000))
+}
+
+/*
+BuildOHLCVOff
+从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
+arr: 子OHLC列表。
+toTFMSecs: 指定要构建的时间粒度，单位：毫秒
+preFire: 提前触发构建完成的比率；
+resOHLCV: 已有的待更新数组
+fromTFSecs: 传入的arr子数组间隔，未提供时计算，单位：毫秒
+alignOffMS: 对齐时间的偏移
+*/
+func BuildOHLCVOff(arr []*banexg.Kline, toTFMSecs int64, preFire float64, resOHLCV []*banexg.Kline, fromTFMSecs, alignOffMS int64) ([]*banexg.Kline, bool) {
+	offsetMS := int64(float64(toTFMSecs) * preFire)
 	subNum := len(arr)
 	if fromTFMSecs == 0 && subNum >= 2 {
 		fromTFMSecs = arr[subNum-1].Time - arr[subNum-2].Time
@@ -173,7 +198,7 @@ func BuildOHLCV(arr []*banexg.Kline, toTFSecs int, preFire float64, resOHLCV []*
 	var big *banexg.Kline
 	aggNum, cacheNum := 0, 0
 	if fromTFMSecs > 0 {
-		aggNum = toTFSecs / int(fromTFMSecs/1000) // 大周期由几个小周期组成
+		aggNum = int(toTFMSecs / fromTFMSecs) // 大周期由几个小周期组成
 		cacheNum = len(arr)/aggNum + 3
 	}
 	if resOHLCV == nil {
@@ -183,17 +208,25 @@ func BuildOHLCV(arr []*banexg.Kline, toTFSecs int, preFire float64, resOHLCV []*
 	}
 	aggCnt := 0 // 当前大周期bar从小周期聚合的数量
 	for _, bar := range arr {
-		timeAlign := AlignTfMSecs(bar.Time+offsetMS, tfMSecs)
+		timeAlign := AlignTfMSecsOffset(bar.Time+offsetMS, toTFMSecs, alignOffMS)
 		if big != nil && big.Time == timeAlign {
 			// 属于同一个
-			if bar.High > big.High {
-				big.High = bar.High
+			if bar.Volume > 0 {
+				if big.Volume == 0 {
+					big.Open = bar.Open
+					big.High = bar.High
+					big.Low = bar.Low
+				} else {
+					if bar.High > big.High {
+						big.High = bar.High
+					}
+					if bar.Low < big.Low {
+						big.Low = bar.Low
+					}
+				}
+				big.Close = bar.Close
+				big.Volume += bar.Volume
 			}
-			if bar.Low < big.Low {
-				big.Low = bar.Low
-			}
-			big.Close = bar.Close
-			big.Volume += bar.Volume
 			aggCnt += 1
 		} else {
 			if aggCnt > aggNum {
@@ -213,7 +246,7 @@ func BuildOHLCV(arr []*banexg.Kline, toTFSecs int, preFire float64, resOHLCV []*
 	lastFinished := false
 	if fromTFMSecs > 0 && len(resOHLCV) > 0 {
 		// 判断最后一个bar是否结束：假定arr中每个bar间隔相等，最后一个bar+间隔属于下一个规划区间，则认为最后一个bar结束
-		finishMS := AlignTfMSecs(arr[subNum-1].Time+fromTFMSecs+offsetMS, tfMSecs)
+		finishMS := AlignTfMSecsOffset(arr[subNum-1].Time+fromTFMSecs+offsetMS, toTFMSecs, alignOffMS)
 		lastFinished = finishMS > resOHLCV[len(resOHLCV)-1].Time
 	}
 	return resOHLCV, lastFinished
