@@ -9,6 +9,41 @@ import (
 	"context"
 )
 
+// iteratorForAddAdjFactors implements pgx.CopyFromSource.
+type iteratorForAddAdjFactors struct {
+	rows                 []AddAdjFactorsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForAddAdjFactors) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForAddAdjFactors) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].Sid,
+		r.rows[0].SubID,
+		r.rows[0].StartMs,
+		r.rows[0].Factor,
+	}, nil
+}
+
+func (r iteratorForAddAdjFactors) Err() error {
+	return nil
+}
+
+func (q *Queries) AddAdjFactors(ctx context.Context, arg []AddAdjFactorsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"adj_factors"}, []string{"sid", "sub_id", "start_ms", "factor"}, &iteratorForAddAdjFactors{rows: arg})
+}
+
 // iteratorForAddCalendars implements pgx.CopyFromSource.
 type iteratorForAddCalendars struct {
 	rows                 []AddCalendarsParams

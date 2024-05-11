@@ -63,7 +63,7 @@ func TestBulkDownOHLCV(t *testing.T) {
 		panic(err)
 	}
 	exchange := exg.Default
-	_, err = exchange.LoadMarkets(false, nil)
+	_, err = LoadMarkets(exchange, false)
 	if err != nil {
 		panic(err)
 	}

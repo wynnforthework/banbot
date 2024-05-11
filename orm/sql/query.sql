@@ -156,3 +156,19 @@ update exorder set
 insert into calendars
 (name, start_ms, stop_ms)
 values ($1, $2, $3);
+
+
+
+-- name: AddAdjFactors :copyfrom
+insert into adj_factors
+(sid, sub_id, start_ms, factor)
+values ($1, $2, $3, $4);
+
+-- name: GetAdjFactors :many
+select * from adj_factors
+where sid=$1
+order by start_ms desc;
+
+-- name: DelAdjFactors :exec
+delete from adj_factors
+where sid=$1;

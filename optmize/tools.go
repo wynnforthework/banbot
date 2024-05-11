@@ -33,7 +33,7 @@ func CompareExgBTOrders(args []string) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = exg.Default.LoadMarkets(false, nil)
+	_, err = orm.LoadMarkets(exg.Default, false)
 	if err != nil {
 		panic(err)
 	}
@@ -258,7 +258,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 			timeFrame := row[tfIdx]
 			maxTfSecs = max(maxTfSecs, utils.TFToSecs(timeFrame))
 			isShort := row[dirtIdx] == "short"
-			leverage, _ := strconv.Atoi(row[lvgIdx])
+			leverage, _ := strconv.ParseFloat(row[lvgIdx], 64)
 			enterMS := btime.ParseTimeMS(row[entIdx])
 			entPrice, _ := strconv.ParseFloat(row[entPriceIdx], 64)
 			entAmount, _ := strconv.ParseFloat(row[entAmtIdx], 64)
@@ -278,7 +278,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 					Symbol:    symbol,
 					Timeframe: timeFrame,
 					Short:     isShort,
-					Leverage:  int32(leverage),
+					Leverage:  leverage,
 					EnterAt:   enterMS,
 					ExitAt:    exitMS,
 					Profit:    profit,

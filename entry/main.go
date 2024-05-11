@@ -59,8 +59,6 @@ func runMainEntrys(cmdName string) {
 		entry = RunDownData
 	case "down_ws":
 		break
-	case "fixtf":
-		entry = RunFixTF
 	case "dbcmd":
 		options = []string{"action", "tables", "force"}
 		entry = RunDbCmd

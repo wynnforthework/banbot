@@ -253,7 +253,7 @@ func newMiner(spider *LiveSpider, exgName, market string) (*Miner, *errs.Error) 
 }
 
 func (m *Miner) init() {
-	_, err := m.exchange.LoadMarkets(false, nil)
+	_, err := orm.LoadMarkets(m.exchange, false)
 	if err != nil {
 		log.Error("load markets for miner fail", zap.String("exg", m.ExgName), zap.Error(err))
 	}

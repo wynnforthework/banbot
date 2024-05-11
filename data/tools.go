@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"encoding/csv"
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
@@ -641,8 +642,11 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 					// 日盘/夜盘切换，累计成交量归0
 					sumVol = volume
 				} else {
-					log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
-						zap.Int64("time", curMinMS), zap.String("nm", oldKey))
+					// 有些数据时间错了，提早了2分钟，但成交量正确，跳过异常数据
+					timeStr := btime.ToDateStr(curMinMS, "")
+					log.Warn("skip volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
+						zap.String("time", timeStr), zap.String("nm", oldKey))
+					continue
 				}
 			}
 			oldMinMS = curMinMS
@@ -653,8 +657,10 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 					// 部分tick，成交量、均价、换手率均为0，是无效的，需要跳过
 					continue
 				}
-				log.Warn("volume invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
-					zap.Int64("time", curMinMS), zap.String("nm", oldKey))
+				timeStr := btime.ToDateStr(curMinMS, "")
+				log.Warn("volume may invalid", zap.Float64("old", sumVol), zap.Float64("new", volume),
+					zap.String("time", timeStr), zap.String("nm", oldKey))
+				continue
 			}
 			if volume > bar1m.Volume {
 				if bar1m.Volume <= sumVol {

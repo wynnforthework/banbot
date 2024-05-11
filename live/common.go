@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/log"
@@ -27,7 +28,7 @@ func CronRefreshPairs() {
 func CronLoadMarkets() {
 	// 2小时更新一次市场行情
 	_, err := core.Cron.AddFunc("30 3 */2 * * *", func() {
-		_, _ = exg.Default.LoadMarkets(true, nil)
+		_, _ = orm.LoadMarkets(exg.Default, true)
 	})
 	if err != nil {
 		log.Error("add CronLoadMarkets fail", zap.Error(err))

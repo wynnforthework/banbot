@@ -21,3 +21,4 @@ sql:
           kinfo: KInfo
           klineun: KLineUn
           exsymbol: ExSymbol
+          adj_factors: AdjFactor

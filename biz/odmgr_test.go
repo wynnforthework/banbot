@@ -26,7 +26,7 @@ func TestCalcSecsForPrice(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = exg.Default.LoadMarkets(false, nil)
+	_, err = orm.LoadMarkets(exg.Default, false)
 	if err != nil {
 		panic(err)
 	}

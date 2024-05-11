@@ -200,4 +200,21 @@ CREATE TABLE "public"."calendars"
 CREATE INDEX "idx_calendar_name" ON "public"."calendars" USING btree ("name");
 
 
+-- ----------------------------
+-- Table structure for adj_factors
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."adj_factors";
+CREATE TABLE "public"."adj_factors"
+(
+    "id"            SERIAL    NOT NULL PRIMARY KEY,
+    "sid"           int4        not null,
+    "sub_id"        int4        not null,
+    "start_ms"      int8        not null,
+    "factor"        float8      not null
+);
+CREATE INDEX "idx_adj_factors_sid" ON "public"."adj_factors" USING btree ("sid");
+CREATE INDEX "idx_adj_factors_start" ON "public"."adj_factors" USING btree ("start_ms");
+
+
+
 

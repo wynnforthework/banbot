@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"slices"
@@ -76,10 +78,13 @@ select time,open,high,low,close,volume from $tbl
 where sid=%d and time < %v
 order by time desc limit %v`, sid, finishEndMS, limit)
 	} else {
+		if limit == 0 {
+			limit = int((finishEndMS-startMs)/tfMSecs) + 1
+		}
 		dctSql = fmt.Sprintf(`
 select time,open,high,low,close,volume from $tbl
 where sid=%d and time >= %v and time < %v
-order by time`, sid, startMs, finishEndMS)
+order by time limit %v`, sid, startMs, finishEndMS, limit)
 	}
 	subTF, rows, err_ := queryHyper(q, timeframe, dctSql)
 	klines, err_ := mapToKlines(rows, err_)
@@ -1240,4 +1245,150 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 
 func GetKlineAggs() []*KlineAgg {
 	return aggList
+}
+
+/*
+CalcAdjFactors 计算更新所有复权因子
+*/
+func CalcAdjFactors(args *config.CmdArgs) *errs.Error {
+	exInfo := exg.Default.Info()
+	err := LoadAllExSymbols()
+	if err != nil {
+		return err
+	}
+	if exInfo.ID == "china" {
+		return calcChinaAdjFactors()
+	} else {
+		return errs.NewMsg(errs.CodeParamInvalid, "exchange %s dont support adjust factors", exInfo.ID)
+	}
+}
+
+func calcChinaAdjFactors() *errs.Error {
+	exchange := exg.Default
+	_, err := LoadMarkets(exchange, false)
+	if err != nil {
+		return err
+	}
+	err = InitListDates()
+	if err != nil {
+		return err
+	}
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	err = calcCnFutureFactors(sess)
+	if err != nil {
+		return err
+	}
+	// 对于股票计算复权因子?
+	return nil
+}
+
+func calcCnFutureFactors(sess *Queries) *errs.Error {
+	items := GetExSymbols("china", banexg.MarketLinear)
+	exsList := utils.ValsOfMap(items)
+	sort.Slice(exsList, func(i, j int) bool {
+		return exsList[i].Symbol < exsList[j].Symbol
+	})
+	var err *errs.Error
+	// 保存当前品种日线各个合约的成交量，用于寻找主力合约
+	dateSidVols := make(map[int64]map[int32]*banexg.Kline)
+	lastCode := ""
+	var lastExs *ExSymbol
+	ctx := context.Background()
+	saveAdjFactors := func() *errs.Error {
+		if lastCode == "" {
+			return nil
+		}
+		exs := &ExSymbol{
+			Exchange: lastExs.Exchange,
+			Market:   lastExs.Market,
+			ExgReal:  lastExs.ExgReal,
+			Symbol:   lastCode + "888", // 期货888结尾表示主力连续合约
+		}
+		err = EnsureSymbols([]*ExSymbol{exs})
+		if err != nil {
+			return err
+		}
+		// 删除旧的主力连续合约复权因子
+		err_ := sess.DelAdjFactors(ctx, exs.ID)
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
+		dates := utils.KeysOfMap(dateSidVols)
+		sort.Slice(dates, func(i, j int) bool {
+			return dates[i] < dates[j]
+		})
+		// 逐日寻找成交量最大的合约ID，并计算复权因子
+		lastSid := int32(0)
+		lastClose := float64(0)
+		var adds []AddAdjFactorsParams
+		for _, dateMS := range dates {
+			vols, _ := dateSidVols[dateMS]
+			curSid := int32(0)
+			var maxK *banexg.Kline
+			for sid, k := range vols {
+				if maxK == nil || k.Volume > maxK.Volume {
+					maxK = k
+					curSid = sid
+				}
+			}
+			if curSid != lastSid {
+				factor := float64(1)
+				if lastSid > 0 {
+					factor = maxK.Open / lastClose
+				}
+				adds = append(adds, AddAdjFactorsParams{
+					Sid:     exs.ID,
+					SubID:   curSid,
+					StartMs: dateMS,
+					Factor:  factor,
+				})
+				lastSid = curSid
+				lastClose = maxK.Close
+			}
+		}
+		_, err_ = sess.AddAdjFactors(ctx, adds)
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
+		return nil
+	}
+	// 对所有期货标的，按顺序获取日K，并按时间记录
+	// startMS := int64(core.MSMinStamp)
+	for _, exs := range exsList {
+		parts := utils2.SplitParts(exs.Symbol)
+		if len(parts) > 1 && parts[1].Type == utils2.StrInt {
+			p1Str := parts[1].Val
+			p1num, _ := strconv.Atoi(p1Str[len(p1Str)-2:])
+			if p1num == 0 || p1num > 12 {
+				// 跳过000, 888, 999这些特殊后缀
+				continue
+			}
+		}
+		if lastCode != parts[0].Val {
+			err = saveAdjFactors()
+			if err != nil {
+				return err
+			}
+			dateSidVols = make(map[int64]map[int32]*banexg.Kline)
+			lastCode = parts[0].Val
+			lastExs = exs
+		}
+		klines, err := sess.QueryOHLCV(exs.ID, "1d", 0, 0, 0, false)
+		if err != nil {
+			return err
+		}
+		for _, k := range klines {
+			vols, _ := dateSidVols[k.Time]
+			if vols == nil {
+				vols = make(map[int32]*banexg.Kline)
+				dateSidVols[k.Time] = vols
+			}
+			vols[exs.ID] = k
+		}
+	}
+	return saveAdjFactors()
 }

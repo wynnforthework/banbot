@@ -31,6 +31,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 	if err != nil {
 		return err
 	}
+	exInfo := exchange.Info()
 	yearStr := strings.Split(filepath.Base(inPath), ".")[0]
 	year, _ := strconv.Atoi(yearStr)
 	mar, err := exchange.MapMarket(cleanName, year)
@@ -203,6 +204,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 	// 这里不自动归集，因有些bar成交量为0，不可使用数据库默认的归集策略；应调用BuildOHLCVOff归集
 	num, err := sess.InsertKLinesAuto(timeFrame, exs.ID, klines, false)
 	if err == nil && num > 0 {
+		startMS, endMS = klines[0].Time, klines[len(klines)-1].Time
 		startDt := btime.ToDateStr(startMS, "")
 		endDt := btime.ToDateStr(endMS, "")
 		log.Info("insert klines", zap.String("symbol", exs.Symbol), zap.Int32("sid", exs.ID),
@@ -213,7 +215,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 			if agg.MSecs <= tfMSecs {
 				continue
 			}
-			offMS := int64(exg.GetAlignOff(exchange.GetID(), int(agg.MSecs/1000)) * 1000)
+			offMS := int64(exg.GetAlignOff(exInfo.ID, int(agg.MSecs/1000)) * 1000)
 			klines, _ = utils.BuildOHLCVOff(klines, agg.MSecs, 0, nil, tfMSecs, offMS)
 			if len(klines) == 0 {
 				continue

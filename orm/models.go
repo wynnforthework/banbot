@@ -6,6 +6,14 @@ package orm
 
 import ()
 
+type AdjFactor struct {
+	ID      int32
+	Sid     int32
+	SubID   int32
+	StartMs int64
+	Factor  float64
+}
+
 type BotTask struct {
 	ID       int64
 	Mode     string
@@ -65,7 +73,7 @@ type IOrder struct {
 	InitPrice   float64
 	QuoteCost   float64
 	ExitTag     string
-	Leverage    int32
+	Leverage    float64
 	EnterAt     int64
 	ExitAt      int64
 	Strategy    string

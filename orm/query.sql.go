@@ -9,6 +9,13 @@ import (
 	"context"
 )
 
+type AddAdjFactorsParams struct {
+	Sid     int32
+	SubID   int32
+	StartMs int64
+	Factor  float64
+}
+
 type AddCalendarsParams struct {
 	Name    string
 	StartMs int64
@@ -85,7 +92,7 @@ type AddIOrderParams struct {
 	InitPrice   float64
 	QuoteCost   float64
 	ExitTag     string
-	Leverage    int32
+	Leverage    float64
 	EnterAt     int64
 	ExitAt      int64
 	Strategy    string
@@ -206,6 +213,16 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*BotTask, err
 	return &i, err
 }
 
+const delAdjFactors = `-- name: DelAdjFactors :exec
+delete from adj_factors
+where sid=$1
+`
+
+func (q *Queries) DelAdjFactors(ctx context.Context, sid int32) error {
+	_, err := q.db.Exec(ctx, delAdjFactors, sid)
+	return err
+}
+
 const delKHoleRange = `-- name: DelKHoleRange :exec
 delete from khole
 where sid = $1 and timeframe=$2 and start >= $3 and stop <= $4
@@ -253,6 +270,38 @@ func (q *Queries) FindTask(ctx context.Context, arg FindTaskParams) (*BotTask, e
 		&i.Info,
 	)
 	return &i, err
+}
+
+const getAdjFactors = `-- name: GetAdjFactors :many
+select id, sid, sub_id, start_ms, factor from adj_factors
+where sid=$1
+order by start_ms desc
+`
+
+func (q *Queries) GetAdjFactors(ctx context.Context, sid int32) ([]*AdjFactor, error) {
+	rows, err := q.db.Query(ctx, getAdjFactors, sid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*AdjFactor{}
+	for rows.Next() {
+		var i AdjFactor
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sid,
+			&i.SubID,
+			&i.StartMs,
+			&i.Factor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getExOrders = `-- name: GetExOrders :many
@@ -670,7 +719,7 @@ type SetIOrderParams struct {
 	InitPrice   float64
 	QuoteCost   float64
 	ExitTag     string
-	Leverage    int32
+	Leverage    float64
 	EnterAt     int64
 	ExitAt      int64
 	Strategy    string

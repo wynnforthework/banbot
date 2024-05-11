@@ -62,7 +62,7 @@ func GetExSymbol(exchange banexg.BanExchange, symbol string) (*ExSymbol, *errs.E
 	if err != nil {
 		return nil, err
 	}
-	key := fmt.Sprintf("%s:%s:%s", exchange.GetID(), market.Type, symbol)
+	key := fmt.Sprintf("%s:%s:%s", exchange.Info().ID, market.Type, symbol)
 	item, ok := keySymbolMap[key]
 	if !ok {
 		err := errs.NewMsg(core.ErrInvalidSymbol, "%s not exist in %d cache", symbol, len(keySymbolMap))
@@ -72,11 +72,11 @@ func GetExSymbol(exchange banexg.BanExchange, symbol string) (*ExSymbol, *errs.E
 }
 
 func EnsureExgSymbols(exchange banexg.BanExchange) *errs.Error {
-	_, err := exchange.LoadMarkets(false, nil)
+	_, err := LoadMarkets(exchange, false)
 	if err != nil {
 		return err
 	}
-	exgId := exchange.GetID()
+	exgId := exchange.Info().ID
 	marMap := exchange.GetCurMarkets()
 	exsList := make([]*ExSymbol, 0, len(marMap))
 	for symbol, market := range marMap {
@@ -89,7 +89,7 @@ func EnsureCurSymbols(symbols []string) *errs.Error {
 	exsList := make([]*ExSymbol, 0, len(symbols))
 	exgId := config.Exchange.Name
 	marketType := core.Market
-	marMap, err := exg.Default.LoadMarkets(false, nil)
+	marMap, err := LoadMarkets(exg.Default, false)
 	if err != nil {
 		return err
 	}
@@ -208,24 +208,39 @@ func InitListDates() *errs.Error {
 		return err
 	}
 	defer conn.Release()
-	for _, exs := range idSymbolMap {
-		if exs.ListMs > 0 {
-			continue
+	exchange := exg.Default
+	exInfo := exchange.Info()
+	exsList := GetExSymbols(exInfo.ID, exInfo.MarketType)
+	hasFetch := exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType)
+	for _, exs := range exsList {
+		var oldListMS, oldDeListMS = exs.ListMs, exs.DelistMs
+		if exs.ListMs == 0 {
+			startMS := int64(core.MSMinStamp)
+			var klines []*banexg.Kline
+			if hasFetch {
+				klines, err = exchange.FetchOHLCV(exs.Symbol, "1m", startMS, 10, nil)
+			} else {
+				klines, err = sess.QueryOHLCV(exs.ID, "5m", startMS, 0, 10, true)
+			}
+			if err != nil {
+				return err
+			}
+			if len(klines) > 0 {
+				exs.ListMs = klines[0].Time
+			}
 		}
-		exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
-		if err != nil {
-			return err
+		if exs.DelistMs == 0 {
+			mar, err := exchange.GetMarket(exs.Symbol)
+			if err != nil {
+				return err
+			}
+			exs.DelistMs = mar.Expiry
 		}
-		klines, err := exchange.FetchOHLCV(exs.Symbol, "1m", core.MSMinStamp, 10, nil)
-		if err != nil {
-			return err
-		}
-		if len(klines) > 0 {
-			exs.ListMs = klines[0].Time
+		if oldListMS != exs.ListMs || oldDeListMS != exs.DelistMs {
 			err_ := sess.SetListMS(context.Background(), SetListMSParams{
 				ID:       exs.ID,
-				ListMs:   klines[0].Time,
-				DelistMs: 0,
+				ListMs:   exs.ListMs,
+				DelistMs: exs.DelistMs,
 			})
 			if err_ != nil {
 				return errs.New(core.ErrDbExecFail, err_)

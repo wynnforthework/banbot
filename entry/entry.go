@@ -10,6 +10,8 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"path/filepath"
 )
 
@@ -44,17 +46,20 @@ func RunDownData(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func RunFixTF(args *config.CmdArgs) *errs.Error {
+func RunDbCmd(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err
 	}
-	return orm.SyncKlineTFs()
-}
-
-func RunDbCmd(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
+	action := args.Action
+	if action == "correct" {
+		return orm.SyncKlineTFs()
+	} else if action == "adj_factors" {
+		return orm.CalcAdjFactors(args)
+	} else {
+		log.Warn("unsupport dbcmd", zap.String("action", action))
+	}
 	return nil
 }
 

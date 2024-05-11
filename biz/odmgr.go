@@ -195,7 +195,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 			Status:    orm.InOutStatusInit,
 			EnterTag:  req.Tag,
 			InitPrice: core.GetPrice(env.Symbol),
-			Leverage:  int32(req.Leverage),
+			Leverage:  req.Leverage,
 			EnterAt:   btime.TimeMS(),
 			Strategy:  req.StgyName,
 			StgVer:    int32(stgVer),

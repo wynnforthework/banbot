@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -268,6 +269,84 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 }
 
 /*
+GetOHLCV 获取品种K线，如需复权自动前复权
+*/
+func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+	if exs.Exchange == "china" && exs.Market != banexg.MarketSpot {
+		// 国内非股票，可能是：期货、期权、基金、、、
+		parts := utils2.SplitParts(exs.Symbol)
+		if len(parts) >= 2 {
+			p2val := parts[1].Val
+			if p2val == "888" {
+				// 期货888是主力连续合约，000是指数合约
+				return sess.GetFacOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+			}
+		}
+	}
+	return sess.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+}
+
+/*
+GetFacOHLCV 获取前复权的K线
+*/
+func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
+	ctx := context.Background()
+	facs, err_ := q.GetAdjFactors(ctx, sid)
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbReadFail, err_)
+	}
+	// facs已按时间倒序排序
+	// price(i) * factor(i-1) * factor(i-2) * ... factor(1) = latest price
+	lastFac := float64(1)
+	rid := len(facs) - 1
+	for i, f := range facs {
+		f.Factor *= lastFac
+		lastFac = f.Factor
+		if f.StartMs < startMS {
+			rid = i
+			break
+		}
+	}
+	facs = facs[:rid+1]
+	var result []*banexg.Kline
+	// 从后往前查询K线，并进行前复权
+	curEnd := endMS
+	for _, f := range facs {
+		curSid := f.SubID
+		if curSid == 0 {
+			curSid = sid
+		}
+		start := max(f.StartMs, startMS)
+		klines, err := q.QueryOHLCV(curSid, timeFrame, start, curEnd, limit, withUnFinish)
+		if err != nil {
+			return nil, err
+		}
+		factor := f.Factor
+		for _, k := range klines {
+			k.Open *= factor
+			k.High *= factor
+			k.Low *= factor
+			k.Close *= factor
+		}
+		result = append(klines, result...)
+		curEnd = f.StartMs
+		withUnFinish = false
+		if limit > 0 && len(result) >= limit {
+			if len(result) > limit {
+				result = result[len(result)-limit:]
+			}
+			break
+		}
+	}
+	return result, nil
+}
+
+/*
 BulkDownOHLCV
 批量同时下载K线
 */
@@ -365,7 +444,7 @@ func MapExSymbols(exchange banexg.BanExchange, symbols []string) (map[int32]*ExS
 }
 
 func parseDownArgs(tfMSecs int64, startMS, endMS int64, limit int, withUnFinish bool) (int64, int64) {
-	if startMS > 0 {
+	if startMS > 0 && startMS != core.MSMinStamp {
 		fixStartMS := utils.AlignTfMSecs(startMS, tfMSecs)
 		if startMS > fixStartMS {
 			startMS = fixStartMS + tfMSecs
@@ -382,7 +461,7 @@ func parseDownArgs(tfMSecs int64, startMS, endMS int64, limit int, withUnFinish 
 		alignEndMS += tfMSecs
 	}
 	endMS = alignEndMS
-	if startMS == 0 {
+	if startMS == 0 && limit > 0 {
 		startMS = endMS - tfMSecs*int64(limit)
 	}
 	return startMS, endMS
@@ -532,4 +611,18 @@ func (q *Queries) GetExSHoles(exchange banexg.BanExchange, exs *ExSymbol, start,
 		res = append(res, [2]int64{validStop, stop})
 	}
 	return res, nil
+}
+
+func LoadMarkets(exchange banexg.BanExchange, reload bool) (banexg.MarketMap, *errs.Error) {
+	exInfo := exchange.Info()
+	args := make(map[string]interface{})
+	if exInfo.ID == "china" && exInfo.MarketType != banexg.MarketSpot {
+		items := GetExSymbols(exInfo.ID, exInfo.MarketType)
+		symbols := make([]string, 0, len(items))
+		for _, it := range items {
+			symbols = append(symbols, it.Symbol)
+		}
+		args[banexg.ParamSymbols] = symbols
+	}
+	return exchange.LoadMarkets(reload, args)
 }
