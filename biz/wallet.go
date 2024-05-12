@@ -427,7 +427,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 
 		if isFuture {
 			//期货合约，名义价值=保证金*杠杆
-			legalCost /= float64(od.Leverage)
+			legalCost /= od.Leverage
 		}
 
 		quoteCost = w.GetAmountByLegal(quoteCode, legalCost)
@@ -440,7 +440,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 		// 计算名义数量
 		quoteMargin = quoteCost
 		if isFuture {
-			quoteMargin *= float64(od.Leverage)
+			quoteMargin *= od.Leverage
 		}
 
 		od.QuoteCost, err = exg.PrecCost(nil, od.Symbol, quoteMargin)
@@ -475,7 +475,7 @@ func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	if core.IsContract {
 		// 期货合约，只锁定定价币，不涉及base币的增加
-		quoteAmount /= float64(od.Leverage)
+		quoteAmount /= od.Leverage
 		gotAmt := quoteAmount - curFee
 		w.ConfirmPending(od.Key(), quoteCode, quoteAmount, quoteCode, gotAmt, true)
 	} else if od.Short {
@@ -626,7 +626,7 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder, currency string) *errs.
 		// 计算名义价值
 		quoteValue := od.Enter.Filled * curPrice
 		// 计算当前所需保证金
-		curMargin := quoteValue / float64(od.Leverage)
+		curMargin := quoteValue / od.Leverage
 		// 判断价格走势和开单方向是否相同
 		odDirt := 1.0
 		if od.Short {

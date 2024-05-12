@@ -110,7 +110,7 @@ stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传
 */
 func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
 	oldStart, oldEnd int64, pBar *utils.PrgBar) (int, *errs.Error) {
-	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs {
+	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs || exs.Combined {
 		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
 		if pBar != nil {
 			pBar.Add(core.StepTotal)
@@ -265,7 +265,7 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 		// DownOHLCV2DB 内部已处理stepCB，这里无需处理
 		return nil, err
 	}
-	return sess.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
 }
 
 /*
@@ -277,6 +277,13 @@ func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, 
 		return nil, err
 	}
 	defer conn.Release()
+	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
+}
+
+/*
+GetOHLCV 获取品种K线，如需复权自动前复权
+*/
+func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
 	if exs.Exchange == "china" && exs.Market != banexg.MarketSpot {
 		// 国内非股票，可能是：期货、期权、基金、、、
 		parts := utils2.SplitParts(exs.Symbol)
@@ -284,11 +291,11 @@ func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, 
 			p2val := parts[1].Val
 			if p2val == "888" {
 				// 期货888是主力连续合约，000是指数合约
-				return sess.GetFacOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+				return q.GetFacOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
 			}
 		}
 	}
-	return sess.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+	return q.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
 }
 
 /*
@@ -396,9 +403,12 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	}
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, false)
-	retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, 0)
-	if retErr != nil {
-		return retErr
+	exInfo := exchange.Info()
+	if exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType) {
+		retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, 0)
+		if retErr != nil {
+			return retErr
+		}
 	}
 	if handler == nil {
 		return nil
@@ -409,20 +419,36 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		return err
 	}
 	defer conn.Release()
+	leftArr := make([]int32, 0, len(exsMap))
 	if itemNum < int64(core.KBatchSize) {
-		sidArr := utils.KeysOfMap(exsMap)
-		bulkHandler := func(sid int32, klines []*banexg.Kline) {
-			exs, ok := exsMap[sid]
-			if !ok {
-				return
+		sidArr := make([]int32, 0, len(exsMap))
+		for sid, exs := range exsMap {
+			if exs.Combined {
+				leftArr = append(leftArr, sid)
+			} else {
+				sidArr = append(sidArr, sid)
 			}
-			handler(exs.Symbol, timeFrame, klines)
 		}
-		return sess.QueryOHLCVBatch(sidArr, timeFrame, startMS, endMS, limit, bulkHandler)
+		if len(sidArr) > 0 {
+			bulkHandler := func(sid int32, klines []*banexg.Kline) {
+				exs, ok := exsMap[sid]
+				if !ok {
+					return
+				}
+				handler(exs.Symbol, timeFrame, klines)
+			}
+			err = sess.QueryOHLCVBatch(sidArr, timeFrame, startMS, endMS, limit, bulkHandler)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		leftArr = utils.KeysOfMap(exsMap)
 	}
 	// 单个数量过多，逐个查询
-	for sid, exs := range exsMap {
-		kline, err := sess.QueryOHLCV(sid, timeFrame, startMS, endMS, limit, false)
+	for _, sid := range leftArr {
+		exs := exsMap[sid]
+		kline, err := sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, false)
 		if err != nil {
 			return err
 		}
@@ -611,18 +637,4 @@ func (q *Queries) GetExSHoles(exchange banexg.BanExchange, exs *ExSymbol, start,
 		res = append(res, [2]int64{validStop, stop})
 	}
 	return res, nil
-}
-
-func LoadMarkets(exchange banexg.BanExchange, reload bool) (banexg.MarketMap, *errs.Error) {
-	exInfo := exchange.Info()
-	args := make(map[string]interface{})
-	if exInfo.ID == "china" && exInfo.MarketType != banexg.MarketSpot {
-		items := GetExSymbols(exInfo.ID, exInfo.MarketType)
-		symbols := make([]string, 0, len(items))
-		for _, it := range items {
-			symbols = append(symbols, it.Symbol)
-		}
-		args[banexg.ParamSymbols] = symbols
-	}
-	return exchange.LoadMarkets(reload, args)
 }

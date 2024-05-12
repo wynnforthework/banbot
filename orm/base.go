@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/jackc/pgx/v5"
@@ -240,4 +241,27 @@ func SaveDirtyODs(account string) *errs.Error {
 		}
 	}
 	return odErr
+}
+
+func LoadMarkets(exchange banexg.BanExchange, reload bool) (banexg.MarketMap, *errs.Error) {
+	exInfo := exchange.Info()
+	args := make(map[string]interface{})
+	if exInfo.ID == "china" && exInfo.MarketType != banexg.MarketSpot {
+		items := GetExSymbols(exInfo.ID, exInfo.MarketType)
+		symbols := make([]string, 0, len(items))
+		for _, it := range items {
+			symbols = append(symbols, it.Symbol)
+		}
+		args[banexg.ParamSymbols] = symbols
+	}
+	return exchange.LoadMarkets(reload, args)
+}
+
+func InitExg(exchange banexg.BanExchange) *errs.Error {
+	// 内部会调用LoadMarkets
+	err := EnsureExgSymbols(exchange)
+	if err != nil {
+		return err
+	}
+	return exchange.LoadLeverageBrackets(false, nil)
 }

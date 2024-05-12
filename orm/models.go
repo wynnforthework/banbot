@@ -57,6 +57,7 @@ type ExSymbol struct {
 	ExgReal  string
 	Market   string
 	Symbol   string
+	Combined bool
 	ListMs   int64
 	DelistMs int64
 }

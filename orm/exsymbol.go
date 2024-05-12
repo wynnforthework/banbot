@@ -76,13 +76,27 @@ func EnsureExgSymbols(exchange banexg.BanExchange) *errs.Error {
 	if err != nil {
 		return err
 	}
-	exgId := exchange.Info().ID
+	exInfo := exchange.Info()
+	exgId := exInfo.ID
 	marMap := exchange.GetCurMarkets()
 	exsList := make([]*ExSymbol, 0, len(marMap))
 	for symbol, market := range marMap {
-		exsList = append(exsList, &ExSymbol{Exchange: exgId, Market: market.Type, Symbol: symbol})
+		exsList = append(exsList, &ExSymbol{
+			Exchange: exgId,
+			Market:   market.Type,
+			Symbol:   symbol,
+			Combined: market.Combined,
+		})
 	}
-	return EnsureSymbols(exsList)
+	err = EnsureSymbols(exsList, exgId)
+	if err != nil {
+		return err
+	}
+	if len(exInfo.Markets) == 0 {
+		// 中国期货需要在EnsureSymbols后再次调用LoadMarkets传入symbols才能加载成功
+		_, err = LoadMarkets(exchange, false)
+	}
+	return err
 }
 
 func EnsureCurSymbols(symbols []string) *errs.Error {
@@ -94,19 +108,28 @@ func EnsureCurSymbols(symbols []string) *errs.Error {
 		return err
 	}
 	for _, symbol := range symbols {
-		if _, ok := marMap[symbol]; !ok {
+		mar, ok := marMap[symbol]
+		if !ok {
 			return errs.NewMsg(core.ErrInvalidSymbol, symbol)
 		}
-		exsList = append(exsList, &ExSymbol{Exchange: exgId, Market: marketType, Symbol: symbol})
+		exsList = append(exsList, &ExSymbol{
+			Exchange: exgId,
+			Market:   marketType,
+			Symbol:   symbol,
+			Combined: mar.Combined,
+		})
 	}
-	return EnsureSymbols(exsList)
+	return EnsureSymbols(exsList, exgId)
 }
 
-func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
+func EnsureSymbols(symbols []*ExSymbol, exchanges ...string) *errs.Error {
 	var err *errs.Error
 	var exgNames = make(map[string]bool)
 	for _, exs := range symbols {
 		exgNames[exs.Exchange] = true
+	}
+	for _, name := range exchanges {
+		exgNames[name] = true
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
@@ -132,6 +155,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 			exs.ID = item.ID
 			exs.ListMs = item.ListMs
 			exs.DelistMs = item.DelistMs
+			exs.Combined = item.Combined
 		}
 	}
 	if len(adds) == 0 {
@@ -172,6 +196,7 @@ func EnsureSymbols(symbols []*ExSymbol) *errs.Error {
 			exs.ID = item.ID
 			exs.ListMs = item.ListMs
 			exs.DelistMs = item.DelistMs
+			exs.Combined = item.Combined
 		}
 	}
 	return nil

@@ -52,7 +52,7 @@ func NewBackTest() *BackTest {
 func (b *BackTest) Init() *errs.Error {
 	btime.CurTimeMS = config.TimeRange.StartMS
 	b.MinReal = math.MaxFloat64
-	err := orm.EnsureExgSymbols(exg.Default)
+	err := orm.InitExg(exg.Default)
 	if err != nil {
 		return err
 	}
@@ -69,11 +69,6 @@ func (b *BackTest) Init() *errs.Error {
 		return err
 	}
 	// 交易对初始化
-	log.Info("loading exchange markets ...")
-	err = exg.Default.LoadLeverageBrackets(false, nil)
-	if err != nil {
-		return err
-	}
 	return biz.LoadRefreshPairs()
 }
 

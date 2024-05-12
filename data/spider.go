@@ -280,7 +280,7 @@ func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 			Symbol:   p,
 		})
 	}
-	err := orm.EnsureSymbols(ensures)
+	err := orm.EnsureSymbols(ensures, m.ExgName)
 	if err != nil {
 		return err
 	}

@@ -423,7 +423,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 			return
 		}
 		batchSize := 3000
-		bars, err := sess.QueryOHLCV(f.exs.ID, state.TimeFrame, f.offsetMS, f.TimeRange.EndMS, batchSize, false)
+		bars, err := sess.GetOHLCV(f.exs, state.TimeFrame, f.offsetMS, f.TimeRange.EndMS, batchSize, false)
 		if err != nil || len(bars) == 0 {
 			f.rowIdx = -1
 			f.nextMS = math.MaxInt64

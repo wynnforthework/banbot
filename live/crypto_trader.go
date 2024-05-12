@@ -36,7 +36,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 	}
 	// 交易对初始化
 	log.Info("loading exchange markets ...")
-	err = orm.EnsureExgSymbols(exg.Default)
+	err = orm.InitExg(exg.Default)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 		"amount":        subOd.Amount,
 		"price":         subOd.Price,
 		"value":         subOd.Amount * subOd.Price,
-		"cost":          subOd.Amount * subOd.Price / float64(od.Leverage),
+		"cost":          subOd.Amount * subOd.Price / od.Leverage,
 		"strategy":      od.Strategy,
 		"pair":          od.Symbol,
 		"timeframe":     od.Timeframe,

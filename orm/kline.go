@@ -99,7 +99,7 @@ order by time limit %v`, sid, startMs, finishEndMS, limit)
 		fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
 		var lastFinish bool
 		klines, lastFinish = utils.BuildOHLCV(klines, tfMSecs, 0, nil, fromTfMSecs)
-		if !lastFinish {
+		if !lastFinish && len(klines) > 0 {
 			klines = klines[:len(klines)-1]
 		}
 	}
@@ -1283,6 +1283,7 @@ func calcChinaAdjFactors() *errs.Error {
 		return err
 	}
 	// 对于股票计算复权因子?
+	log.Info("calc china adj_factors complete")
 	return nil
 }
 
@@ -1307,6 +1308,7 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 			Market:   lastExs.Market,
 			ExgReal:  lastExs.ExgReal,
 			Symbol:   lastCode + "888", // 期货888结尾表示主力连续合约
+			Combined: true,
 		}
 		err = EnsureSymbols([]*ExSymbol{exs})
 		if err != nil {
@@ -1357,8 +1359,10 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 		return nil
 	}
 	// 对所有期货标的，按顺序获取日K，并按时间记录
-	// startMS := int64(core.MSMinStamp)
+	var pBar = utils.NewPrgBar(len(exsList), "future")
+	defer pBar.Close()
 	for _, exs := range exsList {
+		pBar.Add(1)
 		parts := utils2.SplitParts(exs.Symbol)
 		if len(parts) > 1 && parts[1].Type == utils2.StrInt {
 			p1Str := parts[1].Val

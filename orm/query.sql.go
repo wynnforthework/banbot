@@ -521,7 +521,7 @@ func (q *Queries) ListKInfos(ctx context.Context) ([]*KInfo, error) {
 }
 
 const listSymbols = `-- name: ListSymbols :many
-select id, exchange, exg_real, market, symbol, list_ms, delist_ms from exsymbol
+select id, exchange, exg_real, market, symbol, combined, list_ms, delist_ms from exsymbol
 where exchange = $1
 order by id
 `
@@ -541,6 +541,7 @@ func (q *Queries) ListSymbols(ctx context.Context, exchange string) ([]*ExSymbol
 			&i.ExgReal,
 			&i.Market,
 			&i.Symbol,
+			&i.Combined,
 			&i.ListMs,
 			&i.DelistMs,
 		); err != nil {

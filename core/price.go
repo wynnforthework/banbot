@@ -7,7 +7,7 @@ import (
 )
 
 func GetPriceSafe(symbol string) float64 {
-	if strings.Contains(symbol, "USD") && !strings.Contains(symbol, "/") {
+	if IsFiat(symbol) && !strings.Contains(symbol, "/") {
 		return 1
 	}
 	lockPrices.RLock()
@@ -36,7 +36,7 @@ func GetPrice(symbol string) float64 {
 func setDataPrice(data map[string]float64, pair string, price float64) {
 	data[pair] = price
 	base, quote, settle, _ := SplitSymbol(pair)
-	if strings.Contains(quote, "USD") && (settle == "" || settle == quote) {
+	if IsFiat(quote) && (settle == "" || settle == quote) {
 		data[base] = price
 	}
 }
@@ -67,7 +67,7 @@ func SetPrices(data map[string]float64) {
 	for pair, price := range data {
 		prices[pair] = price
 		base, quote, settle, _ := SplitSymbol(pair)
-		if strings.Contains(quote, "USD") && (settle == "" || settle == quote) {
+		if IsFiat(quote) && (settle == "" || settle == quote) {
 			prices[base] = price
 		}
 	}

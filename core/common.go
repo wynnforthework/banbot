@@ -193,3 +193,10 @@ func LoadPerfs(inDir string) {
 	}
 	log.Info("load strtg_perfs ok", zap.String("path", inPath))
 }
+
+/*
+IsFiat 是否是法币
+*/
+func IsFiat(code string) bool {
+	return strings.Contains(code, "USD") || strings.Contains(code, "CNY")
+}

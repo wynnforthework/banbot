@@ -180,7 +180,7 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 	}
 	entQuoteVal := entPrice * i.Enter.Filled
 	if i.Leverage > 0 {
-		entQuoteVal /= float64(i.Leverage)
+		entQuoteVal /= i.Leverage
 	}
 	i.ProfitRate = i.Profit / entQuoteVal
 	if i.ProfitRate < 0 {
