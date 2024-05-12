@@ -323,7 +323,12 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 	var result []*banexg.Kline
 	// 从后往前查询K线，并进行前复权
 	curEnd := endMS
+	factor := float64(1)
 	for _, f := range facs {
+		if f.StartMs >= endMS {
+			factor = f.Factor
+			continue
+		}
 		curSid := f.SubID
 		if curSid == 0 {
 			curSid = sid
@@ -333,12 +338,13 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 		if err != nil {
 			return nil, err
 		}
-		factor := f.Factor
-		for _, k := range klines {
-			k.Open *= factor
-			k.High *= factor
-			k.Low *= factor
-			k.Close *= factor
+		if factor != 1 {
+			for _, k := range klines {
+				k.Open *= factor
+				k.High *= factor
+				k.Low *= factor
+				k.Close *= factor
+			}
 		}
 		result = append(klines, result...)
 		curEnd = f.StartMs
@@ -349,6 +355,7 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 			}
 			break
 		}
+		factor = f.Factor
 	}
 	return result, nil
 }

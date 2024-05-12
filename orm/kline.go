@@ -1349,8 +1349,8 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 					Factor:  factor,
 				})
 				lastSid = curSid
-				lastClose = maxK.Close
 			}
+			lastClose = maxK.Close
 		}
 		_, err_ = sess.AddAdjFactors(ctx, adds)
 		if err_ != nil {

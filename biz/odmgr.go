@@ -4,6 +4,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
 	utils2 "github.com/banbox/banbot/utils"
@@ -177,7 +178,13 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 		}
 	}
 	if req.Leverage == 0 && !isSpot {
-		req.Leverage = config.GetAccLeverage(o.Account)
+		exchange := exg.Default
+		exInfo := exchange.Info()
+		if exInfo.FixedLvg {
+			req.Leverage, _ = exchange.GetLeverage(env.Symbol, 0, o.Account)
+		} else {
+			req.Leverage = config.GetAccLeverage(o.Account)
+		}
 	}
 	stgVer, _ := strategy.Versions[req.StgyName]
 	odSide := banexg.OdSideBuy

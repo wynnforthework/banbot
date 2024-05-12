@@ -66,6 +66,11 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 		if err != nil {
 			return errs.NewFull(errs.CodeUnmarshalFail, err, "Unmarshal %s Fail", path)
 		}
+		for key := range noExtends {
+			if _, ok := unpak[key]; ok {
+				delete(merged, key)
+			}
+		}
 		utils2.DeepCopyMap(merged, unpak)
 	}
 	err := mapstructure.Decode(merged, &Data)

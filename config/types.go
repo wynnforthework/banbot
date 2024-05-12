@@ -55,6 +55,15 @@ var (
 	ReClientID *regexp.Regexp // 正则匹配ClientID，检查是否是机器人下单
 )
 
+var (
+	noExtends = map[string]bool{
+		"run_policy":     true,
+		"wallet_amounts": true,
+		"fatal_stop":     true,
+		"watch_jobs":     true,
+	}
+)
+
 // Config 是根配置结构体
 type Config struct {
 	Name            string                            `yaml:"name" mapstructure:"name"`
