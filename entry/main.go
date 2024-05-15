@@ -77,6 +77,9 @@ func runMainEntrys(cmdName string) {
 	case "load_cal":
 		options = []string{"in"}
 		entry = biz.LoadCalendars
+	case "export_kline":
+		options = []string{"out", "pairs", "timeframes", "adj", "tz"}
+		entry = biz.ExportKlines
 	default:
 		printAndExit()
 	}
@@ -140,6 +143,10 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.InPath, "in", "", "input file or directory")
 		case "out":
 			cmd.StringVar(&args.OutPath, "out", "", "output file or directory")
+		case "adj":
+			cmd.StringVar(&args.AdjType, "adj", "", "qfq/hfq for kline")
+		case "tz":
+			cmd.StringVar(&args.TimeZone, "tz", "", "timeZone, default: utc")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

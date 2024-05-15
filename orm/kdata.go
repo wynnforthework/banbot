@@ -264,25 +264,25 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 		// DownOHLCV2DB 内部已处理stepCB，这里无需处理
 		return nil, err
 	}
-	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
+	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish, 0)
 }
 
 /*
 GetOHLCV 获取品种K线，如需复权自动前复权
 */
-func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
+func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool, adj int) ([]*banexg.Kline, *errs.Error) {
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Release()
-	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
+	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish, adj)
 }
 
 /*
 GetOHLCV 获取品种K线，如需复权自动前复权
 */
-func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
+func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool, adj int) ([]*banexg.Kline, *errs.Error) {
 	if exs.Exchange == "china" && exs.Market != banexg.MarketSpot {
 		// 国内非股票，可能是：期货、期权、基金、、、
 		parts := utils2.SplitParts(exs.Symbol)
@@ -290,7 +290,7 @@ func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64
 			p2val := parts[1].Val
 			if p2val == "888" {
 				// 期货888是主力连续合约，000是指数合约
-				return q.GetFacOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+				return q.GetFacOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish, adj)
 			}
 		}
 	}
@@ -300,7 +300,12 @@ func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64
 /*
 GetFacOHLCV 获取前复权的K线
 */
-func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
+func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool, adj int) ([]*banexg.Kline, *errs.Error) {
+	if adj == core.AdjBehind {
+		return nil, errs.NewMsg(errs.CodeParamInvalid, "AdjBehind is not support yet")
+	} else if adj == 0 {
+		adj = core.AdjFront
+	}
 	ctx := context.Background()
 	facs, err_ := q.GetAdjFactors(ctx, sid)
 	if err_ != nil {
@@ -353,7 +358,7 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 		if err != nil {
 			return nil, err
 		}
-		if f.CurFactor != 1 {
+		if f.CurFactor != 1 && adj != core.AdjNone {
 			factor := f.CurFactor
 			for _, k := range klines {
 				k.Open *= factor
@@ -476,7 +481,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	// 单个数量过多，逐个查询
 	for _, sid := range leftArr {
 		exs := exsMap[sid]
-		kline, err := sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, false)
+		kline, err := sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, false, 0)
 		if err != nil {
 			return err
 		}

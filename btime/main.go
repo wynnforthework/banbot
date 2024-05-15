@@ -136,6 +136,14 @@ ToDateStr
 format为空时，默认2006-01-02 15:04:05
 */
 func ToDateStr(timestamp int64, format string) string {
+	t := ToTime(timestamp)
+	if format == "" {
+		format = core.DefaultDateFmt
+	}
+	return t.Format(format)
+}
+
+func ToTime(timestamp int64) time.Time {
 	var t time.Time
 	if timestamp > 1000000000000 {
 		// 13位毫秒时间戳
@@ -146,11 +154,7 @@ func ToDateStr(timestamp int64, format string) string {
 		// 10位秒级时间戳
 		t = time.Unix(timestamp, 0)
 	}
-
-	if format == "" {
-		format = core.DefaultDateFmt
-	}
-	return t.Format(format)
+	return t
 }
 
 func CountDigit(text string) int {

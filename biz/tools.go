@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error {
@@ -285,5 +286,101 @@ func LoadCalendars(args *config.CmdArgs) *errs.Error {
 		}
 	}
 	log.Info("load calendars success", zap.Int("num", len(rows)))
+	return nil
+}
+
+var adjMap = map[string]int{
+	"qfq": core.AdjFront,
+	"hfq": core.AdjBehind,
+	"":    core.AdjNone,
+}
+
+func ExportKlines(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := SetupComs(args)
+	if err != nil {
+		return err
+	}
+	if args.OutPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
+	}
+	if len(args.Pairs) == 0 {
+		return errs.NewMsg(errs.CodeParamRequired, "--pairs is required")
+	}
+	if len(args.TimeFrames) == 0 {
+		return errs.NewMsg(errs.CodeParamRequired, "--timeframes is required")
+	}
+	adjVal, adjValid := adjMap[args.AdjType]
+	if !adjValid {
+		return errs.NewMsg(errs.CodeParamRequired, "--adj should be qfq/hfq/(empty)")
+	}
+	ctx := context.Background()
+	sess, conn, err := orm.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	err_ := utils.EnsureDir(args.OutPath, 0755)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	tf := args.TimeFrames[0]
+	start, stop := config.TimeRange.StartMS, config.TimeRange.EndMS
+	var loc *time.Location
+	if args.TimeZone != "" {
+		loc, err_ = time.LoadLocation(args.TimeZone)
+		if err_ != nil {
+			return errs.NewMsg(errs.CodeRunTime, "unsupport timezone: %s, %v", args.TimeZone, err_)
+		}
+	} else {
+		loc = banexg.LocUTC
+	}
+	err = orm.InitExg(exg.Default)
+	if err != nil {
+		return err
+	}
+	for _, symbol := range args.Pairs {
+		log.Info("export", zap.String("symbol", symbol))
+		exs, err := orm.GetExSymbolCur(symbol)
+		if err != nil {
+			return err
+		}
+		klines, err := sess.GetOHLCV(exs, tf, start, stop, 0, false, adjVal)
+		if err != nil {
+			return err
+		}
+		err = writeKlineCsv(klines, args.OutPath, symbol, loc)
+		if err != nil {
+			return err
+		}
+	}
+	log.Info("export kline complete")
+	return nil
+}
+
+func writeKlineCsv(klines []*banexg.Kline, dirPath, symbol string, loc *time.Location) *errs.Error {
+	// 将klines写入csv文件，文件名是symbol
+	file, err_ := os.Create(filepath.Join(dirPath, symbol+".csv"))
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	defer file.Close()
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+	for _, k := range klines {
+		dateStr := btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
+		row := []string{
+			dateStr,
+			strconv.FormatFloat(k.Open, 'f', -1, 64),
+			strconv.FormatFloat(k.High, 'f', -1, 64),
+			strconv.FormatFloat(k.Low, 'f', -1, 64),
+			strconv.FormatFloat(k.Close, 'f', -1, 64),
+			strconv.FormatFloat(k.Volume, 'f', -1, 64),
+		}
+		err_ = writer.Write(row)
+		if err_ != nil {
+			return errs.New(errs.CodeIOWriteFail, err_)
+		}
+	}
 	return nil
 }

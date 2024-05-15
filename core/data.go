@@ -130,3 +130,9 @@ const (
 	OrderTypeStop
 	OrderTypeLimitMaker
 )
+
+const (
+	AdjNone   = 1
+	AdjFront  = 2
+	AdjBehind = 3
+)
