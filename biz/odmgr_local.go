@@ -197,8 +197,13 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 		}
 		entAmount := od.QuoteCost / entPrice
 		exOrder.Amount, err = exchange.PrecAmount(market, entAmount)
-		if err != nil {
-			log.Warn("prec enter amount fail", zap.Float64("amt", entAmount), zap.Error(err))
+		if err != nil || exOrder.Amount == 0 {
+			if err != nil {
+				log.Warn("prec enter amount fail", zap.String("symbol", od.Symbol),
+					zap.Float64("amt", entAmount), zap.Error(err))
+			} else {
+				log.Warn("prec enter amount zero", zap.String("symbol", od.Symbol))
+			}
 			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)
 			wallets.Cancel(od.Key(), quote, 0, true)

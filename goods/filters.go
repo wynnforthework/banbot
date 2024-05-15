@@ -3,6 +3,7 @@ package goods
 import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
@@ -14,6 +15,7 @@ import (
 	"math"
 	"math/rand"
 	"slices"
+	"strings"
 )
 
 func (f *BaseFilter) IsNeedTickers() bool {
@@ -42,31 +44,10 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	var symbolVols = make([]SymbolVol, 0)
 	if !f.NeedTickers {
-		startMS := int64(0)
-		if !core.LiveMode {
-			startMS = btime.TimeMS()
-		}
-		limit := f.BackPeriod
-		callBack := func(symbol string, _ string, klines []*banexg.Kline) {
-			if len(klines) == 0 {
-				symbolVols = append(symbolVols, SymbolVol{symbol, 0})
-			} else {
-				total := float64(0)
-				slices.Reverse(klines)
-				for _, k := range klines[:f.BackPeriod] {
-					total += k.Close * k.Volume
-				}
-				symbolVols = append(symbolVols, SymbolVol{symbol, total})
-			}
-		}
-		exchange := exg.Default
-		err := orm.FastBulkOHLCV(exchange, symbols, f.BackTimeframe, startMS, 0, limit, callBack)
+		var err *errs.Error
+		symbolVols, err = getSymbolVols(symbols, f.BackTimeframe, f.BackPeriod)
 		if err != nil {
 			return nil, err
-		}
-		if len(symbolVols) == 0 {
-			msg := fmt.Sprintf("No data found for %d pairs at %v", len(symbols), startMS)
-			return nil, errs.NewMsg(core.ErrRunTime, msg)
 		}
 	} else {
 		for _, symbol := range symbols {
@@ -74,7 +55,7 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 			if !ok {
 				continue
 			}
-			symbolVols = append(symbolVols, SymbolVol{symbol, tik.QuoteVolume})
+			symbolVols = append(symbolVols, SymbolVol{symbol, tik.QuoteVolume, tik.Close})
 		}
 	}
 	slices.SortFunc(symbolVols, func(a, b SymbolVol) int {
@@ -89,12 +70,9 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 			break
 		}
 	}
-	if f.Limit > 0 && f.Limit < len(symbolVols) {
-		symbolVols = symbolVols[:f.Limit]
-	}
-	resPairs := make([]string, len(symbolVols))
-	for i, v := range symbolVols {
-		resPairs[i] = v.Symbol
+	resPairs, _ := filterByMinCost(symbolVols)
+	if f.Limit > 0 && f.Limit < len(resPairs) {
+		resPairs = resPairs[:f.Limit]
 	}
 	return resPairs, nil
 }
@@ -102,6 +80,78 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 type SymbolVol struct {
 	Symbol string
 	Vol    float64
+	Price  float64
+}
+
+func getSymbolVols(symbols []string, tf string, num int) ([]SymbolVol, *errs.Error) {
+	var symbolVols = make([]SymbolVol, 0)
+	startMS := int64(0)
+	if !core.LiveMode {
+		startMS = btime.TimeMS()
+	}
+	callBack := func(symbol string, _ string, klines []*banexg.Kline) {
+		if len(klines) == 0 {
+			symbolVols = append(symbolVols, SymbolVol{symbol, 0, 0})
+		} else {
+			total := float64(0)
+			slices.Reverse(klines)
+			for _, k := range klines[:num] {
+				total += k.Close * k.Volume
+			}
+			price := klines[len(klines)-1].Close
+			symbolVols = append(symbolVols, SymbolVol{symbol, total, price})
+		}
+	}
+	exchange := exg.Default
+	err := orm.FastBulkOHLCV(exchange, symbols, tf, startMS, 0, num, callBack)
+	if err != nil {
+		return nil, err
+	}
+	if len(symbolVols) == 0 {
+		msg := fmt.Sprintf("No data found for %d pairs at %v", len(symbols), startMS)
+		return nil, errs.NewMsg(core.ErrRunTime, msg)
+	}
+	return symbolVols, nil
+}
+
+func filterByMinCost(symbols []SymbolVol) ([]string, map[string]float64) {
+	res := make([]string, 0, len(symbols))
+	skip := make(map[string]float64)
+	exchange := exg.Default
+	accCost := float64(0)
+	for name := range config.Accounts {
+		curCost := config.GetStakeAmount(name)
+		if curCost > accCost {
+			accCost = curCost
+		}
+	}
+	for _, item := range symbols {
+		mar, err := exchange.GetMarket(item.Symbol)
+		if err != nil {
+			log.Warn("no market found", zap.String("symbol", item.Symbol))
+			skip[item.Symbol] = 0
+			continue
+		}
+		if mar.Limits == nil || mar.Limits.Amount == nil {
+			skip[item.Symbol] = 0
+			continue
+		}
+		minAmt := mar.Limits.Amount.Min
+		minCost := minAmt * item.Price
+		if accCost < minCost {
+			skip[item.Symbol] = minCost
+		} else {
+			res = append(res, item.Symbol)
+		}
+	}
+	if len(skip) > 0 {
+		var b strings.Builder
+		for key, amt := range skip {
+			b.WriteString(fmt.Sprintf("%s: %v  ", key, amt))
+		}
+		log.Warn("skip symbols as cost too big", zap.Int("num", len(skip)), zap.String("more", b.String()))
+	}
+	return res, skip
 }
 
 func (f *VolumePairFilter) GenSymbols(tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
@@ -167,7 +217,7 @@ func (f *PriceFilter) validatePrice(symbol string, price float64) bool {
 		}
 		minPrec := market.Precision.Amount
 		if minPrec > 0 {
-			if exchange.PrecMode() != banexg.PrecModeTickSize {
+			if market.Precision.ModeAmount != banexg.PrecModeTickSize {
 				minPrec = math.Pow(0.1, minPrec)
 			}
 			unitVal := minPrec * price

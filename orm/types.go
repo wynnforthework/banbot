@@ -28,3 +28,9 @@ type KlineAgg struct {
 	CpsBefore string
 	Retention string
 }
+
+type AdjFactorExt struct {
+	*AdjFactor
+	CurFactor float64 // 对应此区间的复权因子
+	StopMs    int64   // 13位区间结束时间戳
+}

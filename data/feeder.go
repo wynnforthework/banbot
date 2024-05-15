@@ -5,6 +5,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banbot/utils"
@@ -274,7 +275,8 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 	} else if barTfMSecs == staMSecs {
 		ohlcvs, lastOk = bars, true
 	} else {
-		msg := fmt.Sprintf("bar intv invalid, expect %v, cur: %v s", state.TimeFrame, barTfMSecs/1000)
+		barTf := utils.SecsToTF(int(barTfMSecs / 1000))
+		msg := fmt.Sprintf("bar intv invalid, expect %v, cur: %v", state.TimeFrame, barTf)
 		return false, errs.NewMsg(core.ErrInvalidBars, msg)
 	}
 	if len(ohlcvs) == 0 {
@@ -320,11 +322,13 @@ HistKLineFeeder
 */
 type HistKLineFeeder struct {
 	KlineFeeder
-	TimeRange *config.TimeTuple
-	rowIdx    int             // 缓存中下一个Bar的索引，-1表示已结束
-	caches    []*banexg.Kline // 缓存的Bar，逐个fire，读取完重新加载
-	nextMS    int64           // 下一个bar的13位毫秒时间戳，math.MaxInt32表示结束
-	setNext   func()
+	TimeRange  *config.TimeTuple
+	rowIdx     int             // 缓存中下一个Bar的索引，-1表示已结束
+	caches     []*banexg.Kline // 缓存的Bar，逐个fire，读取完重新加载
+	nextMS     int64           // 下一个bar的13位毫秒时间戳，math.MaxInt32表示结束
+	minGapMs   int64           // caches中最小的间隔毫秒数
+	setNext    func()
+	TradeTimes [][2]int64 // 可交易时间
 }
 
 func (f *HistKLineFeeder) getNextMS() int64 {
@@ -340,13 +344,7 @@ func (f *HistKLineFeeder) invoke() *errs.Error {
 		return errs.NewMsg(core.ErrEOF, fmt.Sprintf("%s no more bars", f.Symbol))
 	}
 	bar := f.caches[f.rowIdx]
-	tfMSecs := f.caches[1].Time - f.caches[0].Time
-	if len(f.caches) > 2 {
-		idx := len(f.caches) - 1
-		msecs := f.caches[idx].Time - f.caches[idx-1].Time
-		tfMSecs = min(tfMSecs, msecs)
-	}
-	_, err := f.onNewBars(tfMSecs, []*banexg.Kline{bar})
+	_, err := f.onNewBars(f.minGapMs, []*banexg.Kline{bar})
 	f.setNext()
 	return err
 }
@@ -366,10 +364,19 @@ func NewDBKlineFeeder(symbol string, callBack FnPairKline) (*DBKlineFeeder, *err
 	if err != nil {
 		return nil, err
 	}
+	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+	if err != nil {
+		return nil, err
+	}
+	market, err := exchange.GetMarket(exs.Symbol)
+	if err != nil {
+		return nil, err
+	}
 	res := &DBKlineFeeder{
 		HistKLineFeeder: HistKLineFeeder{
 			KlineFeeder: *NewKlineFeeder(symbol, callBack),
 			TimeRange:   config.TimeRange,
+			TradeTimes:  market.GetTradeTimes(),
 		},
 		exs: exs,
 	}
@@ -378,6 +385,10 @@ func NewDBKlineFeeder(symbol string, callBack FnPairKline) (*DBKlineFeeder, *err
 }
 
 func (f *DBKlineFeeder) initNext(since int64) {
+	if since == 0 {
+		// 这里不能为0，不然会从后往前读取K线，导致缺失
+		since = core.MSMinStamp
+	}
 	f.offsetMS = since
 	f.setNext()
 }
@@ -436,5 +447,12 @@ func makeSetNext(f *DBKlineFeeder) func() {
 		f.rowIdx = 0
 		f.nextMS = bars[0].Time
 		f.offsetMS = bars[len(bars)-1].Time + tfMSecs
+		f.minGapMs = math.MaxInt64
+		for i, b := range bars[1:] {
+			gap := b.Time - bars[i].Time
+			if gap < f.minGapMs {
+				f.minGapMs = gap
+			}
+		}
 	}
 }

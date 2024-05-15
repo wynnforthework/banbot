@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -309,24 +308,35 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 	}
 	// facs已按时间倒序排序
 	// price(i) * factor(i-1) * factor(i-2) * ... factor(1) = latest price
+	facEts := make([]*AdjFactorExt, 0, len(facs))
 	lastFac := float64(1)
-	rid := len(facs) - 1
-	for i, f := range facs {
+	if endMS == 0 {
+		endMS = btime.UTCStamp()
+	}
+	curEnd := endMS
+	for _, f := range facs {
 		f.Factor *= lastFac
+		facEts = append(facEts, &AdjFactorExt{
+			AdjFactor: f,
+			CurFactor: lastFac,
+			StopMs:    curEnd,
+		})
 		lastFac = f.Factor
+		curEnd = f.StartMs
 		if f.StartMs < startMS {
-			rid = i
 			break
 		}
 	}
-	facs = facs[:rid+1]
+	revRead := startMS == 0 && limit > 0
+	if !revRead {
+		// 从前往后读，按时间从小到大
+		utils.ReverseArr(facEts)
+	}
 	var result []*banexg.Kline
-	// 从后往前查询K线，并进行前复权
-	curEnd := endMS
-	factor := float64(1)
-	for _, f := range facs {
-		if f.StartMs >= endMS {
-			factor = f.Factor
+	// 查询K线，并进行前复权
+	for _, f := range facEts {
+		if f.StartMs >= endMS || f.StopMs <= startMS {
+			// 此区间没有需要的数据，跳过
 			continue
 		}
 		curSid := f.SubID
@@ -334,11 +344,17 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 			curSid = sid
 		}
 		start := max(f.StartMs, startMS)
-		klines, err := q.QueryOHLCV(curSid, timeFrame, start, curEnd, limit, withUnFinish)
+		stop := min(f.StopMs, endMS)
+		if revRead {
+			// 逆序读取，从后往前，开始置为0
+			start = 0
+		}
+		klines, err := q.QueryOHLCV(curSid, timeFrame, start, stop, limit, withUnFinish)
 		if err != nil {
 			return nil, err
 		}
-		if factor != 1 {
+		if f.CurFactor != 1 {
+			factor := f.CurFactor
 			for _, k := range klines {
 				k.Open *= factor
 				k.High *= factor
@@ -346,16 +362,22 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 				k.Close *= factor
 			}
 		}
-		result = append(klines, result...)
-		curEnd = f.StartMs
+		if revRead {
+			result = append(klines, result...)
+		} else {
+			result = append(result, klines...)
+		}
 		withUnFinish = false
 		if limit > 0 && len(result) >= limit {
 			if len(result) > limit {
-				result = result[len(result)-limit:]
+				if revRead {
+					result = result[len(result)-limit:]
+				} else {
+					result = result[:limit]
+				}
 			}
 			break
 		}
-		factor = f.Factor
 	}
 	return result, nil
 }
@@ -409,7 +431,6 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 		return err
 	}
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
-	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, false)
 	exInfo := exchange.Info()
 	if exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType) {
 		retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, 0)
@@ -614,12 +635,7 @@ func (q *Queries) GetExSHoles(exchange banexg.BanExchange, exs *ExSymbol, start,
 			return [][2]int64{{start, stop}}, nil
 		}
 	}
-	times := make([][2]int64, 0, len(mar.DayTimes))
-	times = append(times, mar.DayTimes...)
-	times = append(times, mar.NightTimes...)
-	sort.Slice(times, func(i, j int) bool {
-		return times[i][0] < times[j][0]
-	})
+	times := mar.GetTradeTimes()
 	if len(times) == 0 {
 		if !exInfo.FullDay {
 			log.Warn("day_ranges/night_ranges invalid", zap.String("id", mar.ID))

@@ -18,27 +18,10 @@ import (
  */
 
 func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
-	var amount float64
-	acc, ok := config.Accounts[j.Account]
-	// 优先使用百分比开单
-	if ok && acc.StakePctAmt > 0 {
-		amount = acc.StakePctAmt
-	} else {
-		amount = config.StakeAmount
-	}
-	// 检查是否超出最大金额
-	if ok && acc.MaxStakeAmt > 0 && acc.MaxStakeAmt < amount {
-		amount = acc.MaxStakeAmt
-	} else if config.MaxStakeAmt > 0 && config.MaxStakeAmt < amount {
-		amount = config.MaxStakeAmt
-	}
+	amount := config.GetStakeAmount(j.Account)
 	// 乘以策略倍率
 	if s.StakeRate > 0 {
 		amount *= s.StakeRate
-	}
-	// 乘以账户倍率
-	if ok && acc.StakeRate > 0 {
-		amount *= acc.StakeRate
 	}
 	// 乘以此任务的开单倍率
 	key := core.KeyStagyPairTf(j.Stagy.Name, j.Symbol.Symbol, j.TimeFrame)
