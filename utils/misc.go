@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.uber.org/zap"
 	"regexp"
 	"strings"
 	"sync"
@@ -188,4 +190,44 @@ func ParallelRun[T any](items []T, concurNum int, handle func(T) *errs.Error) *e
 	}
 	wg.Wait()
 	return retErr
+}
+
+func ReadInput(tips []string) (string, error) {
+	for _, l := range tips {
+		fmt.Println(l)
+	}
+	var input string
+	_, err_ := fmt.Scanln(&input)
+	if err_ != nil {
+		return "", err_
+	}
+	return input, nil
+}
+
+func ReadConfirm(tips []string, ok, fail string, exitAny bool) bool {
+	input, err_ := ReadInput(tips)
+	if err_ != nil {
+		log.Warn("read confirm fail", zap.Error(err_))
+		return false
+	}
+	if input == ok {
+		return true
+	} else if input == fail {
+		return false
+	} else if exitAny {
+		return false
+	}
+	tip := fmt.Sprintf("unknown, input %s/%s", ok, fail)
+	for {
+		input, err_ = ReadInput([]string{tip})
+		if err_ != nil {
+			log.Warn("read confirm fail", zap.Error(err_))
+			return false
+		}
+		if input == ok {
+			return true
+		} else if input == fail {
+			return false
+		}
+	}
 }

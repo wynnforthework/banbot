@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/csv"
+	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -212,12 +213,13 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 			zap.Int64("num", num), zap.String("start", startDt), zap.String("end", endDt))
 		// 插入更大周期
 		aggList := orm.GetKlineAggs()
+		klines1m := klines
 		for _, agg := range aggList[1:] {
 			if agg.MSecs <= tfMSecs {
 				continue
 			}
 			offMS := int64(exg.GetAlignOff(exInfo.ID, int(agg.MSecs/1000)) * 1000)
-			klines, _ = utils.BuildOHLCVOff(klines, agg.MSecs, 0, nil, tfMSecs, offMS)
+			klines, _ = utils.BuildOHLCVOff(klines1m, agg.MSecs, 0, nil, tfMSecs, offMS)
 			if len(klines) == 0 {
 				continue
 			}
@@ -290,9 +292,10 @@ func LoadCalendars(args *config.CmdArgs) *errs.Error {
 }
 
 var adjMap = map[string]int{
-	"qfq": core.AdjFront,
-	"hfq": core.AdjBehind,
-	"":    core.AdjNone,
+	"qfq":  core.AdjFront,
+	"hfq":  core.AdjBehind,
+	"none": core.AdjNone,
+	"":     0,
 }
 
 func ExportKlines(args *config.CmdArgs) *errs.Error {
@@ -339,8 +342,12 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	startStr := btime.ToTime(start).In(loc).Format(core.DefaultDateFmt)
+	endStr := btime.ToTime(stop).In(loc).Format(core.DefaultDateFmt)
+	log.Info("export kline", zap.String("tf", tf), zap.String("dt", startStr+" - "+endStr),
+		zap.String("adj", args.AdjType))
 	for _, symbol := range args.Pairs {
-		log.Info("export", zap.String("symbol", symbol))
+		log.Info("handle", zap.String("symbol", symbol))
 		exs, err := orm.GetExSymbolCur(symbol)
 		if err != nil {
 			return err
@@ -382,5 +389,117 @@ func writeKlineCsv(klines []*banexg.Kline, dirPath, symbol string, loc *time.Loc
 			return errs.New(errs.CodeIOWriteFail, err_)
 		}
 	}
+	return nil
+}
+
+func PurgeKlines(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := SetupComs(args)
+	if err != nil {
+		return err
+	}
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	ctx := context.Background()
+	infos, err_ := sess.ListKInfos(ctx)
+	if err_ != nil {
+		return errs.New(core.ErrDbReadFail, err_)
+	}
+	infoMap := make(map[int32]*orm.KInfo)
+	for _, i := range infos {
+		infoMap[i.Sid] = i
+	}
+	exchange := exg.Default
+	err = orm.InitExg(exchange)
+	if err != nil {
+		return err
+	}
+	// 搜索需要删除的标的
+	exsList := make([]*orm.ExSymbol, 0)
+	if len(config.Pairs) > 0 {
+		for _, symbol := range config.Pairs {
+			exs, err := orm.GetExSymbol(exchange, symbol)
+			if err != nil {
+				return err
+			}
+			exsList = append(exsList, exs)
+		}
+	} else {
+		exInfo := exchange.Info()
+		exMap := orm.GetExSymbols(exInfo.ID, exInfo.MarketType)
+		for _, exs := range exMap {
+			exsList = append(exsList, exs)
+		}
+	}
+	if args.ExgReal != "" {
+		filtered := make([]*orm.ExSymbol, 0, len(exsList))
+		for _, exs := range exsList {
+			if exs.ExgReal == args.ExgReal {
+				filtered = append(filtered, exs)
+			}
+		}
+		exsList = filtered
+	}
+	if len(exsList) == 0 {
+		return errs.NewMsg(errs.CodeRunTime, "pairs is required")
+	}
+	// 输出信息要求确认
+	pairs := make([]string, 0, len(exsList))
+	for _, exs := range exsList {
+		pairs = append(pairs, exs.Symbol)
+	}
+	tfList := args.TimeFrames
+	isAllTf := false
+	if len(tfList) == 0 {
+		isAllTf = true
+		aggs := orm.GetKlineAggs()
+		for _, a := range aggs {
+			tfList = append(tfList, a.TimeFrame)
+		}
+	}
+	isOk := utils.ReadConfirm([]string{
+		fmt.Sprintf("exchange: %s, exg_real: %s", config.Exchange.Name, args.ExgReal),
+		fmt.Sprintf("date range: all"),
+		fmt.Sprintf("timeFrames: %s", strings.Join(tfList, ", ")),
+		fmt.Sprintf("symbols(%v): %s", len(exsList), strings.Join(pairs, ", ")),
+		"input `y` to delete, `n` to cancel:",
+	}, "y", "n", true)
+	if !isOk {
+		return nil
+	}
+	// 删除符合要求的数据
+	pBar := utils.NewPrgBar(len(exsList), "purge")
+	defer pBar.Close()
+	for _, exs := range exsList {
+		pBar.Add(1)
+		for _, tf := range tfList {
+			err = sess.DelKLines(exs.ID, tf)
+			if err != nil {
+				return err
+			}
+			err = sess.DelKInfo(exs.ID, tf)
+			if err != nil {
+				return err
+			}
+			err = sess.DelKHoles(exs.ID, tf)
+			if err != nil {
+				return err
+			}
+			err = sess.DelKLineUn(exs.ID, tf)
+			if err != nil {
+				return err
+			}
+		}
+		if isAllTf {
+			err = sess.DelFactors(exs.ID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	log.Info("all purge complete")
 	return nil
 }

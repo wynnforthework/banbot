@@ -298,12 +298,10 @@ func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64
 }
 
 /*
-GetFacOHLCV 获取前复权的K线
+GetFacOHLCV 获取复权的K线
 */
 func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool, adj int) ([]*banexg.Kline, *errs.Error) {
-	if adj == core.AdjBehind {
-		return nil, errs.NewMsg(errs.CodeParamInvalid, "AdjBehind is not support yet")
-	} else if adj == 0 {
+	if adj == 0 {
 		adj = core.AdjFront
 	}
 	ctx := context.Background()
@@ -358,8 +356,13 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 		if err != nil {
 			return nil, err
 		}
-		if f.CurFactor != 1 && adj != core.AdjNone {
-			factor := f.CurFactor
+		factor := float64(1)
+		if adj == core.AdjFront {
+			factor = f.CurFactor
+		} else if adj == core.AdjBehind {
+			factor = 1 / f.Factor
+		}
+		if factor != 1 {
 			for _, k := range klines {
 				k.Open *= factor
 				k.High *= factor

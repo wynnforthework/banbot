@@ -254,11 +254,7 @@ func getSubTf(timeFrame string) (string, string) {
 
 func (q *Queries) PurgeKlineUn() *errs.Error {
 	sql := "delete from kline_un"
-	_, err_ := q.db.Exec(context.Background(), sql)
-	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
-	}
-	return nil
+	return q.Exec(sql)
 }
 
 /*
@@ -392,13 +388,9 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
-	_, err_ = sess.db.Exec(ctx, `insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, timeframe) 
+	return sess.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, timeframe) 
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
 		sub.Close, sub.Volume, sub.Timeframe)
-	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
-	}
-	return nil
 }
 
 // iterForAddKLines implements pgx.CopyFromSource.
@@ -726,7 +718,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 		}
 	}
 	// 将合并后的kholes更新或插入到数据库
-	err = q.DelKHoles(delIDs...)
+	err = q.DelKHoleIDs(delIDs...)
 	if err != nil {
 		return err
 	}
@@ -886,11 +878,12 @@ func GetDownTF(timeFrame string) (string, *errs.Error) {
 
 func (q *Queries) DelKInfo(sid int32, timeFrame string) *errs.Error {
 	sql := fmt.Sprintf("delete from kinfo where sid=%v and timeframe=$1", sid)
-	_, err_ := q.db.Exec(context.Background(), sql, timeFrame)
-	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
-	}
-	return nil
+	return q.Exec(sql, timeFrame)
+}
+
+func (q *Queries) DelKLines(sid int32, timeFrame string) *errs.Error {
+	sql := fmt.Sprintf("delete from kline_%s where sid=%v", timeFrame, sid)
+	return q.Exec(sql)
 }
 
 func (q *Queries) GetKlineRange(sid int32, timeFrame string) (int64, int64) {
@@ -926,7 +919,22 @@ func (q *Queries) GetKlineRanges(sidList []int32, timeFrame string) map[int32][2
 	return res
 }
 
-func (q *Queries) DelKHoles(ids ...int64) *errs.Error {
+func (q *Queries) DelFactors(sid int32) *errs.Error {
+	sql := fmt.Sprintf("delete from adj_factors where sid=%v or sub_id=%v", sid, sid)
+	return q.Exec(sql)
+}
+
+func (q *Queries) DelKLineUn(sid int32, timeFrame string) *errs.Error {
+	sql := fmt.Sprintf("delete from kline_un where sid=%v and timeframe=$1", sid)
+	return q.Exec(sql, timeFrame)
+}
+
+func (q *Queries) DelKHoles(sid int32, timeFrame string) *errs.Error {
+	sql := fmt.Sprintf("delete from khole where sid=%v and timeframe=$1", sid)
+	return q.Exec(sql, timeFrame)
+}
+
+func (q *Queries) DelKHoleIDs(ids ...int64) *errs.Error {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -938,11 +946,7 @@ func (q *Queries) DelKHoles(ids ...int64) *errs.Error {
 	}
 	builder.WriteString(strings.Join(arr, ","))
 	builder.WriteString(")")
-	_, err_ := q.db.Exec(context.Background(), builder.String())
-	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
-	}
-	return nil
+	return q.Exec(builder.String())
 }
 
 func mapToItems[T any](rows pgx.Rows, err_ error, assign func() (T, []any)) ([]T, error) {
@@ -1086,7 +1090,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 	}
 	// 删除已填充的id
 	if len(badIds) > 0 {
-		err := sess.DelKHoles(badIds...)
+		err := sess.DelKHoleIDs(badIds...)
 		if err != nil {
 			return err
 		}
@@ -1325,9 +1329,14 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 		})
 		// 逐日寻找成交量最大的合约ID，并计算复权因子
 		lastSid := int32(0)
-		lastClose := float64(0)
 		var adds []AddAdjFactorsParams
+		var row *AddAdjFactorsParams
 		for _, dateMS := range dates {
+			if row != nil {
+				row.StartMs = dateMS
+				adds = append(adds, *row)
+				row = nil
+			}
 			vols, _ := dateSidVols[dateMS]
 			curSid := int32(0)
 			var maxK *banexg.Kline
@@ -1340,17 +1349,25 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 			if curSid != lastSid {
 				factor := float64(1)
 				if lastSid > 0 {
-					factor = maxK.Open / lastClose
+					lastK, _ := vols[lastSid]
+					if lastK != nil {
+						factor = maxK.Close / lastK.Close
+					} else {
+						log.Warn("last sid invalid", zap.String("code", exs.Symbol), zap.Int32("sid", lastSid))
+					}
 				}
-				adds = append(adds, AddAdjFactorsParams{
-					Sid:     exs.ID,
-					SubID:   curSid,
-					StartMs: dateMS,
-					Factor:  factor,
-				})
+				row = &AddAdjFactorsParams{
+					Sid:    exs.ID,
+					SubID:  curSid,
+					Factor: factor,
+				}
+				if lastSid == 0 {
+					row.StartMs = dateMS
+					adds = append(adds, *row)
+					row = nil
+				}
 				lastSid = curSid
 			}
-			lastClose = maxK.Close
 		}
 		_, err_ = sess.AddAdjFactors(ctx, adds)
 		if err_ != nil {

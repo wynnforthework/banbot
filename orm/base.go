@@ -250,6 +250,9 @@ func LoadMarkets(exchange banexg.BanExchange, reload bool) (banexg.MarketMap, *e
 		items := GetExSymbols(exInfo.ID, exInfo.MarketType)
 		symbols := make([]string, 0, len(items))
 		for _, it := range items {
+			if it.Symbol == "" {
+				return nil, errs.NewMsg(errs.CodeRunTime, "symbol empty for sid: %v", it.ID)
+			}
 			symbols = append(symbols, it.Symbol)
 		}
 		args[banexg.ParamSymbols] = symbols

@@ -5,13 +5,12 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/live"
 	"github.com/banbox/banbot/optmize"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
-	"github.com/banbox/banexg/log"
-	"go.uber.org/zap"
 	"path/filepath"
 )
 
@@ -46,21 +45,22 @@ func RunDownData(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func RunDbCmd(args *config.CmdArgs) *errs.Error {
+func RunKlineCorrect(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err
 	}
-	action := args.Action
-	if action == "correct" {
-		return orm.SyncKlineTFs()
-	} else if action == "adj_factors" {
-		return orm.CalcAdjFactors(args)
-	} else {
-		log.Warn("unsupport dbcmd", zap.String("action", action))
+	return orm.SyncKlineTFs()
+}
+
+func RunKlineAdjFactors(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := biz.SetupComs(args)
+	if err != nil {
+		return err
 	}
-	return nil
+	return orm.CalcAdjFactors(args)
 }
 
 func RunSpider(args *config.CmdArgs) *errs.Error {
@@ -88,6 +88,10 @@ func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
 		return errs.NewMsg(errs.CodeParamRequired, "--in is required")
 	}
 	names, err := data.FindPathNames(args.InPath, ".zip")
+	if err != nil {
+		return err
+	}
+	err = orm.InitExg(exg.Default)
 	if err != nil {
 		return err
 	}

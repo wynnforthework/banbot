@@ -11,90 +11,147 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"os"
-	"strings"
 )
-
-var subHelp = map[string]string{
-	"trade":      "live trade",
-	"backtest":   "backtest with strategies and data",
-	"down_data":  "download kline data",
-	"down_ws":    "download websocket data",
-	"dbcmd":      "run db command",
-	"spider":     "start the spider",
-	"cmp_orders": "compare backTest orders with exchange orders",
-}
 
 const VERSION = "0.1.1"
 
 type FuncEntry = func(args *config.CmdArgs) *errs.Error
+type FuncGetEntry = func(name string) (FuncEntry, []string)
 
 func RunCmd() {
 	if len(os.Args) < 2 {
 		printAndExit()
 	}
-	cmdName := os.Args[1]
-	if cmdName == "cmp_orders" {
-		optmize.CompareExgBTOrders(os.Args[2:])
-	} else {
-		runMainEntrys(cmdName)
-	}
+	args := os.Args[1:]
+	runSubCmd(args, func(name string) (FuncEntry, []string) {
+		var options []string
+		var entry FuncEntry
+		switch name {
+		case "trade":
+			options = []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"}
+			entry = RunTrade
+		case "backtest":
+			options = []string{"timerange", "stake_amount", "pairs", "stg_dir", "cpu_profile", "mem_profile"}
+			entry = RunBackTest
+		case "spider":
+			entry = RunSpider
+		case "kline":
+			runKlineCmds(args[1:])
+		case "tick":
+			runTickCmds(args[1:])
+		case "load_cal":
+			options = []string{"in"}
+			entry = biz.LoadCalendars
+		case "cmp_orders":
+			optmize.CompareExgBTOrders(args[1:])
+			os.Exit(0)
+		}
+		return entry, options
+	}, printAndExit)
 }
 
-func runMainEntrys(cmdName string) {
-	var args config.CmdArgs
+func printAndExit() {
+	tpl := `
+banbot %v
+please run with a subcommand:
+	trade:      live trade
+	backtest:   backtest with strategies and data
+	spider:     start the spider
+	kline:      run kline commands
+	tick:		run tick commands
+	cmp_orders: compare backTest orders with exchange orders
+`
+	log.Warn(fmt.Sprintf(tpl, VERSION))
+}
 
-	var sub = flag.NewFlagSet(cmdName, flag.ExitOnError)
-	var options []string
-	var entry FuncEntry
+func runKlineCmds(args []string) {
+	runSubCmd(args, func(name string) (FuncEntry, []string) {
+		var options []string
+		var entry FuncEntry
+		switch name {
+		case "down":
+			options = []string{"timerange", "pairs", "timeframes", "medium"}
+			entry = RunDownData
+		case "load":
+			options = []string{"in", "cpu_profile", "mem_profile"}
+			entry = LoadKLinesToDB
+		case "export":
+			options = []string{"out", "pairs", "timeframes", "adj", "tz"}
+			entry = biz.ExportKlines
+		case "purge":
+			options = []string{"exg_real", "pairs", "timeframes"}
+			entry = biz.PurgeKlines
+		case "correct":
+			entry = RunKlineCorrect
+		case "adj_factor":
+			entry = RunKlineAdjFactors
+		default:
+			return nil, nil
+		}
+		return entry, options
+	}, func() {
+		tpl := `
+banbot kline:
+	down: 	download kline data from exchange
+	load: 	load kline data from zip/csv files
+	export:	export kline to csv files from db
+	purge: 	purge/delete kline data with args
+	correct: sync klines between timeframes
+	adj_factor: recalculate adjust factors
+please choose a valid action
+`
+		log.Warn(tpl)
+	})
+}
 
-	switch cmdName {
-	case "trade":
-		options = []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"}
-		entry = RunTrade
-	case "backtest":
-		options = []string{"timerange", "stake_amount", "pairs", "stg_dir", "cpu_profile", "mem_profile"}
-		entry = RunBackTest
-	case "down_data":
-		options = []string{"timerange", "pairs", "timeframes", "medium"}
-		entry = RunDownData
-	case "down_ws":
-		break
-	case "dbcmd":
-		options = []string{"action", "tables", "force"}
-		entry = RunDbCmd
-	case "spider":
-		entry = RunSpider
-		break
-	case "cvt_tick":
-		options = []string{"in", "out", "cpu_profile", "mem_profile"}
-		entry = data.RunFormatTick
-	case "tick2kline":
-		options = []string{"in", "out", "cpu_profile", "mem_profile"}
-		entry = data.Build1mWithTicks
-	case "load_kline":
-		options = []string{"in", "cpu_profile", "mem_profile"}
-		entry = LoadKLinesToDB
-	case "load_cal":
-		options = []string{"in"}
-		entry = biz.LoadCalendars
-	case "export_kline":
-		options = []string{"out", "pairs", "timeframes", "adj", "tz"}
-		entry = biz.ExportKlines
-	default:
-		printAndExit()
+func runTickCmds(args []string) {
+	runSubCmd(args, func(name string) (FuncEntry, []string) {
+		var options []string
+		var entry FuncEntry
+		switch name {
+		case "convert":
+			options = []string{"in", "out", "cpu_profile", "mem_profile"}
+			entry = data.RunFormatTick
+		case "to_kline":
+			options = []string{"in", "out", "cpu_profile", "mem_profile"}
+			entry = data.Build1mWithTicks
+		default:
+			return nil, nil
+		}
+		return entry, options
+	}, func() {
+		tpl := `
+banbot tick:
+	convert: 	convert tick data format
+	to_kline: 	build kline from ticks
+please choose a valid action
+`
+		log.Warn(tpl)
+	})
+}
+
+func runSubCmd(sysArgs []string, getEnt FuncGetEntry, printExit func()) {
+	name, subArgs := sysArgs[0], sysArgs[1:]
+	entry, options := getEnt(name)
+	if entry == nil {
+		printExit()
+		return
 	}
+	var args config.CmdArgs
+	var sub = flag.NewFlagSet(name, flag.ExitOnError)
 	bindSubFlags(&args, sub, options...)
-
-	err := sub.Parse(os.Args[2:])
-	if err != nil {
-		log.Error("fail", zap.Error(err))
-		printAndExit()
+	err_ := sub.Parse(subArgs)
+	if err_ != nil {
+		log.Error("fail", zap.Error(err_))
+		printExit()
+		return
 	}
 	args.Init()
-	err2 := entry(&args)
-	if err2 != nil {
-		panic(err2)
+	err := entry(&args)
+	if err != nil {
+		panic(err)
 	}
+	os.Exit(0)
 }
 
 func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
@@ -125,8 +182,6 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.RawTimeFrames, "timeframes", "", "comma-seperated timeframes to use")
 		case "medium":
 			cmd.StringVar(&args.Medium, "medium", "", "data medium:db,file")
-		case "action":
-			cmd.StringVar(&args.Action, "action", "", "db action name")
 		case "tables":
 			cmd.StringVar(&args.RawTables, "tables", "", "db tables, comma-separated")
 		case "force":
@@ -147,19 +202,11 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.AdjType, "adj", "", "qfq/hfq for kline")
 		case "tz":
 			cmd.StringVar(&args.TimeZone, "tz", "", "timeZone, default: utc")
+		case "exg_real":
+			cmd.StringVar(&args.ExgReal, "exg_real", "", "real exchange")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)
 		}
 	}
-}
-
-func printAndExit() {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("banbot %v\nplease run with a subcommand:\n", VERSION))
-	for k, v := range subHelp {
-		b.WriteString(fmt.Sprintf("  %s\n\t%v\n", k, v))
-	}
-	log.Warn(b.String())
-	os.Exit(1)
 }

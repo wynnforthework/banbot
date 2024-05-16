@@ -26,7 +26,6 @@ type CmdArgs struct {
 	StakePct      float64
 	RawPairs      string
 	Pairs         []string
-	Action        string
 	RawTables     string
 	Tables        []string
 	StrategyDirs  ArrString
@@ -42,4 +41,5 @@ type CmdArgs struct {
 	OutPath       string
 	AdjType       string // 复权类型: qfq,hfq
 	TimeZone      string // 时区
+	ExgReal       string
 }
