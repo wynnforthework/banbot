@@ -39,7 +39,7 @@ type CmdArgs struct {
 	MemProfile    bool
 	InPath        string
 	OutPath       string
-	AdjType       string // 复权类型: qfq,hfq
+	AdjType       string // 复权类型: pre,post,none
 	TimeZone      string // 时区
 	ExgReal       string
 }

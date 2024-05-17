@@ -31,6 +31,5 @@ type KlineAgg struct {
 
 type AdjFactorExt struct {
 	*AdjFactor
-	CurFactor float64 // 对应此区间的复权因子
-	StopMs    int64   // 13位区间结束时间戳
+	StopMs int64 // 13位区间结束时间戳
 }

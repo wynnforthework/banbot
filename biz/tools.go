@@ -22,7 +22,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error {
@@ -38,7 +37,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 	year, _ := strconv.Atoi(yearStr)
 	mar, err := exchange.MapMarket(cleanName, year)
 	if err != nil {
-		log.Warn("symbol invalid", zap.String("id", cleanName), zap.Error(err))
+		log.Warn("symbol invalid", zap.String("id", cleanName), zap.String("err", err.Short()))
 		return nil
 	}
 	exs := &orm.ExSymbol{Symbol: mar.Symbol, Exchange: exgName, ExgReal: mar.ExgReal, Market: market}
@@ -91,8 +90,8 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 	timeFrame := utils.SecsToTF(int(tfMSecs / 1000))
 	timeFrame, err = orm.GetDownTF(timeFrame)
 	if err != nil {
-		log.Error("get down tf fail", zap.Int64("ms", tfMSecs), zap.String("id", exs.Symbol),
-			zap.String("path", inPath), zap.Error(err))
+		log.Warn("get down tf fail", zap.Int64("ms", tfMSecs), zap.String("id", exs.Symbol),
+			zap.String("path", inPath), zap.String("err", err.Short()))
 		return nil
 	}
 	tfMSecs = int64(utils.TFToSecs(timeFrame) * 1000)
@@ -203,14 +202,14 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 		}
 		klines = newKlines
 	}
+	startMS, endMS = klines[0].Time, klines[len(klines)-1].Time
+	startDt := btime.ToDateStr(startMS, "")
+	endDt := btime.ToDateStr(endMS, "")
+	log.Info("insert", zap.String("symbol", exs.Symbol), zap.Int32("sid", exs.ID),
+		zap.Int("num", len(klines)), zap.String("start", startDt), zap.String("end", endDt))
 	// 这里不自动归集，因有些bar成交量为0，不可使用数据库默认的归集策略；应调用BuildOHLCVOff归集
 	num, err := sess.InsertKLinesAuto(timeFrame, exs.ID, klines, false)
 	if err == nil && num > 0 {
-		startMS, endMS = klines[0].Time, klines[len(klines)-1].Time
-		startDt := btime.ToDateStr(startMS, "")
-		endDt := btime.ToDateStr(endMS, "")
-		log.Info("insert klines", zap.String("symbol", exs.Symbol), zap.Int32("sid", exs.ID),
-			zap.Int64("num", num), zap.String("start", startDt), zap.String("end", endDt))
 		// 插入更大周期
 		aggList := orm.GetKlineAggs()
 		klines1m := klines
@@ -292,8 +291,8 @@ func LoadCalendars(args *config.CmdArgs) *errs.Error {
 }
 
 var adjMap = map[string]int{
-	"qfq":  core.AdjFront,
-	"hfq":  core.AdjBehind,
+	"pre":  core.AdjFront,
+	"post": core.AdjBehind,
 	"none": core.AdjNone,
 	"":     0,
 }
@@ -315,7 +314,7 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	}
 	adjVal, adjValid := adjMap[args.AdjType]
 	if !adjValid {
-		return errs.NewMsg(errs.CodeParamRequired, "--adj should be qfq/hfq/(empty)")
+		return errs.NewMsg(errs.CodeParamRequired, "--adj should be pre/post/none")
 	}
 	ctx := context.Background()
 	sess, conn, err := orm.Conn(ctx)
@@ -329,14 +328,9 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	}
 	tf := args.TimeFrames[0]
 	start, stop := config.TimeRange.StartMS, config.TimeRange.EndMS
-	var loc *time.Location
-	if args.TimeZone != "" {
-		loc, err_ = time.LoadLocation(args.TimeZone)
-		if err_ != nil {
-			return errs.NewMsg(errs.CodeRunTime, "unsupport timezone: %s, %v", args.TimeZone, err_)
-		}
-	} else {
-		loc = banexg.LocUTC
+	loc, err := args.ParseTimeZone()
+	if err != nil {
+		return err
 	}
 	err = orm.InitExg(exg.Default)
 	if err != nil {
@@ -356,39 +350,26 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 		if err != nil {
 			return err
 		}
-		err = writeKlineCsv(klines, args.OutPath, symbol, loc)
+		rows := make([][]string, 0, len(klines))
+		for _, k := range klines {
+			dateStr := btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
+			row := []string{
+				dateStr,
+				strconv.FormatFloat(k.Open, 'f', -1, 64),
+				strconv.FormatFloat(k.High, 'f', -1, 64),
+				strconv.FormatFloat(k.Low, 'f', -1, 64),
+				strconv.FormatFloat(k.Close, 'f', -1, 64),
+				strconv.FormatFloat(k.Volume, 'f', -1, 64),
+			}
+			rows = append(rows, row)
+		}
+		path := filepath.Join(args.OutPath, symbol+".csv")
+		err = utils.WriteCsvFile(path, rows)
 		if err != nil {
 			return err
 		}
 	}
 	log.Info("export kline complete")
-	return nil
-}
-
-func writeKlineCsv(klines []*banexg.Kline, dirPath, symbol string, loc *time.Location) *errs.Error {
-	// 将klines写入csv文件，文件名是symbol
-	file, err_ := os.Create(filepath.Join(dirPath, symbol+".csv"))
-	if err_ != nil {
-		return errs.New(errs.CodeIOWriteFail, err_)
-	}
-	defer file.Close()
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-	for _, k := range klines {
-		dateStr := btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
-		row := []string{
-			dateStr,
-			strconv.FormatFloat(k.Open, 'f', -1, 64),
-			strconv.FormatFloat(k.High, 'f', -1, 64),
-			strconv.FormatFloat(k.Low, 'f', -1, 64),
-			strconv.FormatFloat(k.Close, 'f', -1, 64),
-			strconv.FormatFloat(k.Volume, 'f', -1, 64),
-		}
-		err_ = writer.Write(row)
-		if err_ != nil {
-			return errs.New(errs.CodeIOWriteFail, err_)
-		}
-	}
 	return nil
 }
 
@@ -501,5 +482,74 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 		}
 	}
 	log.Info("all purge complete")
+	return nil
+}
+
+func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := SetupComs(args)
+	if err != nil {
+		return err
+	}
+	if args.OutPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
+	}
+	if len(args.Pairs) == 0 {
+		return errs.NewMsg(errs.CodeParamRequired, "--pairs is required")
+	}
+	ctx := context.Background()
+	sess, conn, err := orm.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	err_ := utils.EnsureDir(args.OutPath, 0755)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	loc, err := args.ParseTimeZone()
+	if err != nil {
+		return err
+	}
+	err = orm.InitExg(exg.Default)
+	if err != nil {
+		return err
+	}
+	for _, symbol := range args.Pairs {
+		log.Info("handle", zap.String("symbol", symbol))
+		exs, err := orm.GetExSymbolCur(symbol)
+		if err != nil {
+			return err
+		}
+		facs, err_ := sess.GetAdjFactors(ctx, exs.ID)
+		if err_ != nil {
+			return errs.New(core.ErrDbReadFail, err_)
+		}
+		sort.Slice(facs, func(i, j int) bool {
+			return facs[i].StartMs < facs[j].StartMs
+		})
+		rows := make([][]string, 0, len(facs))
+		for _, f := range facs {
+			dateStr := btime.ToTime(f.StartMs).In(loc).Format(core.DefaultDateFmt)
+			subCode := ""
+			if f.SubID > 0 {
+				it := orm.GetSymbolByID(f.SubID)
+				if it != nil {
+					subCode = it.Symbol
+				}
+			}
+			row := []string{
+				subCode,
+				dateStr,
+				strconv.FormatFloat(f.Factor, 'f', -1, 64),
+			}
+			rows = append(rows, row)
+		}
+		path := filepath.Join(args.OutPath, symbol+"_adj.csv")
+		err = utils.WriteCsvFile(path, rows)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }

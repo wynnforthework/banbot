@@ -1353,7 +1353,11 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 					if lastK != nil {
 						factor = maxK.Close / lastK.Close
 					} else {
-						log.Warn("last sid invalid", zap.String("code", exs.Symbol), zap.Int32("sid", lastSid))
+						date := btime.ToDateStr(maxK.Time, "")
+						it := GetSymbolByID(lastSid)
+						log.Warn("last sid invalid", zap.String("code", it.Symbol),
+							zap.Int32("sid", lastSid), zap.String("date", date))
+						continue
 					}
 				}
 				row = &AddAdjFactorsParams{

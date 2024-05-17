@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"encoding/csv"
 	"fmt"
+	"github.com/banbox/banexg/errs"
 	"io"
 	"os"
 	"path/filepath"
@@ -103,4 +105,19 @@ func CopySymLink(source, dest string) error {
 		return err
 	}
 	return os.Symlink(link, dest)
+}
+
+func WriteCsvFile(path string, rows [][]string) *errs.Error {
+	file, err_ := os.Create(path)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	defer file.Close()
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+	err_ = writer.WriteAll(rows)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	return nil
 }

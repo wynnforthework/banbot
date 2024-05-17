@@ -83,8 +83,11 @@ func runKlineCmds(args []string) {
 			entry = biz.PurgeKlines
 		case "correct":
 			entry = RunKlineCorrect
-		case "adj_factor":
+		case "adj_calc":
 			entry = RunKlineAdjFactors
+		case "adj_export":
+			options = []string{"out", "pairs", "tz"}
+			entry = biz.ExportAdjFactors
 		default:
 			return nil, nil
 		}
@@ -199,7 +202,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "out":
 			cmd.StringVar(&args.OutPath, "out", "", "output file or directory")
 		case "adj":
-			cmd.StringVar(&args.AdjType, "adj", "", "qfq/hfq for kline")
+			cmd.StringVar(&args.AdjType, "adj", "", "pre/post/none for kline")
 		case "tz":
 			cmd.StringVar(&args.TimeZone, "tz", "", "timeZone, default: utc")
 		case "exg_real":

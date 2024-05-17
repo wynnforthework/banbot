@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -309,31 +310,48 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 	if err_ != nil {
 		return nil, errs.New(core.ErrDbReadFail, err_)
 	}
-	// facs已按时间倒序排序
-	// price(i) * factor(i-1) * factor(i-2) * ... factor(1) = latest price
+	// facs已按时间倒序，记录每个区间的结束时间戳
 	facEts := make([]*AdjFactorExt, 0, len(facs))
-	lastFac := float64(1)
-	if endMS == 0 {
-		endMS = btime.UTCStamp()
-	}
-	curEnd := endMS
+	curEnd := btime.UTCStamp()
 	for _, f := range facs {
-		f.Factor *= lastFac
 		facEts = append(facEts, &AdjFactorExt{
 			AdjFactor: f,
-			CurFactor: lastFac,
 			StopMs:    curEnd,
 		})
-		lastFac = f.Factor
 		curEnd = f.StartMs
 		if f.StartMs < startMS {
 			break
 		}
 	}
+	facRev := true
+	// factor(i) = newClose(i-1) / oldClose(i-1)
+	if adj == core.AdjBehind {
+		// 后复权，从前往后，复权因子累乘，作为新日期的因子；新数据除以因子
+		sort.Slice(facEts, func(i, j int) bool {
+			return facEts[i].StartMs < facEts[j].StartMs
+		})
+		lastFac := float64(1)
+		for _, f := range facEts {
+			f.Factor *= lastFac
+			lastFac = f.Factor
+		}
+		facRev = false
+	} else if adj == core.AdjFront {
+		// 前复权，从后往前，复权因子累乘，作为旧日期的因子；旧数据乘以因子
+		lastFac := float64(1)
+		for _, f := range facEts {
+			bakFac := f.Factor
+			f.Factor = lastFac
+			lastFac *= bakFac
+		}
+	}
 	revRead := startMS == 0 && limit > 0
-	if !revRead {
-		// 从前往后读，按时间从小到大
+	if revRead != facRev {
+		// 读取顺序和facs顺序不一致，翻转facs
 		utils.ReverseArr(facEts)
+	}
+	if endMS == 0 {
+		endMS = btime.UTCStamp()
 	}
 	var result []*banexg.Kline
 	// 查询K线，并进行前复权
@@ -358,7 +376,7 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 		}
 		factor := float64(1)
 		if adj == core.AdjFront {
-			factor = f.CurFactor
+			factor = f.Factor
 		} else if adj == core.AdjBehind {
 			factor = 1 / f.Factor
 		}
