@@ -121,7 +121,8 @@ CREATE TABLE "public"."kline_un"
     "high"      float8     not null,
     "low"       float8     not null,
     "close"     float8     not null,
-    "volume"    float8     not null
+    "volume"    float8     not null,
+    "info"      float8     not null
 );
 CREATE unique INDEX "kline_un_sid_tf_idx" ON "public"."kline_un" USING btree ("sid", "timeframe");
 

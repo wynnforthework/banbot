@@ -226,6 +226,7 @@ func BuildOHLCVOff(arr []*banexg.Kline, toTFMSecs int64, preFire float64, resOHL
 				}
 				big.Close = bar.Close
 				big.Volume += bar.Volume
+				big.Info = bar.Info
 			}
 			aggCnt += 1
 		} else {

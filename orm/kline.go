@@ -39,7 +39,8 @@ const (
   max(high) AS high,
   min(low) AS low, 
   last(close, time) AS close,
-  sum(volume) AS volume`
+  sum(volume) AS volume,
+  last(info, time) AS info`
 	klineInsConflict = `
 ON CONFLICT (sid, time)
 DO UPDATE SET 
@@ -47,7 +48,8 @@ open = EXCLUDED.open,
 high = EXCLUDED.high,
 low = EXCLUDED.low,
 close = EXCLUDED.close,
-volume = EXCLUDED.volume`
+volume = EXCLUDED.volume,
+info = EXCLUDED.info`
 )
 
 func init() {
@@ -74,7 +76,7 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 	if revRead {
 		// 未提供开始时间，提供了数量限制，按时间倒序搜索
 		dctSql = fmt.Sprintf(`
-select time,open,high,low,close,volume from $tbl
+select time,open,high,low,close,volume,info from $tbl
 where sid=%d and time < %v
 order by time desc limit %v`, sid, finishEndMS, limit)
 	} else {
@@ -82,7 +84,7 @@ order by time desc limit %v`, sid, finishEndMS, limit)
 			limit = int((finishEndMS-startMs)/tfMSecs) + 1
 		}
 		dctSql = fmt.Sprintf(`
-select time,open,high,low,close,volume from $tbl
+select time,open,high,low,close,volume,info from $tbl
 where sid=%d and time >= %v and time < %v
 order by time limit %v`, sid, startMs, finishEndMS, limit)
 	}
@@ -139,13 +141,13 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 	}
 	sidText := strings.Join(sidTA, ", ")
 	dctSql := fmt.Sprintf(`
-select time,open,high,low,close,volume,sid from $tbl
+select time,open,high,low,close,volume,info,sid from $tbl
 where time >= %v and time < %v and sid in (%v)
 order by sid,time`, startMs, finishEndMS, sidText)
 	subTF, rows, err_ := queryHyper(q, timeframe, dctSql)
 	arrs, err_ := mapToItems(rows, err_, func() (*KlineSid, []any) {
 		var i KlineSid
-		return &i, []any{&i.Time, &i.Open, &i.High, &i.Low, &i.Close, &i.Volume, &i.Sid}
+		return &i, []any{&i.Time, &i.Open, &i.High, &i.Low, &i.Close, &i.Volume, &i.Info, &i.Sid}
 	})
 	if err_ != nil {
 		return errs.New(core.ErrDbReadFail, err_)
@@ -184,7 +186,7 @@ order by sid,time`, startMs, finishEndMS, sidText)
 			klineArr = make([]*banexg.Kline, 0, initCap)
 		}
 		klineArr = append(klineArr, &banexg.Kline{Time: k.Time, Open: k.Open, High: k.High, Low: k.Low,
-			Close: k.Close, Volume: k.Volume})
+			Close: k.Close, Volume: k.Volume, Info: k.Info})
 	}
 	if curSid > 0 && len(klineArr) > 0 {
 		callBack()
@@ -234,7 +236,7 @@ func queryHyper(sess *Queries, timeFrame, sql string, args ...interface{}) (stri
 func mapToKlines(rows pgx.Rows, err_ error) ([]*banexg.Kline, error) {
 	return mapToItems(rows, err_, func() (*banexg.Kline, []any) {
 		var i banexg.Kline
-		return &i, []any{&i.Time, &i.Open, &i.High, &i.Low, &i.Close, &i.Volume}
+		return &i, []any{&i.Time, &i.Open, &i.High, &i.Low, &i.Close, &i.Volume, &i.Info}
 	})
 }
 
@@ -276,7 +278,7 @@ func getUnFinish(sess *Queries, sid int32, timeFrame string, startMS, endMS int6
 		// 从已完成的子周期中归集数据
 		fromTF, _ = getSubTf(timeFrame)
 		aggFrom := "kline_" + fromTF
-		sql := fmt.Sprintf(`select time,open,high,low,close,volume from %s
+		sql := fmt.Sprintf(`select time,open,high,low,close,volume,info from %s
 where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 		rows, err_ := sess.db.Query(ctx, sql)
 		klines, err_ := mapToKlines(rows, err_)
@@ -289,13 +291,13 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 		}
 	}
 	// 从未完成的周期/子周期中查询数据
-	sql := fmt.Sprintf(`SELECT start_ms,open,high,low,close,volume,stop_ms FROM kline_un
+	sql := fmt.Sprintf(`SELECT start_ms,open,high,low,close,volume,info,stop_ms FROM kline_un
 						where sid=%d and timeframe='%s' and start_ms >= %d
 						limit 1`, sid, fromTF, startMS)
 	row := sess.db.QueryRow(ctx, sql)
 	var unbar = &banexg.Kline{}
 	var unToMS = int64(0)
-	err_ := row.Scan(&unbar.Time, &unbar.Open, &unbar.High, &unbar.Low, &unbar.Close, &unbar.Volume, &unToMS)
+	err_ := row.Scan(&unbar.Time, &unbar.Open, &unbar.High, &unbar.Low, &unbar.Close, &unbar.Volume, &unbar.Info, &unToMS)
 	if err_ != nil {
 		return nil, 0, err_
 	} else if unbar.Volume > 0 {
@@ -314,7 +316,9 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 			res.Low = min(res.Low, bar.Low)
 			res.Volume += bar.Volume
 		}
-		res.Close = bigKlines[len(bigKlines)-1].Close
+		last := bigKlines[len(bigKlines)-1]
+		res.Close = last.Close
+		res.Info = last.Info
 		return res, barEndMS, nil
 	}
 }
@@ -336,6 +340,7 @@ func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr 
 		Low:       out.Low,
 		Close:     out.Close,
 		Volume:    out.Volume,
+		Info:      out.Info,
 		StopMs:    endMS,
 		Timeframe: timeFrame,
 	}
@@ -363,7 +368,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	barEndMS := utils.AlignTfMSecs(endMS, tfMSecs)
 	if barStartMS == barEndMS {
 		// 当子周期插入开始结束时间戳，对应到当前周期，属于同一个bar时，才执行快速更新
-		sql := "select start_ms,open,high,low,close,volume,stop_ms " + fromWhere
+		sql := "select start_ms,open,high,low,close,volume,info,stop_ms " + fromWhere
 		row := sess.db.QueryRow(ctx, sql)
 		var unBar KlineUn
 		err_ := row.Scan(&unBar.StartMs, &unBar.Open, &unBar.High, &unBar.Low, &unBar.Close, &unBar.Volume, &unBar.StopMs)
@@ -374,8 +379,8 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 			unBar.Close = sub.Close
 			unBar.Volume += sub.Volume
 			unBar.StopMs = endMS
-			updSql := fmt.Sprintf("update kline_un set high=%v,low=%v,close=%v,volume=%v,stop_ms=%v %s",
-				unBar.High, unBar.Low, unBar.Close, unBar.Volume, unBar.StopMs, whereSql)
+			updSql := fmt.Sprintf("update kline_un set high=%v,low=%v,close=%v,volume=%v,info=%v,stop_ms=%v %s",
+				unBar.High, unBar.Low, unBar.Close, unBar.Volume, unBar.Info, unBar.StopMs, whereSql)
 			_, err_ = sess.db.Exec(ctx, updSql)
 			if err_ != nil {
 				return errs.New(core.ErrDbExecFail, err_)
@@ -388,9 +393,9 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
-	return sess.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, timeframe) 
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
-		sub.Close, sub.Volume, sub.Timeframe)
+	return sess.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, info, timeframe) 
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
+		sub.Close, sub.Volume, sub.Info, sub.Timeframe)
 }
 
 // iterForAddKLines implements pgx.CopyFromSource.
@@ -420,6 +425,7 @@ func (r iterForAddKLines) Values() ([]interface{}, error) {
 		r.rows[0].Low,
 		r.rows[0].Close,
 		r.rows[0].Volume,
+		r.rows[0].Info,
 	}, nil
 }
 
@@ -447,7 +453,7 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 		}
 	}
 	ctx := context.Background()
-	cols := []string{"sid", "time", "open", "high", "low", "close", "volume"}
+	cols := []string{"sid", "time", "open", "high", "low", "close", "volume", "info"}
 	num, err_ := q.db.CopyFrom(ctx, []string{tblName}, cols, &iterForAddKLines{rows: adds})
 	if err_ != nil {
 		return 0, errs.New(core.ErrDbExecFail, err_)
@@ -823,7 +829,7 @@ from %s where sid=%d and time>=%v and time<%v
 GROUP BY sid, 2 
 ORDER BY sid, 2`, tfMSecs, tfMSecs, aggFields, tblName, sid, aggStart, endMS)
 	finalSql := fmt.Sprintf(`
-insert into %s (sid, time, open, high, low, close, volume)
+insert into %s (sid, time, open, high, low, close, volume, info)
 %s %s`, item.Table, sql, klineInsConflict)
 	_, err_ := q.db.Exec(context.Background(), finalSql)
 	if err_ != nil {

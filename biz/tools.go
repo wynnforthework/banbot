@@ -66,6 +66,10 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 		l, _ := strconv.ParseFloat(r[3], 64)
 		c, _ := strconv.ParseFloat(r[4], 64)
 		v, _ := strconv.ParseFloat(r[5], 64)
+		var d float64
+		if len(r) > 6 {
+			d, _ = strconv.ParseFloat(r[6], 64)
+		}
 		if barTime == 0 {
 			continue
 		}
@@ -81,6 +85,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 			Low:    l,
 			Close:  c,
 			Volume: v,
+			Info:   d,
 		})
 	}
 	sort.Slice(klines, func(i, j int) bool {
@@ -176,6 +181,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 						}
 						p.Close = k.Close
 						p.Volume += k.Volume
+						p.Info = k.Info
 					}
 				}
 			}
@@ -360,6 +366,7 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 				strconv.FormatFloat(k.Low, 'f', -1, 64),
 				strconv.FormatFloat(k.Close, 'f', -1, 64),
 				strconv.FormatFloat(k.Volume, 'f', -1, 64),
+				strconv.FormatFloat(k.Info, 'f', -1, 64),
 			}
 			rows = append(rows, row)
 		}

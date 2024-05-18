@@ -112,7 +112,7 @@ func TestStagyRun(t *testing.T) {
 			bar.Symbol = pair
 			envKey := strings.Join([]string{pair, tf}, "_")
 			env, _ := strategy.Envs[envKey]
-			env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
+			env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, 0)
 			core.SetBarPrice(pair, bar.Close)
 			jobs, _ := accJobs[envKey]
 			for _, job := range jobs {

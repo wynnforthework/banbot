@@ -31,7 +31,7 @@ func (t *Trader) OnEnvJobs(bar *banexg.PairTFKline) (*ta.BarEnv, *errs.Error) {
 		return nil, nil
 	}
 	// 更新BarEnv状态
-	env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume)
+	env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Info)
 	return env, nil
 }
 

@@ -12,7 +12,8 @@ CREATE TABLE "public"."kline_1m"
     "high"   float8    not null,
     "low"    float8    not null,
     "close"  float8    not null,
-    "volume" float8    not null
+    "volume" float8    not null,
+    "info"   float8    not null
 );
 CREATE INDEX "kline_1m_sid" ON "public"."kline_1m" USING btree ("sid");
 CREATE UNIQUE INDEX "kline_1m_sid_time" ON "public"."kline_1m" ("sid", "time");
@@ -37,7 +38,8 @@ CREATE TABLE "public"."kline_5m"
     "high"   float8    not null,
     "low"    float8    not null,
     "close"  float8    not null,
-    "volume" float8    not null
+    "volume" float8    not null,
+    "info"   float8    not null
 );
 CREATE INDEX "kline_5m_sid" ON "public"."kline_5m" USING btree ("sid");
 CREATE UNIQUE INDEX "kline_5m_sid_time" ON "public"."kline_5m" ("sid", "time");
@@ -62,7 +64,8 @@ CREATE TABLE "public"."kline_15m"
     "high"   float8    not null,
     "low"    float8    not null,
     "close"  float8    not null,
-    "volume" float8    not null
+    "volume" float8    not null,
+    "info"   float8    not null
 );
 CREATE INDEX "kline_15m_sid" ON "public"."kline_15m" USING btree ("sid");
 CREATE UNIQUE INDEX "kline_15m_sid_time" ON "public"."kline_15m" ("sid", "time");
@@ -87,7 +90,8 @@ CREATE TABLE "public"."kline_1h"
     "high"   float8    not null,
     "low"    float8    not null,
     "close"  float8    not null,
-    "volume" float8    not null
+    "volume" float8    not null,
+    "info"   float8    not null
 );
 CREATE INDEX "kline_1h_sid" ON "public"."kline_1h" USING btree ("sid");
 CREATE UNIQUE INDEX "kline_1h_sid_time" ON "public"."kline_1h" ("sid", "time");
@@ -112,7 +116,8 @@ CREATE TABLE "public"."kline_1d"
     "high"   float8    not null,
     "low"    float8    not null,
     "close"  float8    not null,
-    "volume" float8    not null
+    "volume" float8    not null,
+    "info"   float8    not null
 );
 CREATE INDEX "kline_1d_sid" ON "public"."kline_1d" USING btree ("sid");
 CREATE UNIQUE INDEX "kline_1d_sid_time" ON "public"."kline_1d" ("sid", "time");

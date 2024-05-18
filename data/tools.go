@@ -43,7 +43,7 @@ type FuncConvert func(inPath string, file *zip.File, writer *zip.Writer) *errs.E
 
 type FuncReadZipItem func(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error
 
-type FuncTickBar func(inPath string, row []string) (string, int64, [4]float64)
+type FuncTickBar func(inPath string, row []string) (string, int64, [5]float64)
 
 func zipConvert(inPath, outPath, suffix string, convert FuncConvert, pBar *utils.PrgBar) *errs.Error {
 	r, err := zip.OpenReader(inPath)
@@ -301,10 +301,10 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	dayMSecs := int64(utils.TFToSecs("1d") * 1000)
 	nightMSecs := int64(3600 * 10 * 1000)  // utc时间，10小时后，即北京18:00后
 	nightZeroMs := int64(3600 * 16 * 1000) // utc时间，16小时前，即北京24:00前
-	tickBar := func(inPath string, row []string) (string, int64, [4]float64) {
+	tickBar := func(inPath string, row []string) (string, int64, [5]float64) {
 		var symbol string
 		var timeMS int64
-		var arr [4]float64
+		var arr [5]float64
 		if len(row) == 15 {
 			// TradingDay,InstrumentID,UpdateTime,UpdateMillisec,LastPrice,Volume,BidPrice1,BidVolume1,
 			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
@@ -312,21 +312,22 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 			askPrice1, _ := strconv.ParseFloat(row[8], 64)
 			avgPrice, _ := strconv.ParseFloat(row[10], 64)
 			if bidPrice1 == 0 && askPrice1 == 0 && avgPrice == 0 {
-				return "", 0, [4]float64{0, 0, 0, 0}
+				return "", 0, [5]float64{0, 0, 0, 0, 0}
 			}
 			symbol = row[1]
 			dateStr := row[0] + " " + row[2]
 			timeObj, err_ := time.ParseInLocation(layout, dateStr, loc)
 			if err_ != nil {
 				log.Error("invalid time", zap.String("date", dateStr), zap.String("name", inPath))
-				return "", 0, [4]float64{0, 0, 0, 0}
+				return "", 0, [5]float64{0, 0, 0, 0, 0}
 			}
 			milliSecs, _ := strconv.ParseInt(row[3], 10, 64)
 			timeMS = timeObj.UnixMilli() + milliSecs
 			price, _ := strconv.ParseFloat(row[4], 64)
 			volume, _ := strconv.ParseFloat(row[5], 64)
 			turnOver, _ := strconv.ParseFloat(row[11], 64)
-			arr = [4]float64{price, volume, avgPrice, turnOver}
+			openInt, _ := strconv.ParseFloat(row[12], 64)
+			arr = [5]float64{price, volume, avgPrice, turnOver, openInt}
 		} else {
 			// InstrumentID,Time,LastPrice,Volume,BidPrice1,BidVolume1,
 			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
@@ -336,7 +337,8 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 			volume, _ := strconv.ParseFloat(row[3], 64)
 			avgPrice, _ := strconv.ParseFloat(row[8], 64)
 			turnOver, _ := strconv.ParseFloat(row[9], 64)
-			arr = [4]float64{price, volume, avgPrice, turnOver}
+			openInt, _ := strconv.ParseFloat(row[10], 64)
+			arr = [5]float64{price, volume, avgPrice, turnOver, openInt}
 		}
 		off := timeMS % dayMSecs
 		if off > nightMSecs && off < nightZeroMs {
@@ -493,8 +495,8 @@ func saveYear1m(outDir, year string) {
 			}
 			afterVol = true
 			lastMS = bar1m.Time
-			fltArr := []float64{bar1m.Open, bar1m.High, bar1m.Low, bar1m.Close, bar1m.Volume}
-			row := make([]string, 0, 6)
+			fltArr := []float64{bar1m.Open, bar1m.High, bar1m.Low, bar1m.Close, bar1m.Volume, bar1m.Info}
+			row := make([]string, 0, 7)
 			row = append(row, strconv.FormatInt(bar1m.Time, 10))
 			for _, val := range fltArr {
 				valStr := strconv.FormatFloat(math.Round(val*1000)/1000, 'f', -1, 64)
@@ -551,6 +553,7 @@ type tkInfo struct {
 	volume   float64 // 累计日成交量
 	avgPrice float64 // 平均价格
 	turnOver float64 // 换手率
+	openInt  float64 // 持仓量
 }
 
 func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]map[string]int,
@@ -587,7 +590,7 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 		count, _ := counts[symbol]
 		counts[symbol] = count + 1
 		ticks = append(ticks, &tkInfo{symbol: symbol, timeMS: timeMS, price: arr[0], volume: arr[1],
-			avgPrice: arr[2], turnOver: arr[3]})
+			avgPrice: arr[2], turnOver: arr[3], openInt: arr[4]})
 	}
 	for key, num := range counts {
 		items, _ := dones[key]
@@ -650,7 +653,8 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 				}
 			}
 			oldMinMS = curMinMS
-			bar1m = &banexg.Kline{Time: curMinMS, Open: price, High: price, Low: price, Close: price, Volume: volume}
+			bar1m = &banexg.Kline{Time: curMinMS, Open: price, High: price, Low: price, Close: price,
+				Volume: volume, Info: t.openInt}
 		} else {
 			if volume < sumVol {
 				if volume == 0 && t.avgPrice == 0 && t.turnOver == 0 {
@@ -675,6 +679,7 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 				}
 				bar1m.Close = price
 				bar1m.Volume = volume
+				bar1m.Info = t.openInt
 			}
 		}
 	}
