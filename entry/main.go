@@ -84,6 +84,7 @@ func runKlineCmds(args []string) {
 		case "correct":
 			entry = RunKlineCorrect
 		case "adj_calc":
+			options = []string{"out"}
 			entry = RunKlineAdjFactors
 		case "adj_export":
 			options = []string{"out", "pairs", "tz"}

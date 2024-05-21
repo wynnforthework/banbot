@@ -36,7 +36,7 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]m
 		}
 		return pairTfScores, nil
 	}
-	handle := func(pair, timeFrame string, arr []*banexg.Kline) {
+	handle := func(pair, timeFrame string, arr []*banexg.Kline, adjs []*orm.AdjInfo) {
 		tfScores, ok := pairTfScores[pair]
 		if !ok {
 			tfScores = make(map[string]float64)
@@ -49,6 +49,7 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]m
 		}
 		score := float64(1)
 		if len(arr) > 0 && pipChg > 0 {
+			arr = orm.ApplyAdj(adjs, arr, core.AdjFront, 0, 0)
 			score = calcKlineScore(arr, pipChg, 3)
 		}
 		tfScores[timeFrame] = score

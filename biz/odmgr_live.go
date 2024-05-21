@@ -1486,7 +1486,7 @@ func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 		if err != nil {
 			return 0, 0, err
 		}
-		bars, err := orm.AutoFetchOHLCV(exg.Default, exs, "1m", 0, 0, num, false, nil)
+		_, bars, err := orm.AutoFetchOHLCV(exg.Default, exs, "1m", 0, 0, num, false, nil)
 		if err != nil {
 			return 0, 0, err
 		} else if len(bars) == 0 {
@@ -1974,6 +1974,19 @@ func calcFatalLoss(wallets *BanWallets, orders []*orm.InOutOrder, backMins int) 
 	lossVal := math.Abs(sumProfit)
 	totalLegal := wallets.TotalLegal(nil, false)
 	return lossVal / (lossVal + totalLegal)
+}
+
+func (o *LiveOrderMgr) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error {
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	_, err = o.ExitOpenOrders(sess, bar.Symbol, &strategy.ExitReq{
+		Tag:  core.ExitTagEnvEnd,
+		Dirt: core.OdDirtBoth,
+	})
+	return err
 }
 
 func (o *LiveOrderMgr) CleanUp() *errs.Error {

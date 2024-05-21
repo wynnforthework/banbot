@@ -167,7 +167,7 @@ values ($1, $2, $3, $4);
 -- name: GetAdjFactors :many
 select * from adj_factors
 where sid=$1
-order by start_ms desc;
+order by start_ms;
 
 -- name: DelAdjFactors :exec
 delete from adj_factors

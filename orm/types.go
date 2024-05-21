@@ -1,5 +1,7 @@
 package orm
 
+import "github.com/banbox/banexg"
+
 type InOutOrder struct {
 	*IOrder
 	Enter      *ExOrder
@@ -29,7 +31,15 @@ type KlineAgg struct {
 	Retention string
 }
 
-type AdjFactorExt struct {
-	*AdjFactor
-	StopMs int64 // 13位区间结束时间戳
+type AdjInfo struct {
+	*ExSymbol
+	Factor    float64 // 原始相邻复权因子
+	CumFactor float64 // 累计复权因子
+	StartMS   int64   // 开始时间
+	StopMS    int64   // 结束时间
+}
+
+type InfoKline struct {
+	*banexg.PairTFKline
+	Adj *AdjInfo
 }

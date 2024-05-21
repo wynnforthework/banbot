@@ -275,7 +275,7 @@ func (q *Queries) FindTask(ctx context.Context, arg FindTaskParams) (*BotTask, e
 const getAdjFactors = `-- name: GetAdjFactors :many
 select id, sid, sub_id, start_ms, factor from adj_factors
 where sid=$1
-order by start_ms desc
+order by start_ms
 `
 
 func (q *Queries) GetAdjFactors(ctx context.Context, sid int32) ([]*AdjFactor, error) {

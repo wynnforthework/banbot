@@ -14,6 +14,7 @@ import (
 	utils2 "github.com/banbox/banexg/utils"
 	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -1261,19 +1262,22 @@ func GetKlineAggs() []*KlineAgg {
 CalcAdjFactors 计算更新所有复权因子
 */
 func CalcAdjFactors(args *config.CmdArgs) *errs.Error {
+	if args.OutPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
+	}
 	exInfo := exg.Default.Info()
 	err := LoadAllExSymbols()
 	if err != nil {
 		return err
 	}
 	if exInfo.ID == "china" {
-		return calcChinaAdjFactors()
+		return calcChinaAdjFactors(args)
 	} else {
 		return errs.NewMsg(errs.CodeParamInvalid, "exchange %s dont support adjust factors", exInfo.ID)
 	}
 }
 
-func calcChinaAdjFactors() *errs.Error {
+func calcChinaAdjFactors(args *config.CmdArgs) *errs.Error {
 	exchange := exg.Default
 	_, err := LoadMarkets(exchange, false)
 	if err != nil {
@@ -1288,7 +1292,7 @@ func calcChinaAdjFactors() *errs.Error {
 		return err
 	}
 	defer conn.Release()
-	err = calcCnFutureFactors(sess)
+	err = calcCnFutureFactors(sess, args)
 	if err != nil {
 		return err
 	}
@@ -1297,7 +1301,7 @@ func calcChinaAdjFactors() *errs.Error {
 	return nil
 }
 
-func calcCnFutureFactors(sess *Queries) *errs.Error {
+func calcCnFutureFactors(sess *Queries, args *config.CmdArgs) *errs.Error {
 	items := GetExSymbols("china", banexg.MarketLinear)
 	exsList := utils.ValsOfMap(items)
 	sort.Slice(exsList, func(i, j int) bool {
@@ -1308,83 +1312,6 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 	dateSidVols := make(map[int64]map[int32]*banexg.Kline)
 	lastCode := ""
 	var lastExs *ExSymbol
-	ctx := context.Background()
-	saveAdjFactors := func() *errs.Error {
-		if lastCode == "" {
-			return nil
-		}
-		exs := &ExSymbol{
-			Exchange: lastExs.Exchange,
-			Market:   lastExs.Market,
-			ExgReal:  lastExs.ExgReal,
-			Symbol:   lastCode + "888", // 期货888结尾表示主力连续合约
-			Combined: true,
-		}
-		err = EnsureSymbols([]*ExSymbol{exs})
-		if err != nil {
-			return err
-		}
-		// 删除旧的主力连续合约复权因子
-		err_ := sess.DelAdjFactors(ctx, exs.ID)
-		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
-		}
-		dates := utils.KeysOfMap(dateSidVols)
-		sort.Slice(dates, func(i, j int) bool {
-			return dates[i] < dates[j]
-		})
-		// 逐日寻找成交量最大的合约ID，并计算复权因子
-		lastSid := int32(0)
-		var adds []AddAdjFactorsParams
-		var row *AddAdjFactorsParams
-		for _, dateMS := range dates {
-			if row != nil {
-				row.StartMs = dateMS
-				adds = append(adds, *row)
-				row = nil
-			}
-			vols, _ := dateSidVols[dateMS]
-			curSid := int32(0)
-			var maxK *banexg.Kline
-			for sid, k := range vols {
-				if maxK == nil || k.Volume > maxK.Volume {
-					maxK = k
-					curSid = sid
-				}
-			}
-			if curSid != lastSid {
-				factor := float64(1)
-				if lastSid > 0 {
-					lastK, _ := vols[lastSid]
-					if lastK != nil {
-						factor = maxK.Close / lastK.Close
-					} else {
-						date := btime.ToDateStr(maxK.Time, "")
-						it := GetSymbolByID(lastSid)
-						log.Warn("last sid invalid", zap.String("code", it.Symbol),
-							zap.Int32("sid", lastSid), zap.String("date", date))
-						continue
-					}
-				}
-				row = &AddAdjFactorsParams{
-					Sid:    exs.ID,
-					SubID:  curSid,
-					Factor: factor,
-				}
-				if lastSid == 0 {
-					row.StartMs = dateMS
-					adds = append(adds, *row)
-					row = nil
-				}
-				lastSid = curSid
-			}
-		}
-		_, err_ = sess.AddAdjFactors(ctx, adds)
-		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
-		}
-		return nil
-	}
 	// 对所有期货标的，按顺序获取日K，并按时间记录
 	var pBar = utils.NewPrgBar(len(exsList), "future")
 	defer pBar.Close()
@@ -1400,7 +1327,7 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 			}
 		}
 		if lastCode != parts[0].Val {
-			err = saveAdjFactors()
+			err = saveAdjFactors(dateSidVols, lastCode, lastExs, sess, args.OutPath)
 			if err != nil {
 				return err
 			}
@@ -1421,5 +1348,169 @@ func calcCnFutureFactors(sess *Queries) *errs.Error {
 			vols[exs.ID] = k
 		}
 	}
-	return saveAdjFactors()
+	return saveAdjFactors(dateSidVols, lastCode, lastExs, sess, args.OutPath)
+}
+
+func saveAdjFactors(data map[int64]map[int32]*banexg.Kline, pCode string, pExs *ExSymbol, sess *Queries, outDir string) *errs.Error {
+	if pCode == "" {
+		return nil
+	}
+	exs := &ExSymbol{
+		Exchange: pExs.Exchange,
+		Market:   pExs.Market,
+		ExgReal:  pExs.ExgReal,
+		Symbol:   pCode + "888", // 期货888结尾表示主力连续合约
+		Combined: true,
+	}
+	err := EnsureSymbols([]*ExSymbol{exs})
+	if err != nil {
+		return err
+	}
+	// 删除旧的主力连续合约复权因子
+	ctx := context.Background()
+	err_ := sess.DelAdjFactors(ctx, exs.ID)
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	dates := utils.KeysOfMap(data)
+	sort.Slice(dates, func(i, j int) bool {
+		return dates[i] < dates[j]
+	})
+	// 逐日寻找成交量最大的合约ID，并计算复权因子
+	var adds []AddAdjFactorsParams
+	var row *AddAdjFactorsParams
+	// 上市首日选持仓量最大的
+	vols, _ := data[dates[0]]
+	vol, hold := findMaxVols(vols)
+	adds = append(adds, AddAdjFactorsParams{
+		Sid:     exs.ID,
+		StartMs: dates[0],
+		SubID:   hold.Sid,
+		Factor:  1,
+	})
+	lastSid := hold.Sid
+	var lines []string
+	dateFmt := "2006-01-02"
+	lines = writeAdjChg(lastSid, lastSid, 0, 5, data, dates, lines)
+	for i, dateMS := range dates[1:] {
+		if row != nil {
+			row.StartMs = dateMS
+			adds = append(adds, *row)
+			row = nil
+		}
+		vols, _ = data[dateMS]
+		vol, hold = findMaxVols(vols)
+		// 当主力的成交量和持仓量都不为最大，需让出主力
+		if vol.Sid != lastSid && hold.Sid != lastSid {
+			tgt := hold
+			if exs.ExgReal == "CFFEX" {
+				tgt = vol
+			}
+			lines = writeAdjChg(lastSid, tgt.Sid, i+1, 5, data, dates, lines)
+			lastK, _ := vols[lastSid]
+			var factor float64
+			if lastK != nil {
+				factor = tgt.Price / lastK.Close
+			} else {
+				date := btime.ToDateStr(dateMS, dateFmt)
+				it := GetSymbolByID(lastSid)
+				log.Warn("last interrupted", zap.String("code", it.Symbol),
+					zap.Int32("sid", lastSid), zap.String("date", date))
+				factor = findPrevFactor(data, dates[1:], i, tgt.Sid, lastSid)
+			}
+			row = &AddAdjFactorsParams{
+				Sid:    exs.ID,
+				SubID:  tgt.Sid,
+				Factor: factor,
+			}
+			lastSid = tgt.Sid
+		}
+	}
+	outPath := filepath.Join(outDir, exs.Symbol+"_adjs.txt")
+	_ = utils2.WriteFile(outPath, []byte(strings.Join(lines, "\n")))
+	_, err_ = sess.AddAdjFactors(ctx, adds)
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
+	}
+	return nil
+}
+
+func writeAdjChg(sid1, sid2 int32, hit, width int, data map[int64]map[int32]*banexg.Kline, dates []int64, lines []string) []string {
+	symbol1 := GetSymbolByID(sid1).Symbol
+	symbol2 := GetSymbolByID(sid2).Symbol
+	dateFmt := "2006-01-02"
+	lines = append(lines, symbol1+"  "+symbol2)
+	start := max(hit-width, 0)
+	stop := min(hit+width, len(dates))
+	for start < stop {
+		dateMs := dates[start]
+		dateStr := btime.ToDateStr(dateMs, dateFmt)
+		k1 := data[dateMs][sid1]
+		k2 := data[dateMs][sid2]
+		if k1 != nil || k2 != nil {
+			var p1, v1, i1, p2, v2, i2 float64
+			if k1 != nil {
+				p1, v1, i1 = k1.Close, k1.Volume, k1.Info
+			}
+			if k2 != nil {
+				p2, v2, i2 = k2.Close, k2.Volume, k2.Info
+			}
+			text := fmt.Sprintf("%v/%v\t%v/%v\t%v/%v", p1, p2, v1, v2, i1, i2)
+			line := dateStr + "   " + text
+			if start == hit {
+				line += " *"
+			}
+			lines = append(lines, line)
+		}
+		start += 1
+	}
+	lines = append(lines, "")
+	return lines
+}
+
+type PriceVol struct {
+	Sid   int32
+	Price float64
+	Vol   float64
+}
+
+/*
+查找成交量和持仓量最大的项
+*/
+func findMaxVols(vols map[int32]*banexg.Kline) (*PriceVol, *PriceVol) {
+	var vol, hold PriceVol
+	for sid, k := range vols {
+		if vol.Sid == 0 {
+			vol.Sid = sid
+			vol.Price = k.Close
+			vol.Vol = k.Volume
+			hold.Sid = sid
+			hold.Price = k.Close
+			hold.Vol = k.Info
+		} else if k.Volume > vol.Vol {
+			vol.Sid = sid
+			vol.Price = k.Close
+			vol.Vol = k.Volume
+		}
+		if k.Info > hold.Vol {
+			hold.Sid = sid
+			hold.Price = k.Close
+			hold.Vol = k.Info
+		}
+	}
+	return &vol, &hold
+}
+
+func findPrevFactor(data map[int64]map[int32]*banexg.Kline, dates []int64, i int, tgt, old int32) float64 {
+	for i > 0 {
+		i--
+		vols := data[dates[i]]
+		tgtK, _ := vols[tgt]
+		oldK, _ := vols[old]
+		if tgtK == nil || oldK == nil {
+			continue
+		}
+		return tgtK.Close / oldK.Close
+	}
+	return 1
 }

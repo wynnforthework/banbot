@@ -9,7 +9,6 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
-	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -26,7 +25,7 @@ func NewCryptoTrader() *CryptoTrader {
 
 func (t *CryptoTrader) Init() *errs.Error {
 	core.LoadPerfs(config.GetDataDir())
-	err := data.InitLiveProvider(t.FeedKLine)
+	err := data.InitLiveProvider(t.FeedKLine, t.OnEnvEnd)
 	if err != nil {
 		return err
 	}
@@ -104,7 +103,7 @@ func (t *CryptoTrader) Run() *errs.Error {
 	return nil
 }
 
-func (t *CryptoTrader) FeedKLine(bar *banexg.PairTFKline) {
+func (t *CryptoTrader) FeedKLine(bar *orm.InfoKline) {
 	err := t.Trader.FeedKline(bar)
 	if err != nil {
 		log.Error("handle bar fail", zap.String("pair", bar.Symbol), zap.Error(err))

@@ -21,10 +21,16 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 	if err != nil {
 		return nil, err
 	}
+	exchange := exg.Default
+	if !exchange.HasApi(banexg.ApiFetchOHLCV, exs.Market) {
+		// 当前不允许下载K线，跳过
+		j.NextMS = endMS
+		return nil, nil
+	}
 	fetchTF := utils.SecsToTF(subTfSecs)
 	tfMSecs := int64(j.TFSecs * 1000)
 	bigStartMS := utils.AlignTfMSecs(j.NextMS, tfMSecs)
-	preBars, err := orm.AutoFetchOHLCV(exg.Default, exs, fetchTF, bigStartMS, startMS, 0, false, nil)
+	_, preBars, err := orm.AutoFetchOHLCV(exchange, exs, fetchTF, bigStartMS, startMS, 0, false, nil)
 	if err != nil {
 		return nil, err
 	}

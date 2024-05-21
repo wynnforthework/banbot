@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -242,7 +241,7 @@ AutoFetchOHLCV
 	先尝试从本地读取，不存在时从交易所下载，然后返回。
 */
 func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
-	limit int, withUnFinish bool, pBar *utils.PrgBar) ([]*banexg.Kline, *errs.Error) {
+	limit int, withUnFinish bool, pBar *utils.PrgBar) ([]*AdjInfo, []*banexg.Kline, *errs.Error) {
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, withUnFinish)
 	downTF, err := GetDownTF(timeFrame)
@@ -250,40 +249,40 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 		if pBar != nil {
 			pBar.Add(core.StepTotal)
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		if pBar != nil {
 			pBar.Add(core.StepTotal)
 		}
-		return nil, err
+		return nil, nil, err
 	}
 	defer conn.Release()
 	_, err = sess.DownOHLCV2DB(exchange, exs, downTF, startMS, endMS, pBar)
 	if err != nil {
 		// DownOHLCV2DB 内部已处理stepCB，这里无需处理
-		return nil, err
+		return nil, nil, err
 	}
-	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish, 0)
+	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
 }
 
 /*
 GetOHLCV 获取品种K线，如需复权自动前复权
 */
-func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool, adj int) ([]*banexg.Kline, *errs.Error) {
+func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*AdjInfo, []*banexg.Kline, *errs.Error) {
 	sess, conn, err := Conn(nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer conn.Release()
-	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish, adj)
+	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
 }
 
 /*
-GetOHLCV 获取品种K线，如需复权自动前复权
+GetOHLCV 获取品种K线，返回未复权K线和复权因子，调用方可调用ApplyAdj进行复权
 */
-func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool, adj int) ([]*banexg.Kline, *errs.Error) {
+func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*AdjInfo, []*banexg.Kline, *errs.Error) {
 	if exs.Exchange == "china" && exs.Market != banexg.MarketSpot {
 		// 国内非股票，可能是：期货、期权、基金、、、
 		parts := utils2.SplitParts(exs.Symbol)
@@ -291,102 +290,84 @@ func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64
 			p2val := parts[1].Val
 			if p2val == "888" {
 				// 期货888是主力连续合约，000是指数合约
-				return q.GetFacOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish, adj)
+				adjs, err := q.GetAdjs(exs.ID)
+				if err != nil {
+					return nil, nil, err
+				}
+				klines, err := q.GetAdjOHLCV(adjs, timeFrame, startMS, endMS, limit, withUnFinish)
+				return adjs, klines, err
 			}
 		}
 	}
-	return q.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+	klines, err := q.QueryOHLCV(exs.ID, timeFrame, startMS, endMS, limit, withUnFinish)
+	return nil, klines, err
 }
 
-/*
-GetFacOHLCV 获取复权的K线
-*/
-func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool, adj int) ([]*banexg.Kline, *errs.Error) {
-	if adj == 0 {
-		adj = core.AdjFront
+func (q *Queries) GetAdjs(sid int32) ([]*AdjInfo, *errs.Error) {
+	amLock.Lock()
+	cache, hasOld := adjMap[sid]
+	amLock.Unlock()
+	if hasOld {
+		return cache, nil
 	}
 	ctx := context.Background()
-	facs, err_ := q.GetAdjFactors(ctx, sid)
+	rows, err_ := q.GetAdjFactors(ctx, sid)
 	if err_ != nil {
 		return nil, errs.New(core.ErrDbReadFail, err_)
 	}
-	// facs已按时间倒序，记录每个区间的结束时间戳
-	facEts := make([]*AdjFactorExt, 0, len(facs))
+	// facs已按时间升序，从后往前，记录截止时间
+	adjs := make([]*AdjInfo, 0, len(rows))
 	curEnd := btime.UTCStamp()
-	for _, f := range facs {
-		facEts = append(facEts, &AdjFactorExt{
-			AdjFactor: f,
-			StopMs:    curEnd,
-		})
-		curEnd = f.StartMs
-		if f.StartMs < startMS {
-			break
-		}
-	}
-	facRev := true
-	// factor(i) = newClose(i-1) / oldClose(i-1)
-	if adj == core.AdjBehind {
-		// 后复权，从前往后，复权因子累乘，作为新日期的因子；新数据除以因子
-		sort.Slice(facEts, func(i, j int) bool {
-			return facEts[i].StartMs < facEts[j].StartMs
-		})
-		lastFac := float64(1)
-		for _, f := range facEts {
-			f.Factor *= lastFac
-			lastFac = f.Factor
-		}
-		facRev = false
-	} else if adj == core.AdjFront {
-		// 前复权，从后往前，复权因子累乘，作为旧日期的因子；旧数据乘以因子
-		lastFac := float64(1)
-		for _, f := range facEts {
-			bakFac := f.Factor
-			f.Factor = lastFac
-			lastFac *= bakFac
-		}
-	}
-	revRead := startMS == 0 && limit > 0
-	if revRead != facRev {
-		// 读取顺序和facs顺序不一致，翻转facs
-		utils.ReverseArr(facEts)
-	}
-	if endMS == 0 {
-		endMS = btime.UTCStamp()
-	}
-	var result []*banexg.Kline
-	// 查询K线，并进行前复权
-	for _, f := range facEts {
-		if f.StartMs >= endMS || f.StopMs <= startMS {
-			// 此区间没有需要的数据，跳过
-			continue
-		}
+	for i := len(rows) - 1; i >= 0; i-- {
+		f := rows[i]
 		curSid := f.SubID
 		if curSid == 0 {
 			curSid = sid
 		}
-		start := max(f.StartMs, startMS)
-		stop := min(f.StopMs, endMS)
+		adjs = append(adjs, &AdjInfo{
+			ExSymbol: GetSymbolByID(curSid),
+			Factor:   f.Factor,
+			StartMS:  f.StartMs,
+			StopMS:   curEnd,
+		})
+		curEnd = f.StartMs
+	}
+	utils.ReverseArr(adjs)
+	amLock.Lock()
+	adjMap[sid] = adjs
+	amLock.Unlock()
+	return adjs, nil
+}
+
+/*
+GetAdjOHLCV 获取K线和复权信息（返回的是尚未复权的K线，需调用ApplyAdj复权）
+*/
+func (q *Queries) GetAdjOHLCV(adjs []*AdjInfo, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
+	if len(adjs) == 0 {
+		return nil, nil
+	}
+	if endMS == 0 {
+		endMS = btime.UTCStamp()
+	}
+	revRead := startMS == 0 && limit > 0
+	var result []*banexg.Kline
+	if revRead {
+		utils.ReverseArr(adjs)
+		defer utils.ReverseArr(adjs)
+	}
+	for _, f := range adjs {
+		if f.StartMS >= endMS || f.StopMS <= startMS {
+			continue
+		}
+		start := max(f.StartMS, startMS)
+		stop := min(f.StopMS, endMS)
 		if revRead {
 			// 逆序读取，从后往前，开始置为0
 			start = 0
 		}
-		klines, err := q.QueryOHLCV(curSid, timeFrame, start, stop, limit, withUnFinish)
+		klines, err := q.QueryOHLCV(f.ID, timeFrame, start, stop, limit, withUnFinish)
 		if err != nil {
 			return nil, err
-		}
-		factor := float64(1)
-		if adj == core.AdjFront {
-			factor = f.Factor
-		} else if adj == core.AdjBehind {
-			factor = 1 / f.Factor
-		}
-		if factor != 1 {
-			for _, k := range klines {
-				k.Open *= factor
-				k.High *= factor
-				k.Low *= factor
-				k.Close *= factor
-			}
 		}
 		if revRead {
 			result = append(klines, result...)
@@ -406,6 +387,116 @@ func (q *Queries) GetFacOHLCV(sid int32, timeFrame string, startMS, endMS int64,
 		}
 	}
 	return result, nil
+}
+
+/*
+ApplyAdj 计算复权后K线
+adjs 必须已升序
+cutEnd 截取的最大结束时间
+adj 复权类型
+limit 返回数量
+*/
+func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, limit int) []*banexg.Kline {
+	// adjs为空时不应直接返回，因klines可能需要裁剪
+	if len(klines) == 0 {
+		return klines
+	}
+	doCutKlineEnd := true
+	if cutEnd == 0 {
+		cutEnd = klines[len(klines)-1].Time + 1000
+		doCutKlineEnd = false
+	}
+	// 忽略尾部超出范围的adjs
+	match := false
+	for i := len(adjs) - 1; i >= 0; i-- {
+		if adjs[i].StartMS < cutEnd {
+			adjs = adjs[:i+1]
+			match = true
+			break
+		}
+	}
+	if !match {
+		adjs = nil
+	}
+	if doCutKlineEnd {
+		// 忽略尾部超出范围的K线
+		match = false
+		for i := len(klines) - 1; i >= 0; i-- {
+			if klines[i].Time <= cutEnd {
+				klines = klines[:i]
+				match = true
+				break
+			}
+		}
+		if !match {
+			return klines
+		}
+	}
+	if limit > 0 && len(klines) > limit {
+		klines = klines[len(klines)-limit:]
+	}
+	// 过滤adjs前面的无关项
+	if len(adjs) > 0 {
+		startMS := klines[0].Time
+		match = false
+		for i := len(adjs) - 1; i >= 0; i-- {
+			if adjs[i].StartMS <= startMS {
+				adjs = adjs[i:]
+				match = true
+				break
+			}
+		}
+		if !match {
+			return klines
+		}
+	} else {
+		return klines
+	}
+	// factor(i) = newClose(i-1) / oldClose(i-1)
+	if adj == core.AdjBehind {
+		// 后复权，从前往后，复权因子累乘，作为新日期的因子；新数据除以因子
+		lastFac := float64(1)
+		for _, f := range adjs {
+			f.CumFactor = lastFac * f.Factor
+			lastFac = f.CumFactor
+		}
+	} else if adj == core.AdjFront {
+		// 前复权，从后往前，复权因子累乘，作为旧日期的因子；旧数据乘以因子
+		lastFac := float64(1)
+		for i := len(adjs) - 1; i >= 0; i-- {
+			f := adjs[i]
+			f.CumFactor = lastFac
+			lastFac *= f.Factor
+		}
+	}
+	result := make([]*banexg.Kline, 0, len(klines))
+	cache := make([]*banexg.Kline, 0, len(klines)/3)
+	var item = adjs[0]
+	var ai = 1
+	saveBatch := func() {
+		if len(cache) == 0 {
+			return
+		}
+		cache = item.Apply(cache, adj)
+		result = append(result, cache...)
+		cache = make([]*banexg.Kline, 0, len(klines)/3)
+	}
+	for i, k := range klines {
+		if k.Time >= item.StopMS {
+			saveBatch()
+			if ai+1 < len(adjs) {
+				ai += 1
+				item = adjs[ai]
+			} else {
+				item = nil
+				cache = klines[i:]
+				break
+			}
+		}
+		cache = append(cache, k)
+	}
+	saveBatch()
+	return result
 }
 
 /*
@@ -449,9 +540,10 @@ FastBulkOHLCV
 快速批量获取K线。先下载所有需要的币种，然后批量查询再分组返回。
 
 	适用于币种较多，且需要的开始结束时间一致，且大部分已下载的情况。
+	对于组合品种，返回未复权的K线，和复权因子，自行根据需要调用ApplyAdj复权
 */
 func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame string,
-	startMS, endMS int64, limit int, handler func(string, string, []*banexg.Kline)) *errs.Error {
+	startMS, endMS int64, limit int, handler func(string, string, []*banexg.Kline, []*AdjInfo)) *errs.Error {
 	var exsMap, err = MapExSymbols(exchange, symbols)
 	if err != nil {
 		return err
@@ -489,7 +581,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 				if !ok {
 					return
 				}
-				handler(exs.Symbol, timeFrame, klines)
+				handler(exs.Symbol, timeFrame, klines, nil)
 			}
 			err = sess.QueryOHLCVBatch(sidArr, timeFrame, startMS, endMS, limit, bulkHandler)
 			if err != nil {
@@ -502,11 +594,11 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	// 单个数量过多，逐个查询
 	for _, sid := range leftArr {
 		exs := exsMap[sid]
-		kline, err := sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, false, 0)
+		adjs, kline, err := sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, false)
 		if err != nil {
 			return err
 		}
-		handler(exs.Symbol, timeFrame, kline)
+		handler(exs.Symbol, timeFrame, kline, adjs)
 	}
 	return nil
 }

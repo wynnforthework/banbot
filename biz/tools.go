@@ -352,10 +352,11 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 		if err != nil {
 			return err
 		}
-		klines, err := sess.GetOHLCV(exs, tf, start, stop, 0, false, adjVal)
+		adjs, klines, err := sess.GetOHLCV(exs, tf, start, stop, 0, false)
 		if err != nil {
 			return err
 		}
+		klines = orm.ApplyAdj(adjs, klines, adjVal, 0, 0)
 		rows := make([][]string, 0, len(klines))
 		for _, k := range klines {
 			dateStr := btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
@@ -370,7 +371,7 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 			}
 			rows = append(rows, row)
 		}
-		path := filepath.Join(args.OutPath, symbol+".csv")
+		path := filepath.Join(args.OutPath, symbol+"_"+tf+".csv")
 		err = utils.WriteCsvFile(path, rows)
 		if err != nil {
 			return err

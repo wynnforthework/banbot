@@ -35,7 +35,7 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 		return symbols, nil
 	}
 	backNum := max(f.Max, f.Min) + 1
-	return filterByOHLCV(symbols, "1d", backNum, func(s string, klines []*banexg.Kline) bool {
+	return filterByOHLCV(symbols, "1d", backNum, 0, func(s string, klines []*banexg.Kline) bool {
 		knum := len(klines)
 		return knum >= f.Max && (f.Max == 0 || knum <= f.Max)
 	})
@@ -89,7 +89,7 @@ func getSymbolVols(symbols []string, tf string, num int) ([]SymbolVol, *errs.Err
 	if !core.LiveMode {
 		startMS = btime.TimeMS()
 	}
-	callBack := func(symbol string, _ string, klines []*banexg.Kline) {
+	callBack := func(symbol string, _ string, klines []*banexg.Kline, adjs []*orm.AdjInfo) {
 		if len(klines) == 0 {
 			symbolVols = append(symbolVols, SymbolVol{symbol, 0, 0})
 		} else {
@@ -185,11 +185,11 @@ func (f *PriceFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker
 		}
 		return res, nil
 	} else {
-		return filterByOHLCV(symbols, "1h", 1, func(s string, klines []*banexg.Kline) bool {
+		return filterByOHLCV(symbols, "1h", 1, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
 			if len(klines) == 0 {
 				return false
 			}
-			return f.validatePrice(s, klines[0].Close)
+			return f.validatePrice(s, klines[len(klines)-1].Close)
 		})
 	}
 }
@@ -242,7 +242,7 @@ func (f *PriceFilter) validatePrice(symbol string, price float64) bool {
 }
 
 func (f *RateOfChangeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	return filterByOHLCV(symbols, "1d", f.BackDays, f.validate)
+	return filterByOHLCV(symbols, "1d", f.BackDays, core.AdjFront, f.validate)
 }
 
 func (f *RateOfChangeFilter) validate(pair string, arr []*banexg.Kline) bool {
@@ -270,9 +270,10 @@ func (f *RateOfChangeFilter) validate(pair string, arr []*banexg.Kline) bool {
 	return true
 }
 
-func filterByOHLCV(symbols []string, timeFrame string, limit int, cb func(string, []*banexg.Kline) bool) ([]string, *errs.Error) {
+func filterByOHLCV(symbols []string, timeFrame string, limit int, adj int, cb func(string, []*banexg.Kline) bool) ([]string, *errs.Error) {
 	var has = make(map[string]struct{})
-	handle := func(pair string, _ string, arr []*banexg.Kline) {
+	handle := func(pair string, _ string, arr []*banexg.Kline, adjs []*orm.AdjInfo) {
+		arr = orm.ApplyAdj(adjs, arr, adj, 0, 0)
 		if cb(pair, arr) {
 			has[pair] = struct{}{}
 		}
@@ -291,7 +292,7 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, cb func(string
 }
 
 func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	return filterByOHLCV(symbols, "1d", f.BackDays, func(s string, klines []*banexg.Kline) bool {
+	return filterByOHLCV(symbols, "1d", f.BackDays, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
 		var data = make([]float64, 0, len(klines))
 		for i, v := range klines[1:] {
 			data = append(data, v.Close/klines[i].Close)

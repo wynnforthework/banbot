@@ -101,6 +101,7 @@ const (
 	ExitTagTakeProfit  = "take_profit"
 	ExitTagDataStuck   = "data_stuck"
 	ExitTagLiquidation = "liquidation"
+	ExitTagEnvEnd      = "env_end"
 )
 
 var (

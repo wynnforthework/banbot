@@ -20,7 +20,7 @@ import (
 type Trader struct {
 }
 
-func (t *Trader) OnEnvJobs(bar *banexg.PairTFKline) (*ta.BarEnv, *errs.Error) {
+func (t *Trader) OnEnvJobs(bar *orm.InfoKline) (*ta.BarEnv, *errs.Error) {
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
 	env, ok := strategy.Envs[envKey]
 	if !ok {
@@ -35,7 +35,7 @@ func (t *Trader) OnEnvJobs(bar *banexg.PairTFKline) (*ta.BarEnv, *errs.Error) {
 	return env, nil
 }
 
-func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
+func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
 	if _, ok := core.ForbidPairs[bar.Symbol]; ok {
 		return nil
 	}
@@ -68,7 +68,7 @@ func (t *Trader) FeedKline(bar *banexg.PairTFKline) *errs.Error {
 	return err
 }
 
-func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *banexg.PairTFKline, barExpired bool) *errs.Error {
+func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKline, barExpired bool) *errs.Error {
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
 	// 获取交易任务
 	jobs, _ := strategy.GetJobs(account)[envKey]
@@ -170,4 +170,12 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob,
 		}
 	}
 	return nil
+}
+
+func (t *Trader) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) {
+	mgr := GetOdMgr("")
+	err := mgr.OnEnvEnd(bar, adj)
+	if err != nil {
+		log.Warn("close orders on env end fail", zap.Error(err))
+	}
 }

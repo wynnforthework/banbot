@@ -30,7 +30,8 @@ type IOrderMgr interface {
 	EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strategy.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error)
 	ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy.ExitReq) ([]*orm.InOutOrder, *errs.Error)
 	ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strategy.ExitReq) (*orm.InOutOrder, *errs.Error)
-	UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKline) *errs.Error
+	UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *errs.Error
+	OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error
 	CleanUp() *errs.Error
 }
 
@@ -405,7 +406,7 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strateg
 UpdateByBar
 使用价格更新订单的利润等。可能会触发爆仓
 */
-func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKline) *errs.Error {
+func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *errs.Error {
 	for _, od := range allOpens {
 		if od.Symbol != bar.Symbol || od.Timeframe != bar.TimeFrame || od.Status >= orm.InOutStatusFullExit {
 			continue

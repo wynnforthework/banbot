@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"sort"
-	"strings"
 	"sync"
 )
 
@@ -118,8 +117,6 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64, *errs.Error) {
 	sinceMap := make(map[string]int64)
 	lockMap := sync.Mutex{}
-	exchange := exg.Default
-	curTimeMS := btime.TimeMS()
 	jobNum := 0
 	// 预热所需的必要数据
 	for _, job := range warmJobs {
@@ -129,45 +126,12 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	pBar := utils.NewPrgBar(jobNum*core.StepTotal, "warmup")
 	defer pBar.Close()
 	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(job *WarmJob) *errs.Error {
-		symbol := job.hold.getSymbol()
-		exs, err := orm.GetExSymbol(exchange, symbol)
-		if err != nil {
-			pBar.Add(core.StepTotal * len(job.tfWarms))
-			return err
-		}
-		for tf, warmNum := range job.tfWarms {
-			key := fmt.Sprintf("%s|%s", symbol, tf)
-			lockMap.Lock()
-			sinceMap[key] = 0
-			lockMap.Unlock()
-			tfMSecs := int64(utils.TFToSecs(tf) * 1000)
-			if tfMSecs < int64(60000) {
-				pBar.Add(core.StepTotal)
-				continue
-			}
-			endMS := utils.AlignTfMSecs(curTimeMS, tfMSecs)
-			bars, err := orm.AutoFetchOHLCV(exchange, exs, tf, 0, endMS, warmNum, false, pBar)
-			if err != nil {
-				return err
-			}
-			if len(bars) == 0 {
-				log.Warn("skip warm as empty", zap.String("pair", exs.Symbol), zap.String("tf", tf),
-					zap.Int("want", warmNum), zap.Int64("end", endMS))
-				continue
-			}
-			if warmNum != len(bars) {
-				barEndMs := bars[len(bars)-1].Time + tfMSecs
-				barStartMs := bars[0].Time
-				lackNum := warmNum - len(bars)
-				log.Warn(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", exs.Symbol,
-					tf, lackNum, warmNum, barStartMs, barEndMs))
-			}
-			sinceVal := job.hold.WarmTfs(map[string][]*banexg.Kline{tf: bars})
-			lockMap.Lock()
-			sinceMap[key] = sinceVal
-			lockMap.Unlock()
-		}
-		return nil
+		hold := job.hold
+		since, err := hold.warmTfs(btime.TimeMS(), job.tfWarms, pBar)
+		lockMap.Lock()
+		sinceMap[hold.getSymbol()] = since
+		lockMap.Unlock()
+		return err
 	})
 	return sinceMap, retErr
 }
@@ -176,7 +140,7 @@ type HistProvider[T IHistKlineFeeder] struct {
 	Provider[T]
 }
 
-func InitHistProvider(callBack FnPairKline) {
+func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
 	Main = &HistProvider[IHistKlineFeeder]{
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
@@ -185,6 +149,7 @@ func InitHistProvider(callBack FnPairKline) {
 				if err != nil {
 					return nil, err
 				}
+				feeder.onEnvEnd = envEnd
 				feeder.subTfs(tfs, false)
 				return feeder, nil
 			},
@@ -219,19 +184,9 @@ func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[strin
 	if err != nil {
 		return err
 	}
-	pairSince := make(map[string]int64)
-	for key, val := range sinceMap {
-		pair := strings.Split(key, "|")[0]
-		if oldVal, ok := pairSince[pair]; ok && oldVal > 0 {
-			// 大周期的sinceMS可能小于小周期的，这里应该取最大时间。
-			pairSince[pair] = max(oldVal, val)
-		} else {
-			pairSince[pair] = val
-		}
-	}
 	maxSince := int64(0)
 	holders := make(map[string]IHistKlineFeeder)
-	for pair, since := range pairSince {
+	for pair, since := range sinceMap {
 		hold, ok := p.holders[pair]
 		if !ok {
 			continue
@@ -340,7 +295,7 @@ type LiveProvider[T IKlineFeeder] struct {
 	*KLineWatcher
 }
 
-func InitLiveProvider(callBack FnPairKline) *errs.Error {
+func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
 	watcher, err := NewKlineWatcher(config.SpiderAddr)
 	if err != nil {
 		return err
@@ -349,8 +304,12 @@ func InitLiveProvider(callBack FnPairKline) *errs.Error {
 		Provider: Provider[IKlineFeeder]{
 			holders: make(map[string]IKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IKlineFeeder, *errs.Error) {
-				feeder := NewKlineFeeder(pair, callBack)
+				feeder, err := NewKlineFeeder(pair, callBack)
+				if err != nil {
+					return nil, err
+				}
 				feeder.subTfs(tfs, false)
+				feeder.onEnvEnd = envEnd
 				return feeder, nil
 			},
 		},
@@ -377,8 +336,7 @@ func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]in
 		var jobs []WatchJob
 		for _, h := range newHolds {
 			symbol, timeFrame := h.getSymbol(), h.getStates()[0].TimeFrame
-			key := fmt.Sprintf("%s|%s", symbol, timeFrame)
-			if since, ok := sinceMap[key]; ok {
+			if since, ok := sinceMap[symbol]; ok {
 				jobs = append(jobs, WatchJob{
 					Symbol:    symbol,
 					TimeFrame: timeFrame,
@@ -432,6 +390,7 @@ func makeOnKlineMsg(p *LiveProvider[IKlineFeeder]) func(msg *KLineMsg) {
 			return
 		}
 		tfMSecs := int64(msg.TFSecs * 1000)
+		// 已在启动或休市期间计算复权因子，内部会自动进行复权
 		if msg.Interval >= msg.TFSecs {
 			_, err := hold.onNewBars(tfMSecs, msg.Arr)
 			if err != nil {

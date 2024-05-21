@@ -268,3 +268,29 @@ func InitExg(exchange banexg.BanExchange) *errs.Error {
 	}
 	return exchange.LoadLeverageBrackets(false, nil)
 }
+
+func (a *AdjInfo) Apply(bars []*banexg.Kline, adj int) []*banexg.Kline {
+	if a == nil || a.CumFactor == 1 || a.CumFactor == 0 {
+		return bars
+	}
+	result := make([]*banexg.Kline, 0, len(bars))
+	factor := float64(1)
+	if adj == core.AdjFront {
+		factor = a.CumFactor
+	} else if adj == core.AdjBehind {
+		factor = 1 / a.CumFactor
+	} else {
+		return bars
+	}
+	for _, b := range bars {
+		k := b.Clone()
+		k.Open *= factor
+		k.High *= factor
+		k.Low *= factor
+		k.Close *= factor
+		k.Volume *= factor
+		k.Info *= factor
+		result = append(result, k)
+	}
+	return result
+}

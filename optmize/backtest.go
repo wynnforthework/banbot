@@ -10,7 +10,6 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
-	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/robfig/cron/v3"
@@ -44,7 +43,7 @@ func NewBackTest() *BackTest {
 	biz.InitFakeWallets()
 	wallets := biz.GetWallets("")
 	p.TotalInvest = wallets.TotalLegal(nil, false)
-	data.InitHistProvider(p.FeedKLine)
+	data.InitHistProvider(p.FeedKLine, p.OnEnvEnd)
 	biz.InitLocalOrderMgr(p.orderCB)
 	return p
 }
@@ -72,7 +71,7 @@ func (b *BackTest) Init() *errs.Error {
 	return biz.LoadRefreshPairs()
 }
 
-func (b *BackTest) FeedKLine(bar *banexg.PairTFKline) {
+func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	b.BarNum += 1
 	curTime := btime.TimeMS()
 	core.CheckWallets = false

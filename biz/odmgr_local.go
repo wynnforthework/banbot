@@ -40,7 +40,7 @@ func (o *LocalOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, ente
 	return o.OrderMgr.ProcessOrders(sess, env, enters, exits)
 }
 
-func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.PairTFKline) *errs.Error {
+func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *errs.Error {
 	if len(allOpens) == 0 || core.EnvReal {
 		return nil
 	}
@@ -80,7 +80,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *banexg.Pair
 fillPendingOrders
 填充等待交易所响应的订单。不可用于实盘；可用于回测、模拟实盘等。
 */
-func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *banexg.PairTFKline) (int, *errs.Error) {
+func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.InfoKline) (int, *errs.Error) {
 	affectNum := 0
 	for _, od := range orders {
 		if bar != nil && bar.TimeFrame != od.Timeframe {
@@ -376,24 +376,49 @@ func (o *LocalOrderMgr) onLowFunds() {
 	}
 }
 
+func (o *LocalOrderMgr) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error {
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	err = o.exitAndFill(sess, &strategy.ExitReq{
+		Tag:  core.ExitTagEnvEnd,
+		Dirt: core.OdDirtBoth,
+	}, &orm.InfoKline{PairTFKline: bar, Adj: adj})
+	return err
+}
+
+func (o *LocalOrderMgr) exitAndFill(sess *orm.Queries, req *strategy.ExitReq, bar *orm.InfoKline) *errs.Error {
+	pairs := ""
+	if bar != nil {
+		pairs = bar.Symbol
+	}
+	orders, err := o.ExitOpenOrders(sess, pairs, req)
+	if err != nil {
+		return err
+	}
+	if len(orders) > 0 {
+		_, err = o.fillPendingOrders(orders, bar)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (o *LocalOrderMgr) CleanUp() *errs.Error {
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return err
 	}
 	defer conn.Release()
-	orders, err := o.ExitOpenOrders(sess, "", &strategy.ExitReq{
+	err = o.exitAndFill(sess, &strategy.ExitReq{
 		Tag:  core.ExitTagBotStop,
 		Dirt: core.OdDirtBoth,
-	})
+	}, nil)
 	if err != nil {
 		return err
-	}
-	if len(orders) > 0 {
-		_, err = o.fillPendingOrders(orders, nil)
-		if err != nil {
-			return err
-		}
 	}
 	// 重置未实现盈亏
 	wallets := GetWallets(o.Account)
