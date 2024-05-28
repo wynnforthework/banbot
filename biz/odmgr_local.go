@@ -20,6 +20,10 @@ type LocalOrderMgr struct {
 	OrderMgr
 }
 
+var (
+	tipAmtZeros = map[string]bool{} // 已提示数量太小无法开单的标的
+)
+
 func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 	for account := range config.Accounts {
 		mgr, ok := accOdMgrs[account]
@@ -202,7 +206,10 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 				log.Warn("prec enter amount fail", zap.String("symbol", od.Symbol),
 					zap.Float64("amt", entAmount), zap.Error(err))
 			} else {
-				log.Warn("prec enter amount zero", zap.String("symbol", od.Symbol))
+				if _, ok := tipAmtZeros[od.Symbol]; !ok {
+					log.Warn("prec enter amount zero", zap.String("symbol", od.Symbol))
+					tipAmtZeros[od.Symbol] = true
+				}
 			}
 			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)

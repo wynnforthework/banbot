@@ -257,9 +257,12 @@ func InitListDates() *errs.Error {
 		if exs.DelistMs == 0 {
 			mar, err := exchange.GetMarket(exs.Symbol)
 			if err != nil {
-				return err
+				if err.Code != errs.CodeNoMarketForPair {
+					return err
+				}
+			} else {
+				exs.DelistMs = mar.Expiry
 			}
-			exs.DelistMs = mar.Expiry
 		}
 		if oldListMS != exs.ListMs || oldDeListMS != exs.DelistMs {
 			err_ := sess.SetListMS(context.Background(), SetListMSParams{

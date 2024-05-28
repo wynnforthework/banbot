@@ -11,6 +11,7 @@ import (
 var (
 	CurTimeMS    = int64(0)
 	UTCLocale, _ = time.LoadLocation("UTC")
+	LocShow      *time.Location // 用于显示的时区
 )
 
 func init() {
@@ -137,6 +138,14 @@ format为空时，默认2006-01-02 15:04:05
 */
 func ToDateStr(timestamp int64, format string) string {
 	t := ToTime(timestamp)
+	if format == "" {
+		format = core.DefaultDateFmt
+	}
+	return t.Format(format)
+}
+
+func ToDateStrLoc(timestamp int64, format string) string {
+	t := ToTime(timestamp).In(LocShow)
 	if format == "" {
 		format = core.DefaultDateFmt
 	}

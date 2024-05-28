@@ -119,6 +119,7 @@ type RunPolicyConfig struct {
 	MaxPair       int                 `yaml:"max_pair" mapstructure:"max_pair"`
 	MaxOpen       int                 `yaml:"max_open" mapstructure:"max_open"`
 	StrtgPerf     *StrtgPerfConfig    `yaml:"strtg_perf" mapstructure:"strtg_perf"`
+	Pairs         []string            `yaml:"pairs" mapstructure:"pairs"`
 }
 
 type StrtgPerfConfig struct {

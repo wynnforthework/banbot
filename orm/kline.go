@@ -581,8 +581,8 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 		realStart = min(realStart, startMS)
 		realEnd = max(realEnd, endMS)
 	}
-	oldStart, _ := q.GetKlineRange(sid, timeFrame)
-	if oldStart == 0 {
+	oldStart, oldEnd := q.GetKlineRange(sid, timeFrame)
+	if oldStart == 0 && oldEnd == 0 {
 		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: sid, Timeframe: timeFrame, Start: realStart, Stop: realEnd})
 	} else {
 		err_ = q.SetKInfo(ctx, SetKInfoParams{Sid: sid, Timeframe: timeFrame, Start: realStart, Stop: realEnd})

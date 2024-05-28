@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"time"
 )
 
 func GetDataDir() string {
@@ -190,8 +191,17 @@ func apply(args *CmdArgs) *errs.Error {
 	if Data.RunPolicy == nil {
 		Data.RunPolicy = make(map[string]*RunPolicyConfig)
 	}
+	var fixPairs = make(map[string]bool)
+	staticPairs := true
 	for name, pol := range Data.RunPolicy {
 		pol.Name = name
+		if len(pol.Pairs) > 0 {
+			for _, p := range pol.Pairs {
+				fixPairs[p] = true
+			}
+		} else {
+			staticPairs = false
+		}
 	}
 	RunPolicy = Data.RunPolicy
 	if Data.StrtgPerf == nil {
@@ -207,6 +217,18 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	if len(args.Pairs) > 0 {
 		Data.Pairs = args.Pairs
+	}
+	if len(Data.Pairs) > 0 {
+		staticPairs = true
+		for _, p := range Data.Pairs {
+			fixPairs[p] = true
+		}
+	}
+	if staticPairs && len(fixPairs) > 0 {
+		Data.Pairs = make([]string, 0, len(fixPairs))
+		for p := range fixPairs {
+			Data.Pairs = append(Data.Pairs, p)
+		}
 	}
 	Pairs = Data.Pairs
 	if Data.PairMgr == nil {
@@ -250,6 +272,11 @@ func GetAccLeverage(account string) float64 {
 }
 
 func initExgAccs() {
+	if Exchange.Name == "china" {
+		btime.LocShow, _ = time.LoadLocation("Asia/Shanghai")
+	} else {
+		btime.LocShow = btime.UTCLocale
+	}
 	exgCfg := GetExgConfig()
 	var accs map[string]*AccountConfig
 	if core.RunEnv != core.RunEnvTest {

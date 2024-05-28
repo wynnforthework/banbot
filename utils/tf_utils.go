@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
 	"strconv"
@@ -116,8 +117,8 @@ AlignTfMSecs
 将给定的13位毫秒级时间戳，转为指定时间周期下，的头部开始时间戳
 */
 func AlignTfMSecs(timeMSecs int64, tfMSecs int64) int64 {
-	if timeMSecs < 1000000000000 {
-		panic("13 digit timestamp is require for AlignTfMSecs")
+	if timeMSecs < 100000000000 {
+		panic(fmt.Sprintf("12 digit is required for AlignTfMSecs, : %v", timeMSecs))
 	}
 	if tfMSecs < 1000 {
 		panic("milliseconds tfMSecs is require for AlignTfMSecs")
@@ -126,8 +127,8 @@ func AlignTfMSecs(timeMSecs int64, tfMSecs int64) int64 {
 }
 
 func AlignTfMSecsOffset(timeMSecs, tfMSecs, offset int64) int64 {
-	if timeMSecs < 1000000000000 {
-		panic("13 digit timestamp is require for AlignTfMSecs")
+	if timeMSecs < 100000000000 {
+		panic(fmt.Sprintf("12 digit is required for AlignTfMSecsOffset, : %v", timeMSecs))
 	}
 	if tfMSecs < 1000 {
 		panic("milliseconds tfMSecs is require for AlignTfMSecs")

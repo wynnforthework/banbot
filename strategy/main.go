@@ -289,7 +289,24 @@ func initStagyJobs() {
 var polFilters = make(map[string][]goods.IFilter)
 
 func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string, adds []string) ([]string, *errs.Error) {
-	if len(pol.Filters) == 0 || len(pairs) == 0 {
+	if len(pairs) == 0 {
+		return pairs, nil
+	}
+	// 根据pol.Pairs确定交易的标的
+	if len(pol.Pairs) > 0 {
+		allAllows := make(map[string]bool)
+		for _, p := range pairs {
+			allAllows[p] = true
+		}
+		res := make([]string, 0, len(pol.Pairs))
+		for _, p := range pol.Pairs {
+			if _, has := allAllows[p]; has {
+				res = append(res, p)
+			}
+		}
+		return res, nil
+	}
+	if len(pol.Filters) == 0 {
 		return pairs, nil
 	}
 	filters, ok := polFilters[pol.Name]

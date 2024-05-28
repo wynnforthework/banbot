@@ -158,8 +158,11 @@ func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
 }
 
 func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
-	var err *errs.Error
 	exchange := exg.Default
+	if !exchange.HasApi(banexg.ApiFetchOHLCV, core.Market) {
+		return nil
+	}
+	var err *errs.Error
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return err

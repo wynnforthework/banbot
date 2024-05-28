@@ -199,6 +199,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 		}
 	}()
 	// 启动一个goroutine将K线保存到数据库
+	realStart, realEnd := int64(0), int64(0)
 	go func() {
 		defer wg.Done()
 		var num int64
@@ -221,6 +222,13 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 						bar.Add(curNum)
 					}
 					saveNum += curNum
+					if realStart == 0 || batch[0].Time < realStart {
+						realStart = batch[0].Time
+					}
+					curEnd := batch[len(batch)-1].Time
+					if curEnd > realEnd {
+						realEnd = curEnd
+					}
 				}
 			}
 		}
@@ -230,7 +238,10 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	if outErr != nil {
 		return saveNum, errs.New(core.ErrRunTime, outErr)
 	}
-	err = sess.UpdateKRange(exs.ID, timeFrame, startMS, endMS, nil, true)
+	if saveNum == 0 {
+		return 0, nil
+	}
+	err = sess.UpdateKRange(exs.ID, timeFrame, realStart, realEnd, nil, true)
 	return saveNum, err
 }
 
@@ -423,7 +434,7 @@ func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, li
 		match = false
 		for i := len(klines) - 1; i >= 0; i-- {
 			if klines[i].Time <= cutEnd {
-				klines = klines[:i]
+				klines = klines[:i+1]
 				match = true
 				break
 			}
