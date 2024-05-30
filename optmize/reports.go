@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
@@ -12,8 +13,10 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/olekukonko/tablewriter"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"math"
@@ -58,6 +61,8 @@ type RowPart struct {
 	CostSum      float64
 	Durations    []int
 	Orders       []*orm.InOutOrder
+	Sharpe       float64 // 夏普比率
+	Sortino      string
 }
 
 type RowItem struct {
@@ -145,7 +150,7 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 		if od.Exit != nil {
 			sumFee += od.Exit.Fee
 		}
-		sumCost += od.EnterCost()
+		sumCost += od.EnterCost() / od.Leverage
 	}
 	table.Append([]string{"Absolute Profit", strconv.FormatFloat(sumProfit, 'f', 0, 64)})
 	totProfitPctVal := sumProfit * 100 / r.TotalInvest
@@ -177,38 +182,45 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	drawDownRate := strconv.FormatFloat(r.Plots.calcDrawDown()*100, 'f', 1, 64) + "%"
 	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 1, 64) + "%"
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
+	sharpe, sortino, err := measurePerformance(orders, 30)
+	if err != nil {
+		log.Warn("calc sharpe/sortino fail", zap.Error(err))
+	} else {
+		table.Append([]string{"Sharpe Ratio", strconv.FormatFloat(sharpe, 'f', 2, 64)})
+		table.Append([]string{"Sortino Ratio", sortino})
+	}
 	table.Render()
 	return b.String()
 }
 
 func textGroupPairs(orders []*orm.InOutOrder) string {
-	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
 		return od.Symbol
 	})
 	sort.Slice(groups, func(i, j int) bool {
-		return len(groups[i].Orders) > len(groups[j].Orders)
+		return groups[i].Sharpe > groups[j].Sharpe
 	})
-	return printGroups(groups, "Pair", nil, nil)
+	return printGroups(groups, "Pair", true, nil, nil)
 }
 
 func textGroupEntTags(orders []*orm.InOutOrder) string {
-	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
 		return od.EnterTag
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
 	})
-	return printGroups(groups, "Enter Tag", nil, nil)
+	return printGroups(groups, "Enter Tag", true, nil, nil)
 }
 
 func textGroupExitTags(orders []*orm.InOutOrder) string {
-	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
 		return od.ExitTag
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
 	})
-	return printGroups(groups, "Exit Tag", nil, nil)
+	return printGroups(groups, "Exit Tag", true, nil, nil)
 }
 
 func textGroupProfitRanges(orders []*orm.InOutOrder) string {
@@ -233,13 +245,13 @@ func textGroupProfitRanges(orders []*orm.InOutOrder) string {
 		maxPct := strconv.FormatFloat(slices.Max(gp.Items)*100, 'f', 2, 64)
 		grpTitles = append(grpTitles, fmt.Sprintf("%s ~ %s%%", minPct, maxPct))
 	}
-	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, false, func(od *orm.InOutOrder, i int) string {
 		return grpTitles[res.RowGIds[i]]
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Orders[0].ProfitRate < groups[j].Orders[0].ProfitRate
 	})
-	return printGroups(groups, "Profit Range", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
+	return printGroups(groups, "Profit Range", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
 func textGroupDays(orders []*orm.InOutOrder) string {
@@ -267,7 +279,7 @@ func textGroupDays(orders []*orm.InOutOrder) string {
 		bestTFSecs = utils.TFToSecs(bestTF)
 	}
 	tfUnit := bestTF[1]
-	groups := groupItems(orders, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, false, func(od *orm.InOutOrder, i int) string {
 		if tfUnit == 'M' {
 			return btime.ToDateStr(od.EnterAt, "2006-01")
 		} else if tfUnit == 'd' || tfUnit == 'w' {
@@ -280,7 +292,7 @@ func textGroupDays(orders []*orm.InOutOrder) string {
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
 	})
-	return printGroups(groups, "Date", []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
+	return printGroups(groups, "Date", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
 func makeEnterExits(orders []*orm.InOutOrder) []string {
@@ -312,7 +324,7 @@ func makeEnterExits(orders []*orm.InOutOrder) []string {
 	}
 }
 
-func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int) string) []*RowItem {
+func groupItems(orders []*orm.InOutOrder, measure bool, getTag func(od *orm.InOutOrder, i int) string) []*RowItem {
 	if len(orders) == 0 {
 		return nil
 	}
@@ -328,7 +340,7 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 				RowPart: RowPart{
 					ProfitSum:    od.Profit,
 					ProfitPctSum: od.ProfitRate,
-					CostSum:      od.EnterCost(),
+					CostSum:      od.EnterCost() / od.Leverage,
 					Durations:    []int{duration},
 					Orders:       make([]*orm.InOutOrder, 0, 8),
 				},
@@ -344,18 +356,33 @@ func groupItems(orders []*orm.InOutOrder, getTag func(od *orm.InOutOrder, i int)
 			}
 			sta.ProfitSum += od.Profit
 			sta.ProfitPctSum += od.ProfitRate
-			sta.CostSum += od.EnterCost()
+			sta.CostSum += od.EnterCost() / od.Leverage
 			sta.Durations = append(sta.Durations, duration)
 			sta.Orders = append(sta.Orders, od)
+		}
+	}
+	if measure {
+		// 分30份采样计算指标，太大的话会导致指标偏小
+		for _, gp := range groups {
+			sharpe, sortino, err := measurePerformance(gp.Orders, 30)
+			if err != nil {
+				log.Warn("calc measure fail", zap.Error(err))
+			} else {
+				gp.Sharpe = sharpe
+				gp.Sortino = sortino
+			}
 		}
 	}
 	return utils.ValsOfMap(groups)
 }
 
-func printGroups(groups []*RowItem, title string, extHeads []string, prcGrp func([]*orm.InOutOrder) []string) string {
+func printGroups(groups []*RowItem, title string, measure bool, extHeads []string, prcGrp func([]*orm.InOutOrder) []string) string {
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
 	heads := []string{title, "Count", "Avg Profit %", "Tot Profit %", "Sum Profit", "Duration(h'm)", "Win Rate"}
+	if measure {
+		heads = append(heads, "Sharpe/Sortino")
+	}
 	if len(extHeads) > 0 {
 		heads = append(heads, extHeads...)
 	}
@@ -372,6 +399,9 @@ func printGroups(groups []*RowItem, title string, extHeads []string, prcGrp func
 		duraText := kMeansDurations(sta.Durations, 3)
 		winRate := strconv.FormatFloat(float64(sta.WinCount)*100/float64(grpCount), 'f', 1, 64) + "%"
 		row := []string{sta.Title, numText, avgProfit, totProfit, sumProfit, duraText, winRate}
+		if measure {
+			row = append(row, strconv.FormatFloat(sta.Sharpe, 'f', -1, 64)+" / "+sta.Sortino)
+		}
 		if prcGrp != nil {
 			cols := prcGrp(sta.Orders)
 			row = append(row, cols...)
@@ -380,6 +410,56 @@ func printGroups(groups []*RowItem, title string, extHeads []string, prcGrp func
 	}
 	table.Render()
 	return b.String()
+}
+
+func measurePerformance(ods []*orm.InOutOrder, num int) (float64, string, *errs.Error) {
+	if len(ods) == 0 {
+		return 0, "", nil
+	}
+	sort.Slice(ods, func(i, j int) bool {
+		return ods[i].ExitAt < ods[j].ExitAt
+	})
+	var startMs = ods[0].EnterAt
+	var stopMs = ods[len(ods)-1].ExitAt
+	stepMs := (stopMs - startMs) / int64(num)
+	curEnd := startMs + stepMs
+	profit, cost := float64(0), float64(0)
+	allProfit, allCost := float64(0), float64(0)
+	returns := make([]decimal.Decimal, 0)
+	for _, od := range ods {
+		for od.ExitAt > curEnd {
+			if cost > 0 {
+				returns = append(returns, decimal.NewFromFloat(profit/cost))
+			}
+			profit, cost = 0, 0
+			curEnd += stepMs
+		}
+		curCost := od.EnterCost() / od.Leverage
+		cost += curCost
+		profit += od.Profit
+		allCost += curCost
+		allProfit += od.Profit
+	}
+	if cost > 0 {
+		returns = append(returns, decimal.NewFromFloat(profit/cost))
+	}
+	avg := decimal.NewFromFloat(allProfit / allCost)
+	sharpe, err := utils.DecSharpeRatio(returns, decimal.NewFromFloat(0), avg)
+	if err != nil {
+		return 0, "", errs.New(errs.CodeRunTime, err)
+	}
+	var sortineStr string
+	sortine, err := utils.DecSortinoRatio(returns, decimal.NewFromFloat(0), avg)
+	if err != nil {
+		if !errors.Is(err, utils.ErrNoNegativeResults) {
+			return 0, "", errs.New(errs.CodeRunTime, err)
+		}
+		sortineStr = "inf"
+	} else {
+		sortineStr = sortine.StringFixed(2)
+	}
+	sharpeFlt, _ := sharpe.Round(2).Float64()
+	return sharpeFlt, sortineStr, nil
 }
 
 func kMeansDurations(durations []int, num int) string {
@@ -421,8 +501,10 @@ func kMeansDurations(durations []int, num int) string {
 			hours := mins / 60
 			lmins := mins % 60
 			b.WriteString(strconv.Itoa(hours))
-			b.WriteString("'")
-			b.WriteString(strconv.Itoa(lmins))
+			if hours <= 99 {
+				b.WriteString("'")
+				b.WriteString(strconv.Itoa(lmins))
+			}
 		}
 		b.WriteString("/")
 		b.WriteString(strconv.Itoa(grpNum))

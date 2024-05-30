@@ -74,5 +74,5 @@ go tool pprof -http :8080 cpu.profile
 
 # TODO
 1. 将策略注入改为接口，以便允许从结构体继承。
-2. 测试指标的`fmt.Sprintf`与结构体作为map的键两种方式性能优劣
-3. 策略初始化时允许传入config中参数
+2. 策略初始化时允许传入config中参数
+3. 实现自动参数优化
