@@ -121,14 +121,13 @@ func calcKlineScore(arr []*banexg.Kline, pipChg float64, prevNum int) float64 {
 func allAllowTFs() []string {
 	var groups = [][]string{config.RunTimeframes}
 	for _, pol := range config.RunPolicy {
-		stagy := strategy.Get(pol.Name)
+		stagy := strategy.New(pol)
 		if stagy == nil {
 			continue
 		}
 		if len(pol.RunTimeframes) > 0 {
-			groups = append(groups, pol.RunTimeframes)
 			// 配置的时间周期优先级高于策略写死的
-			stagy.AllowTFs = pol.RunTimeframes
+			groups = append(groups, pol.RunTimeframes)
 		} else {
 			groups = append(groups, stagy.AllowTFs)
 		}

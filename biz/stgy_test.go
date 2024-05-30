@@ -54,7 +54,7 @@ func TestStagyRun(t *testing.T) {
 		"ARPA/USDT:USDT", "SOL/USDT:USDT", "1000XEC/USDT:USDT", "DOGE/USDT:USDT", "MANA/USDT:USDT",
 		"SAND/USDT:USDT", "BLUR/USDT:USDT", "1000LUNC/USDT:USDT", "BCH/USDT:USDT", "ID/USDT:USDT",
 		"SFP/USDT:USDT", "WAVES/USDT:USDT", "CHZ/USDT:USDT", "MASK/USDT:USDT", "BNB/USDT:USDT"}
-	stagy := strategy.Get("hammer")
+	stagy := strategy.New(&config.RunPolicyConfig{Name: "hammer"})
 	if stagy == nil {
 		panic("load strategy fail")
 	}

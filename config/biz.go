@@ -188,22 +188,7 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	RunTimeframes = Data.RunTimeframes
 	WatchJobs = Data.WatchJobs
-	if Data.RunPolicy == nil {
-		Data.RunPolicy = make(map[string]*RunPolicyConfig)
-	}
-	var fixPairs = make(map[string]bool)
-	staticPairs := true
-	for name, pol := range Data.RunPolicy {
-		pol.Name = name
-		if len(pol.Pairs) > 0 {
-			for _, p := range pol.Pairs {
-				fixPairs[p] = true
-			}
-		} else {
-			staticPairs = false
-		}
-	}
-	RunPolicy = Data.RunPolicy
+	staticPairs, fixPairs := initPolicies()
 	if Data.StrtgPerf == nil {
 		Data.StrtgPerf = &StrtgPerfConfig{
 			MinOdNum:  5,
@@ -244,6 +229,25 @@ func apply(args *CmdArgs) *errs.Error {
 	RPCChannels = Data.RPCChannels
 	Webhook = Data.Webhook
 	return nil
+}
+
+func initPolicies() (bool, map[string]bool) {
+	if Data.RunPolicy == nil {
+		Data.RunPolicy = make([]*RunPolicyConfig, 0)
+	}
+	var fixPairs = make(map[string]bool)
+	staticPairs := true
+	for _, pol := range Data.RunPolicy {
+		if len(pol.Pairs) > 0 {
+			for _, p := range pol.Pairs {
+				fixPairs[p] = true
+			}
+		} else {
+			staticPairs = false
+		}
+	}
+	RunPolicy = Data.RunPolicy
+	return staticPairs, fixPairs
 }
 
 func GetExgConfig() *ExgItemConfig {
@@ -326,14 +330,6 @@ func (p *StrtgPerfConfig) Validate() {
 	}
 }
 
-func GetStrtgPerf(strtg string) *StrtgPerfConfig {
-	pol, _ := RunPolicy[strtg]
-	if pol != nil && pol.StrtgPerf != nil {
-		return pol.StrtgPerf
-	}
-	return Data.StrtgPerf
-}
-
 func GetStakeAmount(accName string) float64 {
 	var amount float64
 	acc, ok := Accounts[accName]
@@ -354,4 +350,29 @@ func GetStakeAmount(accName string) float64 {
 		amount *= acc.StakeRate
 	}
 	return amount
+}
+
+func (c *RunPolicyConfig) ID() string {
+	if c.Dirt == "" {
+		return c.Name
+	}
+	if c.Dirt == "long" {
+		return c.Name + ":l"
+	} else if c.Dirt == "short" {
+		return c.Name + ":s"
+	} else {
+		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
+	}
+}
+
+func (c *RunPolicyConfig) OdDirt() int {
+	dirt := core.OdDirtBoth
+	if c.Dirt == "long" {
+		dirt = core.OdDirtLong
+	} else if c.Dirt == "short" {
+		dirt = core.OdDirtShort
+	} else if c.Dirt != "" {
+		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
+	}
+	return dirt
 }

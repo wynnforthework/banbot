@@ -21,31 +21,47 @@ import (
 	"unsafe"
 )
 
+type FuncMakeStagy = func(pol *config.RunPolicyConfig) *TradeStagy
+
 var (
-	StagyMap = make(map[string]*TradeStagy) // 已加载的策略缓存
+	StagyMake = make(map[string]FuncMakeStagy) // 已加载的策略缓存
 )
 
-func Get(stagyName string) *TradeStagy {
-	obj, ok := StagyMap[stagyName]
+func New(pol *config.RunPolicyConfig) *TradeStagy {
+	polID := pol.ID()
+	makeFn, ok := StagyMake[pol.Name]
+	var stgy *TradeStagy
 	if ok {
-		if obj.Name == "" {
-			initStrategy(stagyName, obj)
-		}
-		return obj
+		stgy = makeFn(pol)
+	} else {
+		stgy = loadNative(pol.Name)
 	}
-	obj = loadNative(stagyName)
-	initStrategy(stagyName, obj)
-	if obj != nil {
-		StagyMap[stagyName] = obj
+	stgy.Name = polID
+	if stgy.MinTfScore == 0 {
+		stgy.MinTfScore = 0.75
 	}
-	return obj
+	stgy.Policy = pol
+	return stgy
 }
 
-func initStrategy(name string, stgy *TradeStagy) {
-	stgy.Name = name
-	if stgy.MinTfScore == 0 {
-		stgy.MinTfScore = 0.8
+func Get(pair, strtgID string) *TradeStagy {
+	data, _ := PairStags[pair]
+	if len(data) == 0 {
+		return nil
 	}
+	res, _ := data[strtgID]
+	return res
+}
+
+func GetStrtgPerf(pair, strtg string) *config.StrtgPerfConfig {
+	stg := Get(pair, strtg)
+	if stg == nil {
+		return nil
+	}
+	if stg.Policy.StrtgPerf != nil {
+		return stg.Policy.StrtgPerf
+	}
+	return config.Data.StrtgPerf
 }
 
 func loadNative(stagyName string) *TradeStagy {
@@ -304,7 +320,7 @@ func GetInfoJobs(account string) map[string]map[string]*StagyJob {
 
 func CalcJobScores(pair, tf, stagy string) *errs.Error {
 	var orders []*orm.InOutOrder
-	cfg := config.GetStrtgPerf(stagy)
+	cfg := GetStrtgPerf(pair, stagy)
 	if core.EnvReal {
 		// 从数据库查询最近订单
 		sess, conn, err := orm.Conn(nil)
@@ -364,7 +380,7 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 		}
 	}
 	// 计算开单倍率
-	perf.Score = defaultCalcJobScore(stagy, perf, prefs)
+	perf.Score = defaultCalcJobScore(cfg, stagy, perf, prefs)
 	if core.LiveMode {
 		// 实盘模式，立刻保存到数据目录
 		core.DumpPerfs(config.GetDataDir())
@@ -372,8 +388,7 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 	return nil
 }
 
-func defaultCalcJobScore(stagy string, p *core.JobPerf, perfs []*core.JobPerf) float64 {
-	cfg := config.GetStrtgPerf(stagy)
+func defaultCalcJobScore(cfg *config.StrtgPerfConfig, stagy string, p *core.JobPerf, perfs []*core.JobPerf) float64 {
 	if len(perfs) < cfg.MinJobNum {
 		return 1
 	}

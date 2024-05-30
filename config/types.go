@@ -40,7 +40,7 @@ var (
 	RunTimeframes    []string
 	KlineSource      string
 	WatchJobs        map[string][]string
-	RunPolicy        map[string]*RunPolicyConfig
+	RunPolicy        []*RunPolicyConfig
 	Pairs            []string
 	PairMgr          *PairMgrConfig
 	PairFilters      []*CommonPairFilter
@@ -98,7 +98,7 @@ type Config struct {
 	RunTimeframes   []string                          `yaml:"run_timeframes" mapstructure:"run_timeframes"`
 	KlineSource     string                            `yaml:"kline_source" mapstructure:"kline_source"`
 	WatchJobs       map[string][]string               `yaml:"watch_jobs" mapstructure:"watch_jobs"`
-	RunPolicy       map[string]*RunPolicyConfig       `yaml:"run_policy" mapstructure:"run_policy"`
+	RunPolicy       []*RunPolicyConfig                `yaml:"run_policy" mapstructure:"run_policy"`
 	StrtgPerf       *StrtgPerfConfig                  `yaml:"strtg_perf" mapstructure:"strtg_perf"`
 	Pairs           []string                          `yaml:"pairs" mapstructure:"pairs"`
 	PairMgr         *PairMgrConfig                    `yaml:"pairmgr" mapstructure:"pairmgr"`
@@ -118,6 +118,7 @@ type RunPolicyConfig struct {
 	RunTimeframes []string            `yaml:"run_timeframes" mapstructure:"run_timeframes"`
 	MaxPair       int                 `yaml:"max_pair" mapstructure:"max_pair"`
 	MaxOpen       int                 `yaml:"max_open" mapstructure:"max_open"`
+	Dirt          string              `yaml:"dirt" mapstructure:"dirt"`
 	StrtgPerf     *StrtgPerfConfig    `yaml:"strtg_perf" mapstructure:"strtg_perf"`
 	Pairs         []string            `yaml:"pairs" mapstructure:"pairs"`
 }

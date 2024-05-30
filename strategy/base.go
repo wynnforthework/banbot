@@ -41,7 +41,11 @@ func (s *TradeStagy) pickTimeFrame(symbol string, tfScores map[string]float64) s
 	}
 	// 过滤当前需要的时间周期
 	useTfs := make(map[string]bool)
-	for _, tf := range s.AllowTFs {
+	tfList := s.AllowTFs
+	if len(s.Policy.RunTimeframes) > 0 {
+		tfList = s.Policy.RunTimeframes
+	}
+	for _, tf := range tfList {
 		useTfs[tf] = true
 	}
 	curScores := make([]*core.TfScore, 0, len(tfScores))

@@ -113,7 +113,7 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strategy.Enter
 		res := make([]*strategy.EnterReq, 0, len(enters))
 		for _, req := range enters {
 			num, _ := stagyOdNum[req.StgyName]
-			pol, _ := config.RunPolicy[req.StgyName]
+			pol := strategy.Get(env.Symbol, req.StgyName).Policy
 			if pol == nil || pol.MaxOpen == 0 || num < pol.MaxOpen {
 				stagyOdNum[req.StgyName] = num + 1
 				res = append(res, req)
@@ -424,7 +424,7 @@ sess 可为nil
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	od.UpdateProfits(0)
 	err := od.Save(sess)
-	cfg := config.GetStrtgPerf(od.Strategy)
+	cfg := strategy.GetStrtgPerf(od.Symbol, od.Strategy)
 	if cfg.Enable && o.Account == config.DefAcc {
 		err2 := strategy.CalcJobScores(od.Symbol, od.Timeframe, od.Strategy)
 		if err2 != nil {

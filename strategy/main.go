@@ -25,8 +25,7 @@ core.StgPairTfs
 core.BookPairs
 strategy.Versions
 strategy.Envs
-strategy.PairTFStags
-strategy.InfoPairTFStags
+strategy.PairStags
 strategy.AccJobs
 strategy.AccInfoJobs
 
@@ -39,8 +38,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	// 将涉及的全局变量置为空，下面会更新
 	core.TFSecs = make(map[string]int)
 	core.BookPairs = make(map[string]bool)
-	PairTFStags = make(map[string]map[string]*TradeStagy)
-	InfoPairTFStags = make(map[string]map[string]*TradeStagy)
+	PairStags = make(map[string]map[string]*TradeStagy)
 	for account := range AccInfoJobs {
 		AccInfoJobs[account] = make(map[string]map[string]*StagyJob)
 	}
@@ -56,11 +54,13 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			pairTfWarms[pair] = map[string]int{tf: num}
 		}
 	}
+	var envKeys = make(map[string]bool)
 	stagyAdds := getStagyOpenPairs()
 	for _, pol := range config.RunPolicy {
-		stagy := Get(pol.Name)
+		stagy := New(pol)
+		polID := pol.ID()
 		if stagy == nil {
-			return pairTfWarms, errs.NewMsg(core.ErrRunTime, "strategy %s load fail", pol.Name)
+			return pairTfWarms, errs.NewMsg(core.ErrRunTime, "strategy %s load fail", polID)
 		}
 		Versions[stagy.Name] = stagy.Version
 		stagyMaxNum := pol.MaxPair
@@ -70,7 +70,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		holdNum := 0
 		newPairMap := make(map[string]string)
 		failTfScores := make(map[string]map[string]float64)
-		adds, _ := stagyAdds[pol.Name]
+		adds, _ := stagyAdds[polID]
 		var curPairs, err = getPolicyPairs(pol, pairs, adds)
 		if err != nil {
 			return nil, err
@@ -83,18 +83,29 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			}
 			exsList = append(exsList, exs)
 		}
+		dirt := pol.OdDirt()
 		for _, exs := range exsList {
 			if holdNum >= stagyMaxNum {
 				break
 			}
-			scores, ok := tfScores[exs.Symbol]
+			scores, _ := tfScores[exs.Symbol]
 			tf := stagy.pickTimeFrame(exs.Symbol, scores)
 			if tf == "" {
 				failTfScores[exs.Symbol] = scores
 				continue
 			}
+			items, ok := PairStags[exs.Symbol]
+			if !ok {
+				items = make(map[string]*TradeStagy)
+				PairStags[exs.Symbol] = items
+			}
+			if _, ok = items[polID]; ok {
+				// 当前pair+strtgID已有任务，跳过
+				continue
+			}
+			items[polID] = stagy
 			holdNum += 1
-			if _, ok := core.TFSecs[tf]; !ok {
+			if _, ok = core.TFSecs[tf]; !ok {
 				core.TFSecs[tf] = utils.TFToSecs(tf)
 			}
 			newPairMap[exs.Symbol] = tf
@@ -102,22 +113,17 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			if stagy.WatchBook {
 				core.BookPairs[exs.Symbol] = true
 			}
-			items, ok := PairTFStags[envKey]
-			if !ok {
-				items = make(map[string]*TradeStagy)
-				PairTFStags[envKey] = items
-			}
-			items[pol.Name] = stagy
+			envKeys[envKey] = true
 			// 初始化BarEnv
 			env := initBarEnv(exs, tf)
 			// 记录需要预热的数据；记录订阅信息
 			logWarm(exs.Symbol, tf, stagy.WarmupNum)
 			for account := range config.Accounts {
-				ensureStagyJob(stagy, account, tf, envKey, exs, env, logWarm)
+				ensureStagyJob(stagy, account, tf, envKey, exs, env, dirt, envKeys, logWarm)
 			}
 		}
-		core.StgPairTfs[pol.Name] = newPairMap
-		printFailTfScores(pol.Name, failTfScores)
+		core.StgPairTfs[polID] = newPairMap
+		printFailTfScores(polID, failTfScores)
 	}
 	initStagyJobs()
 	// 确保所有pair、tf都在返回的中有记录，防止被数据订阅端移除
@@ -134,13 +140,6 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		}
 	}
 	// 从Envs, AccJobs中删除无用的项
-	var envKeys = make(map[string]bool)
-	for key := range PairTFStags {
-		envKeys[key] = true
-	}
-	for key := range InfoPairTFStags {
-		envKeys[key] = true
-	}
 	for envKey := range Envs {
 		if _, ok := envKeys[envKey]; !ok {
 			delete(Envs, envKey)
@@ -194,8 +193,8 @@ func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 	return env
 }
 
-func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSymbol, env *ta.BarEnv,
-	logWarm func(pair, tf string, num int)) {
+func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSymbol, env *ta.BarEnv, dirt int,
+	envKeys map[string]bool, logWarm func(pair, tf string, num int)) {
 	jobs := GetJobs(account)
 	envJobs, ok := jobs[envKey]
 	if !ok {
@@ -211,8 +210,8 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 			TimeFrame:     tf,
 			Account:       account,
 			TPMaxs:        make(map[int64]float64),
-			OpenLong:      true,
-			OpenShort:     true,
+			OpenLong:      dirt != core.OdDirtShort,
+			OpenShort:     dirt != core.OdDirtLong,
 			CloseLong:     true,
 			CloseShort:    true,
 			ExgStopLoss:   true,
@@ -247,13 +246,7 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 				infoJobs[jobKey] = items
 			}
 			items[stagy.Name] = job
-			// 记录到InfoPairTFStags
-			stags, ok := InfoPairTFStags[jobKey]
-			if !ok {
-				stags = make(map[string]*TradeStagy)
-				InfoPairTFStags[jobKey] = stags
-			}
-			stags[stagy.Name] = stagy
+			envKeys[jobKey] = true
 		}
 	}
 }
@@ -309,14 +302,16 @@ func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string, adds []string) 
 	if len(pol.Filters) == 0 {
 		return pairs, nil
 	}
-	filters, ok := polFilters[pol.Name]
+	// 根据filters过滤筛选
+	polID := pol.ID()
+	filters, ok := polFilters[polID]
 	var err *errs.Error
 	if !ok {
 		filters, err = goods.GetPairFilters(pol.Filters, false)
 		if err != nil {
 			return nil, err
 		}
-		polFilters[pol.Name] = filters
+		polFilters[polID] = filters
 	}
 	var tickersMap map[string]*banexg.Ticker
 	if core.LiveMode {

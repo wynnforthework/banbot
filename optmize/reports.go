@@ -621,18 +621,26 @@ func (r *BTResult) dumpStrategy() {
 }
 
 func (r *BTResult) dumpStagyOutputs() {
-	for name := range strategy.Versions {
-		stgy := strategy.Get(name)
-		if len(stgy.Outputs) == 0 {
-			continue
+	groups := make(map[string][]string)
+	for _, items := range strategy.PairStags {
+		for _, stgy := range items {
+			if len(stgy.Outputs) == 0 {
+				continue
+			}
+			rows, _ := groups[stgy.Name]
+			groups[stgy.Name] = append(rows, stgy.Outputs...)
+			stgy.Outputs = nil
 		}
+	}
+	for name, rows := range groups {
+		name = strings.ReplaceAll(name, ":", "_")
 		outPath := fmt.Sprintf("%s/%s.log", r.OutDir, name)
 		file, err := os.Create(outPath)
 		if err != nil {
 			log.Error("create strategy output file fail", zap.String("name", name), zap.Error(err))
 			continue
 		}
-		_, err = file.WriteString(strings.Join(stgy.Outputs, "\n"))
+		_, err = file.WriteString(strings.Join(rows, "\n"))
 		if err != nil {
 			log.Error("write strategy output fail", zap.String("name", name), zap.Error(err))
 		}

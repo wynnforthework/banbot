@@ -4,13 +4,16 @@ import (
 	ta "github.com/banbox/banta"
 )
 
+/*
+下面变量中所有的stagyName都是RunPolicy.ID()，不是原始策略名。后面添加了":l"或":s"后缀表示仅开多或仅开空
+*/
+
 var (
-	Versions        = make(map[string]int)                             // 策略版本号
-	Envs            = make(map[string]*ta.BarEnv)                      // pair_tf: BarEnv
-	AccJobs         = make(map[string]map[string]map[string]*StagyJob) // account: pair_tf: [stagyName]StagyJob
-	AccInfoJobs     = make(map[string]map[string]map[string]*StagyJob) // account: pair_tf: [stagyName]StagyJob 额外订阅
-	PairTFStags     = make(map[string]map[string]*TradeStagy)          // pair_tf:[stagyName]TradeStagy 所有的订阅策略
-	InfoPairTFStags = make(map[string]map[string]*TradeStagy)          // pair_tf:[stagyName]TradeStagy 所有的辅助订阅策略
+	Versions    = make(map[string]int)                             // stagyName: int 策略版本号
+	Envs        = make(map[string]*ta.BarEnv)                      // pair_tf: BarEnv
+	AccJobs     = make(map[string]map[string]map[string]*StagyJob) // account: pair_tf: [stagyName]StagyJob
+	AccInfoJobs = make(map[string]map[string]map[string]*StagyJob) // account: pair_tf: [stagyName]StagyJob 额外订阅
+	PairStags   = make(map[string]map[string]*TradeStagy)          // pair:[stagyName]TradeStagy 所有的订阅策略
 
 	BatchJobs   = map[string]map[string]*StagyJob{} // tf_account_stagy: pair: job 每个bar周期更新
 	BatchInfos  = map[string]map[string]*StagyJob{} // tf_account_stagy: pair: job 每个info bar周期更新
