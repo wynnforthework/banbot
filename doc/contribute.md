@@ -71,6 +71,16 @@ strategy
 ```shell
 go tool pprof -http :8080 cpu.profile
 ```
+### 如何发布go模块新版本？
+```shell
+git tag v1.0.0
+git push origin --tags
+```
+### 如何引用本地go模块？
+1. 被引用模块执行`go mod init`添加`go.mod`文件，修改`module`后的模块名
+2. 执行上面`git tag`添加新版本
+3. 在当前项目（和依赖当前项目的入口项目）添加依赖：`go get 模块名@version`
+4. 在当前项目（和依赖当前项目的入口项目）的`go.mod`中添加`replace`指令，改为本地绝对或相对路径
 
 # TODO
 1. 将策略注入改为接口，以便允许从结构体继承。

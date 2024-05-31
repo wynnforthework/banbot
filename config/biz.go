@@ -83,7 +83,6 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 
 func apply(args *CmdArgs) *errs.Error {
 	Loaded = true
-	Debug = args.Debug
 	NoDB = args.NoDb
 	if args.TimeRange != "" {
 		Data.TimeRangeRaw = args.TimeRange
@@ -238,6 +237,12 @@ func initPolicies() (bool, map[string]bool) {
 	var fixPairs = make(map[string]bool)
 	staticPairs := true
 	for _, pol := range Data.RunPolicy {
+		if pol.Params == nil {
+			pol.Params = make(map[string]float64)
+		}
+		if pol.PairParams == nil {
+			pol.PairParams = make(map[string]map[string]float64)
+		}
 		if len(pol.Pairs) > 0 {
 			for _, p := range pol.Pairs {
 				fixPairs[p] = true
@@ -375,4 +380,38 @@ func (c *RunPolicyConfig) OdDirt() int {
 		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
 	}
 	return dirt
+}
+
+func (c *RunPolicyConfig) Param(k string, dv float64) float64 {
+	if v, ok := c.Params[k]; ok {
+		return v
+	}
+	return dv
+}
+
+func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
+	return &RunPolicyConfig{
+		Name:          c.Name,
+		Filters:       c.Filters,
+		RunTimeframes: c.RunTimeframes,
+		MaxPair:       c.MaxPair,
+		MaxOpen:       c.MaxOpen,
+		Dirt:          c.Dirt,
+		StrtgPerf:     c.StrtgPerf,
+		Pairs:         c.Pairs,
+		Params:        c.Params,
+		PairParams:    c.PairParams,
+	}
+}
+
+func (c *RunPolicyConfig) PairDup(pair string) (*RunPolicyConfig, bool) {
+	params, _ := c.PairParams[pair]
+	isDiff := true
+	if len(params) == 0 {
+		params = c.Params
+		isDiff = false
+	}
+	res := c.Clone()
+	res.Params = params
+	return res, isDiff
 }

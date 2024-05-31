@@ -26,3 +26,8 @@ type PerfSta struct {
 	Splits   *[4]float64 `yaml:"splits" mapstructure:"splits"`
 	Delta    float64     `yaml:"delta" mapstructure:"delta"` // 对TotProfit进行对数处理前的乘数
 }
+
+type StrVal struct {
+	Str string
+	Val float64
+}

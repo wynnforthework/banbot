@@ -16,9 +16,9 @@ type CmdArgs struct {
 	Logfile       string
 	DataDir       string
 	NoDb          bool
-	Debug         bool
 	NoCompress    bool
 	NoDefault     bool
+	LogLevel      string
 	TimeRange     string
 	RawTimeFrames string
 	TimeFrames    []string
@@ -42,4 +42,5 @@ type CmdArgs struct {
 	AdjType       string // 复权类型: pre,post,none
 	TimeZone      string // 时区
 	ExgReal       string
+	OptRounds     int // 超参数优化单任务执行轮次
 }

@@ -149,7 +149,7 @@ func (b *BackTest) initTaskOut() *errs.Error {
 		return errs.New(core.ErrIOWriteFail, err_)
 	}
 	config.Args.Logfile = b.OutDir + "/out.log"
-	log.Setup(config.Args.Debug, config.Args.Logfile)
+	log.Setup(config.Args.LogLevel, config.Args.Logfile)
 	// 检查是否profile
 	if config.Args.CPUProfile {
 		outPath := b.OutDir + "/cpu.profile"

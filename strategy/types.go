@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg"
 	ta "github.com/banbox/banta"
+	"github.com/d4l3k/go-bayesopt"
 )
 
 type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64
@@ -25,6 +26,7 @@ type TradeStagy struct {
 	AllowTFs      []string // 允许运行的时间周期，不提供时使用全局配置
 	Outputs       []string // 策略输出的文本文件内容，每个字符串是一行
 	Policy        *config.RunPolicyConfig
+	Params        []bayesopt.Param // 超参数，可用于贝叶斯优化
 
 	OnPairInfos         func(s *StagyJob) []*PairSub
 	OnStartUp           func(s *StagyJob)

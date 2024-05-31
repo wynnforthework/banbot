@@ -35,7 +35,7 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	if core.LiveMode {
 		logCores = append(logCores, rpc.NewExcNotify())
 	}
-	log.Setup(config.Args.Debug, config.Args.Logfile, logCores...)
+	log.Setup(args.LogLevel, args.Logfile, logCores...)
 	err = core.Setup()
 	if err != nil {
 		return err
@@ -198,4 +198,10 @@ func TryFireInfos(tf string) {
 		stagy.OnBatchInfos(jobs)
 	}
 	delete(strategy.TFInfoMS, tf)
+}
+
+func ResetVars() {
+	accLiveOdMgrs = make(map[string]*LiveOrderMgr)
+	accOdMgrs = make(map[string]IOrderMgr)
+	accWallets = make(map[string]*BanWallets)
 }

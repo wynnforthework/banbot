@@ -294,3 +294,13 @@ func (a *AdjInfo) Apply(bars []*banexg.Kline, adj int) []*banexg.Kline {
 	}
 	return result
 }
+
+func ResetVars() {
+	accOpenODs = make(map[string]map[int64]*InOutOrder)
+	accTriggerODs = make(map[string]map[string]map[int64]*InOutOrder)
+	lockOpenMap = make(map[string]*sync.Mutex)
+	lockTriggerMap = make(map[string]*sync.Mutex)
+	lockOds = make(map[string]*sync.Mutex)
+	accTasks = make(map[string]*BotTask)
+	taskIdAccMap = make(map[int64]string)
+}

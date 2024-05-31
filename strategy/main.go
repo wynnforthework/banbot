@@ -38,6 +38,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	// 将涉及的全局变量置为空，下面会更新
 	core.TFSecs = make(map[string]int)
 	core.BookPairs = make(map[string]bool)
+	core.StgPairTfs = make(map[string]map[string]string)
 	PairStags = make(map[string]map[string]*TradeStagy)
 	for account := range AccInfoJobs {
 		AccInfoJobs[account] = make(map[string]map[string]*StagyJob)
@@ -88,8 +89,9 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			if holdNum >= stagyMaxNum {
 				break
 			}
+			curStagy := stagy
 			scores, _ := tfScores[exs.Symbol]
-			tf := stagy.pickTimeFrame(exs.Symbol, scores)
+			tf := curStagy.pickTimeFrame(exs.Symbol, scores)
 			if tf == "" {
 				failTfScores[exs.Symbol] = scores
 				continue
@@ -103,23 +105,27 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 				// 当前pair+strtgID已有任务，跳过
 				continue
 			}
-			items[polID] = stagy
+			// 检查有当前标的专有参数，重新初始化策略
+			if curPol, isDiff := pol.PairDup(exs.Symbol); isDiff {
+				curStagy = New(curPol)
+			}
+			items[polID] = curStagy
 			holdNum += 1
 			if _, ok = core.TFSecs[tf]; !ok {
 				core.TFSecs[tf] = utils.TFToSecs(tf)
 			}
 			newPairMap[exs.Symbol] = tf
 			envKey := strings.Join([]string{exs.Symbol, tf}, "_")
-			if stagy.WatchBook {
+			if curStagy.WatchBook {
 				core.BookPairs[exs.Symbol] = true
 			}
 			envKeys[envKey] = true
 			// 初始化BarEnv
 			env := initBarEnv(exs, tf)
 			// 记录需要预热的数据；记录订阅信息
-			logWarm(exs.Symbol, tf, stagy.WarmupNum)
+			logWarm(exs.Symbol, tf, curStagy.WarmupNum)
 			for account := range config.Accounts {
-				ensureStagyJob(stagy, account, tf, envKey, exs, env, dirt, envKeys, logWarm)
+				ensureStagyJob(curStagy, account, tf, envKey, exs, env, dirt, envKeys, logWarm)
 			}
 		}
 		core.StgPairTfs[polID] = newPairMap

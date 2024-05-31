@@ -35,6 +35,9 @@ func RunCmd() {
 			entry = RunBackTest
 		case "spider":
 			entry = RunSpider
+		case "optimize":
+			options = []string{"opt_rounds"}
+			entry = optmize.RunOptimize
 		case "kline":
 			runKlineCmds(args[1:])
 		case "tick":
@@ -163,7 +166,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 	cmd.StringVar(&args.Logfile, "logfile", "", "Log to the file specified")
 	cmd.StringVar(&args.DataDir, "datadir", "", "Path to data dir.")
 	cmd.BoolVar(&args.NoDb, "nodb", false, "dont save orders to database")
-	cmd.BoolVar(&args.Debug, "debug", false, "set logging level to debug")
+	cmd.StringVar(&args.LogLevel, "level", "info", "set logging level to debug")
 	cmd.BoolVar(&args.NoCompress, "no-compress", false, "disable compress for hyper table")
 	cmd.BoolVar(&args.NoDefault, "no-default", false, "ignore default: config.yml, config.local.yml")
 	cmd.IntVar(&args.MaxPoolSize, "max-pool-size", 0, "max pool size for db")
@@ -208,6 +211,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.TimeZone, "tz", "", "timeZone, default: utc")
 		case "exg_real":
 			cmd.StringVar(&args.ExgReal, "exg_real", "", "real exchange")
+		case "opt_rounds":
+			cmd.IntVar(&args.OptRounds, "opt-rounds", 30, "rounds num for single optimize job")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

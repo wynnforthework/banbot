@@ -11,7 +11,6 @@ var (
 
 	Name             string
 	Loaded           bool
-	Debug            bool
 	NoDB             bool
 	Leverage         float64
 	LimitVolSecs     int // 限价单预期等待多长时间成交，单位秒
@@ -113,14 +112,16 @@ type Config struct {
 
 // 运行的策略，可以多个策略同时运行
 type RunPolicyConfig struct {
-	Name          string              `yaml:"name" mapstructure:"name"`
-	Filters       []*CommonPairFilter `yaml:"filters" mapstructure:"filters"`
-	RunTimeframes []string            `yaml:"run_timeframes" mapstructure:"run_timeframes"`
-	MaxPair       int                 `yaml:"max_pair" mapstructure:"max_pair"`
-	MaxOpen       int                 `yaml:"max_open" mapstructure:"max_open"`
-	Dirt          string              `yaml:"dirt" mapstructure:"dirt"`
-	StrtgPerf     *StrtgPerfConfig    `yaml:"strtg_perf" mapstructure:"strtg_perf"`
-	Pairs         []string            `yaml:"pairs" mapstructure:"pairs"`
+	Name          string                        `yaml:"name" mapstructure:"name"`
+	Filters       []*CommonPairFilter           `yaml:"filters" mapstructure:"filters"`
+	RunTimeframes []string                      `yaml:"run_timeframes" mapstructure:"run_timeframes"`
+	MaxPair       int                           `yaml:"max_pair" mapstructure:"max_pair"`
+	MaxOpen       int                           `yaml:"max_open" mapstructure:"max_open"`
+	Dirt          string                        `yaml:"dirt" mapstructure:"dirt"`
+	StrtgPerf     *StrtgPerfConfig              `yaml:"strtg_perf" mapstructure:"strtg_perf"`
+	Pairs         []string                      `yaml:"pairs" mapstructure:"pairs"`
+	Params        map[string]float64            `yaml:"params" mapstructure:"params"`
+	PairParams    map[string]map[string]float64 `yaml:"pair_params" mapstructure:"pair_params"`
 }
 
 type StrtgPerfConfig struct {
