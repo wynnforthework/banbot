@@ -207,7 +207,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 					zap.Float64("amt", entAmount), zap.Error(err))
 			} else {
 				if _, ok := tipAmtZeros[od.Symbol]; !ok {
-					log.Warn("prec enter amount zero", zap.String("symbol", od.Symbol))
+					log.Info("prec enter amount zero", zap.String("symbol", od.Symbol))
 					tipAmtZeros[od.Symbol] = true
 				}
 			}

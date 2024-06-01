@@ -137,3 +137,9 @@ const (
 	AdjFront  = 2
 	AdjBehind = 3
 )
+
+const (
+	VTypeUniform = iota // 均匀线性分布
+	VTypeNorm           // 正态分布，指定均值和标准差
+	VTypeExp            // 指数分布，期望是1，值域0~+inf
+)

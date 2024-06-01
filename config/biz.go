@@ -243,6 +243,7 @@ func initPolicies() (bool, map[string]bool) {
 		if pol.PairParams == nil {
 			pol.PairParams = make(map[string]map[string]float64)
 		}
+		pol.defs = make(map[string]*core.Param)
 		if len(pol.Pairs) > 0 {
 			for _, p := range pol.Pairs {
 				fixPairs[p] = true
@@ -389,6 +390,33 @@ func (c *RunPolicyConfig) Param(k string, dv float64) float64 {
 	return dv
 }
 
+func (c *RunPolicyConfig) Def(k string, dv float64, p *core.Param) float64 {
+	val := c.Param(k, dv)
+	if p.Mean == 0 {
+		p.Mean = dv
+	}
+	if p.VType == core.VTypeExp && p.Rate == 0 {
+		// 指数分布，设定期望值
+		p.Rate = 1 / p.Mean
+	} else if p.VType == core.VTypeNorm && p.StdDev == 0 {
+		// 正态分布，设定期望值和方差
+		p.StdDev = max(p.Max-dv, dv-p.Min) / 1.5
+	}
+	if p.Name == "" {
+		p.Name = k
+	}
+	c.defs[k] = p
+	return val
+}
+
+func (c *RunPolicyConfig) HyperParams() []*core.Param {
+	res := make([]*core.Param, 0, len(c.defs))
+	for _, p := range c.defs {
+		res = append(res, p)
+	}
+	return res
+}
+
 func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
 	return &RunPolicyConfig{
 		Name:          c.Name,
@@ -401,6 +429,7 @@ func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
 		Pairs:         c.Pairs,
 		Params:        c.Params,
 		PairParams:    c.PairParams,
+		defs:          make(map[string]*core.Param),
 	}
 }
 

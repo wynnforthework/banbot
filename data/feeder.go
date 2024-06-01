@@ -298,7 +298,7 @@ func (f *KlineFeeder) warmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 			return 0, err
 		}
 		if len(bars) == 0 {
-			log.Warn("skip warm as empty", zap.String("pair", f.Symbol), zap.String("tf", tf),
+			log.Info("skip warm as empty", zap.String("pair", f.Symbol), zap.String("tf", tf),
 				zap.Int("want", warmNum), zap.Int64("end", endMS))
 			continue
 		}
@@ -306,7 +306,7 @@ func (f *KlineFeeder) warmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 			barEndMs := bars[len(bars)-1].Time + tfMSecs
 			barStartMs := bars[0].Time
 			lackNum := warmNum - len(bars)
-			log.Warn(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", f.Symbol,
+			log.Info(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", f.Symbol,
 				tf, lackNum, warmNum, barStartMs, barEndMs))
 		}
 		curEnd := f.warmTf(tf, bars)

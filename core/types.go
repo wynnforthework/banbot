@@ -31,3 +31,13 @@ type StrVal struct {
 	Str string
 	Val float64
 }
+
+type Param struct {
+	Name   string
+	VType  int
+	Min    float64
+	Max    float64
+	Mean   float64
+	StdDev float64
+	Rate   float64
+}

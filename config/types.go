@@ -1,6 +1,9 @@
 package config
 
-import "regexp"
+import (
+	"github.com/banbox/banbot/core"
+	"regexp"
+)
 
 var (
 	Data        Config
@@ -122,6 +125,7 @@ type RunPolicyConfig struct {
 	Pairs         []string                      `yaml:"pairs" mapstructure:"pairs"`
 	Params        map[string]float64            `yaml:"params" mapstructure:"params"`
 	PairParams    map[string]map[string]float64 `yaml:"pair_params" mapstructure:"pair_params"`
+	defs          map[string]*core.Param
 }
 
 type StrtgPerfConfig struct {

@@ -67,13 +67,14 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	log.Warn("running optimize jobs", zap.Int("num", len(groups)), zap.Int("rounds", args.OptRounds))
 	for _, gp := range groups {
 		config.RunPolicy = []*config.RunPolicyConfig{gp}
-		strtg := strategy.New(gp)
-		if len(strtg.Params) == 0 {
-			log.Warn("no bayes params, skip optimize", zap.String("strtg", gp.ID()))
+		_ = strategy.New(gp)
+		params := getHyperParams(gp)
+		if len(params) == 0 {
+			log.Warn("no hyper params, skip optimize", zap.String("strtg", gp.ID()))
 			continue
 		}
 		file.WriteString(fmt.Sprintf("\n================= %s =============\n", gp.ID()))
-		opt := bayesopt.New(strtg.Params, options...)
+		opt := bayesopt.New(params, options...)
 		best, bestSc, err_ := opt.Optimize(func(m map[bayesopt.Param]float64) float64 {
 			pol := gp.Clone()
 			for k, v := range m {
@@ -108,6 +109,36 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	}
 	core.RunExitCalls()
 	return nil
+}
+
+func getHyperParams(pol *config.RunPolicyConfig) []bayesopt.Param {
+	params := pol.HyperParams()
+	res := make([]bayesopt.Param, 0, len(params))
+	for _, p := range params {
+		if p.VType == core.VTypeUniform {
+			res = append(res, bayesopt.UniformParam{
+				Name: p.Name,
+				Min:  p.Min,
+				Max:  p.Max,
+			})
+		} else if p.VType == core.VTypeNorm {
+			res = append(res, bayesopt.NormalParam{
+				Name:   p.Name,
+				Min:    p.Min,
+				Max:    p.Max,
+				Mean:   p.Mean,
+				StdDev: p.StdDev,
+			})
+		} else if p.VType == core.VTypeExp {
+			res = append(res, bayesopt.ExponentialParam{
+				Name: p.Name,
+				Min:  p.Min,
+				Max:  p.Max,
+				Rate: p.Rate,
+			})
+		}
+	}
+	return res
 }
 
 func paramsToStr(m map[bayesopt.Param]float64, score float64) string {

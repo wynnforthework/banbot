@@ -200,3 +200,34 @@ IsFiat 是否是法币
 func IsFiat(code string) bool {
 	return strings.Contains(code, "USD") || strings.Contains(code, "CNY")
 }
+
+func PExp(min, max, mean float64) *Param {
+	rate := float64(0)
+	if mean != 0 {
+		rate = 1 / mean
+	}
+	return &Param{
+		VType: VTypeExp,
+		Min:   min,
+		Max:   max,
+		Rate:  rate,
+	}
+}
+
+func PNorm(min, max, mean, stdDev float64) *Param {
+	return &Param{
+		VType:  VTypeNorm,
+		Min:    min,
+		Max:    max,
+		Mean:   mean,
+		StdDev: stdDev,
+	}
+}
+
+func PUniform(min, max float64) *Param {
+	return &Param{
+		VType: VTypeUniform,
+		Min:   min,
+		Max:   max,
+	}
+}
