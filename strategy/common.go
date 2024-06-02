@@ -310,11 +310,13 @@ func GetInfoJobs(account string) map[string]map[string]*StagyJob {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
+	lockInfoJobs.Lock()
 	jobs, ok := AccInfoJobs[account]
 	if !ok {
 		jobs = map[string]map[string]*StagyJob{}
 		AccInfoJobs[account] = jobs
 	}
+	lockInfoJobs.Unlock()
 	return jobs
 }
 

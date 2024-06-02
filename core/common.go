@@ -201,26 +201,21 @@ func IsFiat(code string) bool {
 	return strings.Contains(code, "USD") || strings.Contains(code, "CNY")
 }
 
-func PExp(min, max, mean float64) *Param {
-	rate := float64(0)
-	if mean != 0 {
-		rate = 1 / mean
-	}
+func PNorm(min, max float64) *Param {
 	return &Param{
-		VType: VTypeExp,
+		VType: VTypeNorm,
 		Min:   min,
 		Max:   max,
-		Rate:  rate,
 	}
 }
 
-func PNorm(min, max, mean, stdDev float64) *Param {
+func PNormF(min, max, mean, rate float64) *Param {
 	return &Param{
-		VType:  VTypeNorm,
-		Min:    min,
-		Max:    max,
-		Mean:   mean,
-		StdDev: stdDev,
+		VType: VTypeNorm,
+		Min:   min,
+		Max:   max,
+		Mean:  mean,
+		Rate:  rate,
 	}
 }
 
@@ -230,4 +225,84 @@ func PUniform(min, max float64) *Param {
 		Min:   min,
 		Max:   max,
 	}
+}
+
+/*
+OptSpace 返回一个均匀分布的区间，用于超参数搜索
+*/
+func (p *Param) OptSpace() (float64, float64) {
+	if p.VType == VTypeNorm {
+		return p.toNormXSpace()
+	} else {
+		return p.Min, p.Max
+	}
+}
+
+/*
+ToRegular 将均匀分布映射为正态分布的超参数值
+*/
+func (p *Param) ToRegular(x float64) float64 {
+	if p.VType == VTypeNorm {
+		scale := max(p.Mean-p.Min, p.Max-p.Mean)
+		normVal := p.norm(x) / p.getEdgeY()
+		return normVal*scale + p.Mean
+	}
+	return x
+}
+
+func (p *Param) getEdgeY() float64 {
+	if p.edgeY == 0 {
+		p.edgeY = p.norm(0.5)
+	}
+	return p.edgeY
+}
+
+/*
+已知当前y值域，返回反正态分布的x对应值域
+*/
+func (p *Param) toNormXSpace() (float64, float64) {
+	// 使用pow(x, 3) + x/(20*rate) 来拟合符合正态分布的值域
+	// x : [-0.5, 0.5]
+	// y : [-0.15, 0.15]当rate=1
+	neg, pos := p.Mean-p.Min, p.Max-p.Mean
+	xMin, xMax := -0.5, 0.5
+	height := p.getEdgeY()
+	y := float64(0)
+	if neg < pos {
+		y = -neg * height / pos
+	} else {
+		y = pos * height / neg
+	}
+	x := p.calcNormX(y, 1e-6, 1000)
+	if y > 0 {
+		xMax = x
+	} else {
+		xMin = x
+	}
+	return xMin, xMax
+}
+
+func (p *Param) norm(x float64) float64 {
+	return math.Pow(x, 3) + x/(p.Rate*20)
+}
+
+/*
+norm的导数
+*/
+func (p *Param) dNorm(x float64) float64 {
+	return 3*math.Pow(x, 2) + 1/(p.Rate*20)
+}
+
+/*
+计算y=pow(x, 3) + x/20当给定y时，x的值
+*/
+func (p *Param) calcNormX(y, tol float64, maxIter int) float64 {
+	x := float64(0)
+	for i := 0; i < maxIter; i++ {
+		x = x - (p.norm(x)-y)/p.dNorm(x)
+		if math.Abs(p.norm(x)-y) < tol {
+			return x
+		}
+	}
+	return x
 }

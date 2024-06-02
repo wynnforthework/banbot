@@ -36,7 +36,7 @@ func RunCmd() {
 		case "spider":
 			entry = RunSpider
 		case "optimize":
-			options = []string{"opt_rounds"}
+			options = []string{"opt_rounds", "sampler"}
 			entry = optmize.RunOptimize
 		case "kline":
 			runKlineCmds(args[1:])
@@ -213,6 +213,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.ExgReal, "exg_real", "", "real exchange")
 		case "opt_rounds":
 			cmd.IntVar(&args.OptRounds, "opt-rounds", 30, "rounds num for single optimize job")
+		case "sampler":
+			cmd.StringVar(&args.Sampler, "sampler", "tpe", "hyper optimize method, tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

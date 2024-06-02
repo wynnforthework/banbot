@@ -40,9 +40,11 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	core.BookPairs = make(map[string]bool)
 	core.StgPairTfs = make(map[string]map[string]string)
 	PairStags = make(map[string]map[string]*TradeStagy)
+	lockInfoJobs.Lock()
 	for account := range AccInfoJobs {
 		AccInfoJobs[account] = make(map[string]map[string]*StagyJob)
 	}
+	lockInfoJobs.Unlock()
 	pairTfWarms := make(map[string]map[string]int)
 	logWarm := func(pair, tf string, num int) {
 		if warms, ok := pairTfWarms[pair]; ok {

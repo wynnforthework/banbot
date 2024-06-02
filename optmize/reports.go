@@ -189,12 +189,14 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 1, 64) + "%"
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
 	var err *errs.Error
-	r.SharpeRatio, r.SortinoRatio, err = measurePerformance(orders, 30)
+
+	err = r.calcMeasures(30, sumProfit/sumCost)
 	if err != nil {
 		log.Warn("calc sharpe/sortino fail", zap.Error(err))
 	} else {
-		table.Append([]string{"Sharpe Ratio", strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)})
-		table.Append([]string{"Sortino Ratio", strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)})
+		sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
+		sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
+		table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})
 	}
 	table.Render()
 	return b.String()
@@ -454,6 +456,10 @@ func measurePerformance(ods []*orm.InOutOrder, num int) (float64, float64, *errs
 		returns = append(returns, decimal.NewFromFloat(profit/cost))
 	}
 	avg := decimal.NewFromFloat(allProfit / allCost)
+	return calcMeasures(avg, returns)
+}
+
+func calcMeasures(avg decimal.Decimal, returns []decimal.Decimal) (float64, float64, *errs.Error) {
 	sharpe, err := utils.DecSharpeRatio(returns, decimal.NewFromFloat(0), avg)
 	if err != nil {
 		return 0, 0, errs.New(errs.CodeRunTime, err)
@@ -729,4 +735,36 @@ func (p *PlotData) calcDrawDown() float64 {
 		}
 	}
 	return drawDownRate
+}
+
+func (r *BTResult) calcMeasures(num int, avg float64) *errs.Error {
+	p := r.Plots
+	if len(p.Real) <= 1 {
+		return nil
+	}
+	step := len(p.Real) / num
+	prevVal := p.Real[0]
+	inReturns := make([]decimal.Decimal, 0, num)
+	for i := step; i < len(p.Real); i += step {
+		curVal := p.Real[i]
+		inReturns = append(inReturns, decimal.NewFromFloat((curVal-prevVal)/prevVal))
+		prevVal = curVal
+	}
+	if len(inReturns) < num {
+		last := p.Real[len(p.Real)-1]
+		inReturns = append(inReturns, decimal.NewFromFloat((last-prevVal)/prevVal))
+	}
+	if math.IsNaN(avg) || math.IsInf(avg, 0) {
+		r.SharpeRatio = math.NaN()
+		r.SortinoRatio = math.NaN()
+		return nil
+	}
+	avgDec := decimal.NewFromFloat(avg)
+	sharpe, sortino, err := calcMeasures(avgDec, inReturns)
+	if err != nil {
+		return err
+	}
+	r.SharpeRatio = sharpe
+	r.SortinoRatio = sortino
+	return nil
 }

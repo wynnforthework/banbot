@@ -33,3 +33,11 @@ tail /var/log/maillog
 ```text
 3-58/5 * * * * /path_to/check_bot.sh bot1 user1@xxx.com user2@xxx.com
 ```
+### 如何进行策略的超参数调优？
+策略的超参数对收益稳定性至关重要。可在策略中定义各个超参数的上下限，然后使用超参数优化方法自动搜索最佳超参数组合。  
+1. 策略中定义待优化超参数：`pol.Def("ma", 10, core.PNorm(5, 400))`；  
+上面定义了一个正态分布的超参数，默认值10，上下限分别400和5，并自动使用默认值作为期望值；（也可使用`PNormF`指定期望值和倍率`Rate`）
+2. 运行超参数优化；`banbot optimize --nodb -opt-rounds 40 -sampler tpe`；  
+其中`opt-rounds`指定单轮任务搜索轮次，`sampler`指定搜索方法，支持:tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
+3. 查看日志并选定最佳参数组合：  
+打开日志`backtest/task_-1/optimize.log`，将每个策略的最佳参数复制到`config/run_policy/[?]/params`下，并设定`dirt`为long或short

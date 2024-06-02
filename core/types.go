@@ -33,11 +33,11 @@ type StrVal struct {
 }
 
 type Param struct {
-	Name   string
-	VType  int
-	Min    float64
-	Max    float64
-	Mean   float64
-	StdDev float64
-	Rate   float64
+	Name  string
+	VType int
+	Min   float64
+	Max   float64
+	Mean  float64
+	Rate  float64 // 正态分布时有效，默认1，值越大，随机值越趋向于Mean
+	edgeY float64 // 计算正态分布边缘y的缓存
 }

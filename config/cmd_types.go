@@ -42,5 +42,6 @@ type CmdArgs struct {
 	AdjType       string // 复权类型: pre,post,none
 	TimeZone      string // 时区
 	ExgReal       string
-	OptRounds     int // 超参数优化单任务执行轮次
+	OptRounds     int    // 超参数优化单任务执行轮次
+	Sampler       string // 超参数优化的方法: tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
 }

@@ -2,6 +2,7 @@ package strategy
 
 import (
 	ta "github.com/banbox/banta"
+	"sync"
 )
 
 /*
@@ -20,4 +21,6 @@ var (
 	TFEnterMS   = map[string]int64{}                // tf: timeMS 执行入场的时间戳
 	TFInfoMS    = map[string]int64{}                // tf: timeMS 执行Info的时间戳
 	LastBatchMS = map[string]int64{}                // tf: timeMS 仅用于回测
+
+	lockInfoJobs sync.Mutex
 )

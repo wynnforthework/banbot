@@ -395,12 +395,8 @@ func (c *RunPolicyConfig) Def(k string, dv float64, p *core.Param) float64 {
 	if p.Mean == 0 {
 		p.Mean = dv
 	}
-	if p.VType == core.VTypeExp && p.Rate == 0 {
-		// 指数分布，设定期望值
-		p.Rate = 1 / p.Mean
-	} else if p.VType == core.VTypeNorm && p.StdDev == 0 {
-		// 正态分布，设定期望值和方差
-		p.StdDev = max(p.Max-dv, dv-p.Min) / 1.5
+	if p.VType == core.VTypeNorm && p.Rate == 0 {
+		p.Rate = 1
 	}
 	if p.Name == "" {
 		p.Name = k
