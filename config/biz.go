@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -58,7 +59,7 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 	var merged = make(map[string]interface{})
 	for _, path := range paths {
 		log.Info("Using " + path)
-		fileData, err := os.ReadFile(path)
+		fileData, err := os.ReadFile(ParsePath(path))
 		if err != nil {
 			return errs.NewFull(core.ErrIOReadFail, err, "Read %s Fail", path)
 		}
@@ -334,6 +335,13 @@ func (p *StrtgPerfConfig) Validate() {
 	if p.BadWeight == 0 {
 		p.BadWeight = 0.15
 	}
+}
+
+func ParsePath(path string) string {
+	if strings.HasPrefix(path, "$") {
+		return strings.Replace(path, "$", GetDataDir(), 1)
+	}
+	return path
 }
 
 func GetStakeAmount(accName string) float64 {

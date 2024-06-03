@@ -20,6 +20,7 @@ import (
 	"math"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -58,7 +59,7 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
-	file, err_ := os.Create(fmt.Sprintf("%s/optimize.log", outDir))
+	file, err_ := os.Create(fmt.Sprintf("%s/opt_%s.log", outDir, args.Sampler))
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
@@ -75,12 +76,8 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 		}
 		file.WriteString(fmt.Sprintf("\n============== %s =============\n", gp.ID()))
 		runOptJob := func(data map[string]float64) (float64, *errs.Error) {
-			jobParams := make(map[string]float64)
-			for _, p := range params {
-				jobParams[p.Name] = p.ToRegular(data[p.Name])
-			}
-			score, bt, err := runOnce(gp, jobParams)
-			line := paramsToStr(jobParams, score)
+			score, bt, err := runOnce(gp, data)
+			line := paramsToStr(data, score)
 			if err != nil {
 				line += fmt.Sprintf("backtest fail: %v", err)
 			} else {
@@ -101,6 +98,9 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 		if err != nil {
 			log.Error("optimize fail", zap.String("job", gp.ID()), zap.Error(err))
 		} else {
+			for _, p := range params {
+				best[p.Name], _ = p.ToRegular(best[p.Name])
+			}
 			line := "[best] " + paramsToStr(best, bestSc)
 			file.WriteString(line + "\n")
 			log.Warn(line)
@@ -144,7 +144,16 @@ func runGOptuna(name string, rounds int, params []*core.Param, loop FuncOptTask)
 		var data = make(map[string]float64)
 		for _, p := range params {
 			minVal, maxVal := p.OptSpace()
-			data[p.Name], _ = trial.SuggestFloat(p.Name, minVal, maxVal)
+			var val float64
+			var valid bool
+			for i := 0; i < 100; i++ {
+				val, _ = trial.SuggestFloat(p.Name, minVal, maxVal)
+				val, valid = p.ToRegular(val)
+				if valid {
+					break
+				}
+			}
+			data[p.Name] = val
 		}
 		score, err := loop(data)
 		if err != nil {
@@ -191,6 +200,9 @@ func runBayes(rounds int, params []*core.Param, loop FuncOptTask) (map[string]fl
 		for k, v := range m {
 			data[k.GetName()] = v
 		}
+		for _, p := range params {
+			data[p.Name], _ = p.ToRegular(data[p.Name])
+		}
 		score, _ := loop(data)
 		return score
 	})
@@ -233,10 +245,17 @@ func paramsToStr(m map[string]float64, score float64) string {
 	sort.Slice(arr, func(i, j int) bool {
 		return arr[i].Str < arr[j].Str
 	})
+	numLen := 0
 	for _, p := range arr {
-		b.WriteString(fmt.Sprintf("%s: %.2f, ", p.Str, p.Val))
+		valStr := strconv.FormatFloat(p.Val, 'f', 2, 64)
+		b.WriteString(fmt.Sprintf("%s: %s, ", p.Str, valStr))
+		numLen += len(valStr)
 	}
-	return fmt.Sprintf("loss: %.2f \t%s", score, b.String())
+	tabLack := (len(arr)*5 - numLen) / 4
+	if tabLack > 0 {
+		b.WriteString(strings.Repeat("\t", tabLack))
+	}
+	return fmt.Sprintf("loss: %7.2f \t%s", score, b.String())
 }
 
 func ResetVars() {

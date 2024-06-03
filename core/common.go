@@ -241,13 +241,16 @@ func (p *Param) OptSpace() (float64, float64) {
 /*
 ToRegular 将均匀分布映射为正态分布的超参数值
 */
-func (p *Param) ToRegular(x float64) float64 {
+func (p *Param) ToRegular(x float64) (float64, bool) {
 	if p.VType == VTypeNorm {
 		scale := max(p.Mean-p.Min, p.Max-p.Mean)
 		normVal := p.norm(x) / p.getEdgeY()
-		return normVal*scale + p.Mean
+		x = normVal*scale + p.Mean
 	}
-	return x
+	if x < p.Min || x > p.Max {
+		return min(p.Max, max(x, p.Min)), false
+	}
+	return x, true
 }
 
 func (p *Param) getEdgeY() float64 {
