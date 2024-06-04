@@ -235,10 +235,11 @@ func StdDevVolatility(data []float64, rate float64) float64 {
 }
 
 /*
-MaxToZero
+NearScore
 公式：y=e^-abs(x-a)
 在给定的maxAt即a处，y取最大值1，x向两侧移动，y逐渐趋近于0，斜率由大变小
+rate默认1，x偏移40时，衰减70%；rate>1时，衰减加速
 */
-func MaxToZero(x float64, maxAt float64) float64 {
-	return math.Exp(-math.Abs(x - maxAt))
+func NearScore(x, mid, rate float64) float64 {
+	return math.Exp(-math.Abs(x-mid) * rate * 0.03)
 }

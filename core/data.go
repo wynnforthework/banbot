@@ -48,6 +48,7 @@ const (
 	SecsDay  = SecsHour * 24
 	SecsWeek = SecsDay * 7
 	SecsMon  = SecsDay * 30
+	SecsQtr  = SecsMon * 3
 	SecsYear = SecsDay * 365
 )
 

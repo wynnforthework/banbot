@@ -265,7 +265,7 @@ func textGroupProfitRanges(r *BTResult, orders []*orm.InOutOrder) string {
 }
 
 func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
-	units := []string{"1M", "1w", "1d", "6h", "1h"}
+	units := []string{"1Y", "1Q", "1M", "1w", "1d", "6h", "1h"}
 	startMS, endMS := orders[0].EnterAt, orders[len(orders)-1].EnterAt
 	var bestTF string
 	var bestTFSecs int
@@ -275,8 +275,8 @@ func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
 		tfSecs := utils.TFToSecs(tf)
 		grpNum := float64(endMS-startMS) / 1000 / float64(tfSecs)
 		numPerGp := float64(len(orders)) / grpNum
-		score1 := utils.MaxToZero(grpNum, 15)
-		score2 := utils.MaxToZero(numPerGp, 40)
+		score1 := utils.NearScore(grpNum, 18, 2)
+		score2 := utils.NearScore(min(numPerGp, 60), 40, 1)
 		curScore := score2 * score1
 		if curScore > bestScore {
 			bestTF = tf
@@ -290,7 +290,12 @@ func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
 	}
 	tfUnit := bestTF[1]
 	groups := groupItems(orders, false, func(od *orm.InOutOrder, i int) string {
-		if tfUnit == 'M' {
+		if tfUnit == 'Y' {
+			return btime.ToDateStr(od.EnterAt, "2006")
+		} else if tfUnit == 'Q' {
+			enterMS := utils.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
+			return btime.ToDateStr(enterMS, "2006-01")
+		} else if tfUnit == 'M' {
 			return btime.ToDateStr(od.EnterAt, "2006-01")
 		} else if tfUnit == 'd' || tfUnit == 'w' {
 			enterMS := utils.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))

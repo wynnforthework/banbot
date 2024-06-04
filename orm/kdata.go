@@ -562,7 +562,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	exInfo := exchange.Info()
 	if exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType) {
-		retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, 0)
+		retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, limit)
 		if retErr != nil {
 			return retErr
 		}

@@ -40,4 +40,10 @@ tail /var/log/maillog
 2. 运行超参数优化；`banbot optimize --nodb -opt-rounds 40 -sampler tpe`；  
 其中`opt-rounds`指定单轮任务搜索轮次，`sampler`指定搜索方法，支持:tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
 3. 查看日志并选定最佳参数组合：  
-打开日志`backtest/task_-1/optimize.log`，将每个策略的最佳参数复制到`config/run_policy/[?]/params`下，并设定`dirt`为long或short
+打开日志`backtest/task_-1/optimize.log`，将每个策略的最佳参数复制到`config/run_policy/[?]/params`下，并设定`dirt`为long或short。  
+> 新策略调优时，建议在`run_policy`中拆分为long/short/both三种情况分别调优，多空拆分不一定比一起的分数更高。
+### 几种超参数调优方法对比？
+bayes在60%情况下优于其他优化方法，首推。  
+cmaes/ipop-cmaes/bipop-cmaes三种方法大部分情况下结果很类似，bipop-cmaes略优，在30%情况下优于其他方法。  
+tpe在15%情况下优于其他方法，可考虑用于对比。  
+random相比其他方法没有突出优势，不建议。

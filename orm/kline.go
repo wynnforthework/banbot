@@ -168,7 +168,7 @@ order by sid,time`, startMs, finishEndMS, sidText)
 		if fromTfMSecs > 0 {
 			var lastDone bool
 			klineArr, lastDone = utils.BuildOHLCV(klineArr, tfMSecs, 0, nil, fromTfMSecs)
-			if !lastDone {
+			if !lastDone && len(klineArr) > 0 {
 				klineArr = klineArr[:len(klineArr)-1]
 			}
 		}
@@ -332,6 +332,9 @@ func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr 
 	toTfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
 	merged, _ := utils.BuildOHLCV(arr, toTfMSecs, 0, nil, fromTfMSecs)
+	if len(merged) == 0 {
+		return nil
+	}
 	out := merged[len(merged)-1]
 	return &KlineUn{
 		Sid:       sid,
@@ -365,6 +368,13 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		return nil
 	}
 	sub := calcUnFinish(sid, agg.TimeFrame, subTF, startMS, endMS, klines)
+	if sub == nil {
+		_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
+		if err_ != nil {
+			return errs.New(core.ErrDbExecFail, err_)
+		}
+		return nil
+	}
 	barStartMS := utils.AlignTfMSecs(startMS, tfMSecs)
 	barEndMS := utils.AlignTfMSecs(endMS, tfMSecs)
 	if barStartMS == barEndMS {
@@ -630,6 +640,10 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	}
 	// 检查法定休息时间段，过滤非交易时间段
 	exs := GetSymbolByID(sid)
+	if exs == nil {
+		log.Warn("no ExSymbol found", zap.Int32("sid", sid))
+		return nil
+	}
 	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
 	if err != nil {
 		return err
@@ -981,6 +995,10 @@ SyncKlineTFs
 */
 func SyncKlineTFs() *errs.Error {
 	log.Info("run kline data sync ...")
+	err := LoadAllExSymbols()
+	if err != nil {
+		return err
+	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err

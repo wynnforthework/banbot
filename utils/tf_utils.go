@@ -37,6 +37,8 @@ func parseTimeFrame(timeframe string) (int, error) {
 	switch unit {
 	case 'y', 'Y':
 		scale = core.SecsYear
+	case 'q', 'Q':
+		scale = core.SecsQtr
 	case 'M':
 		scale = core.SecsMon
 	case 'w', 'W':
@@ -59,7 +61,7 @@ func parseTimeFrame(timeframe string) (int, error) {
 /*
 TFToSecs
 将时间周期转为秒
-支持单位：s, m, h, d, M, Y
+支持单位：s, m, h, d, M, Q, Y
 */
 func TFToSecs(timeFrame string) int {
 	secs, ok := tfSecsMap[timeFrame]
@@ -146,6 +148,8 @@ func SecsToTF(tfSecs int) string {
 		switch {
 		case tfSecs >= core.SecsYear:
 			timeFrame = strconv.Itoa(tfSecs/core.SecsYear) + "y"
+		case tfSecs >= core.SecsQtr:
+			timeFrame = strconv.Itoa(tfSecs/core.SecsQtr) + "q"
 		case tfSecs >= core.SecsMon:
 			timeFrame = strconv.Itoa(tfSecs/core.SecsMon) + "M"
 		case tfSecs >= core.SecsWeek:
@@ -244,6 +248,10 @@ func BuildOHLCVOff(arr []*banexg.Kline, toTFMSecs int64, preFire float64, resOHL
 			big.Time = timeAlign
 			aggCnt = 1
 		}
+	}
+	if big != nil && big.Volume > 0 || aggCnt*5 > aggNum {
+		// 跳过小周期数量不足20%，且总成交量为0的
+		resOHLCV = append(resOHLCV, big)
 	}
 	lastFinished := false
 	if fromTFMSecs > 0 && len(resOHLCV) > 0 {
