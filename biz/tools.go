@@ -224,7 +224,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 				continue
 			}
 			offMS := int64(exg.GetAlignOff(exInfo.ID, int(agg.MSecs/1000)) * 1000)
-			klines, _ = utils.BuildOHLCVOff(klines1m, agg.MSecs, 0, nil, tfMSecs, offMS)
+			klines, _ = utils.BuildOHLCV(klines1m, agg.MSecs, 0, nil, tfMSecs, offMS)
 			if len(klines) == 0 {
 				continue
 			}

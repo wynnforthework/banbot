@@ -22,11 +22,12 @@ type FnPairKline = func(bar *orm.InfoKline)
 type FuncEnvEnd = func(bar *banexg.PairTFKline, adj *orm.AdjInfo)
 
 type PairTFCache struct {
-	TimeFrame string
-	TFSecs    int
-	NextMS    int64         // 记录下一个期待收到的bar起始时间戳，如果不一致，则出现了bar缺失，需查询更新。
-	WaitBar   *banexg.Kline // 记录尚未完成的bar。已完成时应置为nil
-	Latest    *banexg.Kline // 记录最新bar数据，可能未完成，可能已完成
+	TimeFrame  string
+	TFSecs     int
+	NextMS     int64         // 记录下一个期待收到的bar起始时间戳，如果不一致，则出现了bar缺失，需查询更新。
+	WaitBar    *banexg.Kline // 记录尚未完成的bar。已完成时应置为nil
+	Latest     *banexg.Kline // 记录最新bar数据，可能未完成，可能已完成
+	AlignOffMS int64
 }
 
 /*
@@ -84,15 +85,23 @@ func (f *Feeder) subTfs(timeFrames []string, delOther bool) []string {
 		}
 	}
 	// 新增的记录到adds中，已有的从oldTfs中删除，stateMap保留全部的
+	exchange, err := exg.GetWith(f.Exchange, f.Market, "")
+	if err != nil {
+		log.Warn("get exchange fail", zap.String("ex", f.Exchange), zap.Error(err))
+		return nil
+	}
+	exgID := exchange.Info().ID
 	adds := make([]string, 0, len(timeFrames))
 	for _, tf := range timeFrames {
 		if _, ok := oldTfs[tf]; ok {
 			delete(oldTfs, tf)
 			continue
 		}
+		tfSecs := utils.TFToSecs(tf)
 		sta := &PairTFCache{
-			TimeFrame: tf,
-			TFSecs:    utils.TFToSecs(tf),
+			TimeFrame:  tf,
+			TFSecs:     tfSecs,
+			AlignOffMS: int64(exg.GetAlignOff(exgID, tfSecs) * 1000),
 		}
 		stateMap[tf] = sta
 		if minTfSecs == 0 || sta.TFSecs < minTfSecs {
@@ -391,7 +400,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		if state.WaitBar != nil {
 			olds = append(olds, state.WaitBar)
 		}
-		ohlcvs, lastOk = utils.BuildOHLCV(bars, staMSecs, f.PreFire, olds, barTfMSecs)
+		ohlcvs, lastOk = utils.BuildOHLCV(bars, staMSecs, f.PreFire, olds, barTfMSecs, state.AlignOffMS)
 	} else if barTfMSecs == staMSecs {
 		ohlcvs, lastOk = bars, true
 	} else {
@@ -409,7 +418,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		// 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
 		if barTfMSecs < staMSecs {
 			// 这里应该保留最后未完成的数据
-			ohlcvs, _ = utils.BuildOHLCV(bars, staMSecs, f.PreFire, nil, barTfMSecs)
+			ohlcvs, _ = utils.BuildOHLCV(bars, staMSecs, f.PreFire, nil, barTfMSecs, state.AlignOffMS)
 		} else {
 			ohlcvs = bars
 		}
@@ -419,7 +428,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 				olds = append(olds, state.WaitBar)
 			}
 			bigTfMSecs := int64(state.TFSecs * 1000)
-			curOhlcvs, lastOk := utils.BuildOHLCV(ohlcvs, bigTfMSecs, f.PreFire, olds, staMSecs)
+			curOhlcvs, lastOk := utils.BuildOHLCV(ohlcvs, bigTfMSecs, f.PreFire, olds, staMSecs, state.AlignOffMS)
 			f.onStateOhlcvs(state, curOhlcvs, lastOk)
 		}
 	}

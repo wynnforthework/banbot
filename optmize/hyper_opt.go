@@ -1,10 +1,12 @@
 package optmize
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strategy"
 	"github.com/banbox/banbot/utils"
@@ -17,8 +19,12 @@ import (
 	"github.com/c-bata/goptuna/tpe"
 	"github.com/d4l3k/go-bayesopt"
 	"go.uber.org/zap"
+	"io/fs"
 	"math"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +33,10 @@ import (
 type FuncOptTask func(params map[string]float64) (float64, *errs.Error)
 
 func RunOptimize(args *config.CmdArgs) *errs.Error {
+	if args.OutPath == "" {
+		log.Warn("-out is required")
+		return nil
+	}
 	args.CPUProfile = false
 	args.MemProfile = false
 	args.LogLevel = "warn"
@@ -35,82 +45,263 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	// 将优化任务按多空拆分
-	groups := make([]*config.RunPolicyConfig, 0, len(config.RunPolicy))
-	for _, pol := range config.RunPolicy {
-		if pol.Dirt == "" {
-			long := pol.Clone()
-			long.Dirt = "long"
-			short := pol.Clone()
-			short.Dirt = "short"
-			groups = append(groups, long, short)
-		} else {
-			groups = append(groups, pol)
+	groups := config.RunPolicy
+	// 列举所有标的
+	allPairs := config.Pairs
+	if len(allPairs) == 0 {
+		allPairs, err = goods.RefreshPairList()
+		if err != nil {
+			return err
 		}
 	}
-	// 针对每个策略、多空单独进行贝叶斯优化，寻找最佳参数
-	err = orm.InitTask()
-	if err != nil {
-		return err
+	if len(groups) <= 1 || args.Concur <= 1 {
+		for _, gp := range groups {
+			// 针对每个策略、多空单独进行贝叶斯优化，寻找最佳参数
+			err = optAndPrint(gp, args, allPairs)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	taskId := orm.GetTaskID("")
-	outDir := fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), taskId)
-	err_ := utils.EnsureDir(outDir, 0755)
-	if err_ != nil {
-		return errs.New(errs.CodeIOWriteFail, err_)
+	// 多进程执行，提高速度。
+	log.Warn("running optimize jobs", zap.Int("num", len(groups)), zap.Int("rounds", args.OptRounds))
+	var cmds = []string{"optimize", "--nodb", "-opt-rounds"}
+	cmds = append(cmds, strconv.Itoa(args.OptRounds), "-sampler", args.Sampler)
+	if args.EachPairs {
+		cmds = append(cmds, "-each-pairs")
 	}
-	file, err_ := os.Create(fmt.Sprintf("%s/opt_%s.log", outDir, args.Sampler))
+	for _, p := range args.Configs {
+		cmds = append(cmds, "-config", p)
+	}
+	logPath := strings.TrimSuffix(args.OutPath, filepath.Ext(args.OutPath))
+	return utils.ParallelRun(groups, args.Concur, func(i int, pol *config.RunPolicyConfig) *errs.Error {
+		iStr := strconv.Itoa(i + 1)
+		cfgFile, err_ := os.CreateTemp("", "ban_opt"+iStr)
+		if err_ != nil {
+			log.Warn("write temp config fail", zap.Error(err_))
+			return nil
+		}
+		defer os.Remove(cfgFile.Name())
+		cfgFile.WriteString("run_policy:\n")
+		cfgFile.WriteString(pol.ToYaml())
+		cfgFile.Close()
+		curCmds := append(cmds, "-config", cfgFile.Name())
+		curCmds = append(curCmds, "-out", logPath+iStr+".log")
+		log.Warn("runing: " + strings.Join(curCmds, " "))
+		var out bytes.Buffer
+		prgName := "banbot.o"
+		if runtime.GOOS == "windows" {
+			prgName = "banbot.exe"
+		}
+		excPath := filepath.Join(config.GetStagyDir(), prgName)
+		cmd := exec.Command(excPath, curCmds...)
+		cmd.Dir = config.GetStagyDir()
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		err_ = cmd.Run()
+		fmt.Println(out.String())
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		return nil
+	})
+}
+
+func optAndPrint(pol *config.RunPolicyConfig, args *config.CmdArgs, allPairs []string) *errs.Error {
+	file, err_ := os.Create(args.OutPath)
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
 	defer file.Close()
-	log.Warn("running optimize jobs", zap.Int("num", len(groups)), zap.Int("rounds", args.OptRounds))
-	file.WriteString(fmt.Sprintf("run hyper optimize: %v, groups: %v", args.Sampler, len(groups)))
-	for _, gp := range groups {
-		config.RunPolicy = []*config.RunPolicyConfig{gp}
-		_ = strategy.New(gp)
-		params := gp.HyperParams()
-		if len(params) == 0 {
-			log.Warn("no hyper params, skip optimize", zap.String("strtg", gp.ID()))
-			continue
+	file.WriteString(fmt.Sprintf("run hyper optimize: %v", args.Sampler))
+	res := make([]*GroupScore, 0, 5)
+	if args.EachPairs {
+		pairs := pol.Pairs
+		if len(pairs) == 0 {
+			pairs = allPairs
 		}
-		file.WriteString(fmt.Sprintf("\n============== %s =============\n", gp.ID()))
-		runOptJob := func(data map[string]float64) (float64, *errs.Error) {
-			score, bt, err := runOnce(gp, data)
-			line := paramsToStr(data, score)
-			if err != nil {
-				line += fmt.Sprintf("backtest fail: %v", err)
-			} else {
-				line += fmt.Sprintf(" \todNum: %v, profit: %.1f%%, drawDown: %.1f%%, sharpe: %.2f\n",
-					len(orm.HistODs), bt.TotProfitPct, bt.MaxDrawDownPct, bt.SharpeRatio)
+		for _, p := range pairs {
+			pol.Pairs = []string{p}
+			item := optForGroup(pol, args.Sampler, args.OptRounds, file)
+			if item != nil {
+				res = append(res, item)
 			}
-			file.WriteString(line)
-			log.Warn(line)
-			return score, nil
 		}
-		var best map[string]float64
-		var bestSc float64
-		if args.Sampler == "bayes" {
-			best, bestSc, err = runBayes(args.OptRounds, params, runOptJob)
-		} else {
-			best, bestSc, err = runGOptuna(args.Sampler, args.OptRounds, params, runOptJob)
+	} else {
+		item := optForGroup(pol, args.Sampler, args.OptRounds, file)
+		if item != nil {
+			res = append(res, item)
 		}
-		if err != nil {
-			log.Error("optimize fail", zap.String("job", gp.ID()), zap.Error(err))
-		} else {
-			for _, p := range params {
-				best[p.Name], _ = p.ToRegular(best[p.Name])
-			}
-			line := "[best] " + paramsToStr(best, bestSc)
-			file.WriteString(line + "\n")
-			log.Warn(line)
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Score > res[j].Score
+	})
+	for _, gp := range res {
+		if gp.Score <= 0 {
+			break
+		}
+		file.WriteString(fmt.Sprintf("\n  # score: %.2f\n", gp.Score))
+		for _, p := range gp.Items {
+			file.WriteString(p.ToYaml())
 		}
 	}
 	core.RunExitCalls()
 	return nil
 }
 
-func runGOptuna(name string, rounds int, params []*core.Param, loop FuncOptTask) (map[string]float64, float64, *errs.Error) {
+/*
+optForGroup 对某个策略超参数调优，自动搜索long/short/both的最佳组合。
+*/
+func optForGroup(pol *config.RunPolicyConfig, method string, rounds int, flog *os.File) *GroupScore {
+	groups := make([]*config.RunPolicyConfig, 0, 3)
+	var long, short, both *config.RunPolicyConfig
+	if pol.Dirt == "any" {
+		long = pol.Clone()
+		long.Dirt = "long"
+		short = pol.Clone()
+		short.Dirt = "short"
+		both = pol.Clone()
+		both.Dirt = ""
+		groups = append(groups, long, short, both)
+	} else {
+		groups = append(groups, pol.Clone())
+	}
+	var bestOdNum = 0
+	var bestScore = -999.0
+	var bestPols []*config.RunPolicyConfig
+	for _, p := range groups {
+		config.RunPolicy = []*config.RunPolicyConfig{p}
+		optForPol(p, method, rounds, flog)
+		if p.Score > bestScore {
+			bestOdNum = p.MaxOpen
+			bestScore = p.Score
+			bestPols = []*config.RunPolicyConfig{p}
+		}
+	}
+	if len(groups) == 1 {
+		return &GroupScore{groups, bestScore}
+	}
+	// long,short,both分别评估
+	minScore := min(long.Score, short.Score)
+	maxScore := max(long.Score, short.Score)
+	if minScore > 0 && maxScore > 0 {
+		// 检查组合的是否优于long/short/both
+		flog.WriteString("\n========== union long/short ============\n")
+		config.RunPolicy = []*config.RunPolicyConfig{long, short}
+		bt, loss := runBTOnce()
+		line := fmt.Sprintf("loss: %5.2f \todNum: %v, profit: %.1f%%, drawDown: %.1f%%, sharpe: %.2f\n",
+			loss, bt.OrderNum, bt.TotProfitPct, bt.MaxDrawDownPct, bt.SharpeRatio)
+		flog.WriteString(line)
+		log.Warn(line)
+		curScore := -loss
+		odNumRate := float64(bt.OrderNum) / float64(bestOdNum)
+		scoreRate := curScore / bestScore
+		if scoreRate > 1.25 || scoreRate > 1.1 && odNumRate < 1.5 {
+			bestScore = curScore
+			bestOdNum = bt.OrderNum
+			bestPols = []*config.RunPolicyConfig{long, short}
+		}
+	}
+	if minScore < 0 || maxScore > minScore*5 {
+		// 多空收益严重不均衡，固定收益高的参数不变，微调收益低的参数，寻找组合最佳分数
+		config.RunPolicy = []*config.RunPolicyConfig{long, short}
+		var unionScore float64
+		if long.Score > short.Score {
+			optForPol(short, method, rounds, flog)
+			unionScore = short.Score
+		} else {
+			optForPol(long, method, rounds, flog)
+			unionScore = long.Score
+		}
+		if unionScore > bestScore {
+			return &GroupScore{[]*config.RunPolicyConfig{long, short}, unionScore}
+		}
+	}
+	if len(bestPols) > 0 {
+		return &GroupScore{bestPols, bestScore}
+	}
+	return nil
+}
+
+type GroupScore struct {
+	Items []*config.RunPolicyConfig
+	Score float64
+}
+
+/*
+optForPol 对策略任务执行优化，支持bayes/tpe/cames等
+调用此方法前需要设置 `config.RunPolicy`
+*/
+func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.File) {
+	title := pol.ID()
+	onePair := len(pol.Pairs) == 1
+	if onePair {
+		title += "/" + pol.Pairs[0]
+	}
+	// 重置PairParams，避免影响传入参数
+	pol.PairParams = make(map[string]map[string]float64)
+	pol.Score = -998
+	_ = strategy.New(pol)
+	params := pol.HyperParams()
+	if len(params) == 0 {
+		log.Warn("no hyper params, skip optimize", zap.String("strtg", title))
+		return
+	}
+	flog.WriteString(fmt.Sprintf("\n============== %s =============\n", title))
+	var minLoss = float64(998)
+	var best map[string]float64
+	var bestBt *BTResult
+	runOptJob := func(data map[string]float64) (float64, *errs.Error) {
+		for k, v := range data {
+			pol.Params[k] = v
+		}
+		bt, loss := runBTOnce()
+		line := fmt.Sprintf("%s \todNum: %v, profit: %.1f%%, drawDown: %.1f%%, sharpe: %.2f\n",
+			paramsToStr(data, loss), bt.OrderNum, bt.TotProfitPct, bt.MaxDrawDownPct, bt.SharpeRatio)
+		flog.WriteString(line)
+		log.Warn(line)
+		if loss < minLoss {
+			minLoss = loss
+			best = data
+			bestBt = bt.BTResult
+		}
+		return loss, nil
+	}
+	var err *errs.Error
+	if method == "bayes" {
+		err = runBayes(rounds, params, runOptJob)
+	} else {
+		err = runGOptuna(method, rounds, params, runOptJob)
+	}
+	if err != nil {
+		log.Error("optimize fail", zap.String("job", title), zap.Error(err))
+	} else {
+		line := "[best] " + paramsToStr(best, minLoss)
+		flog.WriteString(line + "\n")
+		log.Warn(line)
+	}
+	pol.Params = best
+	pol.Score = -minLoss
+	pol.MaxOpen = bestBt.OrderNum
+}
+
+func runBTOnce() (*BackTest, float64) {
+	core.BotRunning = true
+	ResetVars()
+	bt := NewBackTest()
+	bt.Run()
+	var loss float64
+	if bt.TotProfitPct <= 0 {
+		loss = -bt.TotProfitPct
+	} else {
+		// 盈利时返回无回撤收益率
+		loss = -bt.TotProfitPct * math.Pow(1-bt.MaxDrawDownPct/100, 1.5)
+	}
+	return bt, loss
+}
+
+func runGOptuna(name string, rounds int, params []*core.Param, loop FuncOptTask) *errs.Error {
 	var sampler goptuna.Sampler
 	var options []goptuna.StudyOption
 	var seed = int64(0)
@@ -138,7 +329,7 @@ func runGOptuna(name string, rounds int, params []*core.Param, loop FuncOptTask)
 	options = append(options, goptuna.StudyOptionSampler(sampler))
 	study, err_ := goptuna.CreateStudy("optimize", options...)
 	if err_ != nil {
-		return nil, 0, errs.New(errs.CodeRunTime, err_)
+		return errs.New(errs.CodeRunTime, err_)
 	}
 	err_ = study.Optimize(func(trial goptuna.Trial) (float64, error) {
 		var data = make(map[string]float64)
@@ -162,24 +353,12 @@ func runGOptuna(name string, rounds int, params []*core.Param, loop FuncOptTask)
 		return score, nil
 	}, rounds)
 	if err_ != nil {
-		return nil, 0, errs.New(errs.CodeRunTime, err_)
+		return errs.New(errs.CodeRunTime, err_)
 	}
-	best, err_ := study.GetBestParams()
-	if err_ != nil {
-		return nil, 0, errs.New(errs.CodeRunTime, err_)
-	}
-	bestSc, err_ := study.GetBestValue()
-	if err_ != nil {
-		return nil, 0, errs.New(errs.CodeRunTime, err_)
-	}
-	res := make(map[string]float64)
-	for k, v := range best {
-		res[k] = v.(float64)
-	}
-	return res, bestSc, nil
+	return nil
 }
 
-func runBayes(rounds int, params []*core.Param, loop FuncOptTask) (map[string]float64, float64, *errs.Error) {
+func runBayes(rounds int, params []*core.Param, loop FuncOptTask) *errs.Error {
 	bysParams := make([]bayesopt.Param, 0, len(params))
 	for _, p := range params {
 		minVal, maxVal := p.OptSpace()
@@ -195,7 +374,7 @@ func runBayes(rounds int, params []*core.Param, loop FuncOptTask) (map[string]fl
 		bayesopt.WithRandomRounds(rounds / 3),
 	}
 	opt := bayesopt.New(bysParams, options...)
-	best, bestSc, err_ := opt.Optimize(func(m map[bayesopt.Param]float64) float64 {
+	_, _, err_ := opt.Optimize(func(m map[bayesopt.Param]float64) float64 {
 		var data = make(map[string]float64)
 		for k, v := range m {
 			data[k.GetName()] = v
@@ -206,56 +385,19 @@ func runBayes(rounds int, params []*core.Param, loop FuncOptTask) (map[string]fl
 		score, _ := loop(data)
 		return score
 	})
-	res := make(map[string]float64)
-	for k, v := range best {
-		res[k.GetName()] = v
-	}
 	if err_ != nil {
-		return nil, 0, errs.New(errs.CodeRunTime, err_)
+		return errs.New(errs.CodeRunTime, err_)
 	}
-	return res, bestSc, nil
+	return nil
 }
 
-func runOnce(gp *config.RunPolicyConfig, params map[string]float64) (float64, *BTResult, *errs.Error) {
-	pol := gp.Clone()
-	for k, v := range params {
-		pol.Params[k] = v
-	}
-	config.RunPolicy = []*config.RunPolicyConfig{pol}
-	core.BotRunning = true
-	ResetVars()
-	bt := NewBackTest()
-	bt.Run()
-	var score float64
-	if bt.TotProfitPct <= 0 {
-		score = bt.TotProfitPct
-	} else {
-		// 盈利时返回无回撤收益率
-		score = bt.TotProfitPct * math.Pow(1-bt.MaxDrawDownPct/100, 1.5)
-	}
-	return -score, bt.BTResult, nil
-}
-
-func paramsToStr(m map[string]float64, score float64) string {
-	var b strings.Builder
-	arr := make([]*core.StrVal, 0, len(m))
-	for k, v := range m {
-		arr = append(arr, &core.StrVal{Str: k, Val: v})
-	}
-	sort.Slice(arr, func(i, j int) bool {
-		return arr[i].Str < arr[j].Str
-	})
-	numLen := 0
-	for _, p := range arr {
-		valStr := strconv.FormatFloat(p.Val, 'f', 2, 64)
-		b.WriteString(fmt.Sprintf("%s: %s, ", p.Str, valStr))
-		numLen += len(valStr)
-	}
-	tabLack := (len(arr)*5 - numLen) / 4
+func paramsToStr(m map[string]float64, loss float64) string {
+	text, numLen := utils.MapToStr(m)
+	tabLack := (len(m)*5 - numLen) / 4
 	if tabLack > 0 {
-		b.WriteString(strings.Repeat("\t", tabLack))
+		text += strings.Repeat("\t", tabLack)
 	}
-	return fmt.Sprintf("loss: %7.2f \t%s", score, b.String())
+	return fmt.Sprintf("loss: %7.2f \t%s", loss, text)
 }
 
 func ResetVars() {
@@ -277,4 +419,258 @@ func ResetVars() {
 	strategy.TFEnterMS = make(map[string]int64)
 	strategy.TFInfoMS = make(map[string]int64)
 	strategy.LastBatchMS = make(map[string]int64)
+}
+
+/*
+CollectOptLog 收集分析RunOptimize生成的日志
+将所有策略任务按分数倒序排列输出。
+*/
+func CollectOptLog(args *config.CmdArgs) *errs.Error {
+	if args.InPath == "" {
+		log.Warn("-in is required")
+		return nil
+	}
+	core.SetRunMode(core.RunModeBackTest)
+	err := biz.SetupComs(args)
+	if err != nil {
+		return err
+	}
+	paths := make([]string, 0)
+	filepath.WalkDir(args.InPath, func(path string, d fs.DirEntry, err error) error {
+		if strings.HasSuffix(path, ".log") {
+			paths = append(paths, path)
+		}
+		return nil
+	})
+	timeFrame := "15m"
+	res := make([]*OptGroup, 0)
+	for _, path := range paths {
+		var name, pair, dirt string
+		var best *OptInfo
+		inUnion := false
+		var long, short, both, union, longMain, shortMain *OptInfo
+		fdata, err_ := os.ReadFile(path)
+		if err_ != nil {
+			return errs.New(errs.CodeIOReadFail, err)
+		}
+		saveGroup := func() {
+			if name == "" {
+				return
+			}
+			if union == nil {
+				// optimize最开始版本没有合并long/short计算分数
+				longPol := &config.RunPolicyConfig{
+					Name:          name,
+					RunTimeframes: []string{timeFrame},
+					Dirt:          "long",
+					Params:        parseParams(long.Param),
+				}
+				if pair != "" {
+					longPol.Pairs = []string{pair}
+				}
+				shortPol := &config.RunPolicyConfig{
+					Name:          name,
+					RunTimeframes: []string{timeFrame},
+					Dirt:          "short",
+					Params:        parseParams(short.Param),
+				}
+				if pair != "" {
+					shortPol.Pairs = []string{pair}
+				}
+				config.RunPolicy = []*config.RunPolicyConfig{longPol, shortPol}
+				bt, loss := runBTOnce()
+				union = &OptInfo{
+					Score: -loss,
+					OdNum: bt.OrderNum,
+					Param: "",
+					Dirt:  "union",
+				}
+			}
+			var oneSide = long
+			if short != nil && (oneSide == nil || short.Score > oneSide.Score) {
+				oneSide = short
+			}
+			var twoSide = both
+			if union != nil && (twoSide == nil || union.Score > twoSide.Score) {
+				twoSide = union
+			}
+			if longMain != nil && (twoSide == nil || longMain.Score > twoSide.Score) {
+				twoSide = longMain
+			}
+			if shortMain != nil && (twoSide == nil || shortMain.Score > twoSide.Score) {
+				twoSide = shortMain
+			}
+			scoreRate := twoSide.Score / oneSide.Score
+			odNumRate := float64(twoSide.OdNum) / float64(oneSide.OdNum)
+			var pols []*OptInfo
+			var bestScore float64
+			if scoreRate > 1.25 || scoreRate > 1.1 && odNumRate < 1.5 {
+				bestScore = twoSide.Score
+				if twoSide.Dirt == "long" {
+					long.Param = twoSide.Param
+				} else if twoSide.Dirt == "short" {
+					short.Param = twoSide.Param
+				}
+				if twoSide.Dirt == "" {
+					pols = []*OptInfo{twoSide}
+				} else {
+					pols = []*OptInfo{long, short}
+				}
+			} else {
+				bestScore = oneSide.Score
+				pols = []*OptInfo{oneSide}
+			}
+			res = append(res, &OptGroup{
+				Items: pols,
+				Score: bestScore,
+				Name:  name,
+				Pair:  pair,
+			})
+			long, short, both, union, longMain, shortMain = nil, nil, nil, nil, nil, nil
+		}
+		lines := strings.Split(string(fdata), "\n")[1:]
+		for _, line := range lines {
+			if line == "" || strings.HasPrefix(line, "[best]") {
+				if best != nil {
+					if inUnion {
+						union = best
+						union.Dirt = "union"
+						inUnion = false
+					} else if dirt == "long" {
+						if long == nil {
+							long = best
+						} else {
+							shortMain = best
+						}
+					} else if dirt == "short" {
+						if short == nil {
+							short = best
+						} else {
+							longMain = best
+						}
+					} else {
+						both = best
+					}
+					best = nil
+				}
+				continue
+			}
+			if strings.HasPrefix(line, "  # score:") {
+				break
+			}
+			if strings.HasPrefix(line, "==============") && strings.HasSuffix(line, "=============") {
+				arr := strings.Split(strings.Split(line, " ")[1], "/")
+				curPair := ""
+				if len(arr) > 1 {
+					curPair = arr[1]
+				}
+				if curPair != "" && curPair != pair {
+					saveGroup()
+					pair = curPair
+					best = nil
+				}
+				name, dirt = parsePolID(arr[0])
+				inUnion = false
+			} else if strings.HasPrefix(line, "========== union") {
+				inUnion = true
+			} else if strings.HasPrefix(line, "loss:") {
+				opt := parseOptLine(line)
+				if best == nil || opt.Score > best.Score {
+					best = opt
+					best.Dirt = dirt
+				}
+			}
+		}
+		saveGroup()
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Score > res[j].Score
+	})
+	for _, gp := range res {
+		if gp.Score < 0 {
+			break
+		}
+		fmt.Printf("\n  # score: %.2f\n", gp.Score)
+		for _, p := range gp.Items {
+			fmt.Printf("  - name: %s\n    run_timeframes: [ %s ]\n", gp.Name, timeFrame)
+			if gp.Pair != "" {
+				fmt.Printf("    pairs: [%s]\n", gp.Pair)
+			}
+			if p.Dirt != "" {
+				fmt.Printf("    dirt: %s\n", p.Dirt)
+			}
+			fmt.Printf("    pair_params:\n      %s: {%s}\n", gp.Pair, p.Param)
+		}
+	}
+	return nil
+}
+
+func parsePolID(id string) (string, string) {
+	arr := strings.Split(id, ":")
+	last := arr[len(arr)-1]
+	var name, dirt string
+	name = strings.Join(arr[:len(arr)-1], ":")
+	if last == "l" {
+		dirt = "long"
+	} else if last == "s" {
+		dirt = "short"
+	} else {
+		name = strings.Join(arr, ":")
+	}
+	return name, dirt
+}
+
+type OptGroup struct {
+	Items []*OptInfo
+	Score float64
+	Name  string
+	Pair  string
+}
+
+func parseParams(line string) map[string]float64 {
+	items := strings.Split(line, ",")
+	res := make(map[string]float64)
+	for _, it := range items {
+		arr := strings.Split(it, ":")
+		tag := strings.TrimSpace(arr[0])
+		valStr := strings.TrimSpace(arr[1])
+		val, _ := strconv.ParseFloat(valStr, 64)
+		res[tag] = val
+	}
+	return res
+}
+
+type OptInfo struct {
+	Dirt  string
+	Score float64
+	Param string
+	OdNum int
+}
+
+func parseOptLine(line string) *OptInfo {
+	raw := strings.Split(line, " ")
+	row := make([]string, 0, len(raw))
+	for _, text := range raw {
+		if text == "" {
+			continue
+		}
+		row = append(row, strings.TrimSpace(text))
+	}
+	num := len(row)
+	cid := 0
+	res := &OptInfo{}
+	for cid+1 < num {
+		tag, str := row[cid], row[cid+1]
+		if tag == "loss:" {
+			loss, _ := strconv.ParseFloat(str, 64)
+			res.Score = -loss
+		} else if tag == "odNum:" {
+			odNum, _ := strconv.ParseInt(strings.ReplaceAll(str, ",", ""), 10, 64)
+			res.OdNum = int(odNum)
+			res.Param = strings.Join(row[2:cid], " ")
+			break
+		}
+		cid += 2
+	}
+	return res
 }

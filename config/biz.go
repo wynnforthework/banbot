@@ -409,6 +409,9 @@ func (c *RunPolicyConfig) Def(k string, dv float64, p *core.Param) float64 {
 	if p.Name == "" {
 		p.Name = k
 	}
+	if c.defs == nil {
+		c.defs = make(map[string]*core.Param)
+	}
 	c.defs[k] = p
 	return val
 }
@@ -419,6 +422,24 @@ func (c *RunPolicyConfig) HyperParams() []*core.Param {
 		res = append(res, p)
 	}
 	return res
+}
+
+func (c *RunPolicyConfig) ToYaml() string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("  - name: %s\n", c.Name))
+	if c.Dirt != "" {
+		b.WriteString(fmt.Sprintf("    dirt: %s\n", c.Dirt))
+	}
+	b.WriteString(fmt.Sprintf("    run_timeframes: [ %s ]\n", strings.Join(c.RunTimeframes, ", ")))
+	b.WriteString(fmt.Sprintf("    pairs: [ %s ]\n", strings.Join(c.Pairs, ", ")))
+	argText, _ := utils2.MapToStr(c.Params)
+	if len(c.Pairs) == 1 {
+		b.WriteString("    pair_params:\n")
+		b.WriteString(fmt.Sprintf("      %s: {%s}\n", c.Pairs[0], argText))
+	} else {
+		b.WriteString(fmt.Sprintf("    params: {%s}\n", argText))
+	}
+	return b.String()
 }
 
 func (c *RunPolicyConfig) Clone() *RunPolicyConfig {

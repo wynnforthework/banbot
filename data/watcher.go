@@ -3,6 +3,7 @@ package data
 import (
 	"fmt"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -88,6 +89,11 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 	tags := make([]string, 0, len(jobs))
 	pairs := make([]string, 0, len(jobs))
 	minTfSecs := 300
+	exchange, err := exg.GetWith(exgName, marketType, "")
+	if err != nil {
+		return err
+	}
+	exgID := exchange.Info().ID
 	for _, j := range jobs {
 		jobKey := fmt.Sprintf("%s_%s", j.Symbol, jobType)
 		if _, ok := w.jobs[jobKey]; ok {
@@ -99,11 +105,12 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 			tags = append(tags, p+"_"+j.Symbol)
 		}
 		pairs = append(pairs, j.Symbol)
-		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since}
+		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since,
+			AlignOffMS: int64(exg.GetAlignOff(exgID, tfSecs) * 1000)}
 		// 尽早启动延迟监听
 		core.SetPairMs(j.Symbol, j.Since, int64(tfSecs*1000))
 	}
-	err := w.SendMsg("subscribe", tags)
+	err = w.SendMsg("subscribe", tags)
 	if err != nil {
 		return err
 	}
@@ -193,7 +200,7 @@ func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 			olds = append(olds, job.WaitBar)
 		}
 		jobMSecs := int64(job.TFSecs * 1000)
-		finishes = job.getFinishes(utils.BuildOHLCV(bars.Arr, jobMSecs, 0, olds, tfMSecs))
+		finishes = job.getFinishes(utils.BuildOHLCV(bars.Arr, jobMSecs, 0, olds, tfMSecs, job.AlignOffMS))
 	} else {
 		finishes = bars.Arr
 	}

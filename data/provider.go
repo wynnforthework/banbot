@@ -125,7 +125,7 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	log.Info(fmt.Sprintf("warmup for %d pairs, %v jobs", len(warmJobs), jobNum))
 	pBar := utils.NewPrgBar(jobNum*core.StepTotal, "warmup")
 	defer pBar.Close()
-	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(job *WarmJob) *errs.Error {
+	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(_ int, job *WarmJob) *errs.Error {
 		hold := job.hold
 		since, err := hold.warmTfs(btime.TimeMS(), job.tfWarms, pBar)
 		lockMap.Lock()

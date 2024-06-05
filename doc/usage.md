@@ -37,11 +37,12 @@ tail /var/log/maillog
 策略的超参数对收益稳定性至关重要。可在策略中定义各个超参数的上下限，然后使用超参数优化方法自动搜索最佳超参数组合。  
 1. 策略中定义待优化超参数：`pol.Def("ma", 10, core.PNorm(5, 400))`；  
 上面定义了一个正态分布的超参数，默认值10，上下限分别400和5，并自动使用默认值作为期望值；（也可使用`PNormF`指定期望值和倍率`Rate`）
-2. 运行超参数优化；`banbot optimize --nodb -opt-rounds 40 -sampler tpe`；  
-其中`opt-rounds`指定单轮任务搜索轮次，`sampler`指定搜索方法，支持:tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
-3. 查看日志并选定最佳参数组合：  
-打开日志`backtest/task_-1/optimize.log`，将每个策略的最佳参数复制到`config/run_policy/[?]/params`下，并设定`dirt`为long或short。  
-> 新策略调优时，建议在`run_policy`中拆分为long/short/both三种情况分别调优，多空拆分不一定比一起的分数更高。
+2. 运行超参数优化；`banbot optimize --nodb -opt-rounds 40 -concur 3 -sampler bayes`；  
+其中`opt-rounds`指定单轮任务搜索轮次，`sampler`指定搜索方法，支持:bayes/tpe/random/cmaes/ipop-cmaes/bipop-cmaes  
+`concur`设置并发进程，默认3，可根据CPU占用情况调整。  
+3. 运行结果收集：`banbot collect_opt --nodb -in [dir_of_opt_out]`：  
+`-in`参数为超参数优化结果输出日志目录；运行收集后会收集所有策略任务分数，降序输出。可自行选择top n个使用。  
+> 新策略调优时，建议在`run_policy`中将dirt设为any，会将此任务拆分为long/short/both三种情况分别调优，多空拆分不一定比一起的分数更高。
 ### 几种超参数调优方法对比？
 bayes在60%情况下优于其他优化方法，首推。  
 cmaes/ipop-cmaes/bipop-cmaes三种方法大部分情况下结果很类似，bipop-cmaes略优，在30%情况下优于其他方法。  

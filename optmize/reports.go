@@ -36,6 +36,7 @@ type BTResult struct {
 	ShowDrawDownPct float64 // 显示最大回撤百分比
 	BarNum          int
 	TimeNum         int
+	OrderNum        int
 	lastTime        int64 // 上次bar的时间戳
 	Plots           *PlotData
 	StartMS         int64
@@ -129,6 +130,7 @@ func (r *BTResult) printBtResult() {
 }
 
 func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
+	r.OrderNum = len(orders)
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
 	heads := []string{"Metric", "Value"}

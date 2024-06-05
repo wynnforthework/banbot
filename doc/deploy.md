@@ -4,9 +4,13 @@
 ```shell
 -- 生成banbot.o包含了策略，用于启动机器人，爬虫
 cd [项目路径]/banstagy
-$env:GOOS="linux"
 $env:GOARCH="amd64"
+$env:GOOS="linux"
 go build -o banbot.o
+
+-- windows
+$env:GOOS="windows"
+go build -o banbot.exe
 ```
 ## 服务器环境准备
 ### 授予可执行权限

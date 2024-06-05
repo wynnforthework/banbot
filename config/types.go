@@ -126,6 +126,7 @@ type RunPolicyConfig struct {
 	Params        map[string]float64            `yaml:"params" mapstructure:"params"`
 	PairParams    map[string]map[string]float64 `yaml:"pair_params" mapstructure:"pair_params"`
 	defs          map[string]*core.Param
+	Score         float64
 }
 
 type StrtgPerfConfig struct {

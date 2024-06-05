@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var (
@@ -101,7 +102,8 @@ order by time limit %v`, sid, startMs, finishEndMS, limit)
 	if subTF != "" && len(klines) > 0 {
 		fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
 		var lastFinish bool
-		klines, lastFinish = utils.BuildOHLCV(klines, tfMSecs, 0, nil, fromTfMSecs)
+		offMS := GetAlignOff(sid, tfMSecs)
+		klines, lastFinish = utils.BuildOHLCV(klines, tfMSecs, 0, nil, fromTfMSecs, offMS)
 		if !lastFinish && len(klines) > 0 {
 			klines = klines[:len(klines)-1]
 		}
@@ -167,7 +169,8 @@ order by sid,time`, startMs, finishEndMS, sidText)
 	callBack := func() {
 		if fromTfMSecs > 0 {
 			var lastDone bool
-			klineArr, lastDone = utils.BuildOHLCV(klineArr, tfMSecs, 0, nil, fromTfMSecs)
+			offMS := GetAlignOff(curSid, tfMSecs)
+			klineArr, lastDone = utils.BuildOHLCV(klineArr, tfMSecs, 0, nil, fromTfMSecs, offMS)
 			if !lastDone && len(klineArr) > 0 {
 				klineArr = klineArr[:len(klineArr)-1]
 			}
@@ -286,7 +289,8 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 		if err_ != nil {
 			return nil, 0, err_
 		}
-		bigKlines, _ = utils.BuildOHLCV(klines, tfMSecs, 0, nil, 0)
+		offMS := GetAlignOff(sid, tfMSecs)
+		bigKlines, _ = utils.BuildOHLCV(klines, tfMSecs, 0, nil, 0, offMS)
 		if len(klines) > 0 {
 			barEndMS = klines[len(klines)-1].Time + int64(utils.TFToSecs(fromTF)*1000)
 		}
@@ -324,6 +328,32 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 	}
 }
 
+var alignOffs = make(map[int32]map[int64]int64)
+var lockAlignOff sync.Mutex
+
+func GetAlignOff(sid int32, toTfMSecs int64) int64 {
+	lockAlignOff.Lock()
+	defer lockAlignOff.Unlock()
+	data, ok1 := alignOffs[sid]
+	if ok1 {
+		if resVal, ok2 := data[toTfMSecs]; ok2 {
+			return resVal
+		}
+	} else {
+		data = make(map[int64]int64)
+		alignOffs[sid] = data
+	}
+	exs := GetSymbolByID(sid)
+	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+	if err != nil {
+		log.Warn(fmt.Sprintf("get exchange fail: %s %s", exs.Exchange, exs.Market))
+		return 0
+	}
+	offMS := int64(exg.GetAlignOff(exchange.Info().ID, int(toTfMSecs/1000)) * 1000)
+	data[toTfMSecs] = offMS
+	return offMS
+}
+
 /*
 calcUnFinish
 从子周期计算大周期的未完成bar
@@ -331,7 +361,8 @@ calcUnFinish
 func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr []*banexg.Kline) *KlineUn {
 	toTfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
-	merged, _ := utils.BuildOHLCV(arr, toTfMSecs, 0, nil, fromTfMSecs)
+	offMS := GetAlignOff(sid, toTfMSecs)
+	merged, _ := utils.BuildOHLCV(arr, toTfMSecs, 0, nil, fromTfMSecs, offMS)
 	if len(merged) == 0 {
 		return nil
 	}

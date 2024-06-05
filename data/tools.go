@@ -126,7 +126,7 @@ func convertFiles(inPath, outPath, srcSuffix string, makeOutPath func(string, st
 	names = names[1:]
 	pBar := utils.NewPrgBar(len(names)*core.StepTotal, "")
 	defer pBar.Close()
-	return utils.ParallelRun(names, ConcurNum, func(name string) *errs.Error {
+	return utils.ParallelRun(names, ConcurNum, func(_ int, name string) *errs.Error {
 		fileOutPath := makeOutPath(outPath, name)
 		_, err_ := os.Stat(fileOutPath)
 		if err_ == nil {
@@ -377,7 +377,7 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 		log.Info("calc 1m kline from ticks", zap.String("year", year))
 		totalNum := len(names) * core.StepTotal
 		pBar := utils.NewPrgBar(totalNum, "tickTo1m")
-		err = utils.ParallelRun(names, ConcurNum, func(name string) *errs.Error {
+		err = utils.ParallelRun(names, ConcurNum, func(_ int, name string) *errs.Error {
 			if timeMsMin > 0 || timeMsMax > 0 {
 				// 过滤范围之外的数据
 				cleanName := strings.Split(filepath.Base(name), ".")[0]

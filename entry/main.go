@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"os"
+	"strings"
 )
 
 const VERSION = "0.1.1"
@@ -36,8 +37,11 @@ func RunCmd() {
 		case "spider":
 			entry = RunSpider
 		case "optimize":
-			options = []string{"opt_rounds", "sampler"}
+			options = []string{"out", "opt_rounds", "sampler", "each_pairs", "concur"}
 			entry = optmize.RunOptimize
+		case "collect_opt":
+			options = []string{"in"}
+			entry = optmize.CollectOptLog
 		case "kline":
 			runKlineCmds(args[1:])
 		case "tick":
@@ -55,16 +59,19 @@ func RunCmd() {
 
 func printAndExit() {
 	tpl := `
+args: %s
 banbot %v
 please run with a subcommand:
 	trade:      live trade
 	backtest:   backtest with strategies and data
 	spider:     start the spider
+	optimize:   run hyper parameters optimization
+	collect_opt: collect result of optimize, and print in order
 	kline:      run kline commands
 	tick:		run tick commands
 	cmp_orders: compare backTest orders with exchange orders
 `
-	log.Warn(fmt.Sprintf(tpl, VERSION))
+	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), VERSION))
 }
 
 func runKlineCmds(args []string) {
@@ -141,6 +148,7 @@ func runSubCmd(sysArgs []string, getEnt FuncGetEntry, printExit func()) {
 	name, subArgs := sysArgs[0], sysArgs[1:]
 	entry, options := getEnt(name)
 	if entry == nil {
+		log.Warn("unknown subcommand: " + name)
 		printExit()
 		return
 	}
@@ -215,6 +223,10 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.IntVar(&args.OptRounds, "opt-rounds", 30, "rounds num for single optimize job")
 		case "sampler":
 			cmd.StringVar(&args.Sampler, "sampler", "tpe", "hyper optimize method, tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes")
+		case "each_pairs":
+			cmd.BoolVar(&args.EachPairs, "each-pairs", false, "run for each pairs")
+		case "concur":
+			cmd.IntVar(&args.Concur, "concur", 3, "Concurrent Number")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

@@ -1,8 +1,12 @@
 package utils
 
 import (
+	"fmt"
+	"github.com/banbox/banbot/core"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -38,4 +42,25 @@ func PadCenter(s string, width int, padText string) string {
 
 	// 输出拼接后的字符串
 	return left + s + right
+}
+
+func MapToStr(m map[string]float64) (string, int) {
+	var b strings.Builder
+	arr := make([]*core.StrVal, 0, len(m))
+	for k, v := range m {
+		arr = append(arr, &core.StrVal{Str: k, Val: v})
+	}
+	sort.Slice(arr, func(i, j int) bool {
+		return arr[i].Str < arr[j].Str
+	})
+	numLen := 0
+	for i, p := range arr {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		valStr := strconv.FormatFloat(p.Val, 'f', 2, 64)
+		b.WriteString(fmt.Sprintf("%s: %s", p.Str, valStr))
+		numLen += len(valStr)
+	}
+	return b.String(), numLen
 }

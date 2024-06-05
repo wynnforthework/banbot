@@ -37,7 +37,8 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 	var doneBars []*banexg.Kline
 	j.WaitBar = nil
 	if len(preBars) > 0 {
-		oldBars, _ := utils.BuildOHLCV(preBars, tfMSecs, 0, nil, int64(subTfSecs*1000))
+		fromTFMS := int64(subTfSecs * 1000)
+		oldBars, _ := utils.BuildOHLCV(preBars, tfMSecs, 0, nil, fromTFMS, j.AlignOffMS)
 		if len(oldBars) > 0 {
 			j.WaitBar = oldBars[len(oldBars)-1]
 			doneBars = oldBars[:len(oldBars)-1]

@@ -535,7 +535,7 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	// 这里应该使用更小的downTF
 	kRanges := sess.GetKlineRanges(sidList, downTF)
 	conn.Release()
-	return utils.ParallelRun(sidList, core.ConcurNum, func(i int32) *errs.Error {
+	return utils.ParallelRun(sidList, core.ConcurNum, func(_ int, i int32) *errs.Error {
 		exs, _ := exsList[i]
 		var oldStart, oldEnd = int64(0), int64(0)
 		if krange, ok := kRanges[exs.ID]; ok {

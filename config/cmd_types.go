@@ -43,5 +43,7 @@ type CmdArgs struct {
 	TimeZone      string // 时区
 	ExgReal       string
 	OptRounds     int    // 超参数优化单任务执行轮次
+	Concur        int    // 并发数量
 	Sampler       string // 超参数优化的方法: tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
+	EachPairs     bool   // 逐个标的执行
 }
