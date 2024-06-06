@@ -21,6 +21,7 @@ import (
 	"go.uber.org/zap"
 	"io/fs"
 	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type FuncOptTask func(params map[string]float64) (float64, *errs.Error)
@@ -55,9 +57,14 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 		}
 	}
 	if len(groups) <= 1 || args.Concur <= 1 {
+		file, err_ := os.Create(args.OutPath)
+		if err_ != nil {
+			return errs.New(errs.CodeIOWriteFail, err_)
+		}
+		defer file.Close()
 		for _, gp := range groups {
 			// 针对每个策略、多空单独进行贝叶斯优化，寻找最佳参数
-			err = optAndPrint(gp, args, allPairs)
+			err = optAndPrint(gp, args, allPairs, file)
 			if err != nil {
 				return err
 			}
@@ -76,6 +83,7 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	}
 	logPath := strings.TrimSuffix(args.OutPath, filepath.Ext(args.OutPath))
 	return utils.ParallelRun(groups, args.Concur, func(i int, pol *config.RunPolicyConfig) *errs.Error {
+		time.Sleep(time.Millisecond * time.Duration(1000*rand.Float64()))
 		iStr := strconv.Itoa(i + 1)
 		cfgFile, err_ := os.CreateTemp("", "ban_opt"+iStr)
 		if err_ != nil {
@@ -108,12 +116,7 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	})
 }
 
-func optAndPrint(pol *config.RunPolicyConfig, args *config.CmdArgs, allPairs []string) *errs.Error {
-	file, err_ := os.Create(args.OutPath)
-	if err_ != nil {
-		return errs.New(errs.CodeIOWriteFail, err_)
-	}
-	defer file.Close()
+func optAndPrint(pol *config.RunPolicyConfig, args *config.CmdArgs, allPairs []string, file *os.File) *errs.Error {
 	file.WriteString(fmt.Sprintf("run hyper optimize: %v", args.Sampler))
 	res := make([]*GroupScore, 0, 5)
 	if args.EachPairs {
@@ -234,11 +237,9 @@ optForPol 对策略任务执行优化，支持bayes/tpe/cames等
 调用此方法前需要设置 `config.RunPolicy`
 */
 func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.File) {
-	title := pol.ID()
-	onePair := len(pol.Pairs) == 1
-	if onePair {
-		title += "/" + pol.Pairs[0]
-	}
+	tfStr := strings.Join(pol.RunTimeframes, "|")
+	pairStr := strings.Join(pol.Pairs, "|")
+	title := fmt.Sprintf("%s/%s/%s", pol.ID(), tfStr, pairStr)
 	// 重置PairParams，避免影响传入参数
 	pol.PairParams = make(map[string]map[string]float64)
 	pol.Score = -998
@@ -442,10 +443,9 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		}
 		return nil
 	})
-	timeFrame := "15m"
 	res := make([]*OptGroup, 0)
 	for _, path := range paths {
-		var name, pair, dirt string
+		var name, pair, dirt, tfStr string
 		var best *OptInfo
 		inUnion := false
 		var long, short, both, union, longMain, shortMain *OptInfo
@@ -456,35 +456,6 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		saveGroup := func() {
 			if name == "" {
 				return
-			}
-			if union == nil {
-				// optimize最开始版本没有合并long/short计算分数
-				longPol := &config.RunPolicyConfig{
-					Name:          name,
-					RunTimeframes: []string{timeFrame},
-					Dirt:          "long",
-					Params:        parseParams(long.Param),
-				}
-				if pair != "" {
-					longPol.Pairs = []string{pair}
-				}
-				shortPol := &config.RunPolicyConfig{
-					Name:          name,
-					RunTimeframes: []string{timeFrame},
-					Dirt:          "short",
-					Params:        parseParams(short.Param),
-				}
-				if pair != "" {
-					shortPol.Pairs = []string{pair}
-				}
-				config.RunPolicy = []*config.RunPolicyConfig{longPol, shortPol}
-				bt, loss := runBTOnce()
-				union = &OptInfo{
-					Score: -loss,
-					OdNum: bt.OrderNum,
-					Param: "",
-					Dirt:  "union",
-				}
 			}
 			var oneSide = long
 			if short != nil && (oneSide == nil || short.Score > oneSide.Score) {
@@ -525,8 +496,11 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 				Score: bestScore,
 				Name:  name,
 				Pair:  pair,
+				TFStr: tfStr,
 			})
 			long, short, both, union, longMain, shortMain = nil, nil, nil, nil, nil, nil
+			name, pair, dirt, tfStr = "", "", "", ""
+			best, inUnion = nil, false
 		}
 		lines := strings.Split(string(fdata), "\n")[1:]
 		for _, line := range lines {
@@ -559,17 +533,11 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 				break
 			}
 			if strings.HasPrefix(line, "==============") && strings.HasSuffix(line, "=============") {
-				arr := strings.Split(strings.Split(line, " ")[1], "/")
-				curPair := ""
-				if len(arr) > 1 {
-					curPair = arr[1]
-				}
-				if curPair != "" && curPair != pair {
+				n, d, t, p := parseSectionTitle(strings.Split(line, " ")[1])
+				if p != pair {
 					saveGroup()
-					pair = curPair
-					best = nil
 				}
-				name, dirt = parsePolID(arr[0])
+				name, dirt, tfStr, pair = n, d, t, p
 				inUnion = false
 			} else if strings.HasPrefix(line, "========== union") {
 				inUnion = true
@@ -592,17 +560,28 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		}
 		fmt.Printf("\n  # score: %.2f\n", gp.Score)
 		for _, p := range gp.Items {
-			fmt.Printf("  - name: %s\n    run_timeframes: [ %s ]\n", gp.Name, timeFrame)
+			tfStr := strings.ReplaceAll(gp.TFStr, "|", ", ")
+			fmt.Printf("  - name: %s\n    run_timeframes: [ %s ]\n", gp.Name, tfStr)
 			if gp.Pair != "" {
-				fmt.Printf("    pairs: [%s]\n", gp.Pair)
+				pairStr := strings.ReplaceAll(gp.Pair, "|", ", ")
+				fmt.Printf("    pairs: [%s]\n", pairStr)
 			}
 			if p.Dirt != "" {
 				fmt.Printf("    dirt: %s\n", p.Dirt)
 			}
-			fmt.Printf("    pair_params:\n      %s: {%s}\n", gp.Pair, p.Param)
+			fmt.Printf("    params: {%s}\n", p.Param)
 		}
 	}
 	return nil
+}
+
+/*
+解析标题，返回：策略名，方向，tfStr，pairStr
+*/
+func parseSectionTitle(title string) (string, string, string, string) {
+	arr := strings.Split(title, "/")
+	name, dirt := parsePolID(arr[0])
+	return name, dirt, arr[1], arr[2]
 }
 
 func parsePolID(id string) (string, string) {
@@ -625,6 +604,7 @@ type OptGroup struct {
 	Score float64
 	Name  string
 	Pair  string
+	TFStr string
 }
 
 func parseParams(line string) map[string]float64 {

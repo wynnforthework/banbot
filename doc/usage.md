@@ -38,8 +38,9 @@ tail /var/log/maillog
 1. 策略中定义待优化超参数：`pol.Def("ma", 10, core.PNorm(5, 400))`；  
 上面定义了一个正态分布的超参数，默认值10，上下限分别400和5，并自动使用默认值作为期望值；（也可使用`PNormF`指定期望值和倍率`Rate`）
 2. 运行超参数优化；`banbot optimize --nodb -opt-rounds 40 -concur 3 -sampler bayes`；  
-其中`opt-rounds`指定单轮任务搜索轮次，`sampler`指定搜索方法，支持:bayes/tpe/random/cmaes/ipop-cmaes/bipop-cmaes  
-`concur`设置并发进程，默认3，可根据CPU占用情况调整。  
+其中`opt-rounds`指定单轮任务搜索轮次，`sampler`指定搜索方法，支持:bayes/tpe/random/cmaes/ipop-cmaes/bipop-cmaes   
+`-concur 3`设置并发进程，默认3，可根据CPU占用情况调整。  
+`-each-pairs`可用于逐标的寻找最佳参数，但很容易过拟合，对于新数据表现不佳，谨慎使用。  
 3. 运行结果收集：`banbot collect_opt --nodb -in [dir_of_opt_out]`：  
 `-in`参数为超参数优化结果输出日志目录；运行收集后会收集所有策略任务分数，降序输出。可自行选择top n个使用。  
 > 新策略调优时，建议在`run_policy`中将dirt设为any，会将此任务拆分为long/short/both三种情况分别调优，多空拆分不一定比一起的分数更高。
