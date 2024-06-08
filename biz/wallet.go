@@ -228,6 +228,14 @@ func (w *BanWallets) SetWallets(data map[string]float64) {
 	}
 }
 
+func (w *BanWallets) DumpAvas() map[string]float64 {
+	res := make(map[string]float64)
+	for k, v := range w.Items {
+		res[k] = v.Available
+	}
+	return res
+}
+
 func (w *BanWallets) Get(code string) *ItemWallet {
 	wallet, ok := w.Items[code]
 	if !ok {

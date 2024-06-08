@@ -46,4 +46,6 @@ type CmdArgs struct {
 	Concur        int    // 并发数量
 	Sampler       string // 超参数优化的方法: tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
 	EachPairs     bool   // 逐个标的执行
+	ReviewPeriod  string // 持续调参回测时，调参回顾的周期
+	RunPeriod     string // 持续调参回测时，调参后有效运行周期
 }

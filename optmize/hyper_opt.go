@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/banbox/banbot/biz"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/goods"
@@ -13,12 +14,15 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
 	"github.com/c-bata/goptuna"
 	"github.com/c-bata/goptuna/cmaes"
 	"github.com/c-bata/goptuna/tpe"
 	"github.com/d4l3k/go-bayesopt"
+	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 	"io/fs"
 	"math"
 	"math/rand"
@@ -34,6 +38,88 @@ import (
 
 type FuncOptTask func(params map[string]float64) (float64, *errs.Error)
 
+/*
+RunBTOverOpt 基于持续调参的回测模式。接近实盘情况，避免使用未来信息调参回测。
+*/
+func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeBackTest)
+	err := biz.SetupComs(args)
+	if err != nil {
+		return err
+	}
+	dateRange := config.TimeRange
+	allStartMs, allEndMs := dateRange.StartMS, dateRange.EndMS
+	runMSecs := int64(utils.TFToSecs(args.RunPeriod)) * 1000
+	reviewMSecs := int64(utils.TFToSecs(args.ReviewPeriod)) * 1000
+	if runMSecs < core.SecsHour*1000 {
+		log.Warn("`run-period` cannot be less than 1 hour")
+		return nil
+	}
+	outDir := filepath.Join(config.GetDataDir(), "backtest", "bt_opt")
+	err_ := utils.EnsureDir(outDir, 0755)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	args.OutPath = filepath.Join(outDir, "opt.log")
+	curMs := allStartMs + reviewMSecs
+	var allHisOds []*orm.InOutOrder
+	var lastWal map[string]float64
+	var lastRes *BTResult
+	for curMs < allEndMs {
+		dateRange.StartMS = curMs - reviewMSecs
+		dateRange.EndMS = curMs
+		fname := fmt.Sprintf("pol_%v_%v.yml", dateRange.StartMS/1000, curMs/1000)
+		cfgPath := filepath.Join(outDir, fname)
+		var polData []byte
+		if !utils.Exists(cfgPath) {
+			polStr, err := runOptimize(args, 11)
+			if err != nil {
+				return err
+			}
+			polData = []byte(polStr)
+			err_ = utils2.WriteFile(cfgPath, polData)
+			if err_ != nil {
+				log.Warn("write pol cache fail", zap.Error(err_))
+			}
+		} else {
+			polData, err_ = utils2.ReadFile(cfgPath)
+			if err_ != nil {
+				return errs.New(errs.CodeIOReadFail, err_)
+			}
+		}
+		ResetVars()
+		var unpak = make(map[string]interface{})
+		err_ = yaml.Unmarshal(polData, &unpak)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		var cfg config.Config
+		err_ = mapstructure.Decode(unpak, &cfg)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		config.RunPolicy = cfg.RunPolicy
+		wallets := biz.GetWallets("")
+		core.BotRunning = true
+		dateRange.StartMS = curMs
+		dateRange.EndMS = curMs + runMSecs
+		bt := NewBackTest()
+		if lastWal != nil {
+			wallets.SetWallets(lastWal)
+		}
+		if lastRes != nil {
+			bt.BTResult = lastRes
+		}
+		orm.HistODs = allHisOds
+		bt.Run()
+		lastRes = bt.BTResult
+		allHisOds = orm.HistODs
+		lastWal = wallets.DumpAvas()
+		curMs += runMSecs
+	}
+	return nil
+}
+
 func RunOptimize(args *config.CmdArgs) *errs.Error {
 	if args.OutPath == "" {
 		log.Warn("-out is required")
@@ -47,77 +133,101 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	groups := config.RunPolicy
+	cfgStr, err := runOptimize(args, 0)
+	if err != nil {
+		return err
+	}
+	fmt.Print(cfgStr)
+	return nil
+}
+
+func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
+	var err *errs.Error
 	// 列举所有标的
 	allPairs := config.Pairs
 	if len(allPairs) == 0 {
 		allPairs, err = goods.RefreshPairList()
 		if err != nil {
-			return err
+			return "", err
 		}
 	}
+	var logOuts []string
+	groups := config.RunPolicy
 	if len(groups) <= 1 || args.Concur <= 1 {
+		logOuts = append(logOuts, args.OutPath)
 		file, err_ := os.Create(args.OutPath)
 		if err_ != nil {
-			return errs.New(errs.CodeIOWriteFail, err_)
+			return "", errs.New(errs.CodeIOWriteFail, err_)
 		}
 		defer file.Close()
 		for _, gp := range groups {
 			// 针对每个策略、多空单独进行贝叶斯优化，寻找最佳参数
-			err = optAndPrint(gp, args, allPairs, file)
+			err = optAndPrint(gp.Clone(), args, allPairs, file)
 			if err != nil {
-				return err
+				return "", err
 			}
 		}
-		return nil
-	}
-	// 多进程执行，提高速度。
-	log.Warn("running optimize jobs", zap.Int("num", len(groups)), zap.Int("rounds", args.OptRounds))
-	var cmds = []string{"optimize", "--nodb", "-opt-rounds"}
-	cmds = append(cmds, strconv.Itoa(args.OptRounds), "-sampler", args.Sampler)
-	if args.EachPairs {
-		cmds = append(cmds, "-each-pairs")
-	}
-	for _, p := range args.Configs {
-		cmds = append(cmds, "-config", p)
-	}
-	logPath := strings.TrimSuffix(args.OutPath, filepath.Ext(args.OutPath))
-	return utils.ParallelRun(groups, args.Concur, func(i int, pol *config.RunPolicyConfig) *errs.Error {
-		time.Sleep(time.Millisecond * time.Duration(1000*rand.Float64()))
-		iStr := strconv.Itoa(i + 1)
-		cfgFile, err_ := os.CreateTemp("", "ban_opt"+iStr)
-		if err_ != nil {
-			log.Warn("write temp config fail", zap.Error(err_))
+	} else {
+		// 多进程执行，提高速度。
+		log.Warn("running optimize", zap.Int("num", len(groups)), zap.Int("rounds", args.OptRounds))
+		var cmds = []string{"optimize", "--nodb", "-opt-rounds"}
+		cmds = append(cmds, strconv.Itoa(args.OptRounds), "-sampler", args.Sampler)
+		if args.EachPairs {
+			cmds = append(cmds, "-each-pairs")
+		}
+		for _, p := range args.Configs {
+			cmds = append(cmds, "-config", p)
+		}
+		logPath := strings.TrimSuffix(args.OutPath, filepath.Ext(args.OutPath))
+		startStr := strconv.FormatInt(config.TimeRange.StartMS/1000, 10)
+		endStr := strconv.FormatInt(config.TimeRange.EndMS/1000, 10)
+		err = utils.ParallelRun(groups, args.Concur, func(i int, pol *config.RunPolicyConfig) *errs.Error {
+			time.Sleep(time.Millisecond * time.Duration(1000*rand.Float64()+100*float64(i)))
+			iStr := strconv.Itoa(i + 1)
+			cfgFile, err_ := os.CreateTemp("", "ban_opt"+iStr)
+			if err_ != nil {
+				log.Warn("write temp config fail", zap.Error(err_))
+				return nil
+			}
+			defer os.Remove(cfgFile.Name())
+			cfgFile.WriteString(fmt.Sprintf("timerange: \"%s-%s\"\n", startStr, endStr))
+			cfgFile.WriteString("run_policy:\n")
+			cfgFile.WriteString(pol.ToYaml())
+			cfgFile.Close()
+			curCmds := append(cmds, "-config", cfgFile.Name())
+			outPath := logPath + iStr + ".log"
+			curCmds = append(curCmds, "-out", outPath)
+			logOuts = append(logOuts, outPath)
+			log.Warn("runing: " + strings.Join(curCmds, " "))
+			var out bytes.Buffer
+			prgName := "banbot.o"
+			if runtime.GOOS == "windows" {
+				prgName = "banbot.exe"
+			}
+			excPath := filepath.Join(config.GetStagyDir(), prgName)
+			cmd := exec.Command(excPath, curCmds...)
+			cmd.Dir = config.GetStagyDir()
+			cmd.Stdout = &out
+			cmd.Stderr = &out
+			err_ = cmd.Run()
+			fmt.Println(out.String())
+			if err_ != nil {
+				return errs.New(errs.CodeRunTime, err_)
+			}
 			return nil
+		})
+		if err != nil {
+			return "", err
 		}
-		defer os.Remove(cfgFile.Name())
-		cfgFile.WriteString("run_policy:\n")
-		cfgFile.WriteString(pol.ToYaml())
-		cfgFile.Close()
-		curCmds := append(cmds, "-config", cfgFile.Name())
-		curCmds = append(curCmds, "-out", logPath+iStr+".log")
-		log.Warn("runing: " + strings.Join(curCmds, " "))
-		var out bytes.Buffer
-		prgName := "banbot.o"
-		if runtime.GOOS == "windows" {
-			prgName = "banbot.exe"
-		}
-		excPath := filepath.Join(config.GetStagyDir(), prgName)
-		cmd := exec.Command(excPath, curCmds...)
-		cmd.Dir = config.GetStagyDir()
-		cmd.Stdout = &out
-		cmd.Stderr = &out
-		err_ = cmd.Run()
-		fmt.Println(out.String())
-		if err_ != nil {
-			return errs.New(errs.CodeRunTime, err_)
-		}
-		return nil
-	})
+	}
+	return collectOptLog(logOuts, minScore)
 }
 
 func optAndPrint(pol *config.RunPolicyConfig, args *config.CmdArgs, allPairs []string, file *os.File) *errs.Error {
-	file.WriteString(fmt.Sprintf("run hyper optimize: %v", args.Sampler))
+	file.WriteString(fmt.Sprintf("# run hyper optimize: %v\n", args.Sampler))
+	startDt := btime.ToDateStr(config.TimeRange.StartMS, "")
+	endDt := btime.ToDateStr(config.TimeRange.EndMS, "")
+	file.WriteString(fmt.Sprintf("# date range: %v - %v\n", startDt, endDt))
 	res := make([]*GroupScore, 0, 5)
 	if args.EachPairs {
 		pairs := pol.Pairs
@@ -409,7 +519,7 @@ func ResetVars() {
 	core.LastBarMs = 0
 	core.OdBooks = make(map[string]*banexg.OrderBook)
 	orm.HistODs = make([]*orm.InOutOrder, 0)
-	orm.FakeOdId = 1
+	//orm.FakeOdId = 1
 	orm.ResetVars()
 	strategy.Envs = make(map[string]*ta.BarEnv)
 	strategy.AccJobs = make(map[string]map[string]map[string]*strategy.StagyJob)
@@ -443,6 +553,15 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		}
 		return nil
 	})
+	res, err := collectOptLog(paths, 0)
+	if err != nil {
+		return err
+	}
+	fmt.Print(res)
+	return nil
+}
+
+func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 	res := make([]*OptGroup, 0)
 	for _, path := range paths {
 		var name, pair, dirt, tfStr string
@@ -451,7 +570,7 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		var long, short, both, union, longMain, shortMain *OptInfo
 		fdata, err_ := os.ReadFile(path)
 		if err_ != nil {
-			return errs.New(errs.CodeIOReadFail, err)
+			return "", errs.New(errs.CodeIOReadFail, err_)
 		}
 		saveGroup := func() {
 			if name == "" {
@@ -471,11 +590,21 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 			if shortMain != nil && (twoSide == nil || shortMain.Score > twoSide.Score) {
 				twoSide = shortMain
 			}
-			scoreRate := twoSide.Score / oneSide.Score
-			odNumRate := float64(twoSide.OdNum) / float64(oneSide.OdNum)
 			var pols []*OptInfo
 			var bestScore float64
-			if scoreRate > 1.25 || scoreRate > 1.1 && odNumRate < 1.5 {
+			var useOne = true
+			if twoSide == nil {
+				useOne = true
+			} else if oneSide == nil {
+				useOne = false
+			} else {
+				scoreRate := twoSide.Score / oneSide.Score
+				odNumRate := float64(twoSide.OdNum) / float64(oneSide.OdNum)
+				if scoreRate > 1.25 || scoreRate > 1.1 && odNumRate < 1.5 {
+					useOne = false
+				}
+			}
+			if !useOne {
 				bestScore = twoSide.Score
 				if twoSide.Dirt == "long" {
 					long.Param = twoSide.Param
@@ -529,8 +658,9 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 				}
 				continue
 			}
-			if strings.HasPrefix(line, "  # score:") {
-				break
+			if strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "# ") {
+				// 跳过输出的配置、注释信息
+				continue
 			}
 			if strings.HasPrefix(line, "==============") && strings.HasSuffix(line, "=============") {
 				n, d, t, p := parseSectionTitle(strings.Split(line, " ")[1])
@@ -554,25 +684,27 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].Score > res[j].Score
 	})
+	var b strings.Builder
+	b.WriteString("run_policy:\n")
 	for _, gp := range res {
-		if gp.Score < 0 {
+		if gp.Score < minScore {
 			break
 		}
-		fmt.Printf("\n  # score: %.2f\n", gp.Score)
+		b.WriteString(fmt.Sprintf("\n  # score: %.2f\n", gp.Score))
 		for _, p := range gp.Items {
 			tfStr := strings.ReplaceAll(gp.TFStr, "|", ", ")
-			fmt.Printf("  - name: %s\n    run_timeframes: [ %s ]\n", gp.Name, tfStr)
+			b.WriteString(fmt.Sprintf("  - name: %s\n    run_timeframes: [ %s ]\n", gp.Name, tfStr))
 			if gp.Pair != "" {
 				pairStr := strings.ReplaceAll(gp.Pair, "|", ", ")
-				fmt.Printf("    pairs: [%s]\n", pairStr)
+				b.WriteString(fmt.Sprintf("    pairs: [%s]\n", pairStr))
 			}
 			if p.Dirt != "" {
-				fmt.Printf("    dirt: %s\n", p.Dirt)
+				b.WriteString(fmt.Sprintf("    dirt: %s\n", p.Dirt))
 			}
-			fmt.Printf("    params: {%s}\n", p.Param)
+			b.WriteString(fmt.Sprintf("    params: {%s}\n", p.Param))
 		}
 	}
-	return nil
+	return b.String(), nil
 }
 
 /*
@@ -605,19 +737,6 @@ type OptGroup struct {
 	Name  string
 	Pair  string
 	TFStr string
-}
-
-func parseParams(line string) map[string]float64 {
-	items := strings.Split(line, ",")
-	res := make(map[string]float64)
-	for _, it := range items {
-		arr := strings.Split(it, ":")
-		tag := strings.TrimSpace(arr[0])
-		valStr := strings.TrimSpace(arr[1])
-		val, _ := strconv.ParseFloat(valStr, 64)
-		res[tag] = val
-	}
-	return res
 }
 
 type OptInfo struct {

@@ -42,6 +42,9 @@ func RunCmd() {
 		case "collect_opt":
 			options = []string{"in"}
 			entry = optmize.CollectOptLog
+		case "bt_opt":
+			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur"}
+			entry = optmize.RunBTOverOpt
 		case "kline":
 			runKlineCmds(args[1:])
 		case "tick":
@@ -218,7 +221,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "tz":
 			cmd.StringVar(&args.TimeZone, "tz", "", "timeZone, default: utc")
 		case "exg_real":
-			cmd.StringVar(&args.ExgReal, "exg_real", "", "real exchange")
+			cmd.StringVar(&args.ExgReal, "exg-real", "", "real exchange")
 		case "opt_rounds":
 			cmd.IntVar(&args.OptRounds, "opt-rounds", 30, "rounds num for single optimize job")
 		case "sampler":
@@ -227,6 +230,10 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.BoolVar(&args.EachPairs, "each-pairs", false, "run for each pairs")
 		case "concur":
 			cmd.IntVar(&args.Concur, "concur", 3, "Concurrent Number")
+		case "review_period":
+			cmd.StringVar(&args.ReviewPeriod, "review-period", "3y", "review period, default: 3 years")
+		case "run_period":
+			cmd.StringVar(&args.RunPeriod, "run-period", "6M", "run period, default: 6 months")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)
