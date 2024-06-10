@@ -98,6 +98,12 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 		if err_ != nil {
 			return errs.New(errs.CodeRunTime, err_)
 		}
+		if len(cfg.RunPolicy) == 0 {
+			log.Warn("no RunPolicy for ", zap.Int64("start", dateRange.StartMS/1000),
+				zap.Int64("end", curMs/1000))
+			curMs += runMSecs
+			continue
+		}
 		config.RunPolicy = cfg.RunPolicy
 		wallets := biz.GetWallets("")
 		core.BotRunning = true

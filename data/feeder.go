@@ -411,8 +411,8 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 	if len(ohlcvs) == 0 {
 		return false, nil
 	}
-	//子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
-	doneBars := f.onStateOhlcvs(state, ohlcvs, lastOk)
+	minState, minOhlcvs := state, ohlcvs
+	// 应该按周期从大到小触发
 	if len(f.States) > 1 {
 		// 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
 		// 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
@@ -422,7 +422,8 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		} else {
 			ohlcvs = bars
 		}
-		for _, state = range f.States[1:] {
+		for i := len(f.States) - 1; i > 1; i-- {
+			state = f.States[i]
 			var olds []*banexg.Kline
 			if state.WaitBar != nil {
 				olds = append(olds, state.WaitBar)
@@ -432,6 +433,8 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 			f.onStateOhlcvs(state, curOhlcvs, lastOk)
 		}
 	}
+	//子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
+	doneBars := f.onStateOhlcvs(minState, minOhlcvs, lastOk)
 	return len(doneBars) > 0, nil
 }
 

@@ -121,6 +121,9 @@ func calcKlineScore(arr []*banexg.Kline, pipChg float64, prevNum int) float64 {
 func allAllowTFs() []string {
 	var groups = [][]string{config.RunTimeframes}
 	for _, pol := range config.RunPolicy {
+		if pol.Dirt == "any" {
+			pol.Dirt = ""
+		}
 		stagy := strategy.New(pol)
 		if stagy == nil {
 			continue
