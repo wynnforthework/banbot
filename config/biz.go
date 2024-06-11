@@ -12,7 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -97,7 +96,6 @@ func apply(args *CmdArgs) *errs.Error {
 		btime.ParseTimeMS(Data.TimeRangeRaw[cutLen+1:]),
 	}
 	Name = Data.Name
-	ReClientID = regexp.MustCompile(fmt.Sprintf("^%s_(\\d+)(_\\d+)?$", Name))
 	core.SetRunEnv(Data.Env)
 	Leverage = Data.Leverage
 	if Data.LimitVolSecs == 0 {

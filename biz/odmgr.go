@@ -251,7 +251,6 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 			od.SetInfo(orm.OdInfoTakeProfitLimit, req.TakeProfitLimit)
 		}
 	}
-	od.DirtyInfo = true
 	err := od.Save(sess)
 	if err != nil {
 		return od, err

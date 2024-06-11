@@ -2,7 +2,6 @@ package config
 
 import (
 	"github.com/banbox/banbot/core"
-	"regexp"
 )
 
 var (
@@ -53,8 +52,6 @@ var (
 	APIServer        *APIServerConfig
 	RPCChannels      map[string]map[string]interface{}
 	Webhook          map[string]map[string]string
-
-	ReClientID *regexp.Regexp // 正则匹配ClientID，检查是否是机器人下单
 )
 
 var (

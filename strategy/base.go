@@ -337,7 +337,6 @@ func (s *StagyJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
 		return &ExitReq{Tag: "take", OrderID: od.ID}
 	}
 	od.SetInfo(orm.OdInfoStopLoss, spVal)
-	od.DirtyInfo = true
 	return nil
 }
 

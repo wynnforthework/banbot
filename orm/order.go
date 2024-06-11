@@ -321,7 +321,6 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg, odType string) *e
 	i.DirtyExit = true
 	if msg != "" {
 		i.SetInfo(KeyStatusMsg, msg)
-		i.DirtyInfo = true
 	}
 	return i.Save(nil)
 }

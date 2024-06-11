@@ -859,15 +859,12 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	o.lockExgIdMap.Unlock()
 	if !ok {
 		// 检查是否是机器人下单
-		matches := config.ReClientID.FindStringSubmatch(trade.ClientID)
-		if len(matches) > 1 {
-			orderId, _ := strconv.ParseInt(matches[1], 10, 64)
-			if orderId > 0 {
-				openOds, lock := orm.GetOpenODs(o.Account)
-				lock.Lock()
-				iod, ok = openOds[orderId]
-				lock.Unlock()
-			}
+		orderId := getClientOrderId(trade.ClientID)
+		if orderId > 0 {
+			openOds, lock := orm.GetOpenODs(o.Account)
+			lock.Lock()
+			iod, ok = openOds[orderId]
+			lock.Unlock()
 		}
 		if iod == nil {
 			// 没有匹配订单，记录到unMatchTrades
@@ -916,6 +913,21 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	}
 }
 
+/*
+解析传入交易所的订单ClientID，一般形如：botName_inOutId_randNum
+*/
+func getClientOrderId(clientId string) int64 {
+	arr := strings.Split(clientId, "_")
+	if len(arr) < 2 || arr[0] != config.Name {
+		return 0
+	}
+	val, err := strconv.ParseInt(arr[1], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return val
+}
+
 func (o *LiveOrderMgr) TrialUnMatchesForever() {
 	if !core.EnvReal || o.isTrialUnMatches {
 		return
@@ -956,7 +968,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 					}
 					continue
 				}
-				if !config.ReClientID.MatchString(trade.ClientID) {
+				if getClientOrderId(trade.ClientID) == 0 {
 					// 记录非机器人订单，检查是否第三方平仓或下单
 					odTrades, _ := pairTrades[odKey]
 					pairTrades[odKey] = append(odTrades, trade)
@@ -1062,6 +1074,15 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 		log.Error(fmt.Sprintf("unknown bnb order status: %s", state))
 	}
 	if od.Status == orm.InOutStatusFullExit {
+		// 可能由止盈止损触发，删除置为已完成
+		slOrder := od.GetInfoString(orm.OdInfoStopLossOrderId)
+		tpOrder := od.GetInfoString(orm.OdInfoTakeProfitOrderId)
+		if slOrder != "" && slOrder == trade.Order {
+			od.SetInfo(orm.OdInfoStopLossOrderId, nil)
+		}
+		if tpOrder != "" && tpOrder == trade.Order {
+			od.SetInfo(orm.OdInfoTakeProfitOrderId, nil)
+		}
 		err := o.finishOrder(od, nil)
 		if err != nil {
 			return err
@@ -1654,7 +1675,7 @@ func cancelAccountOldLimits(account string) {
 	lock.Unlock()
 	odMgr := GetLiveOdMgr(account)
 	for _, od := range openArr {
-		if checkOldLimit(odMgr, od, account) {
+		if checkOldLimit(odMgr, od) {
 			saveOds = append(saveOds, od)
 		}
 	}
@@ -1676,7 +1697,7 @@ func cancelAccountOldLimits(account string) {
 	}
 }
 
-func checkOldLimit(odMgr *LiveOrderMgr, od *orm.InOutOrder, account string) bool {
+func checkOldLimit(odMgr *LiveOrderMgr, od *orm.InOutOrder) bool {
 	if od.Status > orm.InOutStatusPartEnter || od.Enter.Price == 0 ||
 		!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
 		// 跳过已完全入场，或者非限价单
@@ -1688,7 +1709,7 @@ func checkOldLimit(odMgr *LiveOrderMgr, od *orm.InOutOrder, account string) bool
 		defer lock.Unlock()
 		if od.Enter.OrderID != "" {
 			res, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, map[string]interface{}{
-				banexg.ParamAccount: account,
+				banexg.ParamAccount: odMgr.Account,
 			})
 			if err != nil {
 				log.Error("cancel old limit enters fail", zap.String("key", od.Key()), zap.Error(err))
@@ -1723,9 +1744,12 @@ func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Erro
 		subOd = od.Exit
 	}
 	exchange := exg.Default
+	args := map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+	}
 	if core.Market != banexg.MarketLinear && core.Market != banexg.MarketInverse {
 		// 现货，保证金，期权。先取消旧订单，再创建新订单
-		_, err := exchange.CancelOrder(subOd.OrderID, od.Symbol, nil)
+		_, err := exchange.CancelOrder(subOd.OrderID, od.Symbol, args)
 		if err != nil {
 			return err
 		}
@@ -1739,7 +1763,7 @@ func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Erro
 		}
 	}
 	// 只有U本位 & 币本位，修改订单
-	res, err := exchange.EditOrder(od.Symbol, subOd.OrderID, subOd.Side, subOd.Amount, subOd.Price, nil)
+	res, err := exchange.EditOrder(od.Symbol, subOd.OrderID, subOd.Side, subOd.Amount, subOd.Price, args)
 	if err != nil {
 		return err
 	}
@@ -1761,12 +1785,11 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 	od.SetInfo(prefix+"PriceOld", trigPrice)
 	od.SetInfo(prefix+"LimitOld", limitPrice)
 	orderId := od.GetInfoString(prefix + "OrderId")
-	account := orm.GetTaskAcc(od.TaskID)
 	if trigPrice <= 0 {
 		// 未设置止损/止盈，或需要撤销
 		if orderId != "" {
 			_, err := exg.Default.CancelOrder(orderId, od.Symbol, map[string]interface{}{
-				banexg.ParamAccount: account,
+				banexg.ParamAccount: o.Account,
 			})
 			if err != nil {
 				log.Error("cancel old trigger fail", zap.String("key", od.Key()), zap.Error(err))
@@ -1776,7 +1799,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 		return
 	}
 	params := map[string]interface{}{
-		banexg.ParamAccount:       account,
+		banexg.ParamAccount:       o.Account,
 		banexg.ParamClientOrderId: od.ClientId(true),
 	}
 	if core.IsContract {
@@ -1826,11 +1849,10 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 	}
 	if res != nil {
 		od.SetInfo(prefix+"OrderId", res.ID)
-		od.DirtyInfo = true
 	}
 	if orderId != "" && (res == nil || res.Status == "open") {
 		_, err = exg.Default.CancelOrder(orderId, od.Symbol, map[string]interface{}{
-			banexg.ParamAccount: account,
+			banexg.ParamAccount: o.Account,
 		})
 		if err != nil {
 			log.Error("cancel old trigger fail", zap.String("key", od.Key()), zap.Error(err))
