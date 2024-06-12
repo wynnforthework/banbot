@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	"strings"
 	"sync"
 )
 
@@ -222,8 +223,43 @@ func LoadAllExSymbols() *errs.Error {
 	return nil
 }
 
+/*
+GetAllExSymbols 获取已加载到缓存的所有标的
+*/
+func GetAllExSymbols() []*ExSymbol {
+	res := make([]*ExSymbol, 0, len(idSymbolMap))
+	for _, v := range idSymbolMap {
+		res = append(res, v)
+	}
+	return res
+}
+
 func (s *ExSymbol) GetValidStart(startMS int64) int64 {
 	return max(s.ListMs, startMS)
+}
+
+func (s *ExSymbol) ToShort() string {
+	slashArr := strings.Split(s.Symbol, "/")
+	if len(slashArr) == 1 {
+		// 非数字货币，直接返回
+		return s.Symbol
+	}
+	comArr := strings.Split(slashArr[1], ":")
+	if len(comArr) == 1 {
+		// 现货，直接返回
+		return s.Symbol
+	}
+	base, quote, settle := slashArr[0], comArr[0], comArr[1]
+	if !strings.HasPrefix(settle, quote) {
+		// 是币本位合约，直接返回
+		return s.Symbol
+	}
+	if quote == settle {
+		return fmt.Sprintf("%s/%s.P", base, quote)
+	} else {
+		suffix := settle[len(quote)+1:]
+		return fmt.Sprintf("%s/%s.%s", base, quote, suffix)
+	}
 }
 
 func InitListDates() *errs.Error {
@@ -276,4 +312,47 @@ func InitListDates() *errs.Error {
 		}
 	}
 	return nil
+}
+
+func ParseShort(exgName, short string) (*ExSymbol, *errs.Error) {
+	slashArr := strings.Split(short, "/")
+	var symbol string
+	var market = banexg.MarketSpot
+	if len(slashArr) > 1 {
+		// 对数字货币 BTC/USDT:USDT BTC/USDT.P BTC/USDT.2309
+		dotArr := strings.Split(slashArr[1], ".")
+		quote := dotArr[0]
+		var suffix = ""
+		if len(dotArr) > 1 {
+			suffix = quote
+			market = banexg.MarketLinear
+			if !strings.EqualFold(dotArr[1], "p") {
+				suffix += "-" + dotArr[1]
+			}
+		} else {
+			comArr := strings.Split(quote, ":")
+			if len(comArr) > 1 {
+				quote, suffix = comArr[0], comArr[1]
+				if strings.HasPrefix(suffix, quote) {
+					market = banexg.MarketLinear
+				} else {
+					market = banexg.MarketInverse
+				}
+			}
+		}
+		if market == banexg.MarketSpot {
+			symbol = fmt.Sprintf("%s/%s", slashArr[0], quote)
+		} else {
+			symbol = fmt.Sprintf("%s/%s:%s", slashArr[0], quote, suffix)
+		}
+	} else {
+		symbol = short
+	}
+	key := fmt.Sprintf("%s:%s:%s", exgName, market, symbol)
+	item, ok := keySymbolMap[key]
+	if !ok {
+		err := errs.NewMsg(core.ErrInvalidSymbol, "%s not exist in %d cache", symbol, len(keySymbolMap))
+		return nil, err
+	}
+	return item, nil
 }

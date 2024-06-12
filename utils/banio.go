@@ -166,6 +166,9 @@ RunForever
 服务器端和客户端都会调用此方法
 */
 func (c *BanConn) RunForever() *errs.Error {
+	if !core.LiveMode {
+		return errs.NewMsg(errs.CodeRunTime, "BanConn is unavailable in mode %s", core.RunMode)
+	}
 	defer func() {
 		c.Ready = false
 		err_ := c.Conn.Close()
@@ -435,7 +438,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 		go func(c IBanConn) {
 			err = c.Write(compressed, false)
 			if err != nil {
-				log.Error("broadcast fail", zap.String("remote", c.GetRemote()),
+				log.Warn("broadcast fail", zap.String("remote", c.GetRemote()),
 					zap.String("tag", msg.Action), zap.Error(err))
 			}
 		}(conn)
