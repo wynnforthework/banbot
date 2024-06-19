@@ -9,6 +9,7 @@ $env:GOOS="linux"
 go build -o banbot.o
 
 -- windows
+$env:GOARCH="amd64"
 $env:GOOS="windows"
 go build -o banbot.exe
 ```

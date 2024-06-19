@@ -173,7 +173,5 @@ func (t *CryptoTrader) startJobs() {
 	CronKlineSummary()
 	// 每分钟第15s检查是否触发限价单提交
 	CronCheckTriggerOds()
-	// 每分钟第10s检查是否有过期限价入场单需要退出
-	CronCancelOldLimits()
 	core.Cron.Start()
 }

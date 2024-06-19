@@ -91,6 +91,7 @@ const (
 
 const (
 	ExitTagUnknown     = "unknown"
+	ExitTagCancel      = "cancel"
 	ExitTagBotStop     = "bot_stop"
 	ExitTagForceExit   = "force_exit"
 	ExitTagUserExit    = "user_exit"

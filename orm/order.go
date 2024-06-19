@@ -421,7 +421,9 @@ func (i *InOutOrder) Save(sess *Queries) *errs.Error {
 			delete(openOds, i.ID)
 		}
 		lock.Unlock()
+		mLockOds.Lock()
 		delete(lockOds, i.Key())
+		mLockOds.Unlock()
 	} else {
 		i.saveToMem()
 	}
@@ -569,6 +571,8 @@ func (i *InOutOrder) TakeSnap() *InOutSnap {
 */
 func (i *InOutOrder) Lock() *sync.Mutex {
 	odKey := i.Key()
+	mLockOds.Lock()
+	defer mLockOds.Unlock()
 	lock, ok := lockOds[odKey]
 	if !ok {
 		lock = &sync.Mutex{}

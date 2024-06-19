@@ -424,7 +424,7 @@ func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Erro
 	od.UpdateProfits(0)
 	err := od.Save(sess)
 	cfg := strategy.GetStrtgPerf(od.Symbol, od.Strategy)
-	if cfg.Enable && o.Account == config.DefAcc {
+	if cfg != nil && cfg.Enable && o.Account == config.DefAcc {
 		err2 := strategy.CalcJobScores(od.Symbol, od.Timeframe, od.Strategy)
 		if err2 != nil {
 			log.Error("calc job performance fail", zap.Error(err2),

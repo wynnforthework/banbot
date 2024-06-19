@@ -8,8 +8,9 @@ var (
 	lockOpenMap    = map[string]*sync.Mutex{}                      // 访问accOpenODs的锁
 	lockTriggerMap = map[string]*sync.Mutex{}                      // 访问accTriggerODs的锁
 	lockOds        = map[string]*sync.Mutex{}                      // 修改订单的锁，防止并发修改
-	HistODs        []*InOutOrder                                   // 历史订单，回测时作为存储用
-	FakeOdId       = int64(1)                                      // 虚拟订单ID，用于回测时临时维护
+	mLockOds       sync.Mutex
+	HistODs        []*InOutOrder // 历史订单，回测时作为存储用
+	FakeOdId       = int64(1)    // 虚拟订单ID，用于回测时临时维护
 
 	adjMap = map[int32][]*AdjInfo{} // 标的的复权因子缓存
 	amLock = sync.Mutex{}
