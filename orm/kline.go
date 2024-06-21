@@ -80,7 +80,7 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 		dctSql = fmt.Sprintf(`
 select time,open,high,low,close,volume,info from $tbl
 where sid=%d and time < %v
-order by time desc limit %v`, sid, finishEndMS, limit)
+order by time desc`, sid, finishEndMS)
 	} else {
 		if limit == 0 {
 			limit = int((finishEndMS-startMs)/tfMSecs) + 1
@@ -88,9 +88,9 @@ order by time desc limit %v`, sid, finishEndMS, limit)
 		dctSql = fmt.Sprintf(`
 select time,open,high,low,close,volume,info from $tbl
 where sid=%d and time >= %v and time < %v
-order by time limit %v`, sid, startMs, finishEndMS, limit)
+order by time`, sid, startMs, finishEndMS)
 	}
-	subTF, rows, err_ := queryHyper(q, timeframe, dctSql)
+	subTF, rows, err_ := queryHyper(q, timeframe, dctSql, limit)
 	klines, err_ := mapToKlines(rows, err_)
 	if err_ != nil {
 		return nil, errs.New(core.ErrDbReadFail, err_)
@@ -147,7 +147,7 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 select time,open,high,low,close,volume,info,sid from $tbl
 where time >= %v and time < %v and sid in (%v)
 order by sid,time`, startMs, finishEndMS, sidText)
-	subTF, rows, err_ := queryHyper(q, timeframe, dctSql)
+	subTF, rows, err_ := queryHyper(q, timeframe, dctSql, 0)
 	arrs, err_ := mapToItems(rows, err_, func() (*KlineSid, []any) {
 		var i KlineSid
 		return &i, []any{&i.Time, &i.Open, &i.High, &i.Low, &i.Close, &i.Volume, &i.Info, &i.Sid}
@@ -223,14 +223,21 @@ order by time`, tblName, sid, startMs, endMs)
 	return resList, nil
 }
 
-func queryHyper(sess *Queries, timeFrame, sql string, args ...interface{}) (string, pgx.Rows, error) {
+func queryHyper(sess *Queries, timeFrame, sql string, limit int, args ...interface{}) (string, pgx.Rows, error) {
 	agg, ok := aggMap[timeFrame]
 	var subTF, table string
+	var rate int
 	if ok {
 		table = agg.Table
 	} else {
 		// 时间帧没有直接符合的，从最接近的子timeframe聚合
-		subTF, table = getSubTf(timeFrame)
+		subTF, table, rate = getSubTf(timeFrame)
+		if limit > 0 && rate > 1 {
+			limit = rate * (limit + 1)
+		}
+	}
+	if limit > 0 {
+		sql += fmt.Sprintf(" limit %v", limit)
 	}
 	sql = strings.Replace(sql, "$tbl", table, 1)
 	rows, err := sess.db.Query(context.Background(), sql, args...)
@@ -244,7 +251,7 @@ func mapToKlines(rows pgx.Rows, err_ error) ([]*banexg.Kline, error) {
 	})
 }
 
-func getSubTf(timeFrame string) (string, string) {
+func getSubTf(timeFrame string) (string, string, int) {
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	for i := len(aggList) - 1; i >= 0; i-- {
 		agg := aggList[i]
@@ -252,10 +259,10 @@ func getSubTf(timeFrame string) (string, string) {
 			continue
 		}
 		if tfMSecs%agg.MSecs == 0 {
-			return agg.TimeFrame, agg.Table
+			return agg.TimeFrame, agg.Table, int(tfMSecs / agg.MSecs)
 		}
 	}
-	return "", ""
+	return "", "", 0
 }
 
 func (q *Queries) PurgeKlineUn() *errs.Error {
@@ -280,7 +287,7 @@ func getUnFinish(sess *Queries, sid int32, timeFrame string, startMS, endMS int6
 	var bigKlines = make([]*banexg.Kline, 0)
 	if _, ok := aggMap[timeFrame]; mode == "calc" || !ok {
 		// 从已完成的子周期中归集数据
-		fromTF, _ = getSubTf(timeFrame)
+		fromTF, _, _ = getSubTf(timeFrame)
 		aggFrom := "kline_" + fromTF
 		sql := fmt.Sprintf(`select time,open,high,low,close,volume,info from %s
 where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
@@ -656,8 +663,8 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 			if intv > tfMSecs {
 				holes = append(holes, [2]int64{prevTime + tfMSecs, time})
 			} else if intv < tfMSecs {
-				log.Error("invalid timeframe or kline", zap.Int32("sid", sid), zap.String("tf", timeFrame),
-					zap.Int64("intv", intv), zap.Int64("tfmsecs", tfMSecs))
+				log.Warn("invalid timeframe or kline", zap.Int32("sid", sid), zap.String("tf", timeFrame),
+					zap.Int64("intv", intv/1000), zap.Int64("tfmsecs", tfMSecs/1000), zap.Int64("time", time))
 			}
 			prevTime = time
 		}
@@ -1035,6 +1042,27 @@ func SyncKlineTFs() *errs.Error {
 		return err
 	}
 	defer conn.Release()
+	// load all markets
+	exsList := GetAllExSymbols()
+	cache := map[string]map[string]bool{}
+	for _, exs := range exsList {
+		cc, _ := cache[exs.Exchange]
+		if cc == nil {
+			cc = make(map[string]bool)
+			cache[exs.Exchange] = cc
+		}
+		if _, ok := cc[exs.Market]; !ok {
+			exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+			if err != nil {
+				return err
+			}
+			_, err = LoadMarkets(exchange, false)
+			if err != nil {
+				return err
+			}
+			cc[exs.Market] = true
+		}
+	}
 	err = syncKlineInfos(sess)
 	if err != nil {
 		return err
@@ -1122,7 +1150,9 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		// 下载K线，同时也会归集更高周期K线
 		saveNum, err := downOHLCV2DBRange(sess, exg.Default, exs, row.Timeframe, start, stop, 0, 0, nil)
 		if err != nil {
-			return err
+			log.Warn("down ohlcv to fill fail", zap.Int32("sid", exs.ID),
+				zap.String("symbol", exs.Symbol), zap.Error(err))
+			continue
 		}
 		// 查询实际更新的区间
 		if saveNum == 0 {
@@ -1183,7 +1213,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
 	// 显示进度条
-	pgTotal := (len(infos) + len(aggList)) * 10
+	pgTotal := len(infos) + len(aggList)*10
 	pBar := utils.NewPrgBar(pgTotal, "sync tf")
 	defer pBar.Close()
 	// 加载计算的区间

@@ -29,7 +29,7 @@ set smtp-auth=login
 tail /var/log/maillog
 ```
 然后将`check_bot.sh`复制到服务器，并执行`chmod +x check_bot.sh`授予可执行权限。  
-然后在corntab中每隔5分钟执行脚本检查状态：
+然后在crontab中每隔5分钟执行脚本检查状态：
 ```text
 3-58/5 * * * * /path_to/check_bot.sh bot1 user1@xxx.com user2@xxx.com
 ```
