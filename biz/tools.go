@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
@@ -313,7 +314,22 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
 	}
 	if len(args.Pairs) == 0 {
-		return errs.NewMsg(errs.CodeParamRequired, "--pairs is required")
+		// 未提供标的，导出当前市场所有
+		err = orm.LoadAllExSymbols()
+		if err != nil {
+			return err
+		}
+		exsList := orm.GetAllExSymbols()
+		for _, exs := range exsList {
+			if exs.Exchange != core.ExgName || exs.Market != core.Market {
+				continue
+			}
+			args.Pairs = append(args.Pairs, exs.Symbol)
+		}
+		if len(args.Pairs) == 0 {
+			return errs.NewMsg(errs.CodeParamRequired, "--pairs is required")
+		}
+		sort.Strings(args.Pairs)
 	}
 	if len(args.TimeFrames) == 0 {
 		return errs.NewMsg(errs.CodeParamRequired, "--timeframes is required")
@@ -332,7 +348,6 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
-	tf := args.TimeFrames[0]
 	start, stop := config.TimeRange.StartMS, config.TimeRange.EndMS
 	loc, err := args.ParseTimeZone()
 	if err != nil {
@@ -344,37 +359,54 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	}
 	startStr := btime.ToTime(start).In(loc).Format(core.DefaultDateFmt)
 	endStr := btime.ToTime(stop).In(loc).Format(core.DefaultDateFmt)
-	log.Info("export kline", zap.String("tf", tf), zap.String("dt", startStr+" - "+endStr),
-		zap.String("adj", args.AdjType))
+	log.Info("export kline", zap.Strings("tf", args.TimeFrames), zap.String("dt", startStr+" - "+endStr),
+		zap.String("adj", args.AdjType), zap.Int("num", len(args.Pairs)))
+	names, err := data.FindPathNames(args.OutPath, ".zip")
+	if err != nil {
+		return err
+	}
+	handles := make(map[string]bool)
+	for _, n := range names {
+		parts := strings.Split(strings.ReplaceAll(n, ".zip", ""), "_")
+		handles[strings.Join(parts[:len(parts)-1], "_")] = true
+	}
 	for _, symbol := range args.Pairs {
+		clean := strings.ReplaceAll(strings.ReplaceAll(symbol, "/", "_"), ":", "_")
+		if _, ok := handles[clean]; ok {
+			log.Info("skip exist", zap.String("symbol", symbol))
+			continue
+		}
 		log.Info("handle", zap.String("symbol", symbol))
 		exs, err := orm.GetExSymbolCur(symbol)
 		if err != nil {
-			return err
+			log.Warn("export fail", zap.String("symbol", symbol), zap.Error(err))
+			continue
 		}
-		adjs, klines, err := sess.GetOHLCV(exs, tf, start, stop, 0, false)
-		if err != nil {
-			return err
-		}
-		klines = orm.ApplyAdj(adjs, klines, adjVal, 0, 0)
-		rows := make([][]string, 0, len(klines))
-		for _, k := range klines {
-			dateStr := btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
-			row := []string{
-				dateStr,
-				strconv.FormatFloat(k.Open, 'f', -1, 64),
-				strconv.FormatFloat(k.High, 'f', -1, 64),
-				strconv.FormatFloat(k.Low, 'f', -1, 64),
-				strconv.FormatFloat(k.Close, 'f', -1, 64),
-				strconv.FormatFloat(k.Volume, 'f', -1, 64),
-				strconv.FormatFloat(k.Info, 'f', -1, 64),
+		for _, tf := range args.TimeFrames {
+			adjs, klines, err := sess.GetOHLCV(exs, tf, start, stop, 0, false)
+			if err != nil {
+				return err
 			}
-			rows = append(rows, row)
-		}
-		path := filepath.Join(args.OutPath, symbol+"_"+tf+".csv")
-		err = utils.WriteCsvFile(path, rows)
-		if err != nil {
-			return err
+			klines = orm.ApplyAdj(adjs, klines, adjVal, 0, 0)
+			rows := make([][]string, 0, len(klines))
+			for _, k := range klines {
+				dateStr := btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
+				row := []string{
+					dateStr,
+					strconv.FormatFloat(k.Open, 'f', -1, 64),
+					strconv.FormatFloat(k.High, 'f', -1, 64),
+					strconv.FormatFloat(k.Low, 'f', -1, 64),
+					strconv.FormatFloat(k.Close, 'f', -1, 64),
+					strconv.FormatFloat(k.Volume, 'f', -1, 64),
+					strconv.FormatFloat(k.Info, 'f', -1, 64),
+				}
+				rows = append(rows, row)
+			}
+			path := filepath.Join(args.OutPath, fmt.Sprintf("%s_%s.csv", clean, tf))
+			err = utils.WriteCsvFile(path, rows, true)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	log.Info("export kline complete")
@@ -554,7 +586,7 @@ func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 			rows = append(rows, row)
 		}
 		path := filepath.Join(args.OutPath, symbol+"_adj.csv")
-		err = utils.WriteCsvFile(path, rows)
+		err = utils.WriteCsvFile(path, rows, false)
 		if err != nil {
 			return err
 		}

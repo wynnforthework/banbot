@@ -1,12 +1,15 @@
 package utils
 
 import (
+	"archive/zip"
 	"encoding/csv"
 	"fmt"
 	"github.com/banbox/banexg/errs"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 func CopyDir(src, dst string) error {
@@ -107,13 +110,34 @@ func CopySymLink(source, dest string) error {
 	return os.Symlink(link, dest)
 }
 
-func WriteCsvFile(path string, rows [][]string) *errs.Error {
-	file, err_ := os.Create(path)
-	if err_ != nil {
-		return errs.New(errs.CodeIOWriteFail, err_)
+func WriteCsvFile(path string, rows [][]string, compress bool) *errs.Error {
+	var fileWriter io.Writer
+	var err_ error
+	if compress {
+		zipFile, err_ := os.Create(strings.Replace(path, ".csv", ".zip", 1))
+		if err_ != nil {
+			return errs.New(errs.CodeIOWriteFail, err_)
+		}
+		zipWriter := zip.NewWriter(zipFile)
+		defer zipWriter.Close()
+		header := &zip.FileHeader{
+			Name:     filepath.Base(path),
+			Method:   zip.Deflate,
+			Modified: time.Now(),
+		}
+		fileWriter, err_ = zipWriter.CreateHeader(header)
+		if err_ != nil {
+			return errs.New(errs.CodeIOWriteFail, err_)
+		}
+	} else {
+		file, err_ := os.Create(path)
+		if err_ != nil {
+			return errs.New(errs.CodeIOWriteFail, err_)
+		}
+		defer file.Close()
+		fileWriter = file
 	}
-	defer file.Close()
-	writer := csv.NewWriter(file)
+	writer := csv.NewWriter(fileWriter)
 	defer writer.Flush()
 	err_ = writer.WriteAll(rows)
 	if err_ != nil {
