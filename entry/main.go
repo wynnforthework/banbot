@@ -39,22 +39,12 @@ func RunCmd() {
 		case "optimize":
 			options = []string{"out", "opt_rounds", "sampler", "each_pairs", "concur"}
 			entry = optmize.RunOptimize
-		case "collect_opt":
-			options = []string{"in"}
-			entry = optmize.CollectOptLog
-		case "bt_opt":
-			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur"}
-			entry = optmize.RunBTOverOpt
 		case "kline":
 			runKlineCmds(args[1:])
 		case "tick":
 			runTickCmds(args[1:])
-		case "load_cal":
-			options = []string{"in"}
-			entry = biz.LoadCalendars
-		case "cmp_orders":
-			optmize.CompareExgBTOrders(args[1:])
-			os.Exit(0)
+		case "tool":
+			runToolCmds(args[1:])
 		}
 		return entry, options
 	}, printAndExit)
@@ -69,10 +59,9 @@ please run with a subcommand:
 	backtest:   backtest with strategies and data
 	spider:     start the spider
 	optimize:   run hyper parameters optimization
-	collect_opt: collect result of optimize, and print in order
 	kline:      run kline commands
 	tick:		run tick commands
-	cmp_orders: compare backTest orders with exchange orders
+	tool: 		run tools
 `
 	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), VERSION))
 }
@@ -144,6 +133,42 @@ banbot tick:
 please choose a valid action
 `
 		log.Warn(tpl)
+	})
+}
+
+func runToolCmds(args []string) {
+	runSubCmd(args, func(name string) (FuncEntry, []string) {
+		var options []string
+		var entry FuncEntry
+		switch name {
+		case "collect_opt":
+			options = []string{"in"}
+			entry = optmize.CollectOptLog
+		case "bt_opt":
+			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur"}
+			entry = optmize.RunBTOverOpt
+		case "load_cal":
+			options = []string{"in"}
+			entry = biz.LoadCalendars
+		case "cmp_orders":
+			optmize.CompareExgBTOrders(args[1:])
+			os.Exit(0)
+		case "data_server":
+			options = []string{"mem_profile"}
+			entry = biz.RunDataServer
+		default:
+			return nil, nil
+		}
+		return entry, options
+	}, func() {
+		log.Warn(`
+banbot tool:
+	collect_opt: 	collect result of optimize, and print in order
+	bt_opt: 		backtest over optimize
+	load_cal: 		load calenders
+	cmp_orders: 	compare backTest orders with exchange orders
+	data_server: 	serve a grpc server as data feeder
+	`)
 	})
 }
 

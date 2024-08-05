@@ -14,7 +14,6 @@ var env = &ta.BarEnv{
 	TFMSecs:    86400000,
 	Exchange:   "binance",
 	MarketType: "future",
-	BarNum:     1,
 }
 
 func TestStagyJob_DrawDownExit(t *testing.T) {

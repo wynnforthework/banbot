@@ -12,6 +12,7 @@ go build -o banbot.o
 $env:GOARCH="amd64"
 $env:GOOS="windows"
 go build -o banbot.exe
+
 ```
 ## 服务器环境准备
 ### 授予可执行权限

@@ -60,13 +60,18 @@ func GetExSymbolCur(symbol string) (*ExSymbol, *errs.Error) {
 
 func GetExSymbol(exchange banexg.BanExchange, symbol string) (*ExSymbol, *errs.Error) {
 	market, err := exchange.GetMarket(symbol)
-	if err != nil {
-		return nil, err
+	// 这里不立即退出，可能退市了这里返回空，但有历史数据，可尝试从下面缓存获取
+	exgInfo := exchange.Info()
+	var marketType = exgInfo.MarketType
+	if market != nil {
+		marketType = market.Type
 	}
-	key := fmt.Sprintf("%s:%s:%s", exchange.Info().ID, market.Type, symbol)
+	key := fmt.Sprintf("%s:%s:%s", exgInfo.ID, marketType, symbol)
 	item, ok := keySymbolMap[key]
 	if !ok {
-		err := errs.NewMsg(core.ErrInvalidSymbol, "%s not exist in %d cache", symbol, len(keySymbolMap))
+		if err == nil {
+			err = errs.NewMsg(core.ErrInvalidSymbol, "%s not exist in %d cache", symbol, len(keySymbolMap))
+		}
 		return nil, err
 	}
 	return item, nil

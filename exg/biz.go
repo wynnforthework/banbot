@@ -83,6 +83,8 @@ func GetWith(name, market, contractType string) (banexg.BanExchange, *errs.Error
 	if contractType == "" {
 		contractType = core.ContractType
 	}
+	exgMapLock.Lock()
+	defer exgMapLock.Unlock()
 	cacheKey := name + "@" + market + "@" + contractType
 	client, ok := exgMap[cacheKey]
 	var err *errs.Error

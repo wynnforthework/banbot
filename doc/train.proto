@@ -1,0 +1,33 @@
+syntax = "proto3";
+option go_package = "../biz";
+
+/**
+生成go代码：
+protoc --go_out=../biz --go_opt=paths=source_relative --go-grpc_out=../biz --go-grpc_opt=paths=source_relative train.proto
+
+生成python代码
+python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. train.proto
+ */
+
+service FeaFeeder {
+  rpc SubFeatures(SubReq) returns (stream Feature) {}
+}
+
+message SubReq {
+  string exchange = 1;
+  string market = 2;
+  string pair = 3;
+  int64 start = 4;
+  int64 end = 5;
+  string task = 6;
+  int32 sample = 7;
+}
+
+message Feature{
+  map<string, NumArr> Mats = 1;
+}
+
+message NumArr {
+  repeated double data = 1;
+  repeated int32 shape = 2;
+}

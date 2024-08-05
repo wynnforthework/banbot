@@ -52,13 +52,14 @@ func Setup() *errs.Error {
 		return errs.New(core.ErrDbConnFail, err)
 	}
 	pool = dbPool
-	row := pool.QueryRow(context.Background(), "show timezone;")
-	var tz string
-	err = row.Scan(&tz)
+	row := pool.QueryRow(context.Background(), "show max_connections;")
+	var maxConnections string
+	err = row.Scan(&maxConnections)
 	if err != nil {
 		return errs.New(core.ErrDbReadFail, err)
 	}
-	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize))
+	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize),
+		zap.String("DB_MAX_CONN", maxConnections))
 	return nil
 }
 
