@@ -22,7 +22,7 @@ func (q *Queries) LoadExgSymbols(exgName string) *errs.Error {
 	ctx := context.Background()
 	exsList, err := q.ListSymbols(ctx, exgName)
 	if err != nil {
-		return errs.New(core.ErrDbReadFail, err)
+		return NewDbErr(core.ErrDbReadFail, err)
 	}
 	for _, exs := range exsList {
 		key := fmt.Sprintf("%s:%s:%s", exs.Exchange, exs.Market, exs.Symbol)
@@ -187,7 +187,7 @@ func EnsureSymbols(symbols []*ExSymbol, exchanges ...string) *errs.Error {
 	}
 	_, err_ := sess.AddSymbols(context.Background(), argList)
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	for exgId := range exgNames {
 		err = sess.LoadExgSymbols(exgId)
@@ -217,7 +217,7 @@ func LoadAllExSymbols() *errs.Error {
 	ctx := context.Background()
 	exgList, err_ := sess.ListExchanges(ctx)
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err)
+		return NewDbErr(core.ErrDbReadFail, err)
 	}
 	for _, exgId := range exgList {
 		err = sess.LoadExgSymbols(exgId)
@@ -312,7 +312,7 @@ func InitListDates() *errs.Error {
 				DelistMs: exs.DelistMs,
 			})
 			if err_ != nil {
-				return errs.New(core.ErrDbExecFail, err_)
+				return NewDbErr(core.ErrDbExecFail, err_)
 			}
 		}
 	}

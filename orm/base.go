@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"errors"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
@@ -10,7 +11,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	"net"
 	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -56,7 +59,7 @@ func Setup() *errs.Error {
 	var maxConnections string
 	err = row.Scan(&maxConnections)
 	if err != nil {
-		return errs.New(core.ErrDbReadFail, err)
+		return NewDbErr(core.ErrDbReadFail, err)
 	}
 	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize),
 		zap.String("DB_MAX_CONN", maxConnections))
@@ -94,7 +97,7 @@ func (t *Tx) Close(ctx context.Context, commit bool) *errs.Error {
 	}
 	t.closed = true
 	if err != nil {
-		return errs.New(core.ErrDbExecFail, err)
+		return NewDbErr(core.ErrDbExecFail, err)
 	}
 	return nil
 }
@@ -114,7 +117,7 @@ func (q *Queries) NewTx(ctx context.Context) (*Tx, *Queries, *errs.Error) {
 func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {
 	_, err_ := q.db.Exec(context.Background(), sql, args...)
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
@@ -304,4 +307,14 @@ func ResetVars() {
 	lockOds = make(map[string]*sync.Mutex)
 	accTasks = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
+}
+
+func NewDbErr(code int, err_ error) *errs.Error {
+	var opErr *net.OpError
+	if errors.As(err_, &opErr) {
+		if strings.Contains(opErr.Err.Error(), "connection reset") {
+			return errs.New(core.ErrDbConnFail, err_)
+		}
+	}
+	return errs.New(code, err_)
 }

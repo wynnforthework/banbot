@@ -617,7 +617,7 @@ func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 		Info:        i.Info,
 	})
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
@@ -646,7 +646,7 @@ func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 		ID:          i.ID,
 	})
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
@@ -672,7 +672,7 @@ func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 		UpdateAt:  i.UpdateAt,
 	})
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
@@ -698,7 +698,7 @@ func (i *ExOrder) saveUpdate(sess *Queries) *errs.Error {
 		ID:        i.ID,
 	})
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
@@ -765,7 +765,7 @@ func (q *Queries) DumpOrdersToDb() *errs.Error {
 func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.Error) {
 	rows, err_ := q.db.Query(context.Background(), sql, args...)
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	var res = make([]*IOrder, 0, 4)
@@ -794,7 +794,7 @@ func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.E
 			&iod.Info,
 		)
 		if err_ != nil {
-			return nil, errs.New(core.ErrDbReadFail, err_)
+			return nil, NewDbErr(core.ErrDbReadFail, err_)
 		}
 		res = append(res, &iod)
 	}
@@ -804,7 +804,7 @@ func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.E
 func (q *Queries) getExOrders(sql string, args []interface{}) ([]*ExOrder, *errs.Error) {
 	rows, err_ := q.db.Query(context.Background(), sql, args...)
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	var res = make([]*ExOrder, 0, 4)
@@ -830,7 +830,7 @@ func (q *Queries) getExOrders(sql string, args []interface{}) ([]*ExOrder, *errs
 			&iod.UpdateAt,
 		)
 		if err_ != nil {
-			return nil, errs.New(core.ErrDbReadFail, err_)
+			return nil, NewDbErr(core.ErrDbReadFail, err_)
 		}
 		res = append(res, &iod)
 	}
@@ -975,13 +975,13 @@ func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
 	sql := fmt.Sprintf("delete from iorder where id=%v", od.ID)
 	_, err_ := q.db.Exec(ctx, sql)
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	delExOrder := func(exId int64) *errs.Error {
 		sql = fmt.Sprintf("delete from exorder where id=%v", exId)
 		_, err_ = q.db.Exec(ctx, sql)
 		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 		return nil
 	}
@@ -1006,7 +1006,7 @@ func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string
 	sql := fmt.Sprintf("select DISTINCT ON (symbol) symbol,timeframe from iorder where task_id=%v and strategy=? ORDER BY symbol, enter_at DESC", taskId)
 	rows, err_ := q.db.Query(ctx, sql, stagy)
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	var result = make(map[string]string)
@@ -1014,7 +1014,7 @@ func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string
 		var symbol, timeFrame string
 		err_ = rows.Scan(&symbol, &timeFrame)
 		if err_ != nil {
-			return result, errs.New(core.ErrDbReadFail, err_)
+			return result, NewDbErr(core.ErrDbReadFail, err_)
 		}
 		result[symbol] = timeFrame
 	}

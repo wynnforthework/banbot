@@ -72,7 +72,7 @@ func getAccTask(account string) (*BotTask, *errs.Error) {
 			StopAt:   0,
 		})
 		if err_ != nil {
-			return nil, errs.New(core.ErrDbExecFail, err_)
+			return nil, NewDbErr(core.ErrDbExecFail, err_)
 		}
 	}
 	return task, nil

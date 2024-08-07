@@ -93,7 +93,7 @@ order by time`, sid, startMs, finishEndMS)
 	subTF, rows, err_ := queryHyper(q, timeframe, dctSql, limit)
 	klines, err_ := mapToKlines(rows, err_)
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	if revRead {
 		// 倒序读取的，再次逆序，使时间升序
@@ -153,7 +153,7 @@ order by sid,time`, startMs, finishEndMS, sidText)
 		return &i, []any{&i.Time, &i.Open, &i.High, &i.Low, &i.Close, &i.Volume, &i.Info, &i.Sid}
 	})
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err_)
+		return NewDbErr(core.ErrDbReadFail, err_)
 	}
 	initCap := max(len(arrs)/len(sids), 16)
 	var klineArr []*banexg.Kline
@@ -214,7 +214,7 @@ order by time`, tblName, sid, startMs, endMs)
 		return &t, []any{&t}
 	})
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	resList := make([]int64, len(res))
 	for i, v := range res {
@@ -397,7 +397,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	if finished {
 		_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
 		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 		return nil
 	}
@@ -409,7 +409,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	if sub == nil {
 		_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
 		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 		return nil
 	}
@@ -432,7 +432,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 				unBar.High, unBar.Low, unBar.Close, unBar.Volume, unBar.Info, unBar.StopMs, whereSql)
 			_, err_ = sess.db.Exec(ctx, updSql)
 			if err_ != nil {
-				return errs.New(core.ErrDbExecFail, err_)
+				return NewDbErr(core.ErrDbExecFail, err_)
 			}
 			return nil
 		}
@@ -440,7 +440,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	//当快速更新不可用时，从子周期归集
 	_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return sess.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, info, timeframe) 
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
@@ -505,7 +505,7 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 	cols := []string{"sid", "time", "open", "high", "low", "close", "volume", "info"}
 	num, err_ := q.db.CopyFrom(ctx, []string{tblName}, cols, &iterForAddKLines{rows: adds})
 	if err_ != nil {
-		return 0, errs.New(core.ErrDbExecFail, err_)
+		return 0, NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return num, nil
 }
@@ -569,7 +569,7 @@ func (q *Queries) CalcKLineRange(sid int32, timeFrame string, start, end int64) 
 	var realStart, realEnd *int64
 	err_ := row.Scan(&realStart, &realEnd)
 	if err_ != nil {
-		return 0, 0, errs.New(core.ErrDbReadFail, err_)
+		return 0, 0, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	if realEnd == nil {
 		realStart = new(int64)
@@ -588,7 +588,7 @@ func (q *Queries) CalcKLineRanges(timeFrame string) (map[int32][2]int64, *errs.E
 	ctx := context.Background()
 	rows, err_ := q.db.Query(ctx, sql)
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	res := make(map[int32][2]int64)
@@ -599,12 +599,12 @@ func (q *Queries) CalcKLineRanges(timeFrame string) (map[int32][2]int64, *errs.E
 		err_ = rows.Scan(&sid, &realStart, &realEnd)
 		res[sid] = [2]int64{realStart, realEnd + tfMSecs}
 		if err_ != nil {
-			return res, errs.New(core.ErrDbReadFail, err_)
+			return res, NewDbErr(core.ErrDbReadFail, err_)
 		}
 	}
 	err_ = rows.Err()
 	if err_ != nil {
-		return res, errs.New(core.ErrDbReadFail, err_)
+		return res, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	return res, nil
 }
@@ -617,7 +617,7 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	if err != nil {
 		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: sid, Timeframe: timeFrame, Start: startMS, Stop: endMS})
 		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 		log.Debug("add kinfo", zap.Int32("sid", sid), zap.String("tf", timeFrame),
 			zap.Int64("start", startMS), zap.Int64("end", endMS))
@@ -636,7 +636,7 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 		err_ = q.SetKInfo(ctx, SetKInfoParams{Sid: sid, Timeframe: timeFrame, Start: realStart, Stop: realEnd})
 	}
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	log.Debug("set kinfo", zap.Int32("sid", sid), zap.String("tf", timeFrame),
 		zap.Int64("start", startMS), zap.Int64("end", endMS))
@@ -745,7 +745,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	ctx := context.Background()
 	resHoles, err_ := q.GetKHoles(ctx, GetKHolesParams{Sid: sid, Timeframe: timeFrame})
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err_)
+		return NewDbErr(core.ErrDbReadFail, err_)
 	}
 	for _, h := range holes {
 		resHoles = append(resHoles, &KHole{Sid: sid, Timeframe: timeFrame, Start: h[0], Stop: h[1]})
@@ -788,14 +788,14 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 		} else {
 			err_ = q.SetKHole(ctx, SetKHoleParams{ID: h.ID, Start: h.Start, Stop: h.Stop})
 			if err_ != nil {
-				return errs.New(core.ErrDbExecFail, err_)
+				return NewDbErr(core.ErrDbExecFail, err_)
 			}
 		}
 	}
 	if len(adds) > 0 {
 		_, err_ = q.AddKHoles(ctx, adds)
 		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 	}
 	return nil
@@ -886,7 +886,7 @@ insert into %s (sid, time, open, high, low, close, volume, info)
 %s %s`, item.Table, sql, klineInsConflict)
 	_, err_ := q.db.Exec(context.Background(), finalSql)
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err_)
+		return NewDbErr(core.ErrDbReadFail, err_)
 	}
 	// 更新有效区间范围
 	err := q.updateKLineRange(sid, item.TimeFrame, startMS, endMS)
@@ -1080,7 +1080,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 	ctx := context.Background()
 	holes, err_ := sess.ListKHoles(ctx)
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err_)
+		return NewDbErr(core.ErrDbReadFail, err_)
 	}
 	rows := make([]*KHoleExt, len(holes))
 	for i, h := range holes {
@@ -1170,7 +1170,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			editNum += 1
 			err_ = sess.SetKHole(ctx, SetKHoleParams{ID: row.ID, Start: start, Stop: stop})
 			if err_ != nil {
-				return errs.New(core.ErrDbExecFail, err_)
+				return NewDbErr(core.ErrDbExecFail, err_)
 			}
 		}
 	}
@@ -1194,7 +1194,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		}
 		_, err_ = sess.AddKHoles(ctx, items)
 		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 	}
 	log.Info(fmt.Sprintf("find kHoles %v, filled: %v, add: %v, edit: %v", len(holes),
@@ -1210,7 +1210,7 @@ type KInfoExt struct {
 func syncKlineInfos(sess *Queries) *errs.Error {
 	infos, err_ := sess.ListKInfos(context.Background())
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	// 显示进度条
 	pgTotal := len(infos) + len(aggList)*10
@@ -1285,7 +1285,7 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 				})
 			}
 			if err_ != nil {
-				return errs.New(core.ErrDbExecFail, err_)
+				return NewDbErr(core.ErrDbExecFail, err_)
 			}
 			// 更新KHoles，避免有空洞但未记录
 			err = q.updateKHoles(sid, agg.TimeFrame, newStart, newEnd)
@@ -1449,7 +1449,7 @@ func saveAdjFactors(data map[int64]map[int32]*banexg.Kline, pCode string, pExs *
 	ctx := context.Background()
 	err_ := sess.DelAdjFactors(ctx, exs.ID)
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	dates := utils.KeysOfMap(data)
 	sort.Slice(dates, func(i, j int) bool {
@@ -1509,7 +1509,7 @@ func saveAdjFactors(data map[int64]map[int32]*banexg.Kline, pCode string, pExs *
 	_ = utils2.WriteFile(outPath, []byte(strings.Join(lines, "\n")))
 	_, err_ = sess.AddAdjFactors(ctx, adds)
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
 }

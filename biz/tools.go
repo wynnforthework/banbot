@@ -427,7 +427,7 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 	ctx := context.Background()
 	infos, err_ := sess.ListKInfos(ctx)
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err_)
+		return orm.NewDbErr(core.ErrDbReadFail, err_)
 	}
 	infoMap := make(map[int32]*orm.KInfo)
 	for _, i := range infos {
@@ -563,7 +563,7 @@ func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 		}
 		facs, err_ := sess.GetAdjFactors(ctx, exs.ID)
 		if err_ != nil {
-			return errs.New(core.ErrDbReadFail, err_)
+			return orm.NewDbErr(core.ErrDbReadFail, err_)
 		}
 		sort.Slice(facs, func(i, j int) bool {
 			return facs[i].StartMs < facs[j].StartMs

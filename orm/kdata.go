@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 /*
@@ -282,12 +283,23 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 GetOHLCV 获取品种K线，如需复权自动前复权
 */
 func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*AdjInfo, []*banexg.Kline, *errs.Error) {
-	sess, conn, err := Conn(nil)
-	if err != nil {
-		return nil, nil, err
+	retry, maxRetry := 0, 3
+	for retry < maxRetry {
+		sess, conn, err := Conn(nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		adjs, klines, err := sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
+		conn.Release()
+		if err != nil && err.Code == core.ErrDbConnFail && retry < maxRetry+1 {
+			// 连接被断开，等待一会，重试
+			retry += 1
+			time.Sleep(time.Millisecond * 1000 * time.Duration(retry))
+			continue
+		}
+		return adjs, klines, err
 	}
-	defer conn.Release()
-	return sess.GetOHLCV(exs, timeFrame, startMS, endMS, limit, withUnFinish)
+	return nil, nil, errs.NewMsg(core.ErrDbReadFail, "max retry exceed")
 }
 
 /*
@@ -324,7 +336,7 @@ func (q *Queries) GetAdjs(sid int32) ([]*AdjInfo, *errs.Error) {
 	ctx := context.Background()
 	rows, err_ := q.GetAdjFactors(ctx, sid)
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	// facs已按时间升序，从后往前，记录截止时间
 	adjs := make([]*AdjInfo, 0, len(rows))
@@ -669,7 +681,7 @@ func (q *Queries) getCalendars(name string, startMS, stopMS int64, fields string
 func (q *Queries) GetCalendars(name string, startMS, stopMS int64) ([][2]int64, *errs.Error) {
 	rows, err_ := q.getCalendars(name, startMS, stopMS, "start_ms,stop_ms")
 	if err_ != nil {
-		return nil, errs.New(core.ErrDbReadFail, err_)
+		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	result := make([][2]int64, 0)
@@ -677,7 +689,7 @@ func (q *Queries) GetCalendars(name string, startMS, stopMS int64) ([][2]int64, 
 		var start, stop int64
 		err_ = rows.Scan(&start, &stop)
 		if err_ != nil {
-			return result, errs.New(core.ErrDbReadFail, err_)
+			return result, NewDbErr(core.ErrDbReadFail, err_)
 		}
 		result = append(result, [2]int64{start, stop})
 	}
@@ -691,7 +703,7 @@ func (q *Queries) SetCalendars(name string, items [][2]int64) *errs.Error {
 	startMS, stopMS := items[0][0], items[len(items)-1][1]
 	rows, err_ := q.getCalendars(name, startMS, stopMS, "id,start_ms,stop_ms")
 	if err_ != nil {
-		return errs.New(core.ErrDbReadFail, err_)
+		return NewDbErr(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	olds := make([]*Calendar, 0)
@@ -699,7 +711,7 @@ func (q *Queries) SetCalendars(name string, items [][2]int64) *errs.Error {
 		var cal = &Calendar{}
 		err_ = rows.Scan(&cal.ID, &cal.StartMs, &cal.StopMs)
 		if err_ != nil {
-			return errs.New(core.ErrDbReadFail, err_)
+			return NewDbErr(core.ErrDbReadFail, err_)
 		}
 		olds = append(olds, cal)
 	}
@@ -714,7 +726,7 @@ func (q *Queries) SetCalendars(name string, items [][2]int64) *errs.Error {
 		sql := fmt.Sprintf("delete from calendars where id in (%s)", strings.Join(ids, ","))
 		_, err_ = q.db.Exec(ctx, sql)
 		if err_ != nil {
-			return errs.New(core.ErrDbExecFail, err_)
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 	}
 	adds := make([]AddCalendarsParams, 0, len(items))
@@ -723,7 +735,7 @@ func (q *Queries) SetCalendars(name string, items [][2]int64) *errs.Error {
 	}
 	_, err_ = q.AddCalendars(ctx, adds)
 	if err_ != nil {
-		return errs.New(core.ErrDbExecFail, err_)
+		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
