@@ -422,7 +422,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		} else {
 			ohlcvs = bars
 		}
-		for i := len(f.States) - 1; i > 1; i-- {
+		for i := len(f.States) - 1; i >= 1; i-- {
 			state = f.States[i]
 			var olds []*banexg.Kline
 			if state.WaitBar != nil {

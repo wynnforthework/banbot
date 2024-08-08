@@ -3,14 +3,14 @@ option go_package = "../biz";
 
 /**
 生成go代码：
-protoc --go_out=../biz --go_opt=paths=source_relative --go-grpc_out=../biz --go-grpc_opt=paths=source_relative train.proto
+protoc --go_out=../biz --go_opt=paths=source_relative --go-grpc_out=../biz --go-grpc_opt=paths=source_relative aifea.proto
 
 生成python代码
-python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. train.proto
+python -m grpc_tools.protoc -I. --python_out=. --pyi_out=. --grpc_python_out=. aifea.proto
  */
 
 service FeaFeeder {
-  rpc SubFeatures(SubReq) returns (stream Feature) {}
+  rpc SubFeatures(SubReq) returns (stream ArrMap) {}
 }
 
 message SubReq {
@@ -23,7 +23,12 @@ message SubReq {
   int32 sample = 7;
 }
 
-message Feature{
+service AInfer {
+  rpc Trend(ArrMap) returns (ArrMap) {}
+  rpc Trade(ArrMap) returns (ArrMap) {}
+}
+
+message ArrMap{
   map<string, NumArr> Mats = 1;
 }
 

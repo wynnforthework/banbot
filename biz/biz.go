@@ -134,39 +134,26 @@ func TryFireEnters(tf string) {
 			continue
 		}
 		delete(strategy.BatchJobs, key)
-		var stagy *strategy.TradeStagy
-		var entJobs = make([]*strategy.StagyJob, 0, len(jobs)/5)
-		var emptyJobs = make([]*strategy.StagyJob, 0, len(jobs))
-		for _, job := range jobs {
-			if len(job.Entrys) > 0 {
-				entJobs = append(entJobs, job)
-			} else {
-				emptyJobs = append(emptyJobs, job)
-			}
-			if stagy == nil {
-				stagy = job.Stagy
-			}
-		}
-		if len(entJobs) == 0 {
-			continue
-		}
-		// 检查此时间所有入场任务，过滤，返回允许入场的任务
-		entJobs = stagy.OnBatchJobs(entJobs, emptyJobs)
-		if len(entJobs) == 0 {
-			continue
-		}
-		// 执行入场任务
+		jobList := utils.ValsOfMap(jobs)
+		var stagy = jobList[0].Stagy
+		// 检查此时间所有批量任务，决定哪些入场或那些出场
+		stagy.OnBatchJobs(jobList)
+		// 执行入场/出场任务
 		keyParts := strings.Split(key, "_")
 		odMgr := GetOdMgr(keyParts[1])
 		var ents []*orm.InOutOrder
-		for _, job := range entJobs {
-			if len(job.Entrys) == 0 {
+		var exits []*orm.InOutOrder
+		for _, job := range jobs {
+			if len(job.Entrys) == 0 && len(job.Exits) == 0 {
 				continue
 			}
-			ents, _, err = odMgr.ProcessOrders(sess, job.Env, job.Entrys, nil, nil)
-			if len(ents) > 0 && job.Stagy.OnOrderChange != nil {
+			ents, exits, err = odMgr.ProcessOrders(sess, job.Env, job.Entrys, job.Exits, nil)
+			if job.Stagy.OnOrderChange != nil {
 				for _, od := range ents {
 					job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+				}
+				for _, od := range exits {
+					job.Stagy.OnOrderChange(job, od, strategy.OdChgExit)
 				}
 			}
 			if err != nil {

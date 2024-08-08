@@ -107,7 +107,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 		snap := job.SnapOrderStates()
 		job.Stagy.OnBar(job)
 		if !barExpired {
-			if job.Stagy.BatchEnter && job.Stagy.OnBatchJobs != nil {
+			if job.Stagy.BatchInOut && job.Stagy.OnBatchJobs != nil {
 				AddBatchJob(account, bar.TimeFrame, job, false)
 			} else {
 				enters = append(enters, job.Entrys...)
