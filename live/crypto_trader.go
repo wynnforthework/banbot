@@ -52,7 +52,9 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	return biz.LoadRefreshPairs()
+	err = biz.LoadRefreshPairs()
+	biz.InitOdSubs()
+	return err
 }
 
 func (t *CryptoTrader) initOdMgr() *errs.Error {

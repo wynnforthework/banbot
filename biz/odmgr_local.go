@@ -165,6 +165,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.Inf
 		stopAfter := od.GetInfoInt64(orm.OdInfoStopAfter)
 		if stopAfter > 0 && stopAfter <= curMS {
 			err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars", "")
+			strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 			if err != nil {
 				log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
 			}
@@ -179,6 +180,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 	if err != nil {
 		if err.Code == core.ErrLowFunds {
 			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, err.Error(), "")
+			strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 			o.onLowFunds()
 			return err
 		}
@@ -214,6 +216,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)
 			wallets.Cancel(od.Key(), quote, 0, true)
+			strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 			return err
 		}
 	}
@@ -245,6 +248,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 	od.DirtyEnter = true
 	od.DirtyMain = true
 	o.callBack(od, true)
+	strategy.FireOdChange(o.Account, od, strategy.OdChgEnterFill)
 	return nil
 }
 
@@ -271,6 +275,7 @@ func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64, fillM
 	_ = o.finishOrder(od, nil)
 	wallets.ConfirmOdExit(od, price)
 	o.callBack(od, false)
+	strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 	return nil
 }
 
@@ -365,6 +370,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 	wallets.ExitOd(od, od.Exit.Amount)
 	_ = o.finishOrder(od, nil)
 	wallets.ConfirmOdExit(od, od.Exit.Price)
+	strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 	return err
 }
 

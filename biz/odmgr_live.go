@@ -274,7 +274,9 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 		if isFarEnter(od) {
 			orm.AddTriggerOd(o.Account, od)
 		} else {
-			return od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单", "")
+			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单", "")
+			strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
+			return err
 		}
 	} else if tryOd.OrderID != "" && tryOd.Status != orm.OdStatusClosed {
 		// 已提交到交易所，尚未完成
@@ -307,6 +309,7 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 		if tryOd.Status == orm.OdStatusClosed {
 			od.Status = orm.InOutStatusFullExit
 			od.DirtyMain = true
+			strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 			return nil
 		} else if tryOd.Status > orm.OdStatusInit {
 			// 这里不应该走到
@@ -374,6 +377,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 					// 尚未提交到交易所，直接取消
 					msg := "取消未提交的订单"
 					err = iod.LocalExit(core.ExitTagCancel, iod.Enter.Price, msg, "")
+					strategy.FireOdChange(o.Account, iod, strategy.OdChgExitFill)
 					if err != nil {
 						return openOds, err
 					}
@@ -385,6 +389,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				if iod.Status < orm.InOutStatusFullExit {
 					msg := "订单没有入场仓位"
 					err = iod.LocalExit(core.ExitTagFatalErr, iod.InitPrice, msg, "")
+					strategy.FireOdChange(o.Account, iod, strategy.OdChgExitFill)
 					if err != nil {
 						return openOds, err
 					}
@@ -405,6 +410,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			if posAmt < odAmt*-0.01 {
 				msg := fmt.Sprintf("订单在交易所没有对应仓位，交易所：%.5f", posAmt+odAmt)
 				err = iod.LocalExit(core.ExitTagFatalErr, iod.InitPrice, msg, "")
+				strategy.FireOdChange(o.Account, iod, strategy.OdChgExitFill)
 				if err != nil {
 					return openOds, err
 				}
@@ -601,6 +607,11 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 		DirtyMain:  true,
 		DirtyEnter: true,
 	}
+	if status >= orm.InOutStatusFullEnter {
+		strategy.FireOdChange(o.Account, od, strategy.OdChgEnterFill)
+	} else {
+		strategy.FireOdChange(o.Account, od, strategy.OdChgEnter)
+	}
 	return od
 }
 
@@ -636,6 +647,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 	feeName string, feeCost float64) (float64, float64, *orm.InOutOrder) {
 	if iod.Enter.Filled == 0 {
 		err := iod.LocalExit(core.ExitTagForceExit, iod.InitPrice, "not entered", "")
+		strategy.FireOdChange(o.Account, iod, strategy.OdChgExitFill)
 		if err != nil {
 			log.Error("local exit no enter order fail", zap.String("key", iod.Key()), zap.Error(err))
 		}
@@ -701,6 +713,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 	part.ExitAt = odTime
 	part.Status = orm.InOutStatusFullExit
 	part.DirtyMain = true
+	strategy.FireOdChange(o.Account, part, strategy.OdChgExitFill)
 	return filled, feeCost, part
 }
 
@@ -1122,6 +1135,9 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 		}
 		cancelTriggerOds(od)
 		o.callBack(od, subOd.Enter)
+		strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
+	} else {
+		strategy.FireOdChange(o.Account, od, strategy.OdChgEnterFill)
 	}
 	return nil
 }
@@ -1157,6 +1173,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 				} else {
 					msg := err.Short()
 					err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg, "")
+					strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 					if err != nil {
 						log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
 					}
@@ -1180,6 +1197,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 		msg := "submit order fail, local exit"
 		log.Error(msg, zap.String("key", odKey), zap.Error(err))
 		err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg, "")
+		strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 		if err != nil {
 			log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
 		}
@@ -1220,6 +1238,7 @@ func (o *LiveOrderMgr) tryExitEnter(od *orm.InOutOrder) *errs.Error {
 			return err
 		}
 		cancelTriggerOds(od)
+		strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 		return nil
 	} else if od.Enter.Status < orm.OdStatusClosed {
 		od.Enter.Status = orm.OdStatusClosed
@@ -1308,6 +1327,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 				return err
 			}
 			cancelTriggerOds(od)
+			strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 			return nil
 		}
 	}
@@ -1414,9 +1434,12 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 		}
 		if od.Status == orm.InOutStatusFullExit {
 			err := o.finishOrder(od, nil)
+			strategy.FireOdChange(o.Account, od, strategy.OdChgExitFill)
 			if err != nil {
 				return err
 			}
+		} else {
+			strategy.FireOdChange(o.Account, od, strategy.OdChgEnterFill)
 		}
 	}
 	return o.consumeUnMatches(od, subOd)
@@ -1753,6 +1776,7 @@ func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *orm.InOutOrder) {
 	if od.Enter.Filled == 0 {
 		// 尚未入场，直接退出
 		err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars", "")
+		strategy.FireOdChange(odMgr.Account, od, strategy.OdChgExitFill)
 		if err != nil {
 			log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
 		}
@@ -1762,6 +1786,7 @@ func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *orm.InOutOrder) {
 		od.Status = orm.InOutStatusFullEnter
 		od.DirtyMain = true
 		od.DirtyEnter = true
+		strategy.FireOdChange(odMgr.Account, od, strategy.OdChgEnterFill)
 	}
 }
 

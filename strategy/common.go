@@ -479,3 +479,19 @@ func CalcJobPerfs(cfg *config.StrtgPerfConfig, p *core.PerfSta, perfs []*core.Jo
 		}
 	}
 }
+
+func AddOdSub(acc string, cb FnOdChange) {
+	lockOdSub.Lock()
+	defer lockOdSub.Unlock()
+	subs, _ := accOdSubs[acc]
+	accOdSubs[acc] = append(subs, cb)
+}
+
+func FireOdChange(acc string, od *orm.InOutOrder, evt int) {
+	subs, _ := accOdSubs[acc]
+	subs2, _ := accOdSubs["*"]
+	subs = append(subs, subs2...)
+	for _, cb := range subs {
+		cb(acc, od, evt)
+	}
+}

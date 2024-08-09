@@ -142,6 +142,12 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strategy.Enter
 	return nil
 }
 
+/*
+ProcessOrders 执行订单入场出场请求
+创建待执行订单，返回的订单实际并未入场或出场；
+回测：调用方根据下一个bar执行入场/出场订单，更新状态
+实盘：监听交易所返回订单状态更新入场出场
+*/
 func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strategy.EnterReq,
 	exits []*strategy.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	var entOrders, extOrders []*orm.InOutOrder

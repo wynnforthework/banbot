@@ -314,7 +314,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 
 /*
 buildExgOrders
-从交易所订单构建InOutOrder用于对比
+从交易所订单构建InOutOrder用于对比；非实盘/回测时使用
 */
 func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.InOutOrder {
 	sort.Slice(ods, func(i, j int) bool {

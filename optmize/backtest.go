@@ -68,7 +68,9 @@ func (b *BackTest) Init() *errs.Error {
 		return err
 	}
 	// 交易对初始化
-	return biz.LoadRefreshPairs()
+	err = biz.LoadRefreshPairs()
+	biz.InitOdSubs()
+	return err
 }
 
 func (b *BackTest) FeedKLine(bar *orm.InfoKline) {

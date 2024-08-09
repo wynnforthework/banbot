@@ -106,8 +106,10 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 		job.InitBar(curOrders)
 		snap := job.SnapOrderStates()
 		job.Stagy.OnBar(job)
+		var isBatch = false
 		if !barExpired {
-			if job.Stagy.BatchInOut && job.Stagy.OnBatchJobs != nil {
+			isBatch = job.Stagy.BatchInOut && job.Stagy.OnBatchJobs != nil
+			if isBatch {
 				AddBatchJob(account, bar.TimeFrame, job, false)
 			} else {
 				enters = append(enters, job.Entrys...)
@@ -120,7 +122,9 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 			}
 			edits = append(edits, curEdits...)
 		}
-		exits = append(exits, job.Exits...)
+		if !isBatch {
+			exits = append(exits, job.Exits...)
+		}
 	}
 	// 更新辅助订阅数据
 	for _, job := range infoJobs {
@@ -150,24 +154,32 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob,
 		}
 		defer conn.Release()
 	}
-	var ents []*orm.InOutOrder
-	ents, _, err = odMgr.ProcessOrders(sess, env, enters, exits, edits)
+	var ents, exts []*orm.InOutOrder
+	ents, exts, err = odMgr.ProcessOrders(sess, env, enters, exits, edits)
 	if err != nil {
 		log.Error("process orders fail", zap.Error(err))
 		return err
 	}
-	if len(ents) > 0 {
-		var jobMap = map[string]*strategy.StagyJob{}
-		for _, job := range jobs {
-			jobMap[job.Stagy.Name] = job
+	var jobMap = map[string]*strategy.StagyJob{}
+	for _, job := range jobs {
+		if job.Stagy.OnOrderChange == nil {
+			continue
 		}
-		for _, od := range ents {
-			job, ok := jobMap[od.Strategy]
-			if !ok || job.Stagy.OnOrderChange == nil {
-				continue
-			}
-			job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+		jobMap[job.Stagy.Name] = job
+	}
+	for _, od := range ents {
+		job, ok := jobMap[od.Strategy]
+		if !ok || job.Stagy.OnOrderChange == nil {
+			continue
 		}
+		job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+	}
+	for _, od := range exts {
+		job, ok := jobMap[od.Strategy]
+		if !ok || job.Stagy.OnOrderChange == nil {
+			continue
+		}
+		job.Stagy.OnOrderChange(job, od, strategy.OdChgExit)
 	}
 	return nil
 }

@@ -23,4 +23,7 @@ var (
 	LastBatchMS = map[string]int64{}                // tf: timeMS 仅用于回测
 
 	lockInfoJobs sync.Mutex
+
+	accOdSubs = map[string][]FnOdChange{} // acc: listeners 订阅订单状态变化事件列表
+	lockOdSub sync.Mutex
 )

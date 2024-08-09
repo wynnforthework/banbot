@@ -80,6 +80,42 @@ func AutoRefreshPairs() {
 	}
 }
 
+func InitOdSubs() {
+	var subStagys = map[string]*strategy.TradeStagy{}
+	for _, items := range strategy.PairStags {
+		for stgName, stagy := range items {
+			if stagy.OnOrderChange != nil {
+				subStagys[stgName] = stagy
+			}
+		}
+	}
+	if len(subStagys) == 0 {
+		return
+	}
+	for acc := range strategy.AccJobs {
+		strategy.AddOdSub(acc, func(acc string, od *orm.InOutOrder, evt int) {
+			stagy, ok := subStagys[od.Strategy]
+			if !ok {
+				// 当前策略未监听订单状态
+				return
+			}
+			items, _ := strategy.AccJobs[acc]
+			if len(items) == 0 {
+				return
+			}
+			pairTF := strings.Join([]string{od.Symbol, od.Timeframe}, "_")
+			its, _ := items[pairTF]
+			if len(its) == 0 {
+				return
+			}
+			job, _ := its[od.Strategy]
+			if job != nil {
+				stagy.OnOrderChange(job, od, evt)
+			}
+		})
+	}
+}
+
 var lockBatch = sync.Mutex{} // 防止并发修改TFEnterMS/BatchJobs
 
 /*
