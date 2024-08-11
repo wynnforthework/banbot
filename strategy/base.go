@@ -348,7 +348,11 @@ func (s *StagyJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
 	var req *ExitReq
 	if s.Stagy.OnCheckExit != nil {
 		req = s.Stagy.OnCheckExit(s, od)
-	} else if s.Stagy.DrawDownExit && od.Status >= orm.InOutStatusFullEnter {
+		if req != nil {
+			req.OrderID = od.ID
+		}
+	}
+	if req == nil && s.Stagy.DrawDownExit && od.Status >= orm.InOutStatusFullEnter {
 		// 只对已完全入场的订单启用回撤平仓
 		req = s.drawDownExit(od)
 	}

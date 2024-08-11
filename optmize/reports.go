@@ -118,7 +118,11 @@ func (r *BTResult) printBtResult() {
 	b.WriteString(r.textMetrics(orders))
 	log.Info("BackTest Reports:\n" + b.String())
 
-	r.dumpOrders(orders)
+	r.dumpBtFiles()
+}
+
+func (r *BTResult) dumpBtFiles() {
+	r.dumpOrders(orm.HistODs)
 
 	r.dumpConfig()
 

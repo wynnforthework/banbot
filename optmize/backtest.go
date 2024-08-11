@@ -28,6 +28,7 @@ const (
 type BackTest struct {
 	biz.Trader
 	*BTResult
+	lastDumpMs int64 // 上一次保存回测状态的时间
 }
 
 var (
@@ -126,8 +127,11 @@ func (b *BackTest) Run() {
 		log.Error("init pair cron fail", zap.Error(err))
 		return
 	}
+	b.cronDumpBtStatus()
+	core.Cron.Start()
 	btStart := btime.UTCTime()
 	err = data.Main.LoopMain()
+	core.Cron.Stop()
 	if err != nil {
 		log.Error("backtest loop fail", zap.Error(err))
 		return
@@ -309,6 +313,23 @@ func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, tot
 	b.Plots.Available = append(b.Plots.Available, avaLegal)
 	b.Plots.UnrealizedPOL = append(b.Plots.UnrealizedPOL, profitLegal)
 	b.Plots.WithDraw = append(b.Plots.WithDraw, drawLegal)
+}
+
+func (b *BackTest) cronDumpBtStatus() {
+	b.lastDumpMs = btime.UTCStamp()
+	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {
+		curTime := btime.UTCStamp()
+		if curTime-b.lastDumpMs < 300000 {
+			// 5分钟保存一次回测状态
+			return
+		}
+		b.lastDumpMs = curTime
+		log.Info("dump backTest status to files...")
+		b.printBtResult()
+	})
+	if err_ != nil {
+		log.Error("add Dump BackTest Status fail", zap.Error(err_))
+	}
 }
 
 func initRefreshCron() *errs.Error {

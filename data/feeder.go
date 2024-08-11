@@ -442,7 +442,9 @@ type IHistKlineFeeder interface {
 	IKlineFeeder
 	getNextMS() int64
 	initNext(since int64)
-	invoke() *errs.Error
+	getBar() *banexg.Kline
+	invokeBar(bar *banexg.Kline) *errs.Error
+	callNext()
 	downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error
 }
 
@@ -471,14 +473,24 @@ func (f *HistKLineFeeder) initNext(since int64) {
 	f.setNext()
 }
 
-func (f *HistKLineFeeder) invoke() *errs.Error {
-	if f.rowIdx >= len(f.caches) {
-		return errs.NewMsg(core.ErrEOF, fmt.Sprintf("%s no more bars", f.Symbol))
+/*
+获取当前bar，用于invokeBar；之后应调用callNext设置光标到下一个bar
+*/
+func (f *HistKLineFeeder) getBar() *banexg.Kline {
+	if f.rowIdx < 0 || f.rowIdx >= len(f.caches) {
+		return nil
 	}
 	bar := f.caches[f.rowIdx]
+	return bar
+}
+
+func (f *HistKLineFeeder) invokeBar(bar *banexg.Kline) *errs.Error {
 	_, err := f.onNewBars(f.minGapMs, []*banexg.Kline{bar})
-	f.setNext()
 	return err
+}
+
+func (f *HistKLineFeeder) callNext() {
+	f.setNext()
 }
 
 /*

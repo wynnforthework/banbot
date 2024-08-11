@@ -225,6 +225,9 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 	var hold IHistKlineFeeder
 	holds := utils.ValsOfMap(p.holders)
 	p.dirty = true
+	var wg sync.WaitGroup
+	var retErr *errs.Error
+	var lastBarMs int64
 	for {
 		if !core.BotRunning {
 			break
@@ -237,27 +240,49 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			holds = p.sortFeeders(holds, hold, true)
 		}
 		hold = holds[0]
-		if hold.getNextMS() == math.MaxInt64 {
+		bar := hold.getBar()
+		if bar == nil {
 			break
 		}
+		hold.callNext()
 		holds = holds[1:]
-		// 触发回调
-		err := hold.invoke()
-		if err != nil {
-			if err.Code == core.ErrEOF {
-				break
+		if bar.Time > lastBarMs {
+			// 等待并发批量完成
+			wg.Wait()
+			if retErr != nil {
+				log.Error("data loop main fail", zap.Error(retErr))
+				return retErr
 			}
-			log.Error("data loop main fail", zap.Error(err))
-			return err
-		}
-		// 更新进度条
-		pBarAdd := (btime.TimeMS() - pbarTo) / 1000
-		if pBarAdd > 0 {
-			pBar.Add(int(pBarAdd))
-			pbarTo = btime.TimeMS()
+			// 更新进度条
+			pBarAdd := (btime.TimeMS() - pbarTo) / 1000
+			if pBarAdd > 0 {
+				pBar.Add(int(pBarAdd))
+				pbarTo = btime.TimeMS()
+			}
+			// 新时间的第一个bar，同步运行
+			err := hold.invokeBar(bar)
+			if err != nil {
+				log.Error("data loop main fail", zap.Error(err))
+				return err
+			}
+			lastBarMs = bar.Time
+		} else {
+			wg.Add(1)
+			// 同一个时间的不同标的，并发执行
+			go func(hold IHistKlineFeeder, bar *banexg.Kline) {
+				defer wg.Done()
+				if retErr != nil {
+					return
+				}
+				err := hold.invokeBar(bar)
+				if err != nil {
+					retErr = err
+				}
+			}(hold, bar)
 		}
 	}
-	return nil
+	wg.Wait()
+	return retErr
 }
 
 func (p *HistProvider[IHistKlineFeeder]) sortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) []IHistKlineFeeder {
