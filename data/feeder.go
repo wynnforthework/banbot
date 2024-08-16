@@ -1,6 +1,7 @@
 package data
 
 import (
+	"context"
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"math"
 	"slices"
@@ -71,7 +73,7 @@ func (f *Feeder) setWaitBar(bar *banexg.Kline) {
 subTfs
 添加监听到States中，返回新增的TimeFrames
 */
-func (f *Feeder) subTfs(timeFrames []string, delOther bool) []string {
+func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 	var oldTfs = make(map[string]bool)
 	var stateMap = make(map[string]*PairTFCache)
 	var minTfSecs = 0 // 记录最小时间周期
@@ -235,8 +237,14 @@ type IKlineFeeder interface {
 	getSymbol() string
 	getWaitBar() *banexg.Kline
 	setWaitBar(bar *banexg.Kline)
-	subTfs(timeFrames []string, delOther bool) []string
-	warmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error)
+	/*
+		SubTfs 为当前标的订阅指定时间周期的数据，可多个
+	*/
+	SubTfs(timeFrames []string, delOther bool) []string
+	/*
+		WarmTfs 预热时间周期给定K线数量到指定时间
+	*/
+	WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error)
 	onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *errs.Error)
 	getStates() []*PairTFCache
 }
@@ -255,17 +263,12 @@ KlineFeeder
 */
 type KlineFeeder struct {
 	Feeder
-	NextExpectMS int64
-	PreFire      float64
-	adjIdx       int            // adjs的索引
-	warmNums     map[string]int // 各周期预热数量
+	PreFire  float64        // 提前触发bar的比率
+	adjIdx   int            // adjs的索引
+	warmNums map[string]int // 各周期预热数量
 }
 
-func NewKlineFeeder(symbol string, callBack FnPairKline) (*KlineFeeder, *errs.Error) {
-	exs, err := orm.GetExSymbol(exg.Default, symbol)
-	if err != nil {
-		return nil, err
-	}
+func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*KlineFeeder, *errs.Error) {
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return nil, err
@@ -286,7 +289,7 @@ func NewKlineFeeder(symbol string, callBack FnPairKline) (*KlineFeeder, *errs.Er
 	}, nil
 }
 
-func (f *KlineFeeder) warmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error) {
+func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error) {
 	if len(tfNums) == 0 {
 		tfNums = f.warmNums
 		if len(tfNums) == 0 {
@@ -441,11 +444,26 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 type IHistKlineFeeder interface {
 	IKlineFeeder
 	getNextMS() int64
-	initNext(since int64)
-	getBar() *banexg.Kline
-	invokeBar(bar *banexg.Kline) *errs.Error
-	callNext()
-	downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error
+	/*
+		DownIfNeed 下载整个范围的K线，需在SetSeek前调用
+	*/
+	DownIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error
+	/*
+		SetSeek 设置读取位置，在循环读取前调用
+	*/
+	SetSeek(since int64)
+	/*
+		GetBar 获取当前K线，然后可调用CallNext移动指针到下一个
+	*/
+	GetBar() *banexg.Kline
+	/*
+		RunBar 运行Bar对应的回调函数
+	*/
+	RunBar(bar *banexg.Kline) *errs.Error
+	/*
+		CallNext 移动指针到下一个K线
+	*/
+	CallNext()
 }
 
 /*
@@ -469,14 +487,10 @@ func (f *HistKLineFeeder) getNextMS() int64 {
 	return f.nextMS
 }
 
-func (f *HistKLineFeeder) initNext(since int64) {
-	f.setNext()
-}
-
 /*
 获取当前bar，用于invokeBar；之后应调用callNext设置光标到下一个bar
 */
-func (f *HistKLineFeeder) getBar() *banexg.Kline {
+func (f *HistKLineFeeder) GetBar() *banexg.Kline {
 	if f.rowIdx < 0 || f.rowIdx >= len(f.caches) {
 		return nil
 	}
@@ -484,12 +498,12 @@ func (f *HistKLineFeeder) getBar() *banexg.Kline {
 	return bar
 }
 
-func (f *HistKLineFeeder) invokeBar(bar *banexg.Kline) *errs.Error {
+func (f *HistKLineFeeder) RunBar(bar *banexg.Kline) *errs.Error {
 	_, err := f.onNewBars(f.minGapMs, []*banexg.Kline{bar})
 	return err
 }
 
-func (f *HistKLineFeeder) callNext() {
+func (f *HistKLineFeeder) CallNext() {
 	f.setNext()
 }
 
@@ -500,14 +514,9 @@ DBKlineFeeder
 type DBKlineFeeder struct {
 	HistKLineFeeder
 	offsetMS int64
-	exs      *orm.ExSymbol
 }
 
-func NewDBKlineFeeder(symbol string, callBack FnPairKline) (*DBKlineFeeder, *errs.Error) {
-	exs, err := orm.GetExSymbolCur(symbol)
-	if err != nil {
-		return nil, err
-	}
+func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*DBKlineFeeder, *errs.Error) {
 	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
 	if err != nil {
 		return nil, err
@@ -516,7 +525,7 @@ func NewDBKlineFeeder(symbol string, callBack FnPairKline) (*DBKlineFeeder, *err
 	if err != nil {
 		return nil, err
 	}
-	feeder, err := NewKlineFeeder(symbol, callBack)
+	feeder, err := NewKlineFeeder(exs, callBack)
 	if err != nil {
 		return nil, err
 	}
@@ -526,13 +535,12 @@ func NewDBKlineFeeder(symbol string, callBack FnPairKline) (*DBKlineFeeder, *err
 			TimeRange:   config.TimeRange,
 			TradeTimes:  market.GetTradeTimes(),
 		},
-		exs: exs,
 	}
 	res.setNext = makeSetNext(res)
 	return res, nil
 }
 
-func (f *DBKlineFeeder) initNext(since int64) {
+func (f *DBKlineFeeder) SetSeek(since int64) {
 	if since == 0 {
 		// 这里不能为0，不然会从后往前读取K线，导致缺失
 		since = core.MSMinStamp
@@ -542,11 +550,14 @@ func (f *DBKlineFeeder) initNext(since int64) {
 }
 
 /*
-downIfNeed
+DownIfNeed
 下载指定区间的数据
 pBar 用于进度更新，总和为1000，每次更新此次的量
 */
-func (f *DBKlineFeeder) downIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error {
+func (f *DBKlineFeeder) DownIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error {
+	if len(f.States) == 0 {
+		return nil
+	}
 	downTf, err := orm.GetDownTF(f.States[0].TimeFrame)
 	if err != nil {
 		if pBar != nil {
@@ -554,7 +565,19 @@ func (f *DBKlineFeeder) downIfNeed(sess *orm.Queries, exchange banexg.BanExchang
 		}
 		return err
 	}
-	_, err = sess.DownOHLCV2DB(exchange, f.exs, downTf, f.TimeRange.StartMS, f.TimeRange.EndMS, pBar)
+	if sess == nil {
+		ctx := context.Background()
+		var conn *pgxpool.Conn
+		sess, conn, err = orm.Conn(ctx)
+		if err != nil {
+			if pBar != nil {
+				pBar.Add(core.StepTotal)
+			}
+			return err
+		}
+		defer conn.Release()
+	}
+	_, err = sess.DownOHLCV2DB(exchange, f.ExSymbol, downTf, f.TimeRange.StartMS, f.TimeRange.EndMS, pBar)
 	return err
 }
 
@@ -585,7 +608,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 				}, f.adj)
 				// 重新复权预热
 				core.IsWarmUp = true
-				_, err := f.warmTfs(f.nextMS, nil, nil)
+				_, err := f.WarmTfs(f.nextMS, nil, nil)
 				core.IsWarmUp = false
 				if err != nil {
 					log.Error("next warm tf fail", zap.Error(err))
@@ -611,7 +634,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 			return
 		}
 		batchSize := 3000
-		_, bars, err := sess.GetOHLCV(f.exs, state.TimeFrame, f.offsetMS, f.TimeRange.EndMS, batchSize, false)
+		_, bars, err := sess.GetOHLCV(f.ExSymbol, state.TimeFrame, f.offsetMS, f.TimeRange.EndMS, batchSize, false)
 		if err != nil || len(bars) == 0 {
 			f.rowIdx = -1
 			f.nextMS = math.MaxInt64

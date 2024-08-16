@@ -388,20 +388,7 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 				return err
 			}
 			klines = orm.ApplyAdj(adjs, klines, adjVal, 0, 0)
-			rows := make([][]string, 0, len(klines))
-			for _, k := range klines {
-				dateStr := btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
-				row := []string{
-					dateStr,
-					strconv.FormatFloat(k.Open, 'f', -1, 64),
-					strconv.FormatFloat(k.High, 'f', -1, 64),
-					strconv.FormatFloat(k.Low, 'f', -1, 64),
-					strconv.FormatFloat(k.Close, 'f', -1, 64),
-					strconv.FormatFloat(k.Volume, 'f', -1, 64),
-					strconv.FormatFloat(k.Info, 'f', -1, 64),
-				}
-				rows = append(rows, row)
-			}
+			rows := utils.KlineToStr(klines, loc)
 			path := filepath.Join(args.OutPath, fmt.Sprintf("%s_%s.csv", clean, tf))
 			err = utils.WriteCsvFile(path, rows, true)
 			if err != nil {

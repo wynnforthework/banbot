@@ -4,10 +4,14 @@ import (
 	"archive/zip"
 	"encoding/csv"
 	"fmt"
+	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/core"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -144,4 +148,27 @@ func WriteCsvFile(path string, rows [][]string, compress bool) *errs.Error {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
 	return nil
+}
+
+func KlineToStr(klines []*banexg.Kline, loc *time.Location) [][]string {
+	rows := make([][]string, 0, len(klines))
+	for _, k := range klines {
+		var dateStr string
+		if loc != nil {
+			dateStr = btime.ToTime(k.Time).In(loc).Format(core.DefaultDateFmt)
+		} else {
+			dateStr = strconv.FormatInt(k.Time/1000, 10)
+		}
+		row := []string{
+			dateStr,
+			strconv.FormatFloat(k.Open, 'f', -1, 64),
+			strconv.FormatFloat(k.High, 'f', -1, 64),
+			strconv.FormatFloat(k.Low, 'f', -1, 64),
+			strconv.FormatFloat(k.Close, 'f', -1, 64),
+			strconv.FormatFloat(k.Volume, 'f', -1, 64),
+			strconv.FormatFloat(k.Info, 'f', -1, 64),
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }

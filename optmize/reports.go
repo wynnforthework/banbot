@@ -466,7 +466,11 @@ func measurePerformance(ods []*orm.InOutOrder, num int) (float64, float64, *errs
 	if cost > 0 {
 		returns = append(returns, decimal.NewFromFloat(profit/cost))
 	}
-	avg := decimal.NewFromFloat(allProfit / allCost)
+	avgProfit := allProfit / allCost
+	if math.IsNaN(avgProfit) {
+		return 0, 0, nil
+	}
+	avg := decimal.NewFromFloat(avgProfit)
 	return calcMeasures(avg, returns)
 }
 

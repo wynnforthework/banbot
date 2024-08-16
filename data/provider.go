@@ -82,7 +82,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 			warmJobs = append(warmJobs, &WarmJob{hold: hold, tfWarms: tfWarms})
 		} else {
 			oldMinTf := hold.getStates()[0].TimeFrame
-			newTfs := hold.subTfs(utils.KeysOfMap(tfWarms), delOther)
+			newTfs := hold.SubTfs(utils.KeysOfMap(tfWarms), delOther)
 			curMinTf := hold.getStates()[0].TimeFrame
 			if oldMinTf != curMinTf {
 				newHolds = append(newHolds, hold)
@@ -128,7 +128,7 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	startTime := btime.TimeMS()
 	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(_ int, job *WarmJob) *errs.Error {
 		hold := job.hold
-		since, err := hold.warmTfs(startTime, job.tfWarms, pBar)
+		since, err := hold.WarmTfs(startTime, job.tfWarms, pBar)
 		lockMap.Lock()
 		sinceMap[hold.getSymbol()] = since
 		lockMap.Unlock()
@@ -146,12 +146,16 @@ func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IHistKlineFeeder, *errs.Error) {
-				feeder, err := NewDBKlineFeeder(pair, callBack)
+				exs, err := orm.GetExSymbolCur(pair)
+				if err != nil {
+					return nil, err
+				}
+				feeder, err := NewDBKlineFeeder(exs, callBack)
 				if err != nil {
 					return nil, err
 				}
 				feeder.onEnvEnd = envEnd
-				feeder.subTfs(tfs, false)
+				feeder.SubTfs(tfs, false)
 				return feeder, nil
 			},
 		},
@@ -172,7 +176,7 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 	pBar := utils.NewPrgBar(len(p.holders)*core.StepTotal, "DownHist")
 	defer pBar.Close()
 	for _, h := range p.holders {
-		err = h.downIfNeed(sess, exchange, pBar)
+		err = h.DownIfNeed(sess, exchange, pBar)
 		if err != nil {
 			log.Error("download ohlcv fail", zap.String("pair", h.getSymbol()), zap.Error(err))
 			return err
@@ -198,7 +202,7 @@ func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[strin
 		holders[pair] = hold
 		if hold.getNextMS() == 0 || hold.getStates()[0].NextMS != since {
 			// 这里忽略刷新交易对后，仍然存在的标的
-			hold.initNext(since)
+			hold.SetSeek(since)
 		}
 		maxSince = max(maxSince, since)
 	}
@@ -240,11 +244,11 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			holds = p.sortFeeders(holds, hold, true)
 		}
 		hold = holds[0]
-		bar := hold.getBar()
+		bar := hold.GetBar()
 		if bar == nil {
 			break
 		}
-		hold.callNext()
+		hold.CallNext()
 		holds = holds[1:]
 		if bar.Time > lastBarMs {
 			// 等待并发批量完成
@@ -260,7 +264,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 				pbarTo = btime.TimeMS()
 			}
 			// 新时间的第一个bar，同步运行
-			err := hold.invokeBar(bar)
+			err := hold.RunBar(bar)
 			if err != nil {
 				log.Error("data loop main fail", zap.Error(err))
 				return err
@@ -274,7 +278,7 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 				if retErr != nil {
 					return
 				}
-				err := hold.invokeBar(bar)
+				err := hold.RunBar(bar)
 				if err != nil {
 					retErr = err
 				}
@@ -333,11 +337,15 @@ func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
 		Provider: Provider[IKlineFeeder]{
 			holders: make(map[string]IKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IKlineFeeder, *errs.Error) {
-				feeder, err := NewKlineFeeder(pair, callBack)
+				exs, err := orm.GetExSymbol(exg.Default, pair)
 				if err != nil {
 					return nil, err
 				}
-				feeder.subTfs(tfs, false)
+				feeder, err := NewKlineFeeder(exs, callBack)
+				if err != nil {
+					return nil, err
+				}
+				feeder.SubTfs(tfs, false)
 				feeder.onEnvEnd = envEnd
 				return feeder, nil
 			},

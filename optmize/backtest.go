@@ -138,6 +138,7 @@ func (b *BackTest) Run() {
 	}
 	btCost := btime.UTCTime() - btStart
 	err = biz.GetOdMgr("").CleanUp()
+	strategy.ExitStagyJobs()
 	if err != nil {
 		log.Error("backtest clean orders fail", zap.Error(err))
 		return

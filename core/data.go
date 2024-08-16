@@ -40,6 +40,7 @@ var (
 	MemOut    io.Writer // 进行内存profile的输出
 
 	ConcurNum = 2 // 最大同时下载K线任务数，过大会出现429限流
+	Version   = "0.1.1"
 )
 
 const (

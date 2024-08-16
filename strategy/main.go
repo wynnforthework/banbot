@@ -156,11 +156,30 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	for _, jobs := range AccJobs {
 		for envKey := range jobs {
 			if _, ok := envKeys[envKey]; !ok {
+				for _, items := range jobs {
+					for _, job := range items {
+						if job.Stagy.OnShutDown != nil {
+							job.Stagy.OnShutDown(job)
+						}
+					}
+				}
 				delete(jobs, envKey)
 			}
 		}
 	}
 	return pairTfWarms, nil
+}
+
+func ExitStagyJobs() {
+	for _, jobs := range AccJobs {
+		for _, items := range jobs {
+			for _, job := range items {
+				if job.Stagy.OnShutDown != nil {
+					job.Stagy.OnShutDown(job)
+				}
+			}
+		}
+	}
 }
 
 func printFailTfScores(stagyName string, pairTfScores map[string]map[string]float64) {

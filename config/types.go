@@ -142,15 +142,20 @@ type DatabaseConfig struct {
 }
 
 type APIServerConfig struct {
-	Enabled         bool     `yaml:"enabled"`           // 是否启用
-	ListenIPAddress string   `yaml:"listen_ip_address"` // 绑定地址，0.0.0.0表示暴露到公网
-	ListenPort      int      `yaml:"listen_port"`       // 本地监听端口
-	Verbosity       string   `yaml:"verbosity"`         // 详细程度
-	EnableOpenAPI   bool     `yaml:"enable_openapi"`    // 是否提供所有URL接口文档到"/docs"
-	JWTSecretKey    string   `yaml:"jwt_secret_key"`    // 用于密码加密的密钥
-	CORSOrigins     []string `yaml:"CORS_origins"`      // banweb访问时，��要这里添加banweb的地址放行
-	Username        string   `yaml:"username"`          // 用户名
-	Password        string   `yaml:"password"`          // 密码
+	Enabled         bool          `yaml:"enabled"`           // 是否启用
+	ListenIPAddress string        `yaml:"listen_ip_address"` // 绑定地址，0.0.0.0表示暴露到公网
+	ListenPort      int           `yaml:"listen_port"`       // 本地监听端口
+	Verbosity       string        `yaml:"verbosity"`         // 详细程度
+	JWTSecretKey    string        `yaml:"jwt_secret_key"`    // 用于密码加密的密钥
+	CORSOrigins     []string      `yaml:"CORS_origins"`      // banweb访问时，要这里添加banweb的地址放行
+	Users           []*UserConfig `yaml:"users"`             // 登录用户
+}
+
+type UserConfig struct {
+	Username    string            `yaml:"username"`  // 用户名
+	Password    string            `yaml:"password"`  // 密码
+	AccRoles    map[string]string `yaml:"acc_roles"` // 对不同账户的角色权限
+	ExpireHours float64           `yaml:"exp_hours"` // token过期时间，默认168小时
 }
 
 /** ********************************** RPC渠道配置 ******************************** */
