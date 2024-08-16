@@ -154,7 +154,7 @@ func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
 				if err != nil {
 					return nil, err
 				}
-				feeder.onEnvEnd = envEnd
+				feeder.OnEnvEnd = envEnd
 				feeder.SubTfs(tfs, false)
 				return feeder, nil
 			},
@@ -346,7 +346,7 @@ func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
 					return nil, err
 				}
 				feeder.SubTfs(tfs, false)
-				feeder.onEnvEnd = envEnd
+				feeder.OnEnvEnd = envEnd
 				return feeder, nil
 			},
 		},

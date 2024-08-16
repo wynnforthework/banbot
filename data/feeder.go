@@ -47,7 +47,7 @@ type Feeder struct {
 	States   []*PairTFCache
 	WaitBar  *banexg.Kline
 	CallBack FnPairKline
-	onEnvEnd FuncEnvEnd                 // 期货主力切换或股票除权，需先平仓
+	OnEnvEnd FuncEnvEnd                 // 期货主力切换或股票除权，需先平仓
 	tfBars   map[string][]*banexg.Kline // 缓存各周期的原始K线（未复权）
 	adjs     []*orm.AdjInfo             // 复权因子列表
 	adj      *orm.AdjInfo
@@ -186,7 +186,11 @@ func (f *Feeder) getTfKlines(tf string, endMS int64, limit int, pBar *utils.PrgB
 		}
 		return bars, nil
 	}
-	adjs, bars, err := orm.AutoFetchOHLCV(exg.Default, f.ExSymbol, tf, 0, endMS, limit, false, pBar)
+	exchange, err := exg.GetWith(f.Exchange, f.Market, "")
+	if err != nil {
+		return nil, err
+	}
+	adjs, bars, err := orm.AutoFetchOHLCV(exchange, f.ExSymbol, tf, 0, endMS, limit, false, pBar)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +305,7 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 	maxEndMs := int64(0)
 	for tf, warmNum := range tfNums {
 		tfMSecs := int64(utils.TFToSecs(tf) * 1000)
-		if tfMSecs < int64(60000) {
+		if tfMSecs < int64(60000) || warmNum <= 0 {
 			continue
 		}
 		endMS := utils.AlignTfMSecs(curMS, tfMSecs)
@@ -601,7 +605,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 			if f.adj != nil && f.nextMS >= f.adj.StopMS {
 				old := f.caches[f.rowIdx-1]
 				tf := f.States[0].TimeFrame
-				f.onEnvEnd(&banexg.PairTFKline{
+				f.OnEnvEnd(&banexg.PairTFKline{
 					Symbol:    f.Symbol,
 					TimeFrame: tf,
 					Kline:     *old,

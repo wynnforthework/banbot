@@ -190,4 +190,9 @@ func (t *Trader) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) {
 	if err != nil {
 		log.Warn("close orders on env end fail", zap.Error(err))
 	}
+	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
+	env, ok := strategy.Envs[envKey]
+	if ok {
+		env.Reset()
+	}
 }
