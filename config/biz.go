@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -362,6 +363,26 @@ func GetStakeAmount(accName string) float64 {
 		amount *= acc.StakeRate
 	}
 	return amount
+}
+
+func DumpYaml() ([]byte, error) {
+	itemMap := make(map[string]interface{})
+	t := reflect.TypeOf(Data)
+	v := reflect.ValueOf(Data)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		tag := field.Tag.Get("yaml")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		val := v.Field(i)
+		itemMap[tag] = val.Interface()
+	}
+	data, err_ := yaml.Marshal(&itemMap)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeMarshalFail, err_)
+	}
+	return data, nil
 }
 
 func (c *RunPolicyConfig) ID() string {

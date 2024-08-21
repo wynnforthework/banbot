@@ -843,10 +843,10 @@ type GetOrdersArgs struct {
 	TimeFrame   string
 	Status      int   // 0表示所有，1表示未平仓，2表示历史订单
 	TaskID      int64 // 0表示所有，>0表示指定任务
-	CloseAfter  int64
-	CloseBefore int64
+	CloseAfter  int64 // 开始时间戳
+	CloseBefore int64 // 结束时间戳
 	Limit       int
-	Offset      int
+	AfterID     int
 	OrderBy     string
 }
 
@@ -859,6 +859,10 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	if args.TaskID > 0 {
 		b.WriteString(fmt.Sprintf("and task_id=$%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, args.TaskID)
+	}
+	if args.AfterID > 0 {
+		b.WriteString(fmt.Sprintf(" and id > $%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.AfterID)
 	}
 	if args.Status >= 1 {
 		rel := "<"
@@ -903,10 +907,6 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 		args.OrderBy = "enter_at desc"
 	}
 	b.WriteString("order by " + args.OrderBy)
-	if args.Offset > 0 {
-		b.WriteString(fmt.Sprintf(" offset $%v ", len(sqlParams)+1))
-		sqlParams = append(sqlParams, args.Offset)
-	}
 	if args.Limit > 0 {
 		b.WriteString(fmt.Sprintf(" limit $%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, args.Limit)

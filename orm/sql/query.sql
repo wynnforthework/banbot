@@ -92,6 +92,10 @@ where id = $1;
 select * from exorder
 where inout_id=$1;
 
+-- name: GetTaskPairs :many
+select distinct symbol from iorder
+where task_id=$1 and enter_at>=$2 and enter_at<=$3;
+
 -- name: AddIOrder :one
 insert into iorder ("task_id", "symbol", "sid", "timeframe", "short", "status",
                     "enter_tag", "init_price", "quote_cost", "exit_tag", "leverage",

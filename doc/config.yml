@@ -134,3 +134,12 @@ webhook:  # 发送消息的配置
     content: '{name}: {status}'
   exception:
     content: '{name}: {status}'
+api_server:  # 供外部通过api控制机器人
+  enabled: true
+  bind_ip: 0.0.0.0
+  port: 8081
+  jwt_secret_key: nj234hujivhguih2rj3y4234nkjoghfy9088weurt
+  users:
+    - user: ban
+      pwd: 123
+      acc_roles: {user1: admin}

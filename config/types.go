@@ -136,46 +136,46 @@ type StrtgPerfConfig struct {
 }
 
 type DatabaseConfig struct {
-	Url         string `yaml:"url"`
-	Retention   string `yaml:"retention"`
-	MaxPoolSize int    `yaml:"max_pool_size"`
+	Url         string `yaml:"url" mapstructure:"url"`
+	Retention   string `yaml:"retention" mapstructure:"retention"`
+	MaxPoolSize int    `yaml:"max_pool_size" mapstructure:"max_pool_size"`
 }
 
 type APIServerConfig struct {
-	Enabled         bool          `yaml:"enabled"`           // 是否启用
-	ListenIPAddress string        `yaml:"listen_ip_address"` // 绑定地址，0.0.0.0表示暴露到公网
-	ListenPort      int           `yaml:"listen_port"`       // 本地监听端口
-	Verbosity       string        `yaml:"verbosity"`         // 详细程度
-	JWTSecretKey    string        `yaml:"jwt_secret_key"`    // 用于密码加密的密钥
-	CORSOrigins     []string      `yaml:"CORS_origins"`      // banweb访问时，要这里添加banweb的地址放行
-	Users           []*UserConfig `yaml:"users"`             // 登录用户
+	Enable       bool          `yaml:"enable" mapstructure:"enable"`                 // 是否启用
+	BindIPAddr   string        `yaml:"bind_ip" mapstructure:"bind_ip"`               // 绑定地址，0.0.0.0表示暴露到公网
+	Port         int           `yaml:"port" mapstructure:"port"`                     // 本地监听端口
+	Verbosity    string        `yaml:"verbosity" mapstructure:"verbosity"`           // 详细程度
+	JWTSecretKey string        `yaml:"jwt_secret_key" mapstructure:"jwt_secret_key"` // 用于密码加密的密钥
+	CORSOrigins  []string      `yaml:"CORS_origins" mapstructure:"CORS_origins"`     // banweb访问时，要这里添加banweb的地址放行
+	Users        []*UserConfig `yaml:"users" mapstructure:"users"`                   // 登录用户
 }
 
 type UserConfig struct {
-	Username    string            `yaml:"username"`  // 用户名
-	Password    string            `yaml:"password"`  // 密码
-	AccRoles    map[string]string `yaml:"acc_roles"` // 对不同账户的角色权限
-	ExpireHours float64           `yaml:"exp_hours"` // token过期时间，默认168小时
+	Username    string            `yaml:"user" mapstructure:"user"`           // 用户名
+	Password    string            `yaml:"pwd" mapstructure:"pwd"`             // 密码
+	AccRoles    map[string]string `yaml:"acc_roles" mapstructure:"acc_roles"` // 对不同账户的角色权限
+	ExpireHours float64           `yaml:"exp_hours" mapstructure:"exp_hours"` // token过期时间，默认168小时
 }
 
 /** ********************************** RPC渠道配置 ******************************** */
 
 type WeWorkChannel struct {
-	Enable     bool     `yaml:"enable"`
-	Type       string   `yaml:"type"`
-	MsgTypes   []string `yaml:"msg_types"`
-	AgentId    string   `yaml:"agentid"`
-	CorpId     string   `yaml:"corpid"`
-	CorpSecret string   `yaml:"corpsecret"`
-	Keywords   string   `yaml:"keywords"`
+	Enable     bool     `yaml:"enable" mapstructure:"enable"`
+	Type       string   `yaml:"type" mapstructure:"type"`
+	MsgTypes   []string `yaml:"msg_types" mapstructure:"msg_types"`
+	AgentId    string   `yaml:"agentid" mapstructure:"agentid"`
+	CorpId     string   `yaml:"corpid" mapstructure:"corpid"`
+	CorpSecret string   `yaml:"corpsecret" mapstructure:"corpsecret"`
+	Keywords   string   `yaml:"keywords" mapstructure:"keywords"`
 }
 
 type TelegramChannel struct {
-	Enable   bool     `yaml:"enable"`
-	Type     string   `yaml:"type"`
-	MsgTypes []string `yaml:"msg_types"`
-	Token    string   `yaml:"token"`
-	Channel  string   `yaml:"channel"`
+	Enable   bool     `yaml:"enable" mapstructure:"enable"`
+	Type     string   `yaml:"type" mapstructure:"type"`
+	MsgTypes []string `yaml:"msg_types" mapstructure:"msg_types"`
+	Token    string   `yaml:"token" mapstructure:"token"`
+	Channel  string   `yaml:"channel" mapstructure:"channel"`
 }
 
 /** ********************************** 标的筛选器 ******************************** */
@@ -190,7 +190,7 @@ type PairMgrConfig struct {
 
 // 通用的过滤器
 type CommonPairFilter struct {
-	Name  string                 `yaml:"name"`
+	Name  string                 `yaml:"name" mapstructure:"name"`
 	Items map[string]interface{} `mapstructure:",remain"`
 }
 
@@ -198,7 +198,7 @@ type CommonPairFilter struct {
 
 // ExchangeConfig 表示交易所的配置信息
 type ExchangeConfig struct {
-	Name  string                    `yaml:"name"`
+	Name  string                    `yaml:"name" mapstructure:"name"`
 	Items map[string]*ExgItemConfig `mapstructure:",remain"`
 }
 

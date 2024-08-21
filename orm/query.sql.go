@@ -10,16 +10,16 @@ import (
 )
 
 type AddAdjFactorsParams struct {
-	Sid     int32
-	SubID   int32
-	StartMs int64
-	Factor  float64
+	Sid     int32   `json:"sid"`
+	SubID   int32   `json:"sub_id"`
+	StartMs int64   `json:"start_ms"`
+	Factor  float64 `json:"factor"`
 }
 
 type AddCalendarsParams struct {
-	Name    string
-	StartMs int64
-	StopMs  int64
+	Name    string `json:"name"`
+	StartMs int64  `json:"start_ms"`
+	StopMs  int64  `json:"stop_ms"`
 }
 
 const addExOrder = `-- name: AddExOrder :one
@@ -30,22 +30,22 @@ values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 `
 
 type AddExOrderParams struct {
-	TaskID    int32
-	InoutID   int32
-	Symbol    string
-	Enter     bool
-	OrderType string
-	OrderID   string
-	Side      string
-	CreateAt  int64
-	Price     float64
-	Average   float64
-	Amount    float64
-	Filled    float64
-	Status    int16
-	Fee       float64
-	FeeType   string
-	UpdateAt  int64
+	TaskID    int32   `json:"task_id"`
+	InoutID   int32   `json:"inout_id"`
+	Symbol    string  `json:"symbol"`
+	Enter     bool    `json:"enter"`
+	OrderType string  `json:"order_type"`
+	OrderID   string  `json:"order_id"`
+	Side      string  `json:"side"`
+	CreateAt  int64   `json:"create_at"`
+	Price     float64 `json:"price"`
+	Average   float64 `json:"average"`
+	Amount    float64 `json:"amount"`
+	Filled    float64 `json:"filled"`
+	Status    int16   `json:"status"`
+	Fee       float64 `json:"fee"`
+	FeeType   string  `json:"fee_type"`
+	UpdateAt  int64   `json:"update_at"`
 }
 
 func (q *Queries) AddExOrder(ctx context.Context, arg AddExOrderParams) (int64, error) {
@@ -82,25 +82,25 @@ values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $
 `
 
 type AddIOrderParams struct {
-	TaskID      int32
-	Symbol      string
-	Sid         int32
-	Timeframe   string
-	Short       bool
-	Status      int16
-	EnterTag    string
-	InitPrice   float64
-	QuoteCost   float64
-	ExitTag     string
-	Leverage    float64
-	EnterAt     int64
-	ExitAt      int64
-	Strategy    string
-	StgVer      int32
-	MaxDrawDown float64
-	ProfitRate  float64
-	Profit      float64
-	Info        string
+	TaskID      int32   `json:"task_id"`
+	Symbol      string  `json:"symbol"`
+	Sid         int32   `json:"sid"`
+	Timeframe   string  `json:"timeframe"`
+	Short       bool    `json:"short"`
+	Status      int16   `json:"status"`
+	EnterTag    string  `json:"enter_tag"`
+	InitPrice   float64 `json:"init_price"`
+	QuoteCost   float64 `json:"quote_cost"`
+	ExitTag     string  `json:"exit_tag"`
+	Leverage    float64 `json:"leverage"`
+	EnterAt     int64   `json:"enter_at"`
+	ExitAt      int64   `json:"exit_at"`
+	Strategy    string  `json:"strategy"`
+	StgVer      int32   `json:"stg_ver"`
+	MaxDrawDown float64 `json:"max_draw_down"`
+	ProfitRate  float64 `json:"profit_rate"`
+	Profit      float64 `json:"profit"`
+	Info        string  `json:"info"`
 }
 
 func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, error) {
@@ -131,10 +131,10 @@ func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, er
 }
 
 type AddKHolesParams struct {
-	Sid       int32
-	Timeframe string
-	Start     int64
-	Stop      int64
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	Start     int64  `json:"start"`
+	Stop      int64  `json:"stop"`
 }
 
 const addKInfo = `-- name: AddKInfo :one
@@ -145,10 +145,10 @@ values ($1, $2, $3, $4)
 `
 
 type AddKInfoParams struct {
-	Sid       int32
-	Timeframe string
-	Start     int64
-	Stop      int64
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	Start     int64  `json:"start"`
+	Stop      int64  `json:"stop"`
 }
 
 func (q *Queries) AddKInfo(ctx context.Context, arg AddKInfoParams) (*KInfo, error) {
@@ -169,10 +169,10 @@ func (q *Queries) AddKInfo(ctx context.Context, arg AddKInfoParams) (*KInfo, err
 }
 
 type AddSymbolsParams struct {
-	Exchange string
-	ExgReal  string
-	Market   string
-	Symbol   string
+	Exchange string `json:"exchange"`
+	ExgReal  string `json:"exg_real"`
+	Market   string `json:"market"`
+	Symbol   string `json:"symbol"`
 }
 
 const addTask = `-- name: AddTask :one
@@ -183,12 +183,12 @@ returning id, mode, name, create_at, start_at, stop_at, info
 `
 
 type AddTaskParams struct {
-	Mode     string
-	Name     string
-	CreateAt int64
-	StartAt  int64
-	StopAt   int64
-	Info     string
+	Mode     string `json:"mode"`
+	Name     string `json:"name"`
+	CreateAt int64  `json:"create_at"`
+	StartAt  int64  `json:"start_at"`
+	StopAt   int64  `json:"stop_at"`
+	Info     string `json:"info"`
 }
 
 func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*BotTask, error) {
@@ -229,10 +229,10 @@ where sid = $1 and timeframe=$2 and start >= $3 and stop <= $4
 `
 
 type DelKHoleRangeParams struct {
-	Sid       int32
-	Timeframe string
-	Start     int64
-	Stop      int64
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	Start     int64  `json:"start"`
+	Stop      int64  `json:"stop"`
 }
 
 func (q *Queries) DelKHoleRange(ctx context.Context, arg DelKHoleRangeParams) error {
@@ -253,8 +253,8 @@ limit 1
 `
 
 type FindTaskParams struct {
-	Mode string
-	Name string
+	Mode string `json:"mode"`
+	Name string `json:"name"`
 }
 
 func (q *Queries) FindTask(ctx context.Context, arg FindTaskParams) (*BotTask, error) {
@@ -386,8 +386,8 @@ where sid = $1 and timeframe = $2
 `
 
 type GetKHolesParams struct {
-	Sid       int32
-	Timeframe string
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
 }
 
 func (q *Queries) GetKHoles(ctx context.Context, arg GetKHolesParams) ([]*KHole, error) {
@@ -434,6 +434,37 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (*BotTask, error) {
 		&i.Info,
 	)
 	return &i, err
+}
+
+const getTaskPairs = `-- name: GetTaskPairs :many
+select distinct symbol from iorder
+where task_id=$1 and enter_at>=$2 and enter_at<=$3
+`
+
+type GetTaskPairsParams struct {
+	TaskID    int32 `json:"task_id"`
+	EnterAt   int64 `json:"enter_at"`
+	EnterAt_2 int64 `json:"enter_at_2"`
+}
+
+func (q *Queries) GetTaskPairs(ctx context.Context, arg GetTaskPairsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, getTaskPairs, arg.TaskID, arg.EnterAt, arg.EnterAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var symbol string
+		if err := rows.Scan(&symbol); err != nil {
+			return nil, err
+		}
+		items = append(items, symbol)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listExchanges = `-- name: ListExchanges :many
@@ -563,9 +594,9 @@ and enter_at <= $3
 `
 
 type ListTaskPairsParams struct {
-	TaskID    int32
-	EnterAt   int64
-	EnterAt_2 int64
+	TaskID    int32 `json:"task_id"`
+	EnterAt   int64 `json:"enter_at"`
+	EnterAt_2 int64 `json:"enter_at_2"`
 }
 
 func (q *Queries) ListTaskPairs(ctx context.Context, arg ListTaskPairsParams) ([]string, error) {
@@ -643,23 +674,23 @@ update exorder set
 `
 
 type SetExOrderParams struct {
-	TaskID    int32
-	InoutID   int32
-	Symbol    string
-	Enter     bool
-	OrderType string
-	OrderID   string
-	Side      string
-	CreateAt  int64
-	Price     float64
-	Average   float64
-	Amount    float64
-	Filled    float64
-	Status    int16
-	Fee       float64
-	FeeType   string
-	UpdateAt  int64
-	ID        int64
+	TaskID    int32   `json:"task_id"`
+	InoutID   int32   `json:"inout_id"`
+	Symbol    string  `json:"symbol"`
+	Enter     bool    `json:"enter"`
+	OrderType string  `json:"order_type"`
+	OrderID   string  `json:"order_id"`
+	Side      string  `json:"side"`
+	CreateAt  int64   `json:"create_at"`
+	Price     float64 `json:"price"`
+	Average   float64 `json:"average"`
+	Amount    float64 `json:"amount"`
+	Filled    float64 `json:"filled"`
+	Status    int16   `json:"status"`
+	Fee       float64 `json:"fee"`
+	FeeType   string  `json:"fee_type"`
+	UpdateAt  int64   `json:"update_at"`
+	ID        int64   `json:"id"`
 }
 
 func (q *Queries) SetExOrder(ctx context.Context, arg SetExOrderParams) error {
@@ -710,26 +741,26 @@ update iorder set
 `
 
 type SetIOrderParams struct {
-	TaskID      int32
-	Symbol      string
-	Sid         int32
-	Timeframe   string
-	Short       bool
-	Status      int16
-	EnterTag    string
-	InitPrice   float64
-	QuoteCost   float64
-	ExitTag     string
-	Leverage    float64
-	EnterAt     int64
-	ExitAt      int64
-	Strategy    string
-	StgVer      int32
-	MaxDrawDown float64
-	ProfitRate  float64
-	Profit      float64
-	Info        string
-	ID          int64
+	TaskID      int32   `json:"task_id"`
+	Symbol      string  `json:"symbol"`
+	Sid         int32   `json:"sid"`
+	Timeframe   string  `json:"timeframe"`
+	Short       bool    `json:"short"`
+	Status      int16   `json:"status"`
+	EnterTag    string  `json:"enter_tag"`
+	InitPrice   float64 `json:"init_price"`
+	QuoteCost   float64 `json:"quote_cost"`
+	ExitTag     string  `json:"exit_tag"`
+	Leverage    float64 `json:"leverage"`
+	EnterAt     int64   `json:"enter_at"`
+	ExitAt      int64   `json:"exit_at"`
+	Strategy    string  `json:"strategy"`
+	StgVer      int32   `json:"stg_ver"`
+	MaxDrawDown float64 `json:"max_draw_down"`
+	ProfitRate  float64 `json:"profit_rate"`
+	Profit      float64 `json:"profit"`
+	Info        string  `json:"info"`
+	ID          int64   `json:"id"`
 }
 
 func (q *Queries) SetIOrder(ctx context.Context, arg SetIOrderParams) error {
@@ -764,9 +795,9 @@ where id = $1
 `
 
 type SetKHoleParams struct {
-	ID    int64
-	Start int64
-	Stop  int64
+	ID    int64 `json:"id"`
+	Start int64 `json:"start"`
+	Stop  int64 `json:"stop"`
 }
 
 func (q *Queries) SetKHole(ctx context.Context, arg SetKHoleParams) error {
@@ -780,10 +811,10 @@ where sid = $1 and timeframe = $2
 `
 
 type SetKInfoParams struct {
-	Sid       int32
-	Timeframe string
-	Start     int64
-	Stop      int64
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	Start     int64  `json:"start"`
+	Stop      int64  `json:"stop"`
 }
 
 func (q *Queries) SetKInfo(ctx context.Context, arg SetKInfoParams) error {
@@ -802,9 +833,9 @@ where id = $1
 `
 
 type SetListMSParams struct {
-	ID       int32
-	ListMs   int64
-	DelistMs int64
+	ID       int32 `json:"id"`
+	ListMs   int64 `json:"list_ms"`
+	DelistMs int64 `json:"delist_ms"`
 }
 
 func (q *Queries) SetListMS(ctx context.Context, arg SetListMSParams) error {

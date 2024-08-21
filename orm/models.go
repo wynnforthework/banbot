@@ -7,136 +7,136 @@ package orm
 import ()
 
 type AdjFactor struct {
-	ID      int32
-	Sid     int32
-	SubID   int32
-	StartMs int64
-	Factor  float64
+	ID      int32   `json:"id"`
+	Sid     int32   `json:"sid"`
+	SubID   int32   `json:"sub_id"`
+	StartMs int64   `json:"start_ms"`
+	Factor  float64 `json:"factor"`
 }
 
 type BotTask struct {
-	ID       int64
-	Mode     string
-	Name     string
-	CreateAt int64
-	StartAt  int64
-	StopAt   int64
-	Info     string
+	ID       int64  `json:"id"`
+	Mode     string `json:"mode"`
+	Name     string `json:"name"`
+	CreateAt int64  `json:"create_at"`
+	StartAt  int64  `json:"start_at"`
+	StopAt   int64  `json:"stop_at"`
+	Info     string `json:"info"`
 }
 
 type Calendar struct {
-	ID      int32
-	Name    string
-	StartMs int64
-	StopMs  int64
+	ID      int32  `json:"id"`
+	Name    string `json:"name"`
+	StartMs int64  `json:"start_ms"`
+	StopMs  int64  `json:"stop_ms"`
 }
 
 type ExOrder struct {
-	ID        int64
-	TaskID    int64
-	InoutID   int64
-	Symbol    string
-	Enter     bool
-	OrderType string
-	OrderID   string
-	Side      string
-	CreateAt  int64
-	Price     float64
-	Average   float64
-	Amount    float64
-	Filled    float64
-	Status    int16
-	Fee       float64
-	FeeType   string
-	UpdateAt  int64
+	ID        int64   `json:"id"`
+	TaskID    int64   `json:"task_id"`
+	InoutID   int64   `json:"inout_id"`
+	Symbol    string  `json:"symbol"`
+	Enter     bool    `json:"enter"`
+	OrderType string  `json:"order_type"`
+	OrderID   string  `json:"order_id"`
+	Side      string  `json:"side"`
+	CreateAt  int64   `json:"create_at"`
+	Price     float64 `json:"price"`
+	Average   float64 `json:"average"`
+	Amount    float64 `json:"amount"`
+	Filled    float64 `json:"filled"`
+	Status    int16   `json:"status"`
+	Fee       float64 `json:"fee"`
+	FeeType   string  `json:"fee_type"`
+	UpdateAt  int64   `json:"update_at"`
 }
 
 type ExSymbol struct {
-	ID       int32
-	Exchange string
-	ExgReal  string
-	Market   string
-	Symbol   string
-	Combined bool
-	ListMs   int64
-	DelistMs int64
+	ID       int32  `json:"id"`
+	Exchange string `json:"exchange"`
+	ExgReal  string `json:"exg_real"`
+	Market   string `json:"market"`
+	Symbol   string `json:"symbol"`
+	Combined bool   `json:"combined"`
+	ListMs   int64  `json:"list_ms"`
+	DelistMs int64  `json:"delist_ms"`
 }
 
 type IOrder struct {
-	ID          int64
-	TaskID      int64
-	Symbol      string
-	Sid         int32
-	Timeframe   string
-	Short       bool
-	Status      int16
-	EnterTag    string
-	InitPrice   float64
-	QuoteCost   float64
-	ExitTag     string
-	Leverage    float64
-	EnterAt     int64
-	ExitAt      int64
-	Strategy    string
-	StgVer      int32
-	MaxDrawDown float64
-	ProfitRate  float64
-	Profit      float64
-	Info        string
+	ID          int64   `json:"id"`
+	TaskID      int64   `json:"task_id"`
+	Symbol      string  `json:"symbol"`
+	Sid         int32   `json:"sid"`
+	Timeframe   string  `json:"timeframe"`
+	Short       bool    `json:"short"`
+	Status      int16   `json:"status"`
+	EnterTag    string  `json:"enter_tag"`
+	InitPrice   float64 `json:"init_price"`
+	QuoteCost   float64 `json:"quote_cost"`
+	ExitTag     string  `json:"exit_tag"`
+	Leverage    float64 `json:"leverage"`
+	EnterAt     int64   `json:"enter_at"`
+	ExitAt      int64   `json:"exit_at"`
+	Strategy    string  `json:"strategy"`
+	StgVer      int32   `json:"stg_ver"`
+	MaxDrawDown float64 `json:"max_draw_down"`
+	ProfitRate  float64 `json:"profit_rate"`
+	Profit      float64 `json:"profit"`
+	Info        string  `json:"info"`
 }
 
 type KHole struct {
-	ID        int64
-	Sid       int32
-	Timeframe string
-	Start     int64
-	Stop      int64
+	ID        int64  `json:"id"`
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	Start     int64  `json:"start"`
+	Stop      int64  `json:"stop"`
 }
 
 type KInfo struct {
-	Sid       int32
-	Timeframe string
-	Start     int64
-	Stop      int64
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	Start     int64  `json:"start"`
+	Stop      int64  `json:"stop"`
 }
 
 type KlineUn struct {
-	Sid       int32
-	StartMs   int64
-	StopMs    int64
-	Timeframe string
-	Open      float64
-	High      float64
-	Low       float64
-	Close     float64
-	Volume    float64
-	Info      float64
+	Sid       int32   `json:"sid"`
+	StartMs   int64   `json:"start_ms"`
+	StopMs    int64   `json:"stop_ms"`
+	Timeframe string  `json:"timeframe"`
+	Open      float64 `json:"open"`
+	High      float64 `json:"high"`
+	Low       float64 `json:"low"`
+	Close     float64 `json:"close"`
+	Volume    float64 `json:"volume"`
+	Info      float64 `json:"info"`
 }
 
 type Overlay struct {
-	ID       int64
-	User     int32
-	Sid      int32
-	StartMs  int64
-	StopMs   int64
-	TfMsecs  int32
-	UpdateAt int64
-	Data     string
+	ID       int64  `json:"id"`
+	User     int32  `json:"user"`
+	Sid      int32  `json:"sid"`
+	StartMs  int64  `json:"start_ms"`
+	StopMs   int64  `json:"stop_ms"`
+	TfMsecs  int32  `json:"tf_msecs"`
+	UpdateAt int64  `json:"update_at"`
+	Data     string `json:"data"`
 }
 
 type User struct {
-	ID             int32
-	UserName       string
-	Avatar         string
-	Mobile         string
-	MobileVerified bool
-	Email          string
-	EmailVerified  bool
-	PwdSalt        string
-	LastIp         string
-	CreateAt       int64
-	LastLogin      int64
-	VipType        int32
-	VipExpireAt    int64
-	InviterID      int32
+	ID             int32  `json:"id"`
+	UserName       string `json:"user_name"`
+	Avatar         string `json:"avatar"`
+	Mobile         string `json:"mobile"`
+	MobileVerified bool   `json:"mobile_verified"`
+	Email          string `json:"email"`
+	EmailVerified  bool   `json:"email_verified"`
+	PwdSalt        string `json:"pwd_salt"`
+	LastIp         string `json:"last_ip"`
+	CreateAt       int64  `json:"create_at"`
+	LastLogin      int64  `json:"last_login"`
+	VipType        int32  `json:"vip_type"`
+	VipExpireAt    int64  `json:"vip_expire_at"`
+	InviterID      int32  `json:"inviter_id"`
 }

@@ -2,6 +2,7 @@ package live
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/api"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -13,6 +14,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"os"
 	"time"
 )
 
@@ -34,6 +36,15 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
+	if config.Args.Logfile != "" {
+		outDir := fmt.Sprintf("%s/live", config.GetDataDir())
+		err_ := os.MkdirAll(outDir, 0755)
+		if err_ != nil {
+			return errs.New(core.ErrIOWriteFail, err_)
+		}
+		config.Args.Logfile = outDir + "/out.log"
+	}
+	log.Setup(config.Args.LogLevel, config.Args.Logfile)
 	// 交易对初始化
 	log.Info("loading exchange markets ...")
 	err = orm.InitExg(exg.Default)
@@ -45,6 +56,10 @@ func (t *CryptoTrader) Init() *errs.Error {
 		return err
 	}
 	err = rpc.InitRPC()
+	if err != nil {
+		return err
+	}
+	err = api.StartApi()
 	if err != nil {
 		return err
 	}

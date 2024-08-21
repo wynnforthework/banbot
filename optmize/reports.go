@@ -18,10 +18,8 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 	"math"
 	"os"
-	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -613,26 +611,14 @@ func calcExOrder(od *orm.ExOrder) (string, string, string, string) {
 }
 
 func (r *BTResult) dumpConfig() {
-	itemMap := make(map[string]interface{})
-	t := reflect.TypeOf(config.Data)
-	v := reflect.ValueOf(config.Data)
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		tag := field.Tag.Get("yaml")
-		if tag == "" || tag == "-" {
-			continue
-		}
-		val := v.Field(i)
-		itemMap[tag] = val.Interface()
-	}
-	data, err_ := yaml.Marshal(&itemMap)
-	if err_ != nil {
-		log.Error("marshal config as yaml fail", zap.Error(err_))
+	data, err := config.DumpYaml()
+	if err != nil {
+		log.Error("marshal config as yaml fail", zap.Error(err))
 		return
 	}
 	taskId := orm.GetTaskID("")
 	outName := fmt.Sprintf("%s/config_%v.yml", r.OutDir, taskId)
-	err_ = os.WriteFile(outName, data, 0644)
+	err_ := os.WriteFile(outName, data, 0644)
 	if err_ != nil {
 		log.Error("save yaml to file fail", zap.Error(err_))
 	}

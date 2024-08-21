@@ -2,6 +2,7 @@ package entry
 
 import (
 	"github.com/banbox/banbot/biz"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
@@ -34,6 +35,7 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 		return err
 	}
 	core.BotRunning = true
+	core.StartAt = btime.UTCStamp()
 	t := live.NewCryptoTrader()
 	err = t.Run()
 	core.RunExitCalls()

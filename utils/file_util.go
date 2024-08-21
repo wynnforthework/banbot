@@ -172,3 +172,67 @@ func KlineToStr(klines []*banexg.Kline, loc *time.Location) [][]string {
 	}
 	return rows
 }
+
+func ReadLastNLines(filePath string, lineCount int) ([]string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var result []string
+
+	// 获取文件大小
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	fileSize := fileInfo.Size()
+
+	// 设定缓冲区大小和读取偏移量
+	bufferSize := 4096
+	var offset = fileSize
+	var buffer []byte
+
+	var tmp string
+	for offset > 0 && len(result) < lineCount {
+		if int64(bufferSize) > offset {
+			bufferSize = int(offset)
+			offset = 0
+		} else {
+			offset -= int64(bufferSize)
+		}
+
+		buffer = make([]byte, bufferSize)
+		_, err = file.ReadAt(buffer, offset)
+		if err != nil {
+			return nil, err
+		}
+
+		lines := strings.Split(string(buffer), "\n")
+		if len(lines) > 0 {
+			lines[len(lines)-1] += tmp
+			tmp = lines[0]
+			lines = lines[1:]
+		} else {
+			tmp = ""
+		}
+		// 倒序读取行
+		for i := len(lines) - 1; i >= 0; i-- {
+			if len(result) < lineCount {
+				if lines[i] != "" {
+					result = append(result, lines[i])
+				}
+			} else {
+				break
+			}
+		}
+	}
+
+	// 倒序返回结果
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+
+	return result, nil
+}

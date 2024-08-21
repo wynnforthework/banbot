@@ -294,6 +294,9 @@ func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOu
 	return slEdit, tpEdit, nil
 }
 
+/*
+GetJobs 返回：pair_tf: [stagyName]StagyJob
+*/
 func GetJobs(account string) map[string]map[string]*StagyJob {
 	if !core.EnvReal {
 		account = config.DefAcc

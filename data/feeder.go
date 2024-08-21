@@ -525,9 +525,10 @@ func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*DBKlineFeeder, 
 	if err != nil {
 		return nil, err
 	}
+	var tradeTimes [][2]int64
 	market, err := exchange.GetMarket(exs.Symbol)
-	if err != nil {
-		return nil, err
+	if err == nil {
+		tradeTimes = market.GetTradeTimes()
 	}
 	feeder, err := NewKlineFeeder(exs, callBack)
 	if err != nil {
@@ -537,7 +538,7 @@ func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*DBKlineFeeder, 
 		HistKLineFeeder: HistKLineFeeder{
 			KlineFeeder: *feeder,
 			TimeRange:   config.TimeRange,
-			TradeTimes:  market.GetTradeTimes(),
+			TradeTimes:  tradeTimes,
 		},
 	}
 	res.setNext = makeSetNext(res)
