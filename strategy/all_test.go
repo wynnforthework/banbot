@@ -71,10 +71,10 @@ func TestStagyJob_DrawDownExit(t *testing.T) {
 	})
 }
 
-func TestStagyLoad(t *testing.T) {
-	stgy := loadNative("hammer")
-	if stgy == nil {
-		return
-	}
-	t.Logf("%s %d %d", stgy.Name, stgy.Version, stgy.WarmupNum)
-}
+//func TestStagyLoad(t *testing.T) {
+//	stgy := loadNative("hammer")
+//	if stgy == nil {
+//		return
+//	}
+//	t.Logf("%s %d %d", stgy.Name, stgy.Version, stgy.WarmupNum)
+//}

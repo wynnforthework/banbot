@@ -9,16 +9,10 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
-	ta "github.com/banbox/banta"
-	"github.com/pkujhd/goloader"
-	"go.uber.org/zap"
 	"math"
-	"os"
-	"path"
 	"slices"
 	"sort"
 	"strings"
-	"unsafe"
 )
 
 type FuncMakeStagy = func(pol *config.RunPolicyConfig) *TradeStagy
@@ -34,7 +28,8 @@ func New(pol *config.RunPolicyConfig) *TradeStagy {
 	if ok {
 		stgy = makeFn(pol)
 	} else {
-		stgy = loadNative(pol.Name)
+		panic("strategy not found: " + pol.Name)
+		// stgy = loadNative(pol.Name)
 	}
 	stgy.Name = polID
 	if stgy.MinTfScore == 0 {
@@ -64,68 +59,68 @@ func GetStrtgPerf(pair, strtg string) *config.StrtgPerfConfig {
 	return config.Data.StrtgPerf
 }
 
-func loadNative(stagyName string) *TradeStagy {
-	filePath := path.Join(config.GetStagyDir(), stagyName+".o")
-	_, err := os.Stat(filePath)
-	nameVar := zap.String("name", stagyName)
-	if err != nil {
-		log.Error("strategy not found", zap.String("path", filePath), zap.Error(err))
-		return nil
-	}
-	linker, err := goloader.ReadObj(filePath, stagyName)
-	if err != nil {
-		log.Error("strategy load fail, package is `main`?", nameVar, zap.Error(err))
-		return nil
-	}
-	symPtr := make(map[string]uintptr)
-	err = goloader.RegSymbol(symPtr)
-	if err != nil {
-		log.Error("strategy read symbol fail", nameVar, zap.Error(err))
-		return nil
-	}
-	regLoaderTypes(symPtr)
-	module, err := goloader.Load(linker, symPtr)
-	if err != nil {
-		log.Error("strategy load module fail", nameVar, zap.Error(err))
-		return nil
-	}
-	keys := zap.String("keys", strings.Join(utils.KeysOfMap(module.Syms), ","))
-	prefix := stagyName + "."
-	// 加载Main
-	mainPath := prefix + "Main"
-	mainPtr := GetModuleItem(module, mainPath)
-	if mainPtr == nil {
-		log.Error("module item not found", zap.String("p", mainPath), keys)
-		return nil
-	}
-	runFunc := *(*func() *TradeStagy)(mainPtr)
-	stagy := runFunc()
-	stagy.Name = stagyName
-	// 这里不能卸载，卸载后结构体的嵌入函数无法调用
-	// module.Unload()
-	return stagy
-}
-
-func GetModuleItem(module *goloader.CodeModule, itemPath string) unsafe.Pointer {
-	main, ok := module.Syms[itemPath]
-	if !ok || main == 0 {
-		return nil
-	}
-	mainPtr := (uintptr)(unsafe.Pointer(&main))
-	return unsafe.Pointer(&mainPtr)
-}
-
-func regLoaderTypes(symPtr map[string]uintptr) {
-	goloader.RegTypes(symPtr, &ta.BarEnv{}, &ta.Series{}, &ta.CrossLog{}, &ta.XState{}, ta.Cross, ta.Sum, ta.SMA,
-		ta.EMA, ta.EMABy, ta.RMA, ta.RMABy, ta.TR, ta.ATR, ta.MACD, ta.MACDBy, ta.RSI, ta.Highest, ta.Lowest, ta.KDJ,
-		ta.KDJBy, ta.StdDev, ta.StdDevBy, ta.BBANDS, ta.TD, &ta.AdxState{}, ta.ADX, ta.ROC, ta.HeikinAshi)
-	stgy := &TradeStagy{}
-	goloader.RegTypes(symPtr, stgy, stgy.OnPairInfos, stgy.OnStartUp, stgy.OnBar, stgy.OnInfoBar, stgy.OnTrades,
-		stgy.OnCheckExit, stgy.GetDrawDownExitRate, stgy.PickTimeFrame, stgy.OnShutDown)
-	job := &StagyJob{}
-	goloader.RegTypes(symPtr, job, job.OpenOrder)
-	goloader.RegTypes(symPtr, &PairSub{}, &EnterReq{}, &ExitReq{})
-}
+//func loadNative(stagyName string) *TradeStagy {
+//	filePath := path.Join(config.GetStagyDir(), stagyName+".o")
+//	_, err := os.Stat(filePath)
+//	nameVar := zap.String("name", stagyName)
+//	if err != nil {
+//		log.Error("strategy not found", zap.String("path", filePath), zap.Error(err))
+//		return nil
+//	}
+//	linker, err := goloader.ReadObj(filePath, stagyName)
+//	if err != nil {
+//		log.Error("strategy load fail, package is `main`?", nameVar, zap.Error(err))
+//		return nil
+//	}
+//	symPtr := make(map[string]uintptr)
+//	err = goloader.RegSymbol(symPtr)
+//	if err != nil {
+//		log.Error("strategy read symbol fail", nameVar, zap.Error(err))
+//		return nil
+//	}
+//	regLoaderTypes(symPtr)
+//	module, err := goloader.Load(linker, symPtr)
+//	if err != nil {
+//		log.Error("strategy load module fail", nameVar, zap.Error(err))
+//		return nil
+//	}
+//	keys := zap.String("keys", strings.Join(utils.KeysOfMap(module.Syms), ","))
+//	prefix := stagyName + "."
+//	// 加载Main
+//	mainPath := prefix + "Main"
+//	mainPtr := GetModuleItem(module, mainPath)
+//	if mainPtr == nil {
+//		log.Error("module item not found", zap.String("p", mainPath), keys)
+//		return nil
+//	}
+//	runFunc := *(*func() *TradeStagy)(mainPtr)
+//	stagy := runFunc()
+//	stagy.Name = stagyName
+//	// 这里不能卸载，卸载后结构体的嵌入函数无法调用
+//	// module.Unload()
+//	return stagy
+//}
+//
+//func GetModuleItem(module *goloader.CodeModule, itemPath string) unsafe.Pointer {
+//	main, ok := module.Syms[itemPath]
+//	if !ok || main == 0 {
+//		return nil
+//	}
+//	mainPtr := (uintptr)(unsafe.Pointer(&main))
+//	return unsafe.Pointer(&mainPtr)
+//}
+//
+//func regLoaderTypes(symPtr map[string]uintptr) {
+//	goloader.RegTypes(symPtr, &ta.BarEnv{}, &ta.Series{}, &ta.CrossLog{}, &ta.XState{}, ta.Cross, ta.Sum, ta.SMA,
+//		ta.EMA, ta.EMABy, ta.RMA, ta.RMABy, ta.TR, ta.ATR, ta.MACD, ta.MACDBy, ta.RSI, ta.Highest, ta.Lowest, ta.KDJ,
+//		ta.KDJBy, ta.StdDev, ta.StdDevBy, ta.BBANDS, ta.TD, &ta.AdxState{}, ta.ADX, ta.ROC, ta.HeikinAshi)
+//	stgy := &TradeStagy{}
+//	goloader.RegTypes(symPtr, stgy, stgy.OnPairInfos, stgy.OnStartUp, stgy.OnBar, stgy.OnInfoBar, stgy.OnTrades,
+//		stgy.OnCheckExit, stgy.GetDrawDownExitRate, stgy.PickTimeFrame, stgy.OnShutDown)
+//	job := &StagyJob{}
+//	goloader.RegTypes(symPtr, job, job.OpenOrder)
+//	goloader.RegTypes(symPtr, &PairSub{}, &EnterReq{}, &ExitReq{})
+//}
 
 func (q *ExitReq) Clone() *ExitReq {
 	res := &ExitReq{
