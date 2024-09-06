@@ -294,6 +294,9 @@ func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*KlineFeeder, *err
 }
 
 func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error) {
+	if !core.IsWarmUp {
+		return 0, errs.NewMsg(errs.CodeRunTime, "`core.IsWarmUp` must be true, before call WarmTfs")
+	}
 	if len(tfNums) == 0 {
 		tfNums = f.warmNums
 		if len(tfNums) == 0 {
@@ -550,6 +553,8 @@ func (f *DBKlineFeeder) SetSeek(since int64) {
 		// 这里不能为0，不然会从后往前读取K线，导致缺失
 		since = core.MSMinStamp
 	}
+	f.rowIdx = 0
+	f.nextMS = 0
 	f.offsetMS = since
 	f.setNext()
 }
@@ -633,13 +638,14 @@ func makeSetNext(f *DBKlineFeeder) func() {
 			return
 		}
 		defer conn.Release()
-		if f.nextMS+tfMSecs >= f.TimeRange.EndMS {
+		endMS := f.TimeRange.EndMS
+		if endMS > 0 && f.nextMS+tfMSecs >= endMS {
 			f.rowIdx = -1
 			f.nextMS = math.MaxInt64
 			return
 		}
 		batchSize := 3000
-		_, bars, err := sess.GetOHLCV(f.ExSymbol, state.TimeFrame, f.offsetMS, f.TimeRange.EndMS, batchSize, false)
+		_, bars, err := sess.GetOHLCV(f.ExSymbol, state.TimeFrame, f.offsetMS, endMS, batchSize, false)
 		if err != nil || len(bars) == 0 {
 			f.rowIdx = -1
 			f.nextMS = math.MaxInt64

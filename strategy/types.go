@@ -49,6 +49,25 @@ const (
 	OdChgExitFill         // 订单退出完成
 )
 
+const (
+	BatchTypeEnter = iota
+	BatchTypeInfo
+)
+
+type BatchTask struct {
+	Job  *StagyJob
+	Type int
+}
+
+/*
+BatchMap 当前交易所-市场-时间周期下，所有标的的批量执行任务池
+*/
+type BatchMap struct {
+	Map     map[string]*BatchTask
+	TFMSecs int64
+	ExecMS  int64 // 执行批量任务的时间戳，每收到新的标的，推迟几秒；超过DelayBatchMS未收到，开始执行
+}
+
 type PairSub struct {
 	Pair      string
 	TimeFrame string

@@ -116,7 +116,7 @@ func InitOdSubs() {
 	}
 }
 
-var lockBatch = sync.Mutex{} // 防止并发修改TFEnterMS/BatchJobs
+var lockBatch = sync.Mutex{} // 防止并发修改BatchTasks
 
 /*
 AddBatchJob
@@ -126,33 +126,27 @@ AddBatchJob
 func AddBatchJob(account, tf string, job *strategy.StagyJob, isInfo bool) {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
-	data := strategy.BatchJobs
-	tsMap := strategy.TFEnterMS
-	if isInfo {
-		data = strategy.BatchInfos
-		tsMap = strategy.TFInfoMS
-	}
 	key := fmt.Sprintf("%s_%s_%s", tf, account, job.Stagy.Name)
-	execMS, timeOK := tsMap[tf]
-	jobs, ok := data[key]
-	if !ok || !timeOK || execMS < job.Env.TimeStart {
-		jobs = map[string]*strategy.StagyJob{}
-		data[key] = jobs
+	tasks, ok := strategy.BatchTasks[key]
+	if !ok {
+		tasks = &strategy.BatchMap{
+			Map:     make(map[string]*strategy.BatchTask),
+			TFMSecs: int64(utils.TFToSecs(tf) * 1000),
+		}
+		strategy.BatchTasks[key] = tasks
 	}
 	// 推迟3s等待执行
-	execMS = btime.TimeMS() + core.DelayEnterMS
-	tsMap[tf] = execMS
-	jobs[job.Symbol.Symbol] = job
+	tasks.ExecMS = btime.TimeMS() + core.DelayBatchMS
+	var batchType = strategy.BatchTypeEnter
+	if isInfo {
+		batchType = strategy.BatchTypeInfo
+	}
+	tasks.Map[job.Symbol.Symbol] = &strategy.BatchTask{Job: job, Type: batchType}
 }
 
-func TryFireEnters(tf string) {
+func TryFireBatches(currMS int64) int {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
-	execMS, timeOK := strategy.TFEnterMS[tf]
-	if !timeOK || execMS > btime.TimeMS() {
-		// 没有可执行入场的。或者有新bar推迟了执行时间
-		return
-	}
 	var sess *orm.Queries
 	var conn *pgxpool.Conn
 	var err *errs.Error
@@ -161,66 +155,64 @@ func TryFireEnters(tf string) {
 		sess, conn, err = orm.Conn(nil)
 		if err != nil {
 			log.Error("get db sess fail", zap.Error(err))
-			return
+			return 0
 		}
 		defer conn.Release()
 	}
-	for key, jobs := range strategy.BatchJobs {
-		if !strings.HasPrefix(key, tf) || len(jobs) == 0 {
+	var waitNum = 0
+	for key, tasks := range strategy.BatchTasks {
+		if currMS < tasks.ExecMS {
+			if tasks.ExecMS-currMS < tasks.TFMSecs/2 {
+				// 尚未到达批量处理时间
+				waitNum += 1
+			}
 			continue
 		}
-		delete(strategy.BatchJobs, key)
-		jobList := utils.ValsOfMap(jobs)
-		var stagy = jobList[0].Stagy
-		// 检查此时间所有批量任务，决定哪些入场或那些出场
-		stagy.OnBatchJobs(jobList)
-		// 执行入场/出场任务
-		keyParts := strings.Split(key, "_")
-		odMgr := GetOdMgr(keyParts[1])
-		var ents []*orm.InOutOrder
-		var exits []*orm.InOutOrder
-		for _, job := range jobs {
-			if len(job.Entrys) == 0 && len(job.Exits) == 0 {
-				continue
-			}
-			ents, exits, err = odMgr.ProcessOrders(sess, job.Env, job.Entrys, job.Exits, nil)
-			if job.Stagy.OnOrderChange != nil {
-				for _, od := range ents {
-					job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
-				}
-				for _, od := range exits {
-					job.Stagy.OnOrderChange(job, od, strategy.OdChgExit)
-				}
-			}
-			if err != nil {
-				log.Error("process orders fail", zap.Error(err))
-			}
-		}
-	}
-	delete(strategy.TFEnterMS, tf)
-}
-
-func TryFireInfos(tf string) {
-	lockBatch.Lock()
-	defer lockBatch.Unlock()
-	execMS, timeOK := strategy.TFInfoMS[tf]
-	if !timeOK || execMS > btime.TimeMS() {
-		// 没有可执行入场的。或者有新bar推迟了执行时间
-		return
-	}
-	for key, jobs := range strategy.BatchInfos {
-		if !strings.HasPrefix(key, tf) || len(jobs) == 0 {
-			continue
-		}
-		delete(strategy.BatchInfos, key)
+		var enterJobs []*strategy.StagyJob
+		var infoJobs map[string]*strategy.StagyJob
 		var stagy *strategy.TradeStagy
-		for _, job := range jobs {
-			stagy = job.Stagy
-			break
+		for pair, task := range tasks.Map {
+			stagy = task.Job.Stagy
+			if task.Type == strategy.BatchTypeEnter {
+				enterJobs = append(enterJobs, task.Job)
+			} else if task.Type == strategy.BatchTypeInfo {
+				infoJobs[pair] = task.Job
+			} else {
+				panic(fmt.Sprintf("unsupport BatchType: %v", task.Type))
+			}
 		}
-		stagy.OnBatchInfos(jobs)
+		delete(strategy.BatchTasks, key)
+		if len(enterJobs) > 0 {
+			// 检查此时间所有批量任务，决定哪些入场或那些出场
+			stagy.OnBatchJobs(enterJobs)
+			// 执行入场/出场任务
+			keyParts := strings.Split(key, "_")
+			odMgr := GetOdMgr(keyParts[1])
+			var ents []*orm.InOutOrder
+			var exits []*orm.InOutOrder
+			for _, job := range enterJobs {
+				if len(job.Entrys) == 0 && len(job.Exits) == 0 {
+					continue
+				}
+				ents, exits, err = odMgr.ProcessOrders(sess, job.Env, job.Entrys, job.Exits, nil)
+				if job.Stagy.OnOrderChange != nil {
+					for _, od := range ents {
+						job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+					}
+					for _, od := range exits {
+						job.Stagy.OnOrderChange(job, od, strategy.OdChgExit)
+					}
+				}
+				if err != nil {
+					log.Error("process orders fail", zap.Error(err))
+				}
+			}
+		}
+		if len(infoJobs) > 0 {
+			stagy.OnBatchInfos(infoJobs)
+		}
 	}
-	delete(strategy.TFInfoMS, tf)
+	return waitNum
 }
 
 func ResetVars() {

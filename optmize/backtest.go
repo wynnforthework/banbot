@@ -79,15 +79,13 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	curTime := btime.TimeMS()
 	core.CheckWallets = false
 	if !core.IsWarmUp {
-		lastMS, _ := strategy.LastBatchMS[bar.TimeFrame]
-		if bar.Time > lastMS {
+		if curTime > strategy.LastBatchMS {
 			// 进入下一个时间帧，触发批量入场回调
-			backMS := curTime
-			btime.CurTimeMS = bar.Time + core.DelayEnterMS + 100
-			biz.TryFireEnters(bar.TimeFrame)
-			biz.TryFireInfos(bar.TimeFrame)
-			strategy.LastBatchMS[bar.TimeFrame] = bar.Time
-			btime.CurTimeMS = backMS
+			waitNum := biz.TryFireBatches(curTime)
+			if waitNum > 0 {
+				panic(fmt.Sprintf("batch job exec fail, wait: %v", waitNum))
+			}
+			strategy.LastBatchMS = curTime
 		}
 		if curTime > b.lastTime {
 			b.lastTime = curTime

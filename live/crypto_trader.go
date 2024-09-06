@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/api"
 	"github.com/banbox/banbot/biz"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
@@ -128,9 +129,16 @@ func (t *CryptoTrader) FeedKLine(bar *orm.InfoKline) {
 		log.Error("handle bar fail", zap.String("pair", bar.Symbol), zap.Error(err))
 		return
 	}
-	time.AfterFunc(time.Millisecond*core.DelayEnterMS, func() {
-		biz.TryFireEnters(bar.TimeFrame)
-		biz.TryFireInfos(bar.TimeFrame)
+	delayExecBatch()
+}
+
+func delayExecBatch() {
+	time.AfterFunc(time.Millisecond*core.DelayBatchMS, func() {
+		waitNum := biz.TryFireBatches(btime.UTCStamp())
+		if waitNum > 0 {
+			// 有尚未完成的tf周期，推迟几秒再次触发
+			delayExecBatch()
+		}
 	})
 }
 

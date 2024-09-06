@@ -531,11 +531,8 @@ func ResetVars() {
 	strategy.AccJobs = make(map[string]map[string]map[string]*strategy.StagyJob)
 	strategy.AccInfoJobs = make(map[string]map[string]map[string]*strategy.StagyJob)
 	strategy.PairStags = make(map[string]map[string]*strategy.TradeStagy)
-	strategy.BatchJobs = make(map[string]map[string]*strategy.StagyJob)
-	strategy.BatchInfos = make(map[string]map[string]*strategy.StagyJob)
-	strategy.TFEnterMS = make(map[string]int64)
-	strategy.TFInfoMS = make(map[string]int64)
-	strategy.LastBatchMS = make(map[string]int64)
+	strategy.BatchTasks = make(map[string]*strategy.BatchMap)
+	strategy.LastBatchMS = 0
 }
 
 /*

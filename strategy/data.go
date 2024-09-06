@@ -16,11 +16,8 @@ var (
 	AccInfoJobs = make(map[string]map[string]map[string]*StagyJob) // account: pair_tf: [stagyName]StagyJob 额外订阅
 	PairStags   = make(map[string]map[string]*TradeStagy)          // pair:[stagyName]TradeStagy 所有的订阅策略
 
-	BatchJobs   = map[string]map[string]*StagyJob{} // tf_account_stagy: pair: job 每个bar周期更新
-	BatchInfos  = map[string]map[string]*StagyJob{} // tf_account_stagy: pair: job 每个info bar周期更新
-	TFEnterMS   = map[string]int64{}                // tf: timeMS 执行入场的时间戳
-	TFInfoMS    = map[string]int64{}                // tf: timeMS 执行Info的时间戳
-	LastBatchMS = map[string]int64{}                // tf: timeMS 仅用于回测
+	BatchTasks  = map[string]*BatchMap{} // tf_account_stagy: pair: task 每个bar周期更新（只适用于单交易所单市场）
+	LastBatchMS = int64(0)               // timeMS 上次批量执行的时间戳，仅用于回测
 
 	lockInfoJobs sync.Mutex
 
