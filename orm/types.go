@@ -41,5 +41,6 @@ type AdjInfo struct {
 
 type InfoKline struct {
 	*banexg.PairTFKline
-	Adj *AdjInfo
+	Adj      *AdjInfo
+	IsWarmUp bool
 }

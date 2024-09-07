@@ -98,6 +98,7 @@ type StagyJob struct {
 	ExgTakeProfit bool              // 是否允许交易所止盈
 	LongTPPrice   float64           // 做多止盈价格
 	ShortTPPrice  float64           // 做空止盈价格
+	IsWarmUp      bool              // 当前是否处于预热状态
 	More          interface{}       // 策略自定义的额外信息
 }
 

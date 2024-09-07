@@ -62,10 +62,6 @@ SubWarmPairs
 	返回最小周期变化的交易对(新增/旧对新周期)、预热任务
 */
 func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool) ([]IKlineFeeder, map[string]int64, []string, *errs.Error) {
-	core.IsWarmUp = true
-	defer func() {
-		core.IsWarmUp = false
-	}()
 	var newHolds []IKlineFeeder
 	var warmJobs []*WarmJob
 	var oldSince = make(map[string]int64)

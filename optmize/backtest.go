@@ -78,7 +78,7 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	b.BarNum += 1
 	curTime := btime.TimeMS()
 	core.CheckWallets = false
-	if !core.IsWarmUp {
+	if !bar.IsWarmUp {
 		if curTime > strategy.LastBatchMS {
 			// 进入下一个时间帧，触发批量入场回调
 			waitNum := biz.TryFireBatches(curTime)
@@ -102,7 +102,7 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 		}
 		return
 	}
-	if !core.IsWarmUp && core.CheckWallets {
+	if !bar.IsWarmUp && core.CheckWallets {
 		b.logState(bar.Time, curTime)
 	}
 	if nextRefresh > 0 && bar.Time >= nextRefresh {

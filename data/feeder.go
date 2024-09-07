@@ -51,6 +51,7 @@ type Feeder struct {
 	tfBars   map[string][]*banexg.Kline // 缓存各周期的原始K线（未复权）
 	adjs     []*orm.AdjInfo             // 复权因子列表
 	adj      *orm.AdjInfo
+	isWarmUp bool // 当前是否预热状态
 }
 
 func (f *Feeder) getStates() []*PairTFCache {
@@ -171,7 +172,7 @@ func (f *Feeder) onStateOhlcvs(state *PairTFCache, bars []*banexg.Kline, lastOk 
 		state.NextMS = finishBars[len(finishBars)-1].Time + tfMSecs
 		f.addTfKlines(state.TimeFrame, finishBars)
 		adjBars := f.adj.Apply(finishBars, core.AdjFront)
-		f.fireCallBacks(f.Symbol, state.TimeFrame, tfMSecs, adjBars, f.adj)
+		f.fireCallBacks(state.TimeFrame, tfMSecs, adjBars, f.adj)
 	}
 	return finishBars
 }
@@ -207,8 +208,9 @@ func (f *Feeder) addTfKlines(tf string, bars []*banexg.Kline) {
 	f.tfBars[tf] = append(olds, bars...)
 }
 
-func (f *Feeder) fireCallBacks(pair, timeFrame string, tfMSecs int64, bars []*banexg.Kline, adj *orm.AdjInfo) {
+func (f *Feeder) fireCallBacks(timeFrame string, tfMSecs int64, bars []*banexg.Kline, adj *orm.AdjInfo) {
 	isLive := core.LiveMode
+	pair := f.Symbol
 	for _, bar := range bars {
 		if !isLive {
 			btime.CurTimeMS = bar.Time + tfMSecs
@@ -216,9 +218,10 @@ func (f *Feeder) fireCallBacks(pair, timeFrame string, tfMSecs int64, bars []*ba
 		f.CallBack(&orm.InfoKline{
 			PairTFKline: &banexg.PairTFKline{Kline: *bar, Symbol: pair, TimeFrame: timeFrame},
 			Adj:         adj,
+			IsWarmUp:    f.isWarmUp,
 		})
 	}
-	if isLive && !core.IsWarmUp {
+	if isLive && !f.isWarmUp {
 		// 记录收到的bar数量
 		hits, ok := core.TfPairHits[timeFrame]
 		if !ok {
@@ -294,9 +297,6 @@ func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*KlineFeeder, *err
 }
 
 func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error) {
-	if !core.IsWarmUp {
-		return 0, errs.NewMsg(errs.CodeRunTime, "`core.IsWarmUp` must be true, before call WarmTfs")
-	}
 	if len(tfNums) == 0 {
 		tfNums = f.warmNums
 		if len(tfNums) == 0 {
@@ -348,6 +348,7 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 	if len(bars) == 0 {
 		return 0
 	}
+	f.isWarmUp = true
 	tfMSecs := int64(utils.TFToSecs(tf) * 1000)
 	lastMS := bars[len(bars)-1].Time + tfMSecs
 	envKey := strings.Join([]string{f.Symbol, tf}, "_")
@@ -363,11 +364,11 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 		for i, k := range bars {
 			for k.Time >= pAdj.StopMS {
 				if len(cache) > 0 {
-					f.fireCallBacks(f.Symbol, tf, tfMSecs, cache, pAdj)
+					f.fireCallBacks(tf, tfMSecs, cache, pAdj)
 					cache = make([]*banexg.Kline, 0, len(bars))
 				}
 				if pi >= len(f.adjs) {
-					f.fireCallBacks(f.Symbol, tf, tfMSecs, bars[i:], nil)
+					f.fireCallBacks(tf, tfMSecs, bars[i:], nil)
 					forEnd = true
 					pAdj = nil
 					break
@@ -381,10 +382,10 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 			cache = append(cache, k)
 		}
 		if len(cache) > 0 {
-			f.fireCallBacks(f.Symbol, tf, tfMSecs, cache, pAdj)
+			f.fireCallBacks(tf, tfMSecs, cache, pAdj)
 		}
 	} else {
-		f.fireCallBacks(f.Symbol, tf, tfMSecs, bars, nil)
+		f.fireCallBacks(tf, tfMSecs, bars, nil)
 	}
 	for _, sta := range f.States {
 		if sta.TimeFrame == tf {
@@ -392,6 +393,7 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 			break
 		}
 	}
+	f.isWarmUp = false
 	return lastMS
 }
 
@@ -617,9 +619,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 					Kline:     *old,
 				}, f.adj)
 				// 重新复权预热
-				core.IsWarmUp = true
 				_, err := f.WarmTfs(f.nextMS, nil, nil)
-				core.IsWarmUp = false
 				if err != nil {
 					log.Error("next warm tf fail", zap.Error(err))
 				}

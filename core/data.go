@@ -12,7 +12,6 @@ var (
 	RunMode      string                               // live / backtest / other
 	RunEnv       string                               // prod / test / dry_run
 	StartAt      int64                                // 启动时间，13位时间戳
-	IsWarmUp     bool                                 // 是否当前处于预热状态
 	EnvReal      bool                                 // 是否是提交到交易所真实订单模式run_env:prod/test
 	LiveMode     bool                                 // 是否是实时模式：实盘+模拟运行
 	TFSecs       map[string]int                       // 所有涉及的时间周期

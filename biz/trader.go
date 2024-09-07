@@ -44,7 +44,7 @@ func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
 	// 超过1分钟且周期的一半，认为bar延迟，不可下单
 	delaySecs := int((btime.TimeMS()-bar.Time)/1000) - tfSecs
 	barExpired := delaySecs >= max(60, tfSecs/2)
-	if barExpired && core.LiveMode && !core.IsWarmUp {
+	if barExpired && core.LiveMode && !bar.IsWarmUp {
 		log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delaySecs))
 	}
 	// 更新指标环境
@@ -84,7 +84,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	lock.Unlock()
 	odMgr := GetOdMgr(account)
 	var err *errs.Error
-	if !core.IsWarmUp {
+	if !bar.IsWarmUp {
 		// 这里可能修改订单状态
 		err = odMgr.UpdateByBar(allOrders, bar)
 		if err != nil {
@@ -103,6 +103,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	var exits []*strategy.ExitReq
 	var edits []*orm.InOutEdit
 	for _, job := range jobs {
+		job.IsWarmUp = bar.IsWarmUp
 		job.InitBar(curOrders)
 		snap := job.SnapOrderStates()
 		job.Stagy.OnBar(job)
@@ -115,7 +116,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 				enters = append(enters, job.Entrys...)
 			}
 		}
-		if !core.IsWarmUp {
+		if !bar.IsWarmUp {
 			curEdits, err := job.CheckCustomExits(snap)
 			if err != nil {
 				return err
@@ -128,18 +129,22 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	}
 	// 更新辅助订阅数据
 	for _, job := range infoJobs {
+		job.IsWarmUp = bar.IsWarmUp
 		job.Stagy.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
 		if job.Stagy.BatchInfo && job.Stagy.OnBatchInfos != nil {
 			AddBatchJob(account, bar.TimeFrame, job, true)
 		}
 	}
 	// 处理订单
+	if bar.IsWarmUp {
+		return nil
+	}
 	return t.ExecOrders(odMgr, jobs, env, enters, exits, edits)
 }
 
 func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob, env *ta.BarEnv,
 	enters []*strategy.EnterReq, exits []*strategy.ExitReq, edits []*orm.InOutEdit) *errs.Error {
-	if core.IsWarmUp || len(enters)+len(exits)+len(edits) == 0 {
+	if len(enters)+len(exits)+len(edits) == 0 {
 		return nil
 	}
 	var sess *orm.Queries

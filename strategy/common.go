@@ -141,7 +141,7 @@ func (q *ExitReq) Clone() *ExitReq {
 
 func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 	s.CheckMS = btime.TimeMS()
-	if core.IsWarmUp {
+	if s.IsWarmUp {
 		s.LongOrders = nil
 		s.ShortOrders = nil
 	} else if s.OrderNum > 0 {
