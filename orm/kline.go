@@ -1114,6 +1114,14 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			log.Warn("symbol id invalid", zap.Int32("sid", curSid))
 			continue
 		}
+		exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+		if err != nil {
+			return err
+		}
+		if !exchange.HasApi(banexg.ApiFetchOHLCV, exs.Market) {
+			// 不支持下载K线，跳过
+			continue
+		}
 		start, stop := row.Start, row.Stop
 		// 这里本来有从小周期检查已填充则跳过大周期KHole的逻辑，但因较大周期无法从特小周期归集，故这里取消。
 		// 每个周期应独立检索实际K线范围，确保范围正确
@@ -1148,10 +1156,15 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			continue
 		}
 		// 下载K线，同时也会归集更高周期K线
-		saveNum, err := downOHLCV2DBRange(sess, exg.Default, exs, row.Timeframe, start, stop, 0, 0, nil)
+		saveNum, err := downOHLCV2DBRange(sess, exchange, exs, row.Timeframe, start, stop, 0, 0, nil)
 		if err != nil {
-			log.Warn("down ohlcv to fill fail", zap.Int32("sid", exs.ID),
-				zap.String("symbol", exs.Symbol), zap.Error(err))
+			if err.Code == errs.CodeNoMarketForPair {
+				log.Info("skip down no market symbol", zap.Int32("sid", exs.ID),
+					zap.String("symbol", exs.Symbol))
+			} else {
+				log.Warn("down ohlcv to fill fail", zap.Int32("sid", exs.ID),
+					zap.String("symbol", exs.Symbol), zap.Error(err))
+			}
 			continue
 		}
 		// 查询实际更新的区间
@@ -1236,23 +1249,37 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 	slices.SortFunc(infoList, func(a, b *KInfoExt) int {
 		return int(a.Sid - b.Sid)
 	})
+	var groups []map[string]*KInfoExt
 	var curSid int32
 	tfMap := make(map[string]*KInfoExt)
 	for _, info := range infoList {
 		if info.Sid != curSid {
 			if len(tfMap) > 0 {
-				err := sess.syncKlineSid(curSid, tfMap, calcs)
-				if err != nil {
-					return err
-				}
+				groups = append(groups, tfMap)
 			}
 			tfMap = make(map[string]*KInfoExt)
 			curSid = info.Sid
 		}
 		tfMap[info.Timeframe] = info
-		pBar.Add(1)
 	}
-	return sess.syncKlineSid(curSid, tfMap, calcs)
+	if len(tfMap) > 0 {
+		groups = append(groups, tfMap)
+	}
+	return utils.ParallelRun(groups, 20, func(i int, m map[string]*KInfoExt) *errs.Error {
+		sid := int32(0)
+		for _, info := range m {
+			sid = info.Sid
+			break
+		}
+		sess2, conn, err := Conn(nil)
+		if err != nil {
+			return err
+		}
+		defer conn.Release()
+		err = sess2.syncKlineSid(sid, m, calcs)
+		pBar.Add(len(m))
+		return err
+	})
 }
 
 func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[string]map[int32][2]int64) *errs.Error {
