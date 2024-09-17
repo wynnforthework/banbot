@@ -211,6 +211,9 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 				prgName = "banbot.exe"
 			}
 			excPath := filepath.Join(config.GetStagyDir(), prgName)
+			if _, err_ = os.Stat(excPath); err_ != nil {
+				return errs.New(errs.CodeRunTime, err_)
+			}
 			cmd := exec.Command(excPath, curCmds...)
 			cmd.Dir = config.GetStagyDir()
 			cmd.Stdout = &out

@@ -16,7 +16,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/olekukonko/tablewriter"
-	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"math"
 	"os"
@@ -194,7 +193,7 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
 	var err *errs.Error
 
-	err = r.calcMeasures(30, sumProfit/sumCost)
+	err = r.calcMeasures(30)
 	if err != nil {
 		log.Warn("calc sharpe/sortino fail", zap.Error(err))
 	} else {
@@ -446,11 +445,11 @@ func measurePerformance(ods []*orm.InOutOrder, num int) (float64, float64, *errs
 	curEnd := startMs + stepMs
 	profit, cost := float64(0), float64(0)
 	allProfit, allCost := float64(0), float64(0)
-	returns := make([]decimal.Decimal, 0)
+	returns := make([]float64, 0)
 	for _, od := range ods {
 		for od.ExitAt > curEnd {
 			if cost > 0 {
-				returns = append(returns, decimal.NewFromFloat(profit/cost))
+				returns = append(returns, profit/cost)
 			}
 			profit, cost = 0, 0
 			curEnd += stepMs
@@ -462,31 +461,22 @@ func measurePerformance(ods []*orm.InOutOrder, num int) (float64, float64, *errs
 		allProfit += od.Profit
 	}
 	if cost > 0 {
-		returns = append(returns, decimal.NewFromFloat(profit/cost))
+		returns = append(returns, profit/cost)
 	}
-	avgProfit := allProfit / allCost
-	if math.IsNaN(avgProfit) {
-		return 0, 0, nil
-	}
-	avg := decimal.NewFromFloat(avgProfit)
-	return calcMeasures(avg, returns)
+	return calcMeasures(returns)
 }
 
-func calcMeasures(avg decimal.Decimal, returns []decimal.Decimal) (float64, float64, *errs.Error) {
-	sharpe, err := utils.DecSharpeRatio(returns, decimal.NewFromFloat(0), avg)
+func calcMeasures(returns []float64) (float64, float64, *errs.Error) {
+	sharpeFlt, err := utils.SharpeRatio(returns, 0)
 	if err != nil {
 		return 0, 0, errs.New(errs.CodeRunTime, err)
 	}
-	sharpeFlt, _ := sharpe.Round(2).Float64()
-	var sortineFlt float64
-	sortine, err := utils.DecSortinoRatio(returns, decimal.NewFromFloat(0), avg)
+	sortineFlt, err := utils.SortinoRatio(returns, 0)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoNegativeResults) {
 			return sharpeFlt, 0, errs.New(errs.CodeRunTime, err)
 		}
 		sortineFlt = math.Inf(1)
-	} else {
-		sortineFlt, _ = sortine.Round(2).Float64()
 	}
 	return sharpeFlt, sortineFlt, nil
 }
@@ -738,30 +728,24 @@ func (p *PlotData) calcDrawDown() float64 {
 	return drawDownRate
 }
 
-func (r *BTResult) calcMeasures(num int, avg float64) *errs.Error {
+func (r *BTResult) calcMeasures(num int) *errs.Error {
 	p := r.Plots
 	if len(p.Real) <= 1 {
 		return nil
 	}
 	step := len(p.Real) / num
 	prevVal := p.Real[0]
-	inReturns := make([]decimal.Decimal, 0, num)
+	inReturns := make([]float64, 0, num)
 	for i := step; i < len(p.Real); i += step {
 		curVal := p.Real[i]
-		inReturns = append(inReturns, decimal.NewFromFloat((curVal-prevVal)/prevVal))
+		inReturns = append(inReturns, (curVal-prevVal)/prevVal)
 		prevVal = curVal
 	}
 	if len(inReturns) < num {
 		last := p.Real[len(p.Real)-1]
-		inReturns = append(inReturns, decimal.NewFromFloat((last-prevVal)/prevVal))
+		inReturns = append(inReturns, (last-prevVal)/prevVal)
 	}
-	if math.IsNaN(avg) || math.IsInf(avg, 0) {
-		r.SharpeRatio = math.NaN()
-		r.SortinoRatio = math.NaN()
-		return nil
-	}
-	avgDec := decimal.NewFromFloat(avg)
-	sharpe, sortino, err := calcMeasures(avgDec, inReturns)
+	sharpe, sortino, err := calcMeasures(inReturns)
 	if err != nil {
 		return err
 	}

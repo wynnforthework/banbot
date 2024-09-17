@@ -443,6 +443,19 @@ func (c *RunPolicyConfig) HyperParams() []*core.Param {
 	return res
 }
 
+/*
+KeepHyperOnly Only keep the given hyperparameters for optimization and remove other hyperparameters
+*/
+func (c *RunPolicyConfig) KeepHyperOnly(keys ...string) {
+	var res = make(map[string]*core.Param)
+	for _, k := range keys {
+		if v, ok := c.defs[k]; ok {
+			res[k] = v
+		}
+	}
+	c.defs = res
+}
+
 func (c *RunPolicyConfig) ToYaml() string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("  - name: %s\n", c.Name))

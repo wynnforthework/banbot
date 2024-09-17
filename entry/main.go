@@ -254,7 +254,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "each_pairs":
 			cmd.BoolVar(&args.EachPairs, "each-pairs", false, "run for each pairs")
 		case "concur":
-			cmd.IntVar(&args.Concur, "concur", 3, "Concurrent Number")
+			cmd.IntVar(&args.Concur, "concur", 1, "Concurrent Number")
 		case "review_period":
 			cmd.StringVar(&args.ReviewPeriod, "review-period", "3y", "review period, default: 3 years")
 		case "run_period":

@@ -3,6 +3,7 @@ package utils
 import (
 	"errors"
 	"github.com/shopspring/decimal"
+	"gonum.org/v1/gonum/stat"
 	"math"
 )
 
@@ -92,15 +93,50 @@ func DecFinaGeomMean(values []decimal.Decimal) (decimal.Decimal, error) {
 	return decimal.NewFromFloat(geometricPower), nil
 }
 
-// DecSortinoRatio returns sortino ratio of backtest compared to risk-free
-func DecSortinoRatio(moReturns []decimal.Decimal, riskFree, average decimal.Decimal) (decimal.Decimal, error) {
+func SortinoRatio(moReturns []float64, riskFree float64) (float64, error) {
+	return SortinoRatioAdv(moReturns, riskFree, 252, true, false)
+}
+
+func SortinoRatioBy(moReturns []float64, riskFree float64, periods int, annualize bool) (float64, error) {
+	return SortinoRatioAdv(moReturns, riskFree, periods, annualize, false)
+}
+
+func SortinoRatioSmart(moReturns []float64, riskFree float64, periods int, annualize bool) (float64, error) {
+	return SortinoRatioAdv(moReturns, riskFree, periods, annualize, true)
+}
+
+func SortinoRatioAdv(moReturns []float64, riskFree float64, periods int, annualize, smart bool) (float64, error) {
+	res, err := DecSortinoRatioAdv(FloatsToDecArr(moReturns), decimal.NewFromFloat(riskFree), periods, annualize, smart)
+	flt, _ := res.Float64()
+	return flt, err
+}
+
+func DecSortinoRatio(moReturns []decimal.Decimal, riskFree decimal.Decimal) (decimal.Decimal, error) {
+	return DecSortinoRatioAdv(moReturns, riskFree, 252, true, false)
+}
+
+func DecSortinoRatioBy(moReturns []decimal.Decimal, riskFree decimal.Decimal, periods int, annualize bool) (decimal.Decimal, error) {
+	return DecSortinoRatioAdv(moReturns, riskFree, periods, annualize, false)
+}
+
+func DecSortinoRatioSmart(moReturns []decimal.Decimal, riskFree decimal.Decimal, periods int, annualize bool) (decimal.Decimal, error) {
+	return DecSortinoRatioAdv(moReturns, riskFree, periods, annualize, true)
+}
+
+// DecSortinoRatioAdv returns sortino ratio of backtest compared to risk-free
+func DecSortinoRatioAdv(moReturns []decimal.Decimal, riskFree decimal.Decimal, periods int, annualize, smart bool) (decimal.Decimal, error) {
 	if len(moReturns) == 0 {
 		return decimal.Zero, errZeroValue
 	}
+	if !riskFree.Equal(decimal.Zero) && periods <= 0 {
+		return decimal.Zero, errors.New("must provide periods if riskFree!=0")
+	}
+	// Calculates excess returns by subtracting risk-free returns from total returns
+	excessReturns, avg := prepareExcessReturns(moReturns, riskFree, periods)
+
 	totNegSqrt := decimal.Zero
 	val2 := decimal.NewFromInt(2)
-	for x := range moReturns {
-		ret := moReturns[x].Sub(riskFree)
+	for _, ret := range excessReturns {
 		if ret.LessThan(decimal.Zero) {
 			totNegSqrt = totNegSqrt.Add(ret.Pow(val2))
 		}
@@ -108,23 +144,59 @@ func DecSortinoRatio(moReturns []decimal.Decimal, riskFree, average decimal.Deci
 	if totNegSqrt.IsZero() {
 		return decimal.Zero, ErrNoNegativeResults
 	}
-	f, _ := totNegSqrt.Float64()
-	fAvgDownDev := math.Sqrt(f / float64(len(moReturns)))
-	avgDownDev := decimal.NewFromFloat(fAvgDownDev)
+	downSide := totNegSqrt.Div(decimal.NewFromInt32(int32(len(excessReturns)))).Pow(decimal.NewFromFloat(0.5))
+	if smart {
+		downSide = downSide.Mul(decimal.NewFromFloat(AutoCorrPenalty(DecArrToFloats(excessReturns))))
+	}
 
-	return average.Sub(riskFree).Div(avgDownDev), nil
+	res := avg.Div(downSide)
+	if annualize && periods > 1 {
+		res = res.Mul(decimal.NewFromFloat(math.Sqrt(float64(periods))))
+	}
+	return res, nil
 }
 
-// DecSharpeRatio returns sharpe ratio of backtest compared to risk-free
-func DecSharpeRatio(moReturns []decimal.Decimal, riskFree, average decimal.Decimal) (decimal.Decimal, error) {
+func SharpeRatio(moReturns []float64, riskFree float64) (float64, error) {
+	return SharpeRatioAdv(moReturns, riskFree, 252, true, false)
+}
+
+func SharpeRatioBy(moReturns []float64, riskFree float64, periods int, annualize bool) (float64, error) {
+	return SharpeRatioAdv(moReturns, riskFree, periods, annualize, false)
+}
+
+func SharpeRatioSmart(moReturns []float64, riskFree float64, periods int, annualize bool) (float64, error) {
+	return SharpeRatioAdv(moReturns, riskFree, periods, annualize, true)
+}
+
+func SharpeRatioAdv(moReturns []float64, riskFree float64, periods int, annualize, smart bool) (float64, error) {
+	res, err := DecSharpeRatioAdv(FloatsToDecArr(moReturns), decimal.NewFromFloat(riskFree), periods, annualize, smart)
+	flt, _ := res.Float64()
+	return flt, err
+}
+
+// DecSharpeRatio use 252 as default periods to calculate annualize
+func DecSharpeRatio(moReturns []decimal.Decimal, riskFree decimal.Decimal) (decimal.Decimal, error) {
+	return DecSharpeRatioAdv(moReturns, riskFree, 252, true, false)
+}
+
+func DecSharpeRatioBy(moReturns []decimal.Decimal, riskFree decimal.Decimal, periods int, annualize bool) (decimal.Decimal, error) {
+	return DecSharpeRatioAdv(moReturns, riskFree, periods, annualize, false)
+}
+
+func DecSharpeRatioSmart(moReturns []decimal.Decimal, riskFree decimal.Decimal, periods int, annualize bool) (decimal.Decimal, error) {
+	return DecSharpeRatioAdv(moReturns, riskFree, periods, annualize, true)
+}
+
+func DecSharpeRatioAdv(moReturns []decimal.Decimal, riskFree decimal.Decimal, periods int, annualize, smart bool) (decimal.Decimal, error) {
 	totalIntervals := decimal.NewFromInt(int64(len(moReturns)))
 	if totalIntervals.IsZero() {
 		return decimal.Zero, errZeroValue
 	}
-	excessReturns := make([]decimal.Decimal, len(moReturns))
-	for i := range moReturns {
-		excessReturns[i] = moReturns[i].Sub(riskFree)
+	if !riskFree.Equal(decimal.Zero) && periods <= 0 {
+		return decimal.Zero, errors.New("must provide periods if riskFree!=0")
 	}
+	// Calculates excess returns by subtracting risk-free returns from total returns
+	excessReturns, avg := prepareExcessReturns(moReturns, riskFree, periods)
 	stdDev, err := DecStdDev(excessReturns)
 	if err != nil {
 		return decimal.Zero, err
@@ -132,6 +204,77 @@ func DecSharpeRatio(moReturns []decimal.Decimal, riskFree, average decimal.Decim
 	if stdDev.IsZero() {
 		return decimal.Zero, nil
 	}
+	if smart {
+		stdDev = stdDev.Mul(decimal.NewFromFloat(AutoCorrPenalty(DecArrToFloats(excessReturns))))
+	}
 
-	return average.Sub(riskFree).Div(stdDev), nil
+	res := avg.Div(stdDev)
+	if annualize && periods > 1 {
+		res = res.Mul(decimal.NewFromFloat(math.Sqrt(float64(periods))))
+	}
+	return res, nil
+}
+
+func prepareExcessReturns(arr []decimal.Decimal, riskFree decimal.Decimal, periods int) ([]decimal.Decimal, decimal.Decimal) {
+	var excessReturns []decimal.Decimal
+	var avg decimal.Decimal
+	if periods > 0 {
+		dec1 := decimal.NewFromFloat(1)
+		riskFree = riskFree.Add(dec1).Pow(dec1.Div(decimal.NewFromInt(int64(periods)))).Sub(dec1)
+		excessReturns = make([]decimal.Decimal, len(arr))
+		for i := range arr {
+			excessReturns[i] = arr[i].Sub(riskFree)
+			avg = avg.Add(excessReturns[i])
+		}
+	} else {
+		for i := range arr {
+			avg = avg.Add(arr[i])
+		}
+		excessReturns = arr
+	}
+	avg = avg.Div(decimal.NewFromInt32(int32(len(excessReturns))))
+	return excessReturns, avg
+}
+
+func DecArrToFloats(arr []decimal.Decimal) []float64 {
+	var result = make([]float64, 0, len(arr))
+	for _, v := range arr {
+		fltV, _ := v.Float64()
+		result = append(result, fltV)
+	}
+	return result
+}
+
+func FloatsToDecArr(arr []float64) []decimal.Decimal {
+	var result = make([]decimal.Decimal, 0, len(arr))
+	for _, v := range arr {
+		result = append(result, decimal.NewFromFloat(v))
+	}
+	return result
+}
+
+// AutoCorrPenalty Metric to account for auto correlation
+func AutoCorrPenalty(returns []float64) float64 {
+	num := len(returns)
+
+	// 计算序列 returns[:-1] 和 returns[1:] 的相关系数
+	returns1 := returns[:num-1]
+	returns2 := returns[1:]
+	coef := math.Abs(stat.Correlation(returns1, returns2, nil))
+
+	// 计算corr列表
+	var corr []float64
+	for x := 1; x < num; x++ {
+		val := (float64(num-x) / float64(num)) * math.Pow(coef, float64(x))
+		corr = append(corr, val)
+	}
+
+	// 计算 sqrt(1 + 2 * sum(corr))
+	sumCorr := 0.0
+	for _, c := range corr {
+		sumCorr += c
+	}
+
+	result := math.Sqrt(1 + 2*sumCorr)
+	return result
 }

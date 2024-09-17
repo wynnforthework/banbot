@@ -14,6 +14,7 @@ import (
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
 	"strings"
+	"sync"
 )
 
 type LocalOrderMgr struct {
@@ -22,6 +23,7 @@ type LocalOrderMgr struct {
 
 var (
 	tipAmtZeros = map[string]bool{} // 已提示数量太小无法开单的标的
+	tipAmtLock  sync.Mutex
 )
 
 func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
@@ -208,10 +210,12 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 				log.Warn("prec enter amount fail", zap.String("symbol", od.Symbol),
 					zap.Float64("amt", entAmount), zap.Error(err))
 			} else {
+				tipAmtLock.Lock()
 				if _, ok := tipAmtZeros[od.Symbol]; !ok {
 					log.Info("prec enter amount zero", zap.String("symbol", od.Symbol))
 					tipAmtZeros[od.Symbol] = true
 				}
+				tipAmtLock.Unlock()
 			}
 			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)

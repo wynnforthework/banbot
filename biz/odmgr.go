@@ -437,7 +437,9 @@ func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Erro
 				zap.Strings("job", []string{od.Symbol, od.Timeframe, od.Strategy}))
 		}
 	}
+	tipAmtLock.Lock()
 	delete(tipAmtZeros, od.Symbol) // 开单成功，允许提示
+	tipAmtLock.Unlock()
 	return err
 }
 
