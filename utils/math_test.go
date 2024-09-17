@@ -1,12 +1,10 @@
 package utils
 
 import (
-	"encoding/csv"
 	"errors"
 	"github.com/banbox/banexg/log"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
-	"os"
 	"testing"
 )
 
@@ -146,13 +144,7 @@ func readMetaReturns(t *testing.T) []decimal.Decimal {
 		df.to_csv(path)
 	*/
 	path := "E:\\PyProjects\\pytest\\trade\\data.csv"
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	reader := csv.NewReader(file)
-	records, err := reader.ReadAll()
+	records, err := ReadCSV(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,9 +154,9 @@ func readMetaReturns(t *testing.T) []decimal.Decimal {
 
 	var returns []decimal.Decimal
 	for _, record := range records[1:] {
-		val, err := decimal.NewFromString(record[1])
-		if err != nil {
-			t.Fatal(err)
+		val, err_ := decimal.NewFromString(record[1])
+		if err_ != nil {
+			t.Fatal(err_)
 		}
 		returns = append(returns, val)
 	}

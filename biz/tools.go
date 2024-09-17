@@ -2,7 +2,6 @@ package biz
 
 import (
 	"archive/zip"
-	"bufio"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -18,7 +17,6 @@ import (
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"math"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -251,14 +249,9 @@ func LoadCalendars(args *config.CmdArgs) *errs.Error {
 	if args.InPath == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "--in is required")
 	}
-	file, err_ := os.Open(args.InPath)
-	if err_ != nil {
-		return errs.New(errs.CodeIOReadFail, err_)
-	}
-	defer file.Close()
-	rows, err_ := csv.NewReader(bufio.NewReader(file)).ReadAll()
-	if err_ != nil {
-		return errs.New(errs.CodeIOReadFail, err_)
+	rows, err := utils.ReadCSV(args.InPath)
+	if err != nil {
+		return err
 	}
 	ctx := context.Background()
 	sess, conn, err := orm.Conn(ctx)

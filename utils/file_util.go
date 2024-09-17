@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	"github.com/xuri/excelize/v2"
 	"io"
 	"os"
 	"path/filepath"
@@ -235,4 +236,51 @@ func ReadLastNLines(filePath string, lineCount int) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func ReadCSV(path string) ([][]string, *errs.Error) {
+	file, err_ := os.Open(path)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeIOReadFail, err_)
+	}
+	defer file.Close()
+	rows, err_ := csv.NewReader(file).ReadAll()
+	if err_ != nil {
+		return nil, errs.New(errs.CodeIOReadFail, err_)
+	}
+	return rows, nil
+}
+
+/*
+ReadXlsx use first if `sheet` is empty
+*/
+func ReadXlsx(path, sheet string) ([][]string, *errs.Error) {
+	f, err_ := excelize.OpenFile(path)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeIOReadFail, err_)
+	}
+	defer f.Close()
+	if sheet == "" {
+		sheet = f.GetSheetName(0)
+	}
+	rows, err_ := f.Rows(sheet)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeIOReadFail, err_)
+	}
+	var res [][]string
+	for rows.Next() {
+		opts := rows.GetRowOpts()
+		if opts.Hidden {
+			continue
+		}
+		cells, err_ := rows.Columns()
+		if err_ != nil {
+			return nil, errs.New(errs.CodeIOReadFail, err_)
+		}
+		if len(cells) > 1 {
+			// skip row index
+			res = append(res, cells[1:])
+		}
+	}
+	return res, nil
 }

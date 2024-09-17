@@ -11,12 +11,14 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -685,4 +687,139 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 	}
 	saveBar()
 	return nil
+}
+
+/*
+CalcFilePerfs calc sharpe/sortino ratio for input data
+*/
+func CalcFilePerfs(args *config.CmdArgs) *errs.Error {
+	path := args.InPath
+	if path == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "--in is required")
+	}
+	if args.OutPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	var rows [][]string
+	var err *errs.Error
+	if ext == ".csv" {
+		rows, err = utils.ReadCSV(path)
+	} else if ext == ".xlsx" {
+		rows, err = utils.ReadXlsx(path, "")
+	} else {
+		return errs.NewMsg(errs.CodeRunTime, fmt.Sprintf("invalid file type: %s, expect csv/xlsx", ext))
+	}
+	if err != nil {
+		return err
+	}
+	if len(rows) <= 1 {
+		log.Warn("file empty, skip CalcFilePerfs", zap.Int("rowNum", len(rows)))
+		return nil
+	}
+	var names = rows[0]
+	var startCol = 1
+	isPrice := args.InType != "ratio"
+	var cols [][]string
+	for range names {
+		cols = append(cols, make([]string, 0, len(rows)))
+	}
+	for _, row := range rows {
+		for i, text := range row {
+			cols[i] = append(cols[i], text)
+		}
+	}
+	// convert string to Decimal for all cols
+	var colData [][]decimal.Decimal
+	for _, col := range cols[startCol:] {
+		data := make([]decimal.Decimal, 0, len(col)+2)
+		for _, text := range col[1:] {
+			val, _ := decimal.NewFromString(text)
+			data = append(data, val)
+		}
+		colData = append(colData, data)
+	}
+	if isPrice {
+		var resData [][]decimal.Decimal
+		val1 := decimal.NewFromInt(1)
+		val0 := decimal.NewFromInt(0)
+		for _, col := range colData {
+			var res []decimal.Decimal
+			for i, v := range col {
+				if i == 0 {
+					continue
+				}
+				pv := col[i-1]
+				if pv.Equal(val0) {
+					res = append(res, val0)
+				} else {
+					res = append(res, v.Div(pv).Sub(val1))
+				}
+			}
+			resData = append(resData, res)
+		}
+		colData = resData
+	}
+	// calculate sharpe/sortino
+	type Col struct {
+		name string
+		data []decimal.Decimal
+		raw  []string
+	}
+	var items []*Col
+	val0 := decimal.NewFromInt(0)
+	for i, col := range colData {
+		sharpe, err_ := utils.DecSharpeRatio(col, val0)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		sortino, err_ := utils.DecSortinoRatio(col, val0)
+		if err_ != nil {
+			sortino = decimal.NewFromFloat(0)
+		}
+		items = append(items, &Col{
+			name: names[startCol+i],
+			data: append(col, sharpe, sortino),
+			raw:  cols[startCol+i][1:],
+		})
+	}
+	// sort columns by sharpe ratio
+	slices.SortFunc(items, func(a, b *Col) int {
+		av := a.data[len(a.data)-2]
+		bv := b.data[len(b.data)-2]
+		sub, _ := av.Sub(bv).Float64()
+		return int(sub * 100)
+	})
+	var outRows [][]string
+	var heads = []string{""}
+	for _, item := range items {
+		heads = append(heads, item.name)
+	}
+	outRows = append(outRows, heads)
+	rowId := 0
+	for {
+		row := make([]string, 0, len(items)+2)
+		row = append(row, rows[rowId+1][0])
+		for _, item := range items {
+			row = append(row, item.raw[rowId])
+		}
+		outRows = append(outRows, row)
+		rowId += 1
+		if rowId >= len(items[0].raw) {
+			row = make([]string, 0, len(items)+2)
+			row = append(row, "sharpe")
+			for _, item := range items {
+				row = append(row, item.data[len(item.data)-2].String())
+			}
+			outRows = append(outRows, row)
+			row = make([]string, 0, len(items)+2)
+			row = append(row, "sortino")
+			for _, item := range items {
+				row = append(row, item.data[len(item.data)-1].String())
+			}
+			outRows = append(outRows, row)
+			break
+		}
+	}
+	return utils.WriteCsvFile(args.OutPath, outRows, false)
 }

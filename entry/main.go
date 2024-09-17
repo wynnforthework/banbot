@@ -156,6 +156,9 @@ func runToolCmds(args []string) {
 		case "data_server":
 			options = []string{"mem_profile"}
 			entry = biz.RunDataServer
+		case "calc_perfs":
+			options = []string{"in", "in_type", "out"}
+			entry = data.CalcFilePerfs
 		default:
 			return nil, nil
 		}
@@ -239,6 +242,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.IntVar(&args.TaskId, "task-id", 0, "task")
 		case "in":
 			cmd.StringVar(&args.InPath, "in", "", "input file or directory")
+		case "in_type":
+			cmd.StringVar(&args.InType, "in-type", "", "input data type")
 		case "out":
 			cmd.StringVar(&args.OutPath, "out", "", "output file or directory")
 		case "adj":
