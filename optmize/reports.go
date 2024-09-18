@@ -11,7 +11,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -629,7 +629,7 @@ func (r *BTResult) dumpStrategy() {
 
 func (r *BTResult) dumpStagyOutputs() {
 	groups := make(map[string][]string)
-	for _, items := range strategy.PairStags {
+	for _, items := range strat.PairStags {
 		for _, stgy := range items {
 			if len(stgy.Outputs) == 0 {
 				continue

@@ -8,7 +8,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -352,7 +352,7 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 	tfMSecs := int64(utils.TFToSecs(tf) * 1000)
 	lastMS := bars[len(bars)-1].Time + tfMSecs
 	envKey := strings.Join([]string{f.Symbol, tf}, "_")
-	if env, ok := strategy.Envs[envKey]; ok {
+	if env, ok := strat.Envs[envKey]; ok {
 		env.Reset()
 	}
 	if len(f.adjs) > 0 {

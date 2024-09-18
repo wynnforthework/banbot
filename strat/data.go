@@ -1,4 +1,4 @@
-package strategy
+package strat
 
 import (
 	ta "github.com/banbox/banta"

@@ -6,7 +6,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -22,7 +22,7 @@ type Trader struct {
 
 func (t *Trader) OnEnvJobs(bar *orm.InfoKline) (*ta.BarEnv, *errs.Error) {
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
-	env, ok := strategy.Envs[envKey]
+	env, ok := strat.Envs[envKey]
 	if !ok {
 		return nil, errs.NewMsg(core.ErrBadConfig, "env for %s/%s not found", bar.Symbol, bar.TimeFrame)
 	}
@@ -71,9 +71,9 @@ func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
 func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKline, barExpired bool) *errs.Error {
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
 	// 获取交易任务
-	jobs, _ := strategy.GetJobs(account)[envKey]
+	jobs, _ := strat.GetJobs(account)[envKey]
 	// 辅助订阅的任务
-	infoJobs, _ := strategy.GetInfoJobs(account)[envKey]
+	infoJobs, _ := strat.GetInfoJobs(account)[envKey]
 	if len(jobs) == 0 && len(infoJobs) == 0 {
 		return nil
 	}
@@ -99,8 +99,8 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 			curOrders = append(curOrders, od)
 		}
 	}
-	var enters []*strategy.EnterReq
-	var exits []*strategy.ExitReq
+	var enters []*strat.EnterReq
+	var exits []*strat.ExitReq
 	var edits []*orm.InOutEdit
 	for _, job := range jobs {
 		job.IsWarmUp = bar.IsWarmUp
@@ -142,8 +142,8 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	return t.ExecOrders(odMgr, jobs, env, enters, exits, edits)
 }
 
-func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob, env *ta.BarEnv,
-	enters []*strategy.EnterReq, exits []*strategy.ExitReq, edits []*orm.InOutEdit) *errs.Error {
+func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StagyJob, env *ta.BarEnv,
+	enters []*strat.EnterReq, exits []*strat.ExitReq, edits []*orm.InOutEdit) *errs.Error {
 	if len(enters)+len(exits)+len(edits) == 0 {
 		return nil
 	}
@@ -165,7 +165,7 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob,
 		log.Error("process orders fail", zap.Error(err))
 		return err
 	}
-	var jobMap = map[string]*strategy.StagyJob{}
+	var jobMap = map[string]*strat.StagyJob{}
 	for _, job := range jobs {
 		if job.Stagy.OnOrderChange == nil {
 			continue
@@ -177,14 +177,14 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strategy.StagyJob,
 		if !ok || job.Stagy.OnOrderChange == nil {
 			continue
 		}
-		job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+		job.Stagy.OnOrderChange(job, od, strat.OdChgEnter)
 	}
 	for _, od := range exts {
 		job, ok := jobMap[od.Strategy]
 		if !ok || job.Stagy.OnOrderChange == nil {
 			continue
 		}
-		job.Stagy.OnOrderChange(job, od, strategy.OdChgExit)
+		job.Stagy.OnOrderChange(job, od, strat.OdChgExit)
 	}
 	return nil
 }
@@ -196,7 +196,7 @@ func (t *Trader) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) {
 		log.Warn("close orders on env end fail", zap.Error(err))
 	}
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
-	env, ok := strategy.Envs[envKey]
+	env, ok := strat.Envs[envKey]
 	if ok {
 		env.Reset()
 	}

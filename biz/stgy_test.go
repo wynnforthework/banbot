@@ -6,7 +6,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -54,11 +54,11 @@ func TestStagyRun(t *testing.T) {
 		"ARPA/USDT:USDT", "SOL/USDT:USDT", "1000XEC/USDT:USDT", "DOGE/USDT:USDT", "MANA/USDT:USDT",
 		"SAND/USDT:USDT", "BLUR/USDT:USDT", "1000LUNC/USDT:USDT", "BCH/USDT:USDT", "ID/USDT:USDT",
 		"SFP/USDT:USDT", "WAVES/USDT:USDT", "CHZ/USDT:USDT", "MASK/USDT:USDT", "BNB/USDT:USDT"}
-	stagy := strategy.New(&config.RunPolicyConfig{Name: "hammer"})
+	stagy := strat.New(&config.RunPolicyConfig{Name: "hammer"})
 	if stagy == nil {
 		panic("load strategy fail")
 	}
-	accJobs := strategy.GetJobs("")
+	accJobs := strat.GetJobs("")
 	for _, symbol := range pairs {
 		exs, err := orm.GetExSymbolCur(symbol)
 		if err != nil {
@@ -74,8 +74,8 @@ func TestStagyRun(t *testing.T) {
 			MaxCache:   core.NumTaCache,
 			Data:       map[string]interface{}{"sid": exs.ID},
 		}
-		strategy.Envs[envKey] = env
-		job := &strategy.StagyJob{
+		strat.Envs[envKey] = env
+		job := &strat.StagyJob{
 			Stagy:         stagy,
 			Env:           env,
 			Symbol:        exs,
@@ -90,7 +90,7 @@ func TestStagyRun(t *testing.T) {
 		}
 		jobs, ok := accJobs[envKey]
 		if !ok {
-			jobs = make(map[string]*strategy.StagyJob)
+			jobs = make(map[string]*strat.StagyJob)
 			accJobs[envKey] = jobs
 		}
 		jobs[job.Stagy.Name] = job
@@ -111,7 +111,7 @@ func TestStagyRun(t *testing.T) {
 		for _, pair := range pairs {
 			bar.Symbol = pair
 			envKey := strings.Join([]string{pair, tf}, "_")
-			env, _ := strategy.Envs[envKey]
+			env, _ := strat.Envs[envKey]
 			env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, 0)
 			core.SetBarPrice(pair, bar.Close)
 			jobs, _ := accJobs[envKey]

@@ -6,7 +6,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -25,11 +25,11 @@ var (
 )
 
 type IOrderMgr interface {
-	ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strategy.EnterReq,
-		exits []*strategy.ExitReq, edits []*orm.InOutEdit) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error)
-	EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strategy.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error)
-	ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy.ExitReq) ([]*orm.InOutOrder, *errs.Error)
-	ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strategy.ExitReq) (*orm.InOutOrder, *errs.Error)
+	ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
+		exits []*strat.ExitReq, edits []*orm.InOutEdit) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error)
+	EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error)
+	ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.ExitReq) ([]*orm.InOutOrder, *errs.Error)
+	ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.ExitReq) (*orm.InOutOrder, *errs.Error)
 	UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *errs.Error
 	OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error
 	CleanUp() *errs.Error
@@ -92,7 +92,7 @@ func CleanUpOdMgr() *errs.Error {
 	return err
 }
 
-func allowOrderEnter(account string, env *banta.BarEnv, enters []*strategy.EnterReq) []*strategy.EnterReq {
+func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq) []*strat.EnterReq {
 	if _, ok := core.ForbidPairs[env.Symbol]; ok {
 		return nil
 	}
@@ -110,10 +110,10 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strategy.Enter
 			num, _ := stagyOdNum[od.Strategy]
 			stagyOdNum[od.Strategy] = num + 1
 		}
-		res := make([]*strategy.EnterReq, 0, len(enters))
+		res := make([]*strat.EnterReq, 0, len(enters))
 		for _, req := range enters {
 			num, _ := stagyOdNum[req.StgyName]
-			pol := strategy.Get(env.Symbol, req.StgyName).Policy
+			pol := strat.Get(env.Symbol, req.StgyName).Policy
 			if pol == nil || pol.MaxOpen == 0 || num < pol.MaxOpen {
 				stagyOdNum[req.StgyName] = num + 1
 				res = append(res, req)
@@ -148,8 +148,8 @@ ProcessOrders 执行订单入场出场请求
 回测：调用方根据下一个bar执行入场/出场订单，更新状态
 实盘：监听交易所返回订单状态更新入场出场
 */
-func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strategy.EnterReq,
-	exits []*strategy.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
+	exits []*strat.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	var entOrders, extOrders []*orm.InOutOrder
 	if len(enters) > 0 {
 		enters = allowOrderEnter(o.Account, env, enters)
@@ -173,13 +173,13 @@ func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []
 	return entOrders, extOrders, nil
 }
 
-func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strategy.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error) {
 	isSpot := core.Market == banexg.MarketSpot
 	if req.Short && isSpot {
 		return nil, errs.NewMsg(core.ErrRunTime, "short oder is invalid for spot")
 	}
 	if doCheck {
-		enters := allowOrderEnter(o.Account, env, []*strategy.EnterReq{req})
+		enters := allowOrderEnter(o.Account, env, []*strat.EnterReq{req})
 		if len(enters) == 0 {
 			return nil, nil
 		}
@@ -193,7 +193,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 			req.Leverage = config.GetAccLeverage(o.Account)
 		}
 	}
-	stgVer, _ := strategy.Versions[req.StgyName]
+	stgVer, _ := strat.Versions[req.StgyName]
 	odSide := banexg.OdSideBuy
 	if req.Short {
 		odSide = banexg.OdSideSell
@@ -267,7 +267,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strateg
 	return od, err
 }
 
-func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy.ExitReq) ([]*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.ExitReq) ([]*orm.InOutOrder, *errs.Error) {
 	// 筛选匹配的订单
 	var matches []*orm.InOutOrder
 	openOds, lock := orm.GetOpenODs(o.Account)
@@ -364,7 +364,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strategy
 	return result, nil
 }
 
-func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strategy.ExitReq) (*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.ExitReq) (*orm.InOutOrder, *errs.Error) {
 	if od.ExitTag != "" || (od.Exit != nil && od.Exit.Amount > 0) {
 		// Exit一旦有值，表示全部退出
 		return nil, nil
@@ -429,9 +429,9 @@ sess 可为nil
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	od.UpdateProfits(0)
 	err := od.Save(sess)
-	cfg := strategy.GetStrtgPerf(od.Symbol, od.Strategy)
+	cfg := strat.GetStrtgPerf(od.Symbol, od.Strategy)
 	if cfg != nil && cfg.Enable && o.Account == config.DefAcc {
-		err2 := strategy.CalcJobScores(od.Symbol, od.Timeframe, od.Strategy)
+		err2 := strat.CalcJobScores(od.Symbol, od.Timeframe, od.Strategy)
 		if err2 != nil {
 			log.Error("calc job performance fail", zap.Error(err2),
 				zap.Strings("job", []string{od.Symbol, od.Timeframe, od.Strategy}))

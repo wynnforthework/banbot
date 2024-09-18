@@ -8,7 +8,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/gofiber/fiber/v2"
@@ -461,7 +461,7 @@ func getStagyJobs(c *fiber.Ctx) error {
 		OdNum    int     `json:"od_num"`
 	}
 	return wrapAccount(c, func(acc string) error {
-		jobs := strategy.GetJobs(acc)
+		jobs := strat.GetJobs(acc)
 		items := make([]*JobItem, 0, len(jobs))
 		openOds, lock := orm.GetOpenODs(acc)
 		lock.Lock()

@@ -4,7 +4,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -124,7 +124,7 @@ func allAllowTFs() []string {
 		if pol.Dirt == "any" {
 			pol.Dirt = ""
 		}
-		stagy := strategy.New(pol)
+		stagy := strat.New(pol)
 		if stagy == nil {
 			continue
 		}

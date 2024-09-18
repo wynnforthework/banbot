@@ -11,7 +11,7 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -110,7 +110,7 @@ func (t *CryptoTrader) Run() *errs.Error {
 		return err
 	}
 	err = biz.CleanUpOdMgr()
-	strategy.ExitStagyJobs()
+	strat.ExitStagyJobs()
 	if err != nil {
 		return err
 	}

@@ -9,7 +9,7 @@ import (
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/robfig/cron/v3"
@@ -79,13 +79,13 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	curTime := btime.TimeMS()
 	core.CheckWallets = false
 	if !bar.IsWarmUp {
-		if curTime > strategy.LastBatchMS {
+		if curTime > strat.LastBatchMS {
 			// 进入下一个时间帧，触发批量入场回调
 			waitNum := biz.TryFireBatches(curTime)
 			if waitNum > 0 {
 				panic(fmt.Sprintf("batch job exec fail, wait: %v", waitNum))
 			}
-			strategy.LastBatchMS = curTime
+			strat.LastBatchMS = curTime
 		}
 		if curTime > b.lastTime {
 			b.lastTime = curTime
@@ -136,7 +136,7 @@ func (b *BackTest) Run() {
 	}
 	btCost := btime.UTCTime() - btStart
 	err = biz.GetOdMgr("").CleanUp()
-	strategy.ExitStagyJobs()
+	strat.ExitStagyJobs()
 	if err != nil {
 		log.Error("backtest clean orders fail", zap.Error(err))
 		return

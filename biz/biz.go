@@ -11,7 +11,7 @@ import (
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -65,7 +65,7 @@ func LoadRefreshPairs() *errs.Error {
 		return err
 	}
 	var warms map[string]map[string]int
-	warms, err = strategy.LoadStagyJobs(pairs, pairTfScores)
+	warms, err = strat.LoadStagyJobs(pairs, pairTfScores)
 	if err != nil {
 		return err
 	}
@@ -81,8 +81,8 @@ func AutoRefreshPairs() {
 }
 
 func InitOdSubs() {
-	var subStagys = map[string]*strategy.TradeStagy{}
-	for _, items := range strategy.PairStags {
+	var subStagys = map[string]*strat.TradeStagy{}
+	for _, items := range strat.PairStags {
 		for stgName, stagy := range items {
 			if stagy.OnOrderChange != nil {
 				subStagys[stgName] = stagy
@@ -92,14 +92,14 @@ func InitOdSubs() {
 	if len(subStagys) == 0 {
 		return
 	}
-	for acc := range strategy.AccJobs {
-		strategy.AddOdSub(acc, func(acc string, od *orm.InOutOrder, evt int) {
+	for acc := range strat.AccJobs {
+		strat.AddOdSub(acc, func(acc string, od *orm.InOutOrder, evt int) {
 			stagy, ok := subStagys[od.Strategy]
 			if !ok {
 				// 当前策略未监听订单状态
 				return
 			}
-			items, _ := strategy.AccJobs[acc]
+			items, _ := strat.AccJobs[acc]
 			if len(items) == 0 {
 				return
 			}
@@ -123,25 +123,25 @@ AddBatchJob
 添加批量入场任务。
 即使job没有入场任务，也应该调用此方法，用于推迟入场时间TFEnterMS
 */
-func AddBatchJob(account, tf string, job *strategy.StagyJob, isInfo bool) {
+func AddBatchJob(account, tf string, job *strat.StagyJob, isInfo bool) {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
 	key := fmt.Sprintf("%s_%s_%s", tf, account, job.Stagy.Name)
-	tasks, ok := strategy.BatchTasks[key]
+	tasks, ok := strat.BatchTasks[key]
 	if !ok {
-		tasks = &strategy.BatchMap{
-			Map:     make(map[string]*strategy.BatchTask),
+		tasks = &strat.BatchMap{
+			Map:     make(map[string]*strat.BatchTask),
 			TFMSecs: int64(utils.TFToSecs(tf) * 1000),
 		}
-		strategy.BatchTasks[key] = tasks
+		strat.BatchTasks[key] = tasks
 	}
 	// 推迟3s等待执行
 	tasks.ExecMS = btime.TimeMS() + core.DelayBatchMS
-	var batchType = strategy.BatchTypeEnter
+	var batchType = strat.BatchTypeEnter
 	if isInfo {
-		batchType = strategy.BatchTypeInfo
+		batchType = strat.BatchTypeInfo
 	}
-	tasks.Map[job.Symbol.Symbol] = &strategy.BatchTask{Job: job, Type: batchType}
+	tasks.Map[job.Symbol.Symbol] = &strat.BatchTask{Job: job, Type: batchType}
 }
 
 func TryFireBatches(currMS int64) int {
@@ -160,7 +160,7 @@ func TryFireBatches(currMS int64) int {
 		defer conn.Release()
 	}
 	var waitNum = 0
-	for key, tasks := range strategy.BatchTasks {
+	for key, tasks := range strat.BatchTasks {
 		if currMS < tasks.ExecMS {
 			if tasks.ExecMS-currMS < tasks.TFMSecs/2 {
 				// 尚未到达批量处理时间
@@ -168,20 +168,20 @@ func TryFireBatches(currMS int64) int {
 			}
 			continue
 		}
-		var enterJobs []*strategy.StagyJob
-		var infoJobs map[string]*strategy.StagyJob
-		var stagy *strategy.TradeStagy
+		var enterJobs []*strat.StagyJob
+		var infoJobs map[string]*strat.StagyJob
+		var stagy *strat.TradeStagy
 		for pair, task := range tasks.Map {
 			stagy = task.Job.Stagy
-			if task.Type == strategy.BatchTypeEnter {
+			if task.Type == strat.BatchTypeEnter {
 				enterJobs = append(enterJobs, task.Job)
-			} else if task.Type == strategy.BatchTypeInfo {
+			} else if task.Type == strat.BatchTypeInfo {
 				infoJobs[pair] = task.Job
 			} else {
 				panic(fmt.Sprintf("unsupport BatchType: %v", task.Type))
 			}
 		}
-		delete(strategy.BatchTasks, key)
+		delete(strat.BatchTasks, key)
 		if len(enterJobs) > 0 {
 			// 检查此时间所有批量任务，决定哪些入场或那些出场
 			stagy.OnBatchJobs(enterJobs)
@@ -197,10 +197,10 @@ func TryFireBatches(currMS int64) int {
 				ents, exits, err = odMgr.ProcessOrders(sess, job.Env, job.Entrys, job.Exits, nil)
 				if job.Stagy.OnOrderChange != nil {
 					for _, od := range ents {
-						job.Stagy.OnOrderChange(job, od, strategy.OdChgEnter)
+						job.Stagy.OnOrderChange(job, od, strat.OdChgEnter)
 					}
 					for _, od := range exits {
-						job.Stagy.OnOrderChange(job, od, strategy.OdChgExit)
+						job.Stagy.OnOrderChange(job, od, strat.OdChgExit)
 					}
 				}
 				if err != nil {

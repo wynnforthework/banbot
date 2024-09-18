@@ -1,4 +1,4 @@
-package strategy
+package strat
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package strategy
+package strat
 
 import (
 	"fmt"
@@ -23,11 +23,11 @@ LoadStagyJobs 加载策略和交易对
 core.TFSecs
 core.StgPairTfs
 core.BookPairs
-strategy.Versions
-strategy.Envs
-strategy.PairStags
-strategy.AccJobs
-strategy.AccInfoJobs
+strat.Versions
+strat.Envs
+strat.PairStags
+strat.AccJobs
+strat.AccInfoJobs
 
 	返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
 */

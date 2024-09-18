@@ -9,7 +9,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strategy"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -362,7 +362,7 @@ func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.
 	// 重置PairParams，避免影响传入参数
 	pol.PairParams = make(map[string]map[string]float64)
 	pol.Score = -998
-	_ = strategy.New(pol)
+	_ = strat.New(pol)
 	params := pol.HyperParams()
 	if len(params) == 0 {
 		log.Warn("no hyper params, skip optimize", zap.String("strtg", title))
@@ -530,12 +530,12 @@ func ResetVars() {
 	orm.HistODs = make([]*orm.InOutOrder, 0)
 	//orm.FakeOdId = 1
 	orm.ResetVars()
-	strategy.Envs = make(map[string]*ta.BarEnv)
-	strategy.AccJobs = make(map[string]map[string]map[string]*strategy.StagyJob)
-	strategy.AccInfoJobs = make(map[string]map[string]map[string]*strategy.StagyJob)
-	strategy.PairStags = make(map[string]map[string]*strategy.TradeStagy)
-	strategy.BatchTasks = make(map[string]*strategy.BatchMap)
-	strategy.LastBatchMS = 0
+	strat.Envs = make(map[string]*ta.BarEnv)
+	strat.AccJobs = make(map[string]map[string]map[string]*strat.StagyJob)
+	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StagyJob)
+	strat.PairStags = make(map[string]map[string]*strat.TradeStagy)
+	strat.BatchTasks = make(map[string]*strat.BatchMap)
+	strat.LastBatchMS = 0
 }
 
 /*
