@@ -567,7 +567,7 @@ DownIfNeed
 pBar 用于进度更新，总和为1000，每次更新此次的量
 */
 func (f *DBKlineFeeder) DownIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error {
-	if len(f.States) == 0 {
+	if len(f.States) == 0 || f.DelistMs > 0 {
 		return nil
 	}
 	downTf, err := orm.GetDownTF(f.States[0].TimeFrame)

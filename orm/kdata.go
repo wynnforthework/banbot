@@ -237,7 +237,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 
 	wg.Wait()
 	if outErr != nil {
-		return saveNum, errs.New(core.ErrRunTime, outErr)
+		return saveNum, outErr
 	}
 	if saveNum == 0 {
 		return 0, nil
@@ -549,6 +549,9 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	conn.Release()
 	return utils.ParallelRun(sidList, core.ConcurNum, func(_ int, i int32) *errs.Error {
 		exs, _ := exsList[i]
+		if exs.DelistMs > 0 {
+			return nil
+		}
 		var oldStart, oldEnd = int64(0), int64(0)
 		if krange, ok := kRanges[exs.ID]; ok {
 			oldStart, oldEnd = krange[0], krange[1]

@@ -36,10 +36,13 @@ require (
 )
 
 require (
+	github.com/flopp/go-findfont v0.1.0
+	github.com/fogleman/gg v1.3.0
 	github.com/go-playground/validator/v10 v10.22.0
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/shirou/gopsutil/v4 v4.24.7
+	golang.org/x/image v0.14.0
 )
 
 require (
@@ -53,6 +56,7 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/glog v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect

@@ -39,6 +39,7 @@ type CmdArgs struct {
 	MemProfile    bool
 	InPath        string
 	OutPath       string
+	OutType       string // output data type
 	AdjType       string // 复权类型: pre,post,none
 	TimeZone      string // 时区
 	ExgReal       string
@@ -49,4 +50,6 @@ type CmdArgs struct {
 	ReviewPeriod  string // 持续调参回测时，调参回顾的周期
 	RunPeriod     string // 持续调参回测时，调参后有效运行周期
 	InType        string // 输入文件的数据类型
+	RunEveryTF    string // run once every n timeframe
+	BatchSize     int
 }

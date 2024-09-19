@@ -8,7 +8,9 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	"github.com/flopp/go-findfont"
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/image/font/opentype"
 	"io"
 	"os"
 	"path/filepath"
@@ -151,6 +153,19 @@ func WriteCsvFile(path string, rows [][]string, compress bool) *errs.Error {
 	return nil
 }
 
+func WriteFile(path string, data []byte) *errs.Error {
+	file, err_ := os.Create(path)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	defer file.Close()
+	_, err_ = file.Write(data)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	return nil
+}
+
 func KlineToStr(klines []*banexg.Kline, loc *time.Location) [][]string {
 	rows := make([][]string, 0, len(klines))
 	for _, k := range klines {
@@ -283,4 +298,28 @@ func ReadXlsx(path, sheet string) ([][]string, *errs.Error) {
 		}
 	}
 	return res, nil
+}
+
+func GetFontData(name string) ([]byte, error) {
+	if name == "" {
+		name = "arial.ttf"
+	}
+	path, err := findfont.Find(name)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func GetOpenFont(name string) (*opentype.Font, error) {
+	fontData, err := GetFontData(name)
+	if err != nil {
+		return nil, err
+	}
+	fontFace, err := opentype.Parse(fontData)
+	return fontFace, err
 }

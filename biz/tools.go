@@ -10,6 +10,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
@@ -18,6 +19,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -570,6 +572,161 @@ func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+/*
+CalcCorrelation calculate correlation for pairs; generate csv or images
+*/
+func CalcCorrelation(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := SetupComs(args)
+	if err != nil {
+		return err
+	}
+	err = orm.InitExg(exg.Default)
+	if err != nil {
+		return err
+	}
+	if len(args.TimeFrames) == 0 {
+		return errs.NewMsg(errs.CodeParamRequired, "--timeframes is required")
+	}
+	if args.BatchSize <= 1 {
+		return errs.NewMsg(errs.CodeParamRequired, "--batch-size is required")
+	}
+	if args.RunEveryTF == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "--run-every is required")
+	}
+	if args.OutPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
+	}
+	pairs, err := goods.RefreshPairList()
+	if err != nil {
+		return err
+	}
+	slices.Sort(pairs)
+	exsList := make([]*orm.ExSymbol, 0, len(pairs))
+	for _, pair := range pairs {
+		exs, err := orm.GetExSymbolCur(pair)
+		if err != nil {
+			log.Warn("get exs fail, skip", zap.String("code", pair), zap.Error(err))
+			continue
+		}
+		exsList = append(exsList, exs)
+	}
+	tf := args.TimeFrames[0]
+	tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+	gapTFMSecs := int64(utils.TFToSecs(args.RunEveryTF) * 1000)
+	if int(gapTFMSecs/tfMSecs) < args.BatchSize {
+		log.Error("run-every is too small for current batch-size and timeframe")
+		return nil
+	}
+	startMs := config.TimeRange.StartMS
+	klineNum := args.BatchSize + 1
+	pBar := utils.NewPrgBar(int((config.TimeRange.EndMS-startMs)/gapTFMSecs)+1, "Corr")
+	defer pBar.Close()
+	var csvRows [][]string
+	codes := make([]string, 0, len(pairs))
+	for _, pair := range pairs {
+		id, _, _, _ := core.SplitSymbol(pair)
+		codes = append(codes, id)
+	}
+	emptyRow := make(map[string]string)
+	// make csv head; first avg corr for each code
+	var head []string
+	head = append(head, "date")
+	emptyRow["date"] = "-"
+	for _, id := range codes {
+		emptyRow[id] = "-"
+		head = append(head, id)
+	}
+	// detail corr for each pair
+	for i, id := range codes {
+		for j := i + 1; j < len(codes); j++ {
+			key := fmt.Sprintf("%s/%s", id, codes[j])
+			emptyRow[key] = "-"
+			head = append(head, key)
+		}
+	}
+	csvRows = append(csvRows, head)
+	for {
+		if startMs >= config.TimeRange.EndMS {
+			break
+		}
+		pBar.Add(1)
+		// Calculate logarithmic rate of return
+		names := make([]string, 0, len(exsList))
+		dataArr := make([][]float64, 0, len(exsList))
+		var lacks []string
+		for i, exs := range exsList {
+			_, klines, err := orm.GetOHLCV(exs, tf, startMs, startMs+gapTFMSecs, klineNum, false)
+			if err != nil {
+				log.Warn("get kline fail, skip", zap.String("code", exs.Symbol), zap.Error(err))
+				continue
+			}
+			if len(klines) >= klineNum {
+				prices := make([]float64, 0, len(klines))
+				for _, b := range klines {
+					prices = append(prices, b.Close)
+				}
+				names = append(names, codes[i])
+				dataArr = append(dataArr, prices[:klineNum])
+			} else {
+				lacks = append(lacks, exs.Symbol)
+			}
+		}
+		dateStr := btime.ToDateStr(startMs, "20060102")
+		if len(lacks) > 0 {
+			log.Warn("skip no enough kline", zap.String("dt", dateStr), zap.Strings("codes", lacks))
+		}
+		startMs += gapTFMSecs
+		if len(names) == 0 {
+			continue
+		}
+		// Calculate the Pearson correlation matrix
+		corrMat, err_ := utils.CalcCorrMat(dataArr, true)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		if args.OutType == "csv" {
+			row := make(map[string]string)
+			for k, v := range emptyRow {
+				row[k] = v
+			}
+			row["date"] = btime.ToDateStr(startMs, "2006-01-02 15:04")
+			for i, id := range names {
+				var avg = float64(0)
+				for j := 0; j < i; j++ {
+					avg += corrMat.At(i, j)
+				}
+				for j := i + 1; j < len(names); j++ {
+					val := corrMat.At(i, j)
+					avg += val
+					key := fmt.Sprintf("%s/%s", id, names[j])
+					row[key] = strconv.FormatFloat(val, 'f', 3, 64)
+				}
+				row[id] = strconv.FormatFloat(avg/float64(len(names)-1), 'f', 3, 64)
+			}
+			arr := make([]string, 0, len(head))
+			for _, name := range head {
+				arr = append(arr, row[name])
+			}
+			csvRows = append(csvRows, arr)
+		} else {
+			imgData, err_ := utils.GenCorrImg(corrMat, dateStr, names, "", 0)
+			if err_ != nil {
+				return errs.New(errs.CodeRunTime, err_)
+			}
+			err = utils.WriteFile(filepath.Join(args.OutPath, dateStr+".png"), imgData)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if args.OutType == "csv" {
+		outName := fmt.Sprintf("corr_%s_every_%s.csv", tf, args.RunEveryTF)
+		return utils.WriteCsvFile(filepath.Join(args.OutPath, outName), csvRows, false)
 	}
 	return nil
 }

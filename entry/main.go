@@ -159,6 +159,9 @@ func runToolCmds(args []string) {
 		case "calc_perfs":
 			options = []string{"in", "in_type", "out"}
 			entry = data.CalcFilePerfs
+		case "corr":
+			options = []string{"out", "out_type", "timeframes", "batch_size", "run_every"}
+			entry = biz.CalcCorrelation
 		default:
 			return nil, nil
 		}
@@ -264,6 +267,12 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.ReviewPeriod, "review-period", "3y", "review period, default: 3 years")
 		case "run_period":
 			cmd.StringVar(&args.RunPeriod, "run-period", "6M", "run period, default: 6 months")
+		case "batch_size":
+			cmd.IntVar(&args.BatchSize, "batch-size", 0, "batch size for task")
+		case "run_every":
+			cmd.StringVar(&args.RunEveryTF, "run-every", "", "run every ? timerange")
+		case "out_type":
+			cmd.StringVar(&args.OutType, "out-type", "", "output data type")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

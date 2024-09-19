@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
@@ -101,6 +102,33 @@ func EnsureExgSymbols(exchange banexg.BanExchange) *errs.Error {
 	if len(exInfo.Markets) == 0 {
 		// 中国期货需要在EnsureSymbols后再次调用LoadMarkets传入symbols才能加载成功
 		_, err = LoadMarkets(exchange, false)
+	} else {
+		// Mark the coins that are not returned by the exchange as delisted
+		var editList []*ExSymbol
+		for _, exs := range idSymbolMap {
+			if _, ok := exInfo.Markets[exs.Symbol]; !ok {
+				exs.DelistMs = btime.UTCStamp()
+				editList = append(editList, exs)
+			}
+		}
+		if len(editList) > 0 {
+			ctx := context.Background()
+			sess, conn, err := Conn(ctx)
+			if err != nil {
+				return err
+			}
+			defer conn.Release()
+			for _, exs := range editList {
+				err_ := sess.SetListMS(context.Background(), SetListMSParams{
+					ID:       exs.ID,
+					ListMs:   exs.ListMs,
+					DelistMs: exs.DelistMs,
+				})
+				if err_ != nil {
+					return NewDbErr(core.ErrDbExecFail, err_)
+				}
+			}
+		}
 	}
 	return err
 }
