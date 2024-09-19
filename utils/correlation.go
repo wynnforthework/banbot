@@ -19,9 +19,9 @@ import (
 /*
 CalcCorrMat calculate Correlation Matrix for given data
 */
-func CalcCorrMat(dataArr [][]float64, useChgRate bool) (*mat.SymDense, error) {
+func CalcCorrMat(dataArr [][]float64, useChgRate bool) (*mat.SymDense, []float64, error) {
 	if len(dataArr) <= 1 {
-		return nil, errors.New("at least two data series are required to calculate correlation")
+		return nil, nil, errors.New("at least two data series are required to calculate correlation")
 	}
 	if useChgRate {
 		resArr := make([][]float64, 0, len(dataArr))
@@ -52,7 +52,18 @@ func CalcCorrMat(dataArr [][]float64, useChgRate bool) (*mat.SymDense, error) {
 	returnsMat := mat.NewDense(numReturns, numAssets, matrixData)
 	corrMat := mat.NewSymDense(numAssets, nil)
 	stat.CorrelationMatrix(corrMat, returnsMat, nil)
-	return corrMat, nil
+	avgs := make([]float64, 0, numAssets)
+	for i := 0; i < numAssets; i++ {
+		var sum float64
+		for j := 0; j < numAssets; j++ {
+			if i == j {
+				continue
+			}
+			sum += corrMat.At(i, j)
+		}
+		avgs = append(avgs, sum/float64(numAssets-1))
+	}
+	return corrMat, avgs, nil
 }
 
 func GenCorrImg(m *mat.SymDense, title string, names []string, fontName string, fontSize float64) ([]byte, error) {

@@ -186,6 +186,8 @@ type PairMgrConfig struct {
 	Offset int `yaml:"offset" mapstructure:"offset,omitempty"`
 	// 限制币种数量
 	Limit int `yaml:"limit" mapstructure:"limit,omitempty"`
+	// apply filters to static pairs force
+	ForceFilters bool `yaml:"force_filters" mapstructure:"force_filters,omitempty"`
 }
 
 // 通用的过滤器

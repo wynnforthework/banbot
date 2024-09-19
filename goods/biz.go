@@ -70,6 +70,8 @@ func GetPairFilters(items []*config.CommonPairFilter, withInvalid bool) ([]IFilt
 			output = &OffsetFilter{BaseFilter: base}
 		case "ShuffleFilter":
 			output = &ShuffleFilter{BaseFilter: base}
+		case "CorrelationFilter":
+			output = &CorrelationFilter{BaseFilter: base}
 		default:
 			return nil, errs.NewMsg(errs.CodeParamInvalid, "unknown symbol filter: %s", cfg.Name)
 		}
@@ -97,6 +99,7 @@ func RefreshPairList() ([]string, *errs.Error) {
 			return nil, err
 		}
 		pairs, _ = filterByMinCost(pairVols)
+		allowFilter = config.PairMgr.ForceFilters
 	} else {
 		allowFilter = true
 		if needTickers && core.LiveMode {

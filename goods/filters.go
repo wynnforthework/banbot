@@ -291,6 +291,65 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, adj int, cb fu
 	return res, nil
 }
 
+func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+	if f.Timeframe == "" || f.BackNum == 0 || f.Max == 0 && f.TopN == 0 {
+		return symbols, nil
+	}
+	if f.BackNum < 10 {
+		return nil, errs.NewMsg(errs.CodeParamInvalid, "`CorrelationFilter.back_num` should >= 10, cur: %v", f.BackNum)
+	}
+	var skips []string
+	var names = make([]string, 0, len(symbols))
+	var dataArr = make([][]float64, 0, len(symbols))
+	for _, pair := range symbols {
+		exs, err := orm.GetExSymbolCur(pair)
+		if err != nil {
+			skips = append(skips, pair)
+			continue
+		}
+		_, klines, err := orm.GetOHLCV(exs, f.Timeframe, 0, 0, f.BackNum, false)
+		if err != nil || len(klines) < f.BackNum {
+			skips = append(skips, pair)
+			continue
+		}
+		names = append(names, pair)
+		prices := make([]float64, 0, len(klines))
+		for _, b := range klines {
+			prices = append(prices, b.Close)
+		}
+		dataArr = append(dataArr, prices[:f.BackNum])
+	}
+	nameNum := len(names)
+	if nameNum <= 3 {
+		log.Warn("too less symbols, skip CorrelationFilter", zap.Int("num", nameNum))
+		return symbols, nil
+	}
+	if len(skips) > 0 {
+		log.Warn("skip for klines lack", zap.Strings("codes", skips))
+	}
+	if f.TopN > 0 && nameNum <= f.TopN {
+		return names, nil
+	}
+	_, avgs, err_ := utils.CalcCorrMat(dataArr, true)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeRunTime, err_)
+	}
+	result := make([]string, 0, nameNum)
+	for i, avg := range avgs {
+		if f.Min != 0 && avg < f.Min {
+			continue
+		}
+		if f.Max != 0 && avg > f.Max {
+			continue
+		}
+		result = append(result, names[i])
+		if f.TopN > 0 && len(result) >= f.TopN {
+			break
+		}
+	}
+	return result, nil
+}
+
 func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	return filterByOHLCV(symbols, "1d", f.BackDays, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
 		var data = make([]float64, 0, len(klines))

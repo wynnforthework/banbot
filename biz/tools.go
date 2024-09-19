@@ -685,7 +685,7 @@ func CalcCorrelation(args *config.CmdArgs) *errs.Error {
 			continue
 		}
 		// Calculate the Pearson correlation matrix
-		corrMat, err_ := utils.CalcCorrMat(dataArr, true)
+		corrMat, avgs, err_ := utils.CalcCorrMat(dataArr, true)
 		if err_ != nil {
 			return errs.New(errs.CodeRunTime, err_)
 		}
@@ -696,17 +696,12 @@ func CalcCorrelation(args *config.CmdArgs) *errs.Error {
 			}
 			row["date"] = btime.ToDateStr(startMs, "2006-01-02 15:04")
 			for i, id := range names {
-				var avg = float64(0)
-				for j := 0; j < i; j++ {
-					avg += corrMat.At(i, j)
-				}
 				for j := i + 1; j < len(names); j++ {
 					val := corrMat.At(i, j)
-					avg += val
 					key := fmt.Sprintf("%s/%s", id, names[j])
 					row[key] = strconv.FormatFloat(val, 'f', 3, 64)
 				}
-				row[id] = strconv.FormatFloat(avg/float64(len(names)-1), 'f', 3, 64)
+				row[id] = strconv.FormatFloat(avgs[i], 'f', 3, 64)
 			}
 			arr := make([]string, 0, len(head))
 			for _, name := range head {

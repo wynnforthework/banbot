@@ -63,6 +63,15 @@ type SpreadFilter struct {
 	MaxRatio float32 `yaml:"max_ratio" mapstructure:"max_ratio,omitempty"` // 公式：1-bid/ask，买卖价差占价格的最大比率
 }
 
+type CorrelationFilter struct {
+	BaseFilter
+	Min       float64 `yaml:"min" mapstructure:"min,omitempty"`
+	Max       float64 `yaml:"max" mapstructure:"max,omitempty"`
+	Timeframe string  `yaml:"timeframe" mapstructure:"timeframe,omitempty"`
+	BackNum   int     `yaml:"back_num" mapstructure:"back_num,omitempty"`
+	TopN      int     `yaml:"top_n" mapstructure:"top_n"`
+}
+
 // VolatilityFilter StdDev(ln(close / prev_close)) * sqrt(num)
 type VolatilityFilter struct {
 	BaseFilter
