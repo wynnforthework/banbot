@@ -11,9 +11,10 @@ import (
 type PrgBar struct {
 	bar      *progressbar.ProgressBar
 	m        *sync.Mutex
-	doneNum  int
-	totalNum int
 	title    string
+	DoneNum  int
+	TotalNum int
+	Last     int64 // for outer usage
 }
 
 func NewPrgBar(totalNum int, title string) *PrgBar {
@@ -21,7 +22,7 @@ func NewPrgBar(totalNum int, title string) *PrgBar {
 	return &PrgBar{
 		bar:      pBar,
 		m:        &sync.Mutex{},
-		totalNum: totalNum,
+		TotalNum: totalNum,
 		title:    title,
 	}
 }
@@ -32,10 +33,10 @@ func (p *PrgBar) Add(num int) {
 	}
 	p.m.Lock()
 	defer p.m.Unlock()
-	p.doneNum += num
-	if p.doneNum > p.totalNum {
-		log.Warn("pBar progress exceed", zap.String("title", p.title), zap.Int("max", p.totalNum),
-			zap.Int("cur", p.doneNum))
+	p.DoneNum += num
+	if p.DoneNum > p.TotalNum {
+		log.Warn("pBar progress exceed", zap.String("title", p.title), zap.Int("max", p.TotalNum),
+			zap.Int("cur", p.DoneNum))
 		return
 	}
 	err_ := p.bar.Add(num)
@@ -52,8 +53,8 @@ func (p *PrgBar) Close() {
 	if p.bar == nil {
 		return
 	}
-	if p.doneNum < p.totalNum {
-		p.Add(p.totalNum - p.doneNum)
+	if p.DoneNum < p.TotalNum {
+		p.Add(p.TotalNum - p.DoneNum)
 	}
 	err := p.bar.Close()
 	if err != nil {

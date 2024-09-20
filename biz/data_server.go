@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type FnFeaStream = func(exs *orm.ExSymbol, req *SubReq, rsp FeaFeeder_SubFeaturesServer) error
+type FnFeaStream = func(exsList []*orm.ExSymbol, req *SubReq, rsp FeaFeeder_SubFeaturesServer) error
 
 var (
 	FeaGenerators = map[string]FnFeaStream{} // SubFeatures 的任务特征生成函数注册
@@ -82,14 +82,19 @@ func (s *DataServer) SubFeatures(req *SubReq, rsp FeaFeeder_SubFeaturesServer) e
 		s.feaLock.Unlock()
 		return err
 	}
-	exs, err := orm.GetExSymbol(exchange, req.Pair)
-	s.feaLock.Unlock()
-	if err != nil {
-		return err
+	exsList := make([]*orm.ExSymbol, 0, len(req.Codes))
+	for _, code := range req.Codes {
+		exs, err := orm.GetExSymbol(exchange, code)
+		if err != nil {
+			s.feaLock.Unlock()
+			return err
+		}
+		exsList = append(exsList, exs)
 	}
+	s.feaLock.Unlock()
 	gen, ok := FeaGenerators[req.Task]
 	if !ok {
 		return fmt.Errorf("unsupport data task:" + req.Task)
 	}
-	return gen(exs, req, rsp)
+	return gen(exsList, req, rsp)
 }

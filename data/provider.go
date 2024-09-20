@@ -31,7 +31,8 @@ type IProvider interface {
 type Provider[T IKlineFeeder] struct {
 	holders   map[string]T
 	newFeeder func(pair string, tfs []string) (T, *errs.Error)
-	dirty     bool
+	dirtyVers chan int
+	dirtyLast int
 }
 
 func (p *Provider[IKlineFeeder]) UnSubPairs(pairs ...string) []string {
@@ -46,7 +47,8 @@ func (p *Provider[IKlineFeeder]) UnSubPairs(pairs ...string) []string {
 }
 
 func (p *Provider[IKlineFeeder]) SetDirty() {
-	p.dirty = true
+	p.dirtyLast += 1
+	p.dirtyVers <- p.dirtyLast
 }
 
 type WarmJob struct {
@@ -133,12 +135,12 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	return sinceMap, retErr
 }
 
-type HistProvider[T IHistKlineFeeder] struct {
-	Provider[T]
+type HistProvider struct {
+	Provider[IHistKlineFeeder]
 }
 
 func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
-	Main = &HistProvider[IHistKlineFeeder]{
+	Main = &HistProvider{
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IHistKlineFeeder, *errs.Error) {
@@ -158,7 +160,7 @@ func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
 	}
 }
 
-func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
+func (p *HistProvider) downIfNeed() *errs.Error {
 	exchange := exg.Default
 	if !exchange.HasApi(banexg.ApiFetchOHLCV, core.Market) {
 		return nil
@@ -181,7 +183,7 @@ func (p *HistProvider[IHistKlineFeeder]) downIfNeed() *errs.Error {
 	return nil
 }
 
-func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
+func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
 	_, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther)
 	// 检查回测期间数据是否需要下载，如需要自动下载
 	err = p.downIfNeed()
@@ -208,41 +210,52 @@ func (p *HistProvider[IHistKlineFeeder]) SubWarmPairs(items map[string]map[strin
 	return err
 }
 
-func (p *HistProvider[IHistKlineFeeder]) UnSubPairs(pairs ...string) *errs.Error {
+func (p *HistProvider) UnSubPairs(pairs ...string) *errs.Error {
 	_ = p.Provider.UnSubPairs(pairs...)
 	return nil
 }
 
-func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
+func (p *HistProvider) LoopMain() *errs.Error {
 	if len(p.holders) == 0 {
 		return errs.NewMsg(core.ErrBadConfig, "no pairs to run")
 	}
+	makeFeeders := func() []IHistKlineFeeder {
+		return utils.ValsOfMap(p.holders)
+	}
 	totalMS := (config.TimeRange.EndMS - config.TimeRange.StartMS) / 1000
-	var pbarTo = config.TimeRange.StartMS
 	var pBar = utils.NewPrgBar(int(totalMS), "RunHist")
 	defer pBar.Close()
+	pBar.Last = config.TimeRange.StartMS
 	log.Info("run data loop for backtest..")
+	return RunHistFeeders(makeFeeders, p.dirtyVers, pBar)
+}
+
+/*
+RunHistFeeders run hist feeders for historical data
+
+versions: When an integer greater than the previous value is received, makeFeeders will be called to re-acquire and continue running; when a negative number is received, exit immediately
+
+pBar: optional, used to display a progress bar
+*/
+func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pBar *utils.PrgBar) *errs.Error {
 	var hold IHistKlineFeeder
-	holds := utils.ValsOfMap(p.holders)
-	p.dirty = true
 	var wg sync.WaitGroup
 	var retErr *errs.Error
 	var lastBarMs int64
-	for {
-		if !core.BotRunning {
-			break
-		}
-		if p.dirty {
-			holds = utils.ValsOfMap(p.holders)
-			holds = p.sortFeeders(holds, hold, false)
-			p.dirty = false
+	var oldVer int
+	var holds []IHistKlineFeeder
+	step := func(ver int) bool {
+		if ver > oldVer || len(holds) == 0 {
+			holds = makeFeeders()
+			holds = SortFeeders(holds, nil, false)
+			oldVer = max(oldVer, ver)
 		} else {
-			holds = p.sortFeeders(holds, hold, true)
+			holds = SortFeeders(holds, hold, true)
 		}
 		hold = holds[0]
 		bar := hold.GetBar()
 		if bar == nil {
-			break
+			return false
 		}
 		hold.CallNext()
 		holds = holds[1:]
@@ -251,19 +264,25 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 			wg.Wait()
 			if retErr != nil {
 				log.Error("data loop main fail", zap.Error(retErr))
-				return retErr
+				return false
 			}
 			// 更新进度条
-			pBarAdd := (btime.TimeMS() - pbarTo) / 1000
-			if pBarAdd > 0 {
-				pBar.Add(int(pBarAdd))
-				pbarTo = btime.TimeMS()
+			if pBar != nil {
+				if pBar.Last == 0 {
+					pBar.Last = btime.TimeMS()
+				} else {
+					pBarAdd := (btime.TimeMS() - pBar.Last) / 1000
+					if pBarAdd > 0 {
+						pBar.Add(int(pBarAdd))
+						pBar.Last = btime.TimeMS()
+					}
+				}
 			}
 			// 新时间的第一个bar，同步运行
 			err := hold.RunBar(bar)
 			if err != nil {
 				log.Error("data loop main fail", zap.Error(err))
-				return err
+				return false
 			}
 			lastBarMs = bar.Time
 		} else {
@@ -280,12 +299,27 @@ func (p *HistProvider[IHistKlineFeeder]) LoopMain() *errs.Error {
 				}
 			}(hold, bar)
 		}
+		return true
+	}
+	for {
+		var ver = 0
+		select {
+		case ver = <-versions:
+			if ver < 0 {
+				return retErr
+			}
+		default:
+			ver = 0
+		}
+		if !step(ver) {
+			break
+		}
 	}
 	wg.Wait()
 	return retErr
 }
 
-func (p *HistProvider[IHistKlineFeeder]) sortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) []IHistKlineFeeder {
+func SortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) []IHistKlineFeeder {
 	if insert {
 		// 插入排序，说明holds已有序，二分查找位置，最快排序
 		vb := hold.getNextMS()
@@ -319,8 +353,8 @@ func (p *HistProvider[IHistKlineFeeder]) sortFeeders(holds []IHistKlineFeeder, h
 	return holds
 }
 
-type LiveProvider[T IKlineFeeder] struct {
-	Provider[T]
+type LiveProvider struct {
+	Provider[IKlineFeeder]
 	*KLineWatcher
 }
 
@@ -329,7 +363,7 @@ func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
 	if err != nil {
 		return err
 	}
-	provider := &LiveProvider[IKlineFeeder]{
+	provider := &LiveProvider{
 		Provider: Provider[IKlineFeeder]{
 			holders: make(map[string]IKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IKlineFeeder, *errs.Error) {
@@ -360,7 +394,7 @@ func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
 	return nil
 }
 
-func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
+func (p *LiveProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
 	newHolds, sinceMap, delPairs, err := p.Provider.SubWarmPairs(items, delOther)
 	if err != nil {
 		return err
@@ -401,7 +435,7 @@ func (p *LiveProvider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]in
 	return nil
 }
 
-func (p *LiveProvider[IKlineFeeder]) UnSubPairs(pairs ...string) *errs.Error {
+func (p *LiveProvider) UnSubPairs(pairs ...string) *errs.Error {
 	removed := p.Provider.UnSubPairs(pairs...)
 	if len(removed) == 0 {
 		return nil
@@ -409,11 +443,11 @@ func (p *LiveProvider[IKlineFeeder]) UnSubPairs(pairs ...string) *errs.Error {
 	return p.UnWatchJobs(core.ExgName, core.Market, "ohlcv", pairs)
 }
 
-func (p *LiveProvider[IKlineFeeder]) LoopMain() *errs.Error {
+func (p *LiveProvider) LoopMain() *errs.Error {
 	return p.RunForever()
 }
 
-func makeOnKlineMsg(p *LiveProvider[IKlineFeeder]) func(msg *KLineMsg) {
+func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 	return func(msg *KLineMsg) {
 		if msg.ExgName != core.ExgName || msg.Market != core.Market {
 			return

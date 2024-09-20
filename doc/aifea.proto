@@ -16,7 +16,7 @@ service FeaFeeder {
 message SubReq {
   string exchange = 1;
   string market = 2;
-  string pair = 3;
+  repeated string codes = 3;
   int64 start = 4;
   int64 end = 5;
   string task = 6;
@@ -29,7 +29,8 @@ service AInfer {
 }
 
 message ArrMap{
-  map<string, NumArr> Mats = 1;
+  repeated string codes = 1;
+  map<string, NumArr> mats = 2;
 }
 
 message NumArr {
