@@ -463,6 +463,9 @@ func measurePerformance(ods []*orm.InOutOrder, num int) (float64, float64, *errs
 	if cost > 0 {
 		returns = append(returns, profit/cost)
 	}
+	if len(returns) <= 2 {
+		return 0, 0, nil
+	}
 	return calcMeasures(returns)
 }
 

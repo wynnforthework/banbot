@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
@@ -44,6 +45,10 @@ RunBTOverOpt 基于持续调参的回测模式。接近实盘情况，避免使�
 func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeBackTest)
 	err := biz.SetupComs(args)
+	if err != nil {
+		return err
+	}
+	err = orm.InitExg(exg.Default)
 	if err != nil {
 		return err
 	}
@@ -149,6 +154,7 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 
 func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 	var err *errs.Error
+	btime.CurTimeMS = config.TimeRange.StartMS
 	// 列举所有标的
 	allPairs := config.Pairs
 	if len(allPairs) == 0 {

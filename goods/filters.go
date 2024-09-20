@@ -95,11 +95,15 @@ func getSymbolVols(symbols []string, tf string, num int) ([]SymbolVol, *errs.Err
 		} else {
 			total := float64(0)
 			slices.Reverse(klines)
-			for _, k := range klines[:num] {
+			if len(klines) > num {
+				klines = klines[:num]
+			}
+			for _, k := range klines {
 				total += k.Close * k.Volume
 			}
+			vol := total / float64(len(klines))
 			price := klines[len(klines)-1].Close
-			symbolVols = append(symbolVols, SymbolVol{symbol, total, price})
+			symbolVols = append(symbolVols, SymbolVol{symbol, vol, price})
 		}
 	}
 	exchange := exg.Default
@@ -163,6 +167,9 @@ func (f *VolumePairFilter) GenSymbols(tickers map[string]*banexg.Ticker) ([]stri
 	} else {
 		markets := exg.Default.GetCurMarkets()
 		symbols = utils.KeysOfMap(markets)
+	}
+	if len(symbols) == 0 {
+		return nil, errs.NewMsg(errs.CodeRunTime, "no symbols generate from VolumePairFilter")
 	}
 	return f.Filter(symbols, tickers)
 }
