@@ -81,8 +81,6 @@ func TestStagyRun(t *testing.T) {
 			Symbol:        exs,
 			TimeFrame:     tf,
 			TPMaxs:        make(map[int64]float64),
-			OpenLong:      true,
-			OpenShort:     true,
 			CloseLong:     true,
 			CloseShort:    true,
 			ExgStopLoss:   true,

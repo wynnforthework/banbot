@@ -85,7 +85,8 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Short {
 		dirType = core.OdDirtShort
 	}
-	if req.Short && !s.OpenShort || !req.Short && !s.OpenLong {
+	if req.Short && s.MaxOpenShort > 0 && len(s.ShortOrders) >= s.MaxOpenShort ||
+		!req.Short && s.MaxOpenLong > 0 && len(s.LongOrders) >= s.MaxOpenLong {
 		if isLiveMode {
 			log.Warn("open order disabled",
 				zap.String("strategy", s.Stagy.Name),

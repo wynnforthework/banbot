@@ -64,3 +64,18 @@ func MapToStr(m map[string]float64) (string, int) {
 	}
 	return b.String(), numLen
 }
+
+func UniqueItems[T comparable](arr []T) ([]T, []T) {
+	var res = make([]T, 0, len(arr))
+	var has = make(map[T]bool)
+	var dups = make([]T, 0, len(arr)/10)
+	for _, it := range arr {
+		if _, ok := has[it]; ok {
+			dups = append(dups, it)
+			continue
+		}
+		res = append(res, it)
+		has[it] = true
+	}
+	return res, dups
+}

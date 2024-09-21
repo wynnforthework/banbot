@@ -214,7 +214,7 @@ func apply(args *CmdArgs) *errs.Error {
 			Data.Pairs = append(Data.Pairs, p)
 		}
 	}
-	Pairs = Data.Pairs
+	Pairs, _ = utils2.UniqueItems(Data.Pairs)
 	if Data.PairMgr == nil {
 		Data.PairMgr = &PairMgrConfig{}
 	}

@@ -31,10 +31,11 @@ func TestDataServer(t *testing.T) {
 	tfMSecs := int64(utils2.TFToSecs("1M") * 1000)
 	now := time.Now()
 	endMS := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, btime.UTCLocale).UnixMilli()
+	pairs := []string{"AAVE/USDT:USDT", "ACH/USDT:USDT", "ADA/USDT:USDT", "AGIX/USDT:USDT", "ALGO/USDT:USDT", "ANKR/USDT:USDT", "APE/USDT:USDT", "API3/USDT:USDT", "APT/USDT:USDT", "AR/USDT:USDT", "ARB/USDT:USDT", "ARPA/USDT:USDT", "ASTR/USDT:USDT", "ATOM/USDT:USDT", "AUCTION/USDT:USDT", "AVAX/USDT:USDT", "AXL/USDT:USDT", "AXS/USDT:USDT", "BADGER/USDT:USDT", "BAKE/USDT:USDT", "BCH/USDT:USDT", "BEAMX/USDT:USDT", "BEL/USDT:USDT", "BICO/USDT:USDT", "BLUR/USDT:USDT", "BNB/USDT:USDT", "BNX/USDT:USDT", "BOND/USDT:USDT", "BSV/USDT:USDT", "BTC/USDT:USDT"}
 	res, err_ := client.SubFeatures(ctx, &SubReq{
 		Exchange: "binance",
 		Market:   banexg.MarketLinear,
-		Codes:    []string{"BTC/USDT:USDT", "ETH/USDT:USDT", "ETC/USDT:USDT"},
+		Codes:    pairs,
 		Start:    endMS - tfMSecs/4,
 		End:      endMS, // first day of month
 		Task:     "aifea2",
@@ -52,8 +53,9 @@ func TestDataServer(t *testing.T) {
 			panic(err_)
 		}
 		barSecs := data.Mats["bar"].Data[0]
+		barShape := data.Mats["bar"].Shape
 		barDate := btime.ToDateStr(int64(barSecs*1000), core.DefaultDateFmt)
-		log.Info("receive", zap.Strings("code", data.Codes), zap.Int("keys", len(data.Mats)),
-			zap.String("date", barDate))
+		log.Info("receive", zap.Int("keys", len(data.Mats)), zap.String("date", barDate),
+			zap.Int32s("bar_shape", barShape), zap.Strings("codes", data.Codes))
 	}
 }

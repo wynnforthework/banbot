@@ -110,7 +110,8 @@ stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传
 */
 func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
 	oldStart, oldEnd int64, pBar *utils.PrgBar) (int, *errs.Error) {
-	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs || exs.Combined {
+	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs ||
+		exs.Combined || exs.DelistMs > 0 {
 		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
 		if pBar != nil {
 			pBar.Add(core.StepTotal)

@@ -23,6 +23,8 @@ type TradeStagy struct {
 	BatchInfo     bool    // 是否对OnInfoBar后执行批量处理
 	StakeRate     float64 // 相对基础金额开单倍率
 	StopEnterBars int
+	EachMaxLong   int      // max number of long open orders for one pair
+	EachMaxShort  int      // max number of short open orders for one pair
 	AllowTFs      []string // 允许运行的时间周期，不提供时使用全局配置
 	Outputs       []string // 策略输出的文本文件内容，每个字符串是一行
 	Policy        *config.RunPolicyConfig
@@ -88,8 +90,8 @@ type StagyJob struct {
 	OrderNum      int               // 所有未完成订单数量
 	EnteredNum    int               // 已完全入场的订单数量
 	CheckMS       int64             // 上次处理信号的时间戳，13位毫秒
-	OpenLong      bool              // 是否允许开多
-	OpenShort     bool              // 是否允许开空
+	MaxOpenLong   int               // 最大开多数量
+	MaxOpenShort  int               // 最大开空数量
 	CloseLong     bool              // 是否允许平多
 	CloseShort    bool              // 是否允许平空
 	ExgStopLoss   bool              // 是否允许交易所止损

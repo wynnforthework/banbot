@@ -2,6 +2,7 @@ package biz
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/utils"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -82,8 +83,12 @@ func (s *DataServer) SubFeatures(req *SubReq, rsp FeaFeeder_SubFeaturesServer) e
 		s.feaLock.Unlock()
 		return err
 	}
-	exsList := make([]*orm.ExSymbol, 0, len(req.Codes))
-	for _, code := range req.Codes {
+	codes, dups := utils.UniqueItems(req.Codes)
+	if len(dups) > 0 {
+		log.Info("found duplicate codes", zap.Int("valid", len(codes)), zap.Strings("dups", dups))
+	}
+	exsList := make([]*orm.ExSymbol, 0, len(codes))
+	for _, code := range codes {
 		exs, err := orm.GetExSymbol(exchange, code)
 		if err != nil {
 			s.feaLock.Unlock()

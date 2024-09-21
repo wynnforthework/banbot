@@ -237,12 +237,17 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 			TimeFrame:     tf,
 			Account:       account,
 			TPMaxs:        make(map[int64]float64),
-			OpenLong:      dirt != core.OdDirtShort,
-			OpenShort:     dirt != core.OdDirtLong,
+			MaxOpenLong:   stagy.EachMaxLong,
+			MaxOpenShort:  stagy.EachMaxShort,
 			CloseLong:     true,
 			CloseShort:    true,
 			ExgStopLoss:   true,
 			ExgTakeProfit: true,
+		}
+		if dirt == core.OdDirtShort {
+			job.MaxOpenLong = -1
+		} else if dirt == core.OdDirtLong {
+			job.MaxOpenShort = -1
 		}
 		if stagy.OnStartUp != nil {
 			stagy.OnStartUp(job)
