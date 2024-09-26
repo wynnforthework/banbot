@@ -309,3 +309,7 @@ func (p *Param) calcNormX(y, tol float64, maxIter int) float64 {
 	}
 	return x
 }
+
+func IsLimitOrder(t int) bool {
+	return t == OrderTypeLimit || t == OrderTypeLimitMaker
+}

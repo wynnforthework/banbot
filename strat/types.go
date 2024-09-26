@@ -95,11 +95,11 @@ type StagyJob struct {
 	CloseLong     bool              // 是否允许平多
 	CloseShort    bool              // 是否允许平空
 	ExgStopLoss   bool              // 是否允许交易所止损
-	LongSLPrice   float64           // 做多止损价格
-	ShortSLPrice  float64           // 做空止损价格
+	LongSLPrice   float64           // 开仓时默认做多止损价格
+	ShortSLPrice  float64           // 开仓时默认做空止损价格
 	ExgTakeProfit bool              // 是否允许交易所止盈
-	LongTPPrice   float64           // 做多止盈价格
-	ShortTPPrice  float64           // 做空止盈价格
+	LongTPPrice   float64           // 开仓时默认做多止盈价格
+	ShortTPPrice  float64           // 开仓时默认做空止盈价格
 	IsWarmUp      bool              // 当前是否处于预热状态
 	More          interface{}       // 策略自定义的额外信息
 }
@@ -118,12 +118,16 @@ type EnterReq struct {
 	LegalCost       float64 // 花费法币金额。指定时忽略CostRate
 	Leverage        float64 // 杠杆倍数
 	Amount          float64 // 入场标的数量，由LegalCost和price计算
-	StopLossVal     float64 // 入场价格到止损价格的距离
+	StopLossVal     float64 // 入场价格到止损价格的距离，用于计算StopLoss
 	StopLoss        float64 // 止损触发价格，不为空时在交易所提交一个止损单
 	StopLossLimit   float64 // 止损限制价格，不提供使用StopLoss
-	TakeProfitVal   float64 // 入场价格到止盈价格的距离
-	TakeProfit      float64 // 止盈价格，不为空时在交易所提交一个止盈单。
+	StopLossRate    float64 // 止损退出比例，0表示全部退出，需介于(0,1]之间
+	StopLossTag     string  // 止损原因
+	TakeProfitVal   float64 // 入场价格到止盈价格的距离，用于计算TakeProfit
+	TakeProfit      float64 // 止盈触发价格，不为空时在交易所提交一个止盈单。
 	TakeProfitLimit float64 // 止盈限制价格，不提供使用TakeProfit
+	TakeProfitRate  float64 // 止盈退出比率，0表示全部退出，需介于(0,1]之间
+	TakeProfitTag   string  // 止盈原因
 	StopBars        int     // 入场限价单超过多少个bar未成交则取消
 }
 
@@ -132,15 +136,15 @@ ExitReq
 请求平仓
 */
 type ExitReq struct {
-	Tag        string  //退出信号
+	Tag        string  // 退出信号
 	StgyName   string  // 策略名称
-	EnterTag   string  //只退出入场信号为EnterTag的订单
+	EnterTag   string  // 只退出入场信号为EnterTag的订单
 	Dirt       int     // core.OdDirt* long/short/both
 	OrderType  int     // 订单类型, core.OrderType*
-	Limit      float64 //限价单退出价格，指定时订单将作为限价单提交
-	ExitRate   float64 //退出比率，默认100%即所有订单全部退出
-	Amount     float64 //要退出的标的数量。指定时ExitRate无效
-	OrderID    int64   //只退出指定订单
-	UnOpenOnly bool    //True时只退出尚未入场的订单
-	Force      bool    //是否强制退出
+	Limit      float64 // 限价单退出价格，指定时订单将作为限价单提交
+	ExitRate   float64 // 退出比率，默认100%即所有订单全部退出
+	Amount     float64 // 要退出的标的数量。指定时ExitRate无效
+	OrderID    int64   // 只退出指定订单
+	UnOpenOnly bool    // True时只退出尚未入场的订单
+	Force      bool    // 是否强制退出
 }

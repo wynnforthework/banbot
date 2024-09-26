@@ -185,7 +185,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Limit > 0 && req.OrderType == 0 {
 		req.OrderType = core.OrderTypeLimit
 	}
-	if req.Limit > 0 && (req.OrderType == core.OrderTypeLimit || req.OrderType == core.OrderTypeLimitMaker) {
+	if req.Limit > 0 && core.IsLimitOrder(req.OrderType) {
 		// 是限价入场单
 		if req.StopBars == 0 {
 			req.StopBars = s.Stagy.StopEnterBars
@@ -197,8 +197,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 }
 
 func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
-	orders := s.GetOrders(float64(req.Dirt))
-	if len(orders) == 0 {
+	if s.GetOrderNum(float64(req.Dirt)) == 0 {
 		return nil
 	}
 	if req.Tag == "" {
@@ -223,6 +222,20 @@ func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
 	}
 	if req.Limit > 0 && req.OrderType == 0 {
 		req.OrderType = core.OrderTypeLimit
+	}
+	if req.Limit > 0 && req.Dirt == core.OdDirtBoth {
+		if !core.IsLimitOrder(req.OrderType) {
+			return errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Limit` is invalid for Market order")
+		}
+		hasLong := len(s.LongOrders) > 0
+		hasShort := len(s.ShortOrders) > 0
+		if hasLong && hasShort {
+			return errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Dirt` is required for Limit order")
+		} else if hasLong {
+			req.Dirt = core.OdDirtLong
+		} else if hasShort {
+			req.Dirt = core.OdDirtShort
+		}
 	}
 	s.Exits = append(s.Exits, req)
 	return nil
@@ -337,7 +350,10 @@ func (s *StagyJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
 	if (spVal-curPrice)*odDirt >= 0 {
 		return &ExitReq{Tag: "take", OrderID: od.ID}
 	}
-	od.SetInfo(orm.OdInfoStopLoss, spVal)
+	od.SetStopLoss(&orm.ExitTrigger{
+		Price: spVal,
+		Tag:   core.ExitTagDrawDown,
+	})
 	return nil
 }
 
@@ -377,7 +393,7 @@ func (s *StagyJob) Position(dirt float64, enterTag string) float64 {
 		if enterTag != "" && od.EnterTag != enterTag {
 			continue
 		}
-		totalCost += od.EnterCost()
+		totalCost += od.HoldCost()
 	}
 	return totalCost / s.Stagy.GetStakeAmount(s)
 }
@@ -393,4 +409,76 @@ func (s *StagyJob) GetOrders(dirt float64) []*orm.InOutOrder {
 		res = append(res, s.LongOrders...)
 		return res
 	}
+}
+
+func (s *StagyJob) GetOrderNum(dirt float64) int {
+	if dirt > 0 {
+		return len(s.LongOrders)
+	} else if dirt < 0 {
+		return len(s.ShortOrders)
+	} else {
+		return len(s.LongOrders) + len(s.ShortOrders)
+	}
+}
+
+func (s *StagyJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTrigger) {
+	if s.GetOrderNum(dirt) == 0 {
+		return
+	}
+	if dirt == 0 && len(s.LongOrders) > 0 && len(s.ShortOrders) > 0 {
+		panic(fmt.Sprintf("%v SetAll%s.dirt should be 1/-1 when both long/short orders exists!", s.Stagy.Name, key))
+	}
+	odList := s.GetOrders(dirt)
+	var entOds = make([]*orm.InOutOrder, 0, len(odList))
+	var position float64
+	setAll := args == nil || args.Rate <= 0 || args.Rate >= 1
+	for _, od := range odList {
+		if od.Status >= orm.InOutStatusPartEnter && od.Status <= orm.InOutStatusPartExit {
+			if setAll {
+				od.SetExitTrigger(key, args)
+			} else {
+				entOds = append(entOds, od)
+				position += od.HoldCost()
+			}
+		}
+	}
+	if setAll || len(entOds) == 0 {
+		return
+	}
+	stdCost := s.Stagy.GetStakeAmount(s)
+	position /= stdCost
+	setPos := position * args.Rate
+	for _, od := range entOds {
+		size := od.HoldCost() / stdCost
+		if size < core.AmtDust {
+			continue
+		}
+		if setPos >= size+core.AmtDust {
+			od.SetExitTrigger(key, &orm.ExitTrigger{
+				Price: args.Price,
+				Limit: args.Limit,
+				Tag:   args.Tag,
+			})
+			setPos -= size
+		} else {
+			od.SetExitTrigger(key, &orm.ExitTrigger{
+				Price: args.Price,
+				Limit: args.Limit,
+				Rate:  setPos / size,
+				Tag:   args.Tag,
+			})
+			setPos = 0
+		}
+		if setPos < core.AmtDust {
+			break
+		}
+	}
+}
+
+func (s *StagyJob) SetAllStopLoss(dirt float64, args *orm.ExitTrigger) {
+	s.setAllExitTrigger(dirt, "StopLoss", args)
+}
+
+func (s *StagyJob) SetAllTakeProfit(dirt float64, args *orm.ExitTrigger) {
+	s.setAllExitTrigger(dirt, "TakeProfit", args)
 }

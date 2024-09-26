@@ -166,7 +166,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.Inf
 		}
 		stopAfter := od.GetInfoInt64(orm.OdInfoStopAfter)
 		if stopAfter > 0 && stopAfter <= curMS {
-			err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars", "")
+			err := od.LocalExit(core.ExitTagEntExp, od.InitPrice, "reach StopEnterBars", "")
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			if err != nil {
 				log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
@@ -284,30 +284,28 @@ func (o *LocalOrderMgr) fillPendingExit(od *orm.InOutOrder, price float64, fillM
 }
 
 func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, afterRate float64) *errs.Error {
-	slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)
-	tpPrice := od.GetInfoFloat64(orm.OdInfoTakeProfit)
-	if slPrice == 0 && tpPrice == 0 {
+	sl := od.GetStopLoss()
+	tp := od.GetTakeProfit()
+	if sl == nil && tp == nil {
 		return nil
 	}
-	slHit := od.GetInfoBool(orm.OdInfoStopLossHit)
-	tpHit := od.GetInfoBool(orm.OdInfoTakeProfitHit)
-	if !slHit {
+	if sl != nil && !sl.Hit {
 		// 空单止损，最高价超过止损价触发
 		// 多单止损，最低价跌破止损价触发
-		slHit = slPrice > 0 && (od.Short && bar.High >= slPrice || !od.Short && bar.Low <= slPrice)
+		sl.Hit = od.Short && bar.High >= sl.Price || !od.Short && bar.Low <= sl.Price
 	}
-	if !tpHit {
+	if tp != nil && !tp.Hit {
 		// 空单止盈，最低价跌破止盈价触发
 		// 多单止盈，最高价突破止盈价触发
-		tpHit = tpPrice > 0 && (od.Short && bar.Low <= tpPrice || !od.Short && bar.High >= tpPrice)
+		tp.Hit = od.Short && bar.Low <= tp.Price || !od.Short && bar.High >= tp.Price
 	}
-	if !slHit && !tpHit {
+	if (sl == nil || !sl.Hit) && (tp == nil || !tp.Hit) {
 		// 止损和止盈都未触发
 		return nil
 	}
-	od.SetInfo(orm.OdInfoStopLossHit, slHit)
-	od.SetInfo(orm.OdInfoTakeProfitHit, tpHit)
+	od.DirtyInfo = true
 	tfSecs := float64(utils2.TFToSecs(od.Timeframe))
+	// 计算平仓成交价格，0市价，-1不平仓，>0指定价格
 	getExcPrice := func(trigPrice, limit float64) float64 {
 		if limit > 0 {
 			if od.Short && limit < bar.Low || !od.Short && limit > bar.High {
@@ -328,39 +326,65 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 		}
 		return 0
 	}
-	var stopPrice, trigPrice float64
+	var fillPrice, trigPrice, amtRate float64
 	var exitTag string
-	if slHit {
+	if sl != nil && sl.Hit {
 		// 触发止损，计算执行价格
-		trigPrice = slPrice
-		stopPrice = getExcPrice(slPrice, od.GetInfoFloat64(orm.OdInfoStopLossLimit))
-		exitTag = core.ExitTagStopLoss
-		if od.ProfitRate >= 0 {
-			exitTag = core.ExitTagSLTake
+		trigPrice = sl.Price
+		amtRate = sl.Rate
+		fillPrice = getExcPrice(sl.Price, sl.Limit)
+		if sl.Tag != "" {
+			exitTag = sl.Tag
+		} else {
+			exitTag = core.ExitTagStopLoss
+			if od.ProfitRate >= 0 {
+				exitTag = core.ExitTagSLTake
+			}
+		}
+	} else if tp != nil && tp.Hit {
+		// 触发止盈，计算执行价格
+		trigPrice = tp.Price
+		amtRate = tp.Rate
+		fillPrice = getExcPrice(tp.Price, tp.Limit)
+		if tp.Tag != "" {
+			exitTag = tp.Tag
+		} else {
+			exitTag = core.ExitTagTakeProfit
 		}
 	} else {
-		// 触发止盈，计算执行价格
-		trigPrice = tpPrice
-		stopPrice = getExcPrice(tpPrice, od.GetInfoFloat64(orm.OdInfoTakeProfitLimit))
-		exitTag = core.ExitTagTakeProfit
+		return nil
 	}
-	if stopPrice < 0 {
+	if fillPrice < 0 {
 		return nil
 	}
 	curMS := btime.TimeMS()
 	// 模拟触发时的时间
 	var rate = config.BTNetCost / tfSecs
 	odType := banexg.OdTypeMarket
-	if stopPrice > 0 {
+	if fillPrice > 0 {
 		odType = banexg.OdTypeLimit
-		rate += simMarketRate(bar, stopPrice, od.Short, true, afterRate)
+		rate += simMarketRate(bar, fillPrice, od.Short, true, afterRate)
 	} else {
 		// 触发时间+网络延迟
 		rate += simMarketRate(bar, trigPrice, od.Short, true, afterRate)
 		// 市价止损，立刻卖出
-		stopPrice = simMarketPrice(bar, rate)
+		fillPrice = simMarketPrice(bar, rate)
 	}
-	err := od.LocalExit(exitTag, stopPrice, "", odType)
+	if amtRate > 0 && amtRate <= 0.99 {
+		// 部分退出
+		part := o.CutOrder(od, amtRate, 0)
+		if sl != nil && sl.Hit {
+			od.SetStopLoss(nil)
+		} else {
+			od.SetTakeProfit(nil)
+		}
+		err := od.Save(nil)
+		if err != nil {
+			log.Error("save cutPart parent order fail", zap.String("key", od.Key()), zap.Error(err))
+		}
+		od = part
+	}
+	err := od.LocalExit(exitTag, fillPrice, "", odType)
 	cutSecs := tfSecs * (1 - rate)
 	od.ExitAt = curMS - int64(cutSecs*1000)
 	od.DirtyMain = true

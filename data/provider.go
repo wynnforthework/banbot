@@ -17,10 +17,6 @@ import (
 	"sync"
 )
 
-var (
-	Main IProvider
-)
-
 type IProvider interface {
 	LoopMain() *errs.Error
 	SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error
@@ -139,8 +135,8 @@ type HistProvider struct {
 	Provider[IHistKlineFeeder]
 }
 
-func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
-	Main = &HistProvider{
+func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) *HistProvider {
+	return &HistProvider{
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
 			newFeeder: func(pair string, tfs []string) (IHistKlineFeeder, *errs.Error) {
@@ -156,6 +152,7 @@ func InitHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) {
 				feeder.SubTfs(tfs, false)
 				return feeder, nil
 			},
+			dirtyVers: make(chan int, 5),
 		},
 	}
 }
@@ -228,6 +225,10 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	pBar.Last = config.TimeRange.StartMS
 	log.Info("run data loop for backtest..")
 	return RunHistFeeders(makeFeeders, p.dirtyVers, pBar)
+}
+
+func (p *HistProvider) Terminate() {
+	p.dirtyVers <- -1
 }
 
 /*
@@ -358,10 +359,10 @@ type LiveProvider struct {
 	*KLineWatcher
 }
 
-func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
+func NewLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) (*LiveProvider, *errs.Error) {
 	watcher, err := NewKlineWatcher(config.SpiderAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	provider := &LiveProvider{
 		Provider: Provider[IKlineFeeder]{
@@ -379,6 +380,7 @@ func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
 				feeder.OnEnvEnd = envEnd
 				return feeder, nil
 			},
+			dirtyVers: make(chan int, 5),
 		},
 		KLineWatcher: watcher,
 	}
@@ -388,10 +390,9 @@ func InitLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) *errs.Error {
 		fmt.Sprintf("price_%s_%s", core.ExgName, core.Market),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	Main = provider
-	return nil
+	return provider, nil
 }
 
 func (p *LiveProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {

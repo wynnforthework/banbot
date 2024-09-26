@@ -21,6 +21,7 @@ import (
 
 type CryptoTrader struct {
 	biz.Trader
+	dp *data.LiveProvider
 }
 
 func NewCryptoTrader() *CryptoTrader {
@@ -29,10 +30,11 @@ func NewCryptoTrader() *CryptoTrader {
 
 func (t *CryptoTrader) Init() *errs.Error {
 	core.LoadPerfs(config.GetDataDir())
-	err := data.InitLiveProvider(t.FeedKLine, t.OnEnvEnd)
+	dp, err := data.NewLiveProvider(t.FeedKLine, t.OnEnvEnd)
 	if err != nil {
 		return err
 	}
+	t.dp = dp
 	err = orm.InitTask()
 	if err != nil {
 		return err
@@ -69,7 +71,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = biz.LoadRefreshPairs()
+	err = biz.LoadRefreshPairs(dp)
 	biz.InitOdSubs()
 	return err
 }
@@ -105,7 +107,7 @@ func (t *CryptoTrader) Run() *errs.Error {
 		return err
 	}
 	t.startJobs()
-	err = data.Main.LoopMain()
+	err = t.dp.LoopMain()
 	if err != nil {
 		return err
 	}
@@ -189,7 +191,7 @@ func (t *CryptoTrader) startJobs() {
 	// 监听账户订单流、处理用户下单、消费订单队列
 	biz.StartLiveOdMgr()
 	// 定期刷新交易对
-	CronRefreshPairs()
+	CronRefreshPairs(t.dp)
 	// 定时刷新市场行情
 	CronLoadMarkets()
 	// 每5分钟检查是否触发全局止损

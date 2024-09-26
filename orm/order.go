@@ -76,16 +76,6 @@ func (i *InOutOrder) GetInfoInt64(key string) int64 {
 	return utils.ConvertInt64(val)
 }
 
-func (i *InOutOrder) GetInfoBool(key string) bool {
-	i.loadInfo()
-	val, ok := i.Info[key]
-	if !ok {
-		return false
-	}
-	resVal, _ := val.(bool)
-	return resVal
-}
-
 func (i *InOutOrder) GetInfoString(key string) string {
 	i.loadInfo()
 	return utils2.GetMapVal(i.Info, key, "")
@@ -104,6 +94,14 @@ func (i *InOutOrder) EnterCost() float64 {
 		price = i.InitPrice
 	}
 	return i.Enter.Filled * price
+}
+
+func (i *InOutOrder) HoldCost() float64 {
+	holdCost := i.EnterCost()
+	if i.Exit != nil && i.Exit.Filled > 0 {
+		holdCost -= i.Exit.Filled * i.Exit.Average
+	}
+	return holdCost
 }
 
 func (i *InOutOrder) Key() string {
@@ -531,6 +529,53 @@ func (i *InOutOrder) GetInfoText() (string, *errs.Error) {
 	return "", nil
 }
 
+func (i *InOutOrder) SetExitTrigger(key string, args *ExitTrigger) {
+	var empty *TriggerState
+	tg := utils2.GetMapVal(i.Info, key, empty)
+	if args == nil || args.Price == 0 {
+		if tg != nil && tg.OrderId != "" {
+			tg.ExitTrigger = &ExitTrigger{}
+			i.SetInfo(key, tg)
+		} else {
+			i.SetInfo(key, nil)
+		}
+		return
+	} else if tg == nil {
+		tg = &TriggerState{}
+	}
+	var rangeVal float64
+	if args.Limit != 0 {
+		rangeVal = math.Abs(i.InitPrice - args.Limit)
+	} else {
+		rangeVal = math.Abs(i.InitPrice - args.Price)
+	}
+	tg.Range = rangeVal
+	tg.ExitTrigger = args
+	i.SetInfo(key, tg)
+}
+
+func (i *InOutOrder) SetStopLoss(args *ExitTrigger) {
+	i.SetExitTrigger("StopLoss", args)
+}
+
+func (i *InOutOrder) SetTakeProfit(args *ExitTrigger) {
+	i.SetExitTrigger("TakeProfit", args)
+}
+
+func (i *InOutOrder) GetExitTrigger(key string) *TriggerState {
+	i.loadInfo()
+	var empty *TriggerState
+	return utils2.GetMapVal(i.Info, key, empty)
+}
+
+func (i *InOutOrder) GetStopLoss() *TriggerState {
+	return i.GetExitTrigger("StopLoss")
+}
+
+func (i *InOutOrder) GetTakeProfit() *TriggerState {
+	return i.GetExitTrigger("TakeProfit")
+}
+
 /*
 ClientId
 生成交易所的ClientOrderId
@@ -559,10 +604,16 @@ func (i *InOutOrder) TakeSnap() *InOutSnap {
 	if i.Status > InOutStatusFullEnter && i.Exit != nil && i.Exit.Status < OdStatusClosed {
 		snap.ExitLimit = i.Exit.Price
 	}
-	snap.StopLoss = i.GetInfoFloat64(OdInfoStopLoss)
-	snap.TakeProfit = i.GetInfoFloat64(OdInfoTakeProfit)
-	snap.StopLossLimit = i.GetInfoFloat64(OdInfoStopLossLimit)
-	snap.TakeProfitLimit = i.GetInfoFloat64(OdInfoTakeProfitLimit)
+	sl := i.GetStopLoss()
+	tp := i.GetTakeProfit()
+	if sl != nil {
+		snap.StopLoss = sl.Price
+		snap.StopLossLimit = sl.Limit
+	}
+	if tp != nil {
+		snap.TakeProfit = tp.Price
+		snap.TakeProfitLimit = tp.Limit
+	}
 	return snap
 }
 
@@ -1019,4 +1070,56 @@ func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string
 		result[symbol] = timeFrame
 	}
 	return result, nil
+}
+
+func (s *TriggerState) SaveOld() {
+	if s.Old == nil {
+		s.Old = s.ExitTrigger.Clone()
+	} else {
+		s.Old.Price = s.Price
+		s.Old.Limit = s.Limit
+		s.Old.Rate = s.Rate
+		if s.Tag != "" {
+			s.Old.Tag = s.Tag
+		}
+	}
+}
+
+func (s *TriggerState) Clone() *TriggerState {
+	if s == nil {
+		return nil
+	}
+	return &TriggerState{
+		ExitTrigger: &ExitTrigger{
+			Price: s.Price,
+			Limit: s.Limit,
+			Rate:  s.Rate,
+			Tag:   s.Tag,
+		},
+		Range:   s.Rate,
+		Hit:     s.Hit,
+		OrderId: s.OrderId,
+	}
+}
+
+func (t *ExitTrigger) Equal(o *ExitTrigger) bool {
+	if t == nil || o == nil {
+		return (t != nil) == (o != nil)
+	}
+	if t.Price != o.Price || t.Limit != o.Limit || t.Rate != o.Limit {
+		return false
+	}
+	return true
+}
+
+func (t *ExitTrigger) Clone() *ExitTrigger {
+	if t == nil {
+		return nil
+	}
+	return &ExitTrigger{
+		Price: t.Price,
+		Limit: t.Limit,
+		Rate:  t.Rate,
+		Tag:   t.Tag,
+	}
 }

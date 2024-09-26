@@ -29,6 +29,7 @@ type BackTest struct {
 	biz.Trader
 	*BTResult
 	lastDumpMs int64 // 上一次保存回测状态的时间
+	dp         *data.HistProvider
 }
 
 var (
@@ -44,7 +45,7 @@ func NewBackTest() *BackTest {
 	biz.InitFakeWallets()
 	wallets := biz.GetWallets("")
 	p.TotalInvest = wallets.TotalLegal(nil, false)
-	data.InitHistProvider(p.FeedKLine, p.OnEnvEnd)
+	p.dp = data.NewHistProvider(p.FeedKLine, p.OnEnvEnd)
 	biz.InitLocalOrderMgr(p.orderCB)
 	return p
 }
@@ -69,7 +70,7 @@ func (b *BackTest) Init() *errs.Error {
 		return err
 	}
 	// 交易对初始化
-	err = biz.LoadRefreshPairs()
+	err = biz.LoadRefreshPairs(b.dp)
 	biz.InitOdSubs()
 	return err
 }
@@ -105,12 +106,16 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	if !bar.IsWarmUp && core.CheckWallets {
 		b.logState(bar.Time, curTime)
 	}
+	if !core.BotRunning {
+		b.dp.Terminate()
+		return
+	}
 	if nextRefresh > 0 && bar.Time >= nextRefresh {
 		// 刷新交易对
 		nextRefresh = schedule.Next(time.UnixMilli(bar.Time)).UnixMilli()
-		biz.AutoRefreshPairs()
+		biz.AutoRefreshPairs(b.dp)
 		log.Info("refreshed pairs at", zap.String("date", btime.ToDateStr(curTime, "")))
-		data.Main.SetDirty()
+		b.dp.SetDirty()
 	}
 }
 
@@ -128,7 +133,7 @@ func (b *BackTest) Run() {
 	b.cronDumpBtStatus()
 	core.Cron.Start()
 	btStart := btime.UTCTime()
-	err = data.Main.LoopMain()
+	err = b.dp.LoopMain()
 	core.Cron.Stop()
 	if err != nil {
 		log.Error("backtest loop fail", zap.Error(err))
@@ -219,7 +224,7 @@ func (b *BackTest) onLiquidation(symbol string) {
 	} else {
 		log.Error(fmt.Sprintf("wallet %s BOMB at %s, exit", symbol, date))
 		core.StopAll()
-		core.BotRunning = false
+		b.dp.Terminate()
 	}
 }
 

@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"errors"
+	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/fogleman/gg"
 	"go.uber.org/zap"
@@ -42,6 +43,12 @@ func CalcCorrMat(dataArr [][]float64, useChgRate bool) (*mat.SymDense, []float64
 	// calculate CorrelationMatrix
 	numAssets := len(dataArr)
 	numReturns := len(dataArr[0])
+	for i, col := range dataArr {
+		if len(col) != numReturns {
+			msg := "col %v length inconsistent with col 0, %v - %v"
+			return nil, nil, errs.NewMsg(errs.CodeParamInvalid, msg, i, len(col), numReturns)
+		}
+	}
 	matrixData := make([]float64, 0, numAssets*numReturns)
 	for i := 0; i < numReturns; i++ {
 		for j := 0; j < numAssets; j++ {

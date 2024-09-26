@@ -418,8 +418,8 @@ func printGroups(groups []*RowItem, title string, measure bool, extHeads []strin
 		winRate := strconv.FormatFloat(float64(sta.WinCount)*100/float64(grpCount), 'f', 1, 64) + "%"
 		row := []string{sta.Title, numText, avgProfit, totProfit, sumProfit, duraText, winRate}
 		if measure {
-			sharpeStr := strconv.FormatFloat(sta.Sharpe, 'f', -1, 64)
-			sortinoStr := strconv.FormatFloat(sta.Sortino, 'f', -1, 64)
+			sharpeStr := strconv.FormatFloat(sta.Sharpe, 'f', 2, 64)
+			sortinoStr := strconv.FormatFloat(sta.Sortino, 'f', 2, 64)
 			row = append(row, sharpeStr+" / "+sortinoStr)
 		}
 		if prcGrp != nil {

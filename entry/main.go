@@ -32,7 +32,7 @@ func RunCmd() {
 			options = []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"}
 			entry = RunTrade
 		case "backtest":
-			options = []string{"timerange", "stake_amount", "pairs", "stg_dir", "cpu_profile", "mem_profile"}
+			options = []string{"timerange", "stake_amount", "pairs", "stg_dir", "separate", "cpu_profile", "mem_profile"}
 			entry = RunBackTest
 		case "spider":
 			entry = RunSpider
@@ -273,6 +273,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.RunEveryTF, "run-every", "", "run every ? timerange")
 		case "out_type":
 			cmd.StringVar(&args.OutType, "out-type", "", "output data type")
+		case "separate":
+			cmd.BoolVar(&args.Separate, "separate", false, "run policy separately for backtest")
 		default:
 			log.Warn(fmt.Sprintf("undefined argument: %s", key))
 			os.Exit(1)

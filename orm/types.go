@@ -44,3 +44,18 @@ type InfoKline struct {
 	Adj      *AdjInfo
 	IsWarmUp bool
 }
+
+type ExitTrigger struct {
+	Price float64 `json:"price"` // 触发价格
+	Limit float64 `json:"limit"` // 触发后提交限价单价格，否则市价单
+	Rate  float64 `json:"rate"`  // 止盈止损比例，(0,1]，0表示全部
+	Tag   string  `json:"tag"`   // 原因，用于ExitTag
+}
+
+type TriggerState struct {
+	*ExitTrigger
+	Range   float64 `json:"range"` // 止盈止损区间，入场价格到离场价格的区间
+	Hit     bool    `json:"hit"`   // 是否已触发
+	OrderId string  `json:"order_id"`
+	Old     *ExitTrigger
+}

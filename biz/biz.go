@@ -13,8 +13,10 @@ import (
 	"github.com/banbox/banbot/rpc"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	ta "github.com/banbox/banta"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -55,7 +57,7 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func LoadRefreshPairs() *errs.Error {
+func LoadRefreshPairs(dp data.IProvider) *errs.Error {
 	pairs, err := goods.RefreshPairList()
 	if err != nil {
 		return err
@@ -70,11 +72,11 @@ func LoadRefreshPairs() *errs.Error {
 		return err
 	}
 	core.PrintStagyGroups()
-	return data.Main.SubWarmPairs(warms, true)
+	return dp.SubWarmPairs(warms, true)
 }
 
-func AutoRefreshPairs() {
-	err := LoadRefreshPairs()
+func AutoRefreshPairs(dp data.IProvider) {
+	err := LoadRefreshPairs(dp)
 	if err != nil {
 		log.Error("refresh pairs fail", zap.Error(err))
 	}
@@ -216,7 +218,21 @@ func TryFireBatches(currMS int64) int {
 }
 
 func ResetVars() {
+	core.NoEnterUntil = make(map[string]int64)
+	core.PairCopiedMs = make(map[string][2]int64)
+	core.TfPairHits = make(map[string]map[string]int)
 	accLiveOdMgrs = make(map[string]*LiveOrderMgr)
 	accOdMgrs = make(map[string]IOrderMgr)
 	accWallets = make(map[string]*BanWallets)
+	core.LastBarMs = 0
+	core.OdBooks = make(map[string]*banexg.OrderBook)
+	orm.HistODs = make([]*orm.InOutOrder, 0)
+	//orm.FakeOdId = 1
+	orm.ResetVars()
+	strat.Envs = make(map[string]*ta.BarEnv)
+	strat.AccJobs = make(map[string]map[string]map[string]*strat.StagyJob)
+	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StagyJob)
+	strat.PairStags = make(map[string]map[string]*strat.TradeStagy)
+	strat.BatchTasks = make(map[string]*strat.BatchMap)
+	strat.LastBatchMS = 0
 }

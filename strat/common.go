@@ -238,52 +238,24 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 }
 
 func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOutEdit, *errs.Error) {
-	slPrice := od.GetInfoFloat64(orm.OdInfoStopLoss)
-	tpPrice := od.GetInfoFloat64(orm.OdInfoTakeProfit)
-	slLimit := od.GetInfoFloat64(orm.OdInfoStopLossLimit)
-	tpLimit := od.GetInfoFloat64(orm.OdInfoTakeProfitLimit)
+	sl := od.GetStopLoss().Clone()
+	tp := od.GetTakeProfit().Clone()
 	req, err := s.customExit(od)
-	if err != nil {
+	if err != nil || req != nil {
 		return nil, nil, err
 	}
 	var slEdit, tpEdit *orm.InOutEdit
-	if req == nil {
-		// 检查是否需要修改条件单
-		newSLPrice := s.LongSLPrice
-		newTPPrice := s.LongTPPrice
-		if od.Short {
-			newSLPrice = s.ShortSLPrice
-			newTPPrice = s.ShortTPPrice
+	newSL := od.GetStopLoss()
+	newTP := od.GetTakeProfit()
+	// 检查是否需要修改条件单
+	if sl != nil || newSL != nil {
+		if sl == nil || newSL == nil || sl.Price != newSL.Price || sl.Limit != newSL.Limit {
+			slEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionStopLoss}
 		}
-		if newSLPrice == 0 {
-			newSLPrice = od.GetInfoFloat64(orm.OdInfoStopLoss)
-		}
-		if newTPPrice == 0 {
-			newTPPrice = od.GetInfoFloat64(orm.OdInfoTakeProfit)
-		}
-		newSLLimit := od.GetInfoFloat64(orm.OdInfoStopLossLimit)
-		newTPLimit := od.GetInfoFloat64(orm.OdInfoTakeProfitLimit)
-		if newSLPrice != slPrice || slLimit != newSLLimit {
-			if s.ExgStopLoss {
-				slEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionStopLoss}
-				od.SetInfo(orm.OdInfoStopLoss, newSLPrice)
-				od.SetInfo(orm.OdInfoStopLossLimit, newSLLimit)
-			} else {
-				slEdit = &orm.InOutEdit{}
-				od.SetInfo(orm.OdInfoStopLoss, nil)
-				od.SetInfo(orm.OdInfoStopLossLimit, nil)
-			}
-		}
-		if newTPPrice != tpPrice || tpLimit != newTPLimit {
-			if s.ExgTakeProfit {
-				tpEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionTakeProfit}
-				od.SetInfo(orm.OdInfoTakeProfit, newTPPrice)
-				od.SetInfo(orm.OdInfoTakeProfitLimit, newTPLimit)
-			} else {
-				tpEdit = &orm.InOutEdit{}
-				od.SetInfo(orm.OdInfoTakeProfit, nil)
-				od.SetInfo(orm.OdInfoTakeProfitLimit, nil)
-			}
+	}
+	if tp != nil || newTP != nil {
+		if tp == nil || newTP == nil || tp.Price != newTP.Price || tp.Limit != newTP.Limit {
+			tpEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionTakeProfit}
 		}
 	}
 	return slEdit, tpEdit, nil

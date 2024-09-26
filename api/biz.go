@@ -98,7 +98,7 @@ func getOpenNum(c *fiber.Ctx) error {
 		openNum := len(ods)
 		totalCost := float64(0)
 		for _, od := range ods {
-			totalCost += od.EnterCost()
+			totalCost += od.HoldCost()
 		}
 		lock.Unlock()
 		return c.JSON(fiber.Map{

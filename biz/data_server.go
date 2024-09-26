@@ -52,7 +52,8 @@ func RunDataServer(args *config.CmdArgs) *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeNetFail, err_)
 	}
-	s := grpc.NewServer()
+	maxMsgSize := 100 * 1024 * 1024
+	s := grpc.NewServer(grpc.MaxRecvMsgSize(maxMsgSize), grpc.MaxSendMsgSize(maxMsgSize))
 	RegisterFeaFeederServer(s, &DataServer{})
 	log.Info(fmt.Sprintf("data server ready, grpc listen at port: %s ...", port))
 	err_ = s.Serve(lis)

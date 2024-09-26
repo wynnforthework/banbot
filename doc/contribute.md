@@ -15,16 +15,16 @@ orm
   exg config  
 data
   orm exg config 
-strategy
+strat
   orm utils
 goods
   orm exg 
 biz:
-  exg orm strategy goods data
+  exg orm strat goods data
 optmize
-  biz data orm goods strategy
+  biz data orm goods strat
 live 
-  biz data orm goods strategy
+  biz data orm goods strat
 entry
   optmize live data 
 ```
@@ -42,7 +42,6 @@ biz
     AccWallets // 钱包
     
 data
-    Main // 当前数据源
     Spider // 爬虫
 
 orm
@@ -55,7 +54,7 @@ orm
 exg
     Default  // 交易所对象
 
-strategy
+strat
     StagyMap // 策略注册map
     Versions // 策略版本
     Envs // 涉及的所有K线环境：Pair+TimeFrame

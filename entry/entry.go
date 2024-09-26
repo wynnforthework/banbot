@@ -1,6 +1,7 @@
 package entry
 
 import (
+	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -12,6 +13,8 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"path/filepath"
 )
 
@@ -21,11 +24,31 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	if args.Separate && len(config.RunPolicy) > 1 {
+		log.Info("run backtest separately for policies", zap.Int("num", len(config.RunPolicy)))
+		policyList := config.RunPolicy
+		for i, item := range policyList {
+			log.Info("start backtest", zap.Int("id", i+1), zap.String("name", item.Name))
+			config.RunPolicy = []*config.RunPolicyConfig{item}
+			outDir := runBackTest()
+			err_ := utils.CopyDir(outDir, fmt.Sprintf("%s_%d", outDir, i+1))
+			if err_ != nil {
+				return errs.New(errs.CodeIOWriteFail, err_)
+			}
+		}
+	} else {
+		runBackTest()
+	}
+	return nil
+}
+
+func runBackTest() string {
 	core.BotRunning = true
+	biz.ResetVars()
 	b := optmize.NewBackTest()
 	b.Run()
 	core.RunExitCalls()
-	return nil
+	return b.OutDir
 }
 
 func RunTrade(args *config.CmdArgs) *errs.Error {

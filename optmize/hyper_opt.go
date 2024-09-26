@@ -12,11 +12,9 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
-	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	ta "github.com/banbox/banta"
 	"github.com/c-bata/goptuna"
 	"github.com/c-bata/goptuna/cmaes"
 	"github.com/c-bata/goptuna/tpe"
@@ -92,7 +90,7 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 				return errs.New(errs.CodeIOReadFail, err_)
 			}
 		}
-		ResetVars()
+		biz.ResetVars()
 		var unpak = make(map[string]interface{})
 		err_ = yaml.Unmarshal(polData, &unpak)
 		if err_ != nil {
@@ -414,7 +412,7 @@ func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.
 
 func runBTOnce() (*BackTest, float64) {
 	core.BotRunning = true
-	ResetVars()
+	biz.ResetVars()
 	bt := NewBackTest()
 	bt.Run()
 	var loss float64
@@ -524,24 +522,6 @@ func paramsToStr(m map[string]float64, loss float64) string {
 		text += strings.Repeat("\t", tabLack)
 	}
 	return fmt.Sprintf("loss: %7.2f \t%s", loss, text)
-}
-
-func ResetVars() {
-	core.NoEnterUntil = make(map[string]int64)
-	core.PairCopiedMs = make(map[string][2]int64)
-	core.TfPairHits = make(map[string]map[string]int)
-	biz.ResetVars()
-	core.LastBarMs = 0
-	core.OdBooks = make(map[string]*banexg.OrderBook)
-	orm.HistODs = make([]*orm.InOutOrder, 0)
-	//orm.FakeOdId = 1
-	orm.ResetVars()
-	strat.Envs = make(map[string]*ta.BarEnv)
-	strat.AccJobs = make(map[string]map[string]map[string]*strat.StagyJob)
-	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StagyJob)
-	strat.PairStags = make(map[string]map[string]*strat.TradeStagy)
-	strat.BatchTasks = make(map[string]*strat.BatchMap)
-	strat.LastBatchMS = 0
 }
 
 /*

@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
@@ -16,9 +17,11 @@ import (
 	"strconv"
 )
 
-func CronRefreshPairs() {
+func CronRefreshPairs(dp data.IProvider) {
 	if config.PairMgr.Cron != "" {
-		_, err_ := core.Cron.AddFunc(config.PairMgr.Cron, biz.AutoRefreshPairs)
+		_, err_ := core.Cron.AddFunc(config.PairMgr.Cron, func() {
+			biz.AutoRefreshPairs(dp)
+		})
 		if err_ != nil {
 			log.Error("add RefreshPairList fail", zap.Error(err_))
 		}

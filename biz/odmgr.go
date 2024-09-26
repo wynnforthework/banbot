@@ -243,19 +243,20 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 	}
 	od.SetInfo(orm.OdInfoLegalCost, req.LegalCost)
 	if req.StopLoss > 0 {
-		od.SetInfo(orm.OdInfoStopLoss, req.StopLoss)
-		if req.StopLossLimit > 0 {
-			od.SetInfo(orm.OdInfoStopLossLimit, req.StopLossLimit)
-			od.SetInfo(orm.OdInfoStopLossVal, math.Abs(od.InitPrice-req.StopLossLimit))
-		} else {
-			od.SetInfo(orm.OdInfoStopLossVal, math.Abs(od.InitPrice-req.StopLoss))
-		}
+		od.SetStopLoss(&orm.ExitTrigger{
+			Price: req.StopLoss,
+			Limit: req.StopLossLimit,
+			Rate:  req.StopLossRate,
+			Tag:   req.StopLossTag,
+		})
 	}
 	if req.TakeProfit > 0 {
-		od.SetInfo(orm.OdInfoTakeProfit, req.TakeProfit)
-		if req.TakeProfitLimit > 0 {
-			od.SetInfo(orm.OdInfoTakeProfitLimit, req.TakeProfitLimit)
-		}
+		od.SetTakeProfit(&orm.ExitTrigger{
+			Price: req.TakeProfit,
+			Limit: req.TakeProfitLimit,
+			Rate:  req.TakeProfitRate,
+			Tag:   req.TakeProfitTag,
+		})
 	}
 	err := od.Save(sess)
 	if err != nil {
@@ -311,9 +312,6 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 				// 订单已退出
 				continue
 			}
-			if !req.Force && !od.CanClose() {
-				continue
-			}
 			if req.UnOpenOnly && od.Enter.Filled > 0 {
 				continue
 			}
@@ -324,35 +322,90 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 	if len(matches) == 0 {
 		return nil, nil
 	}
-	// 按未成交数量倒序
 	slices.SortFunc(matches, func(a, b *orm.InOutOrder) int {
-		unfillA := (a.Enter.Amount - a.Enter.Filled) * a.InitPrice
-		unfillB := (b.Enter.Amount - b.Enter.Filled) * b.InitPrice
-		return int((unfillB - unfillA) * 10)
-	})
-	// 计算要退出的数量
-	allAmount := float64(0)
-	for _, od := range matches {
-		allAmount += od.Enter.Amount
-		if od.Exit != nil {
-			allAmount -= od.Exit.Amount
+		costA := a.Enter.Amount * a.InitPrice
+		fillA := a.Enter.Filled * a.InitPrice
+		unfillA := costA - fillA
+		costB := b.Enter.Amount * b.InitPrice
+		fillB := b.Enter.Filled * b.InitPrice
+		unfillB := costB - fillB
+		// 首先按未成交金额倒序
+		res := int(math.Round((unfillB - unfillA) * 100))
+		if res != 0 {
+			return res
 		}
-	}
-	exitAmount := allAmount
-	if req.ExitRate > 0 {
-		exitAmount = allAmount * req.ExitRate
-	} else if req.Amount > 0 {
+		// 其次按已入场金额升序
+		res = int(math.Round((fillA - fillB) * 100))
+		if res != 0 {
+			return res
+		}
+		// 最后按入场时间升序
+		return int((a.EnterAt - b.EnterAt) / 1000)
+	})
+	var exitAmount float64
+	useRate := req.ExitRate > 0 && req.ExitRate < 1
+	if useRate || req.Amount <= 0 {
+		// 计算要退出的数量
+		allAmount := float64(0)
+		for _, od := range matches {
+			allAmount += od.Enter.Amount
+			if od.Exit != nil {
+				allAmount -= od.Exit.Amount
+			}
+		}
+		exitAmount = allAmount
+		if useRate {
+			exitAmount = allAmount * req.ExitRate
+		}
+	} else {
 		exitAmount = req.Amount
 	}
+	isTakeProfit := false
+	if req.Limit > 0 && core.IsLimitOrder(req.OrderType) {
+		symbol := matches[0].Symbol
+		for _, od := range matches[1:] {
+			if od.Symbol != symbol {
+				return nil, errs.NewMsg(errs.CodeParamInvalid, "ExitReq.Limit invalid for multi pairs")
+			}
+		}
+		price := core.GetPrice(symbol)
+		if price > 0 && (req.Limit-price)*float64(req.Dirt) > 0 {
+			isTakeProfit = true
+		}
+	}
 	var result []*orm.InOutOrder
-	for _, od := range matches {
+	var part *orm.InOutOrder
+	var err *errs.Error
+	for i, od := range matches {
+		if !req.Force && !od.CanClose() {
+			continue
+		}
 		dust := od.Enter.Amount * 0.01
 		if exitAmount < dust {
+			if isTakeProfit {
+				// 剩余订单重置TakeProfit
+				for _, odr := range matches[i:] {
+					odr.SetTakeProfit(nil)
+					_, err = o.postOrderExit(sess, odr)
+					if err != nil {
+						return result, err
+					}
+				}
+			}
 			break
 		}
 		q := req.Clone()
 		q.ExitRate = min(1, exitAmount/od.Enter.Amount)
-		part, err := o.ExitOrder(sess, od, req)
+		if isTakeProfit {
+			od.SetTakeProfit(&orm.ExitTrigger{
+				Price: q.Limit,
+				Rate:  q.ExitRate,
+				Tag:   q.Tag,
+			})
+			part, err = o.postOrderExit(sess, od)
+		} else {
+			part, err = o.exitOrder(sess, od, q)
+		}
 		if err != nil {
 			return result, err
 		}
@@ -369,34 +422,45 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.E
 		// Exit一旦有值，表示全部退出
 		return nil, nil
 	}
-	if req.ExitRate == 0 {
-		if req.Amount == 0 {
-			req.ExitRate = 1
-		} else {
-			req.ExitRate = req.Amount / od.Enter.Amount
+	if req.Dirt != 0 && (req.Dirt < 0) != od.Short {
+		return nil, errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Dirt` mismatch with Order")
+	}
+	if req.Limit > 0 && core.IsLimitOrder(req.OrderType) {
+		price := core.GetPrice(od.Symbol)
+		if price > 0 && (req.Limit-price)*float64(req.Dirt) > 0 {
+			// 是有效的限价出场单，设置到止盈中
+			od.SetTakeProfit(&orm.ExitTrigger{
+				Price: req.Limit,
+				Rate:  req.ExitRate,
+				Tag:   req.Tag,
+			})
+			return o.postOrderExit(sess, od)
 		}
+	}
+	return o.exitOrder(sess, od, req)
+}
+
+func (o *OrderMgr) exitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.ExitReq) (*orm.InOutOrder, *errs.Error) {
+	// 外部已确认不是限价止盈
+	odType := core.OrderTypeEnums[req.OrderType]
+	if odType == "" {
+		odType = config.OrderType
 	}
 	if req.ExitRate < 0.99 {
 		// 要退出的部分不足99%，分割出一个小订单，用于退出。
-		part := od.CutPart(req.ExitRate, 0)
-		// 这里part的key和原始的一样，所以part作为src_key
-		tgtKey, srcKey := od.Key(), part.Key()
-		base, quote, _, _ := core.SplitSymbol(od.Symbol)
-		wallets := GetWallets(o.Account)
-		wallets.CutPart(srcKey, tgtKey, base, 1-req.ExitRate)
-		wallets.CutPart(srcKey, tgtKey, quote, 1-req.ExitRate)
+		part := o.CutOrder(od, req.ExitRate, 0)
 		req.ExitRate = 1
 		err := od.Save(sess)
 		if err != nil {
 			log.Error("save cutPart parent order fail", zap.String("key", od.Key()), zap.Error(err))
 		}
-		return o.ExitOrder(sess, part, req)
+		return o.exitOrder(sess, part, req)
 	}
-	odType := core.OrderTypeEnums[req.OrderType]
-	if odType == "" {
-		odType = config.OrderType
-	}
-	od.SetExit(req.Tag, odType, req.Limit)
+	od.SetExit(req.Tag, odType, 0)
+	return o.postOrderExit(sess, od)
+}
+
+func (o *OrderMgr) postOrderExit(sess *orm.Queries, od *orm.InOutOrder) (*orm.InOutOrder, *errs.Error) {
 	err := od.Save(sess)
 	if err != nil {
 		return od, err
@@ -419,6 +483,17 @@ func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *
 		od.UpdateProfits(bar.Close)
 	}
 	return nil
+}
+
+func (o *OrderMgr) CutOrder(od *orm.InOutOrder, enterRate, exitRate float64) *orm.InOutOrder {
+	part := od.CutPart(od.Enter.Amount*enterRate, od.Enter.Amount*exitRate)
+	// 这里part的key和原始的一样，所以part作为src_key
+	tgtKey, srcKey := od.Key(), part.Key()
+	base, quote, _, _ := core.SplitSymbol(od.Symbol)
+	wallets := GetWallets(o.Account)
+	wallets.CutPart(srcKey, tgtKey, base, 1-enterRate)
+	wallets.CutPart(srcKey, tgtKey, quote, 1-enterRate)
+	return part
 }
 
 /*

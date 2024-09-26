@@ -63,6 +63,7 @@ const (
 	DefaultDateFmt = "2006-01-02 15:04:05"
 	DelayBatchMS   = 3000  // 批量逻辑推迟的毫秒数
 	PrefMinRate    = 0.001 // job最低开仓比率，直接使用MinStakeAmount开仓
+	AmtDust        = 1e-8
 )
 
 const (
@@ -101,9 +102,11 @@ const (
 	ExitTagStopLoss    = "stop_loss"
 	ExitTagSLTake      = "sl_take"
 	ExitTagTakeProfit  = "take_profit"
+	ExitTagDrawDown    = "draw_down"
 	ExitTagDataStuck   = "data_stuck"
 	ExitTagLiquidation = "liquidation"
 	ExitTagEnvEnd      = "env_end"
+	ExitTagEntExp      = "ent_exp" // enter limit expired
 )
 
 var (
@@ -126,11 +129,6 @@ const (
 	OrderTypeEmpty = iota
 	OrderTypeMarket
 	OrderTypeLimit
-	OrderTypeStopLoss
-	OrderTypeStopLossLimit
-	OrderTypeTakeProfit
-	OrderTypeTakeProfitLimit
-	OrderTypeStop
 	OrderTypeLimitMaker
 )
 

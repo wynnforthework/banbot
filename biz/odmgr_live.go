@@ -756,12 +756,22 @@ func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 
 func makeAfterExit(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
-		log.Info("Exit Order", zap.String("acc", o.Account), zap.String("key", order.Key()),
-			zap.String("exitTag", order.ExitTag))
-		o.queue <- &OdQItem{
-			Order:  order,
-			Action: orm.OdActionExit,
+		fields := []zap.Field{zap.String("acc", o.Account), zap.String("key", order.Key())}
+		action := orm.OdActionExit
+		if order.Exit != nil {
+			fields = append(fields, zap.String("tag", order.ExitTag))
+			log.Info("Exit Order", fields...)
+		} else {
+			tp := order.GetTakeProfit()
+			if tp != nil {
+				action = orm.OdActionTakeProfit
+				log.Info("Set Order TakeProfit", fields...)
+			} else {
+				log.Error("afterExit: unknown order status", fields...)
+				return nil
+			}
 		}
+		o.queue <- &OdQItem{Order: order, Action: action}
 		return nil
 	}
 }
@@ -1027,16 +1037,16 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 }
 
 func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade) *errs.Error {
-	slOrder := od.GetInfoString(orm.OdInfoStopLossOrderId)
-	tpOrder := od.GetInfoString(orm.OdInfoTakeProfitOrderId)
+	sl := od.GetStopLoss()
+	tp := od.GetTakeProfit()
 	isSell := trade.Side == banexg.OdSideSell
 	isEnter := od.Short == isSell
 	subOd := od.Exit
 	dirtTag := "enter"
 	var isStopLoss, isTakeProfit bool
-	if slOrder != "" && slOrder == trade.Order {
+	if sl != nil && sl.OrderId == trade.Order {
 		isStopLoss = true
-	} else if tpOrder != "" && tpOrder == trade.Order {
+	} else if tp != nil && tp.OrderId == trade.Order {
 		isTakeProfit = true
 	}
 	if isEnter {
@@ -1115,18 +1125,20 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 	}
 	if od.Status == orm.InOutStatusFullExit {
 		// 可能由止盈止损触发，删除置为已完成
-		if slOrder != "" {
+		if sl != nil && sl.OrderId != "" {
 			if isStopLoss {
-				od.SetInfo(orm.OdInfoStopLossOrderId, nil)
+				sl.OrderId = ""
+				od.DirtyInfo = true
 			} else {
-				log.Info("finish order", zap.String("stopLoss", slOrder), zap.String("trade.Od", trade.Order))
+				log.Info("finish order", zap.String("stopLoss", sl.OrderId), zap.String("trade.Od", trade.Order))
 			}
 		}
-		if tpOrder != "" {
+		if tp != nil && tp.OrderId != "" {
 			if isTakeProfit {
-				od.SetInfo(orm.OdInfoTakeProfitOrderId, nil)
+				tp.OrderId = ""
+				od.DirtyInfo = true
 			} else {
-				log.Info("finish order", zap.String("takeProfit", slOrder), zap.String("trade.Od", trade.Order))
+				log.Info("finish order", zap.String("takeProfit", tp.OrderId), zap.String("trade.Od", trade.Order))
 			}
 		}
 		err := o.finishOrder(od, nil)
@@ -1826,27 +1838,22 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 	if od.Status >= orm.InOutStatusFullExit {
 		return
 	}
-	trigPrice := od.GetInfoFloat64(prefix + "Price")
-	limitPrice := od.GetInfoFloat64(prefix + "Limit")
-	oldTrigPrice := od.GetInfoFloat64(prefix + "PriceOld")
-	oldLimitPrice := od.GetInfoFloat64(prefix + "LimitOld")
-	if trigPrice == oldTrigPrice && limitPrice == oldLimitPrice {
-		// 和上次完全一样，无需重新提交
+	tg := od.GetExitTrigger(prefix)
+	if tg == nil || tg.Old != nil && tg.Old.Equal(tg.ExitTrigger) {
 		return
 	}
-	od.SetInfo(prefix+"PriceOld", trigPrice)
-	od.SetInfo(prefix+"LimitOld", limitPrice)
-	orderId := od.GetInfoString(prefix + "OrderId")
-	if trigPrice <= 0 {
+	tg.SaveOld()
+	if tg.Price <= 0 {
 		// 未设置止损/止盈，或需要撤销
-		if orderId != "" {
-			_, err := exg.Default.CancelOrder(orderId, od.Symbol, map[string]interface{}{
+		if tg.OrderId != "" {
+			_, err := exg.Default.CancelOrder(tg.OrderId, od.Symbol, map[string]interface{}{
 				banexg.ParamAccount: o.Account,
 			})
 			if err != nil {
 				log.Error("cancel old trigger fail", zap.String("key", od.Key()), zap.Error(err))
 			}
-			od.SetInfo(prefix+"OrderId", nil)
+			tg.OrderId = ""
+			od.SetExitTrigger(prefix, nil)
 		}
 		return
 	}
@@ -1861,16 +1868,16 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 		}
 	}
 	var odType = banexg.OdTypeMarket
-	if limitPrice > 0 {
+	var price = tg.Price
+	if tg.Limit > 0 {
 		odType = banexg.OdTypeLimit
-	} else {
-		limitPrice = trigPrice
+		price = tg.Limit
 	}
 	params[banexg.ParamClosePosition] = true
 	if prefix == orm.OdActionStopLoss {
-		params[banexg.ParamStopLossPrice] = trigPrice
+		params[banexg.ParamStopLossPrice] = tg.Price
 	} else if prefix == orm.OdActionTakeProfit {
-		params[banexg.ParamTakeProfitPrice] = trigPrice
+		params[banexg.ParamTakeProfitPrice] = tg.Price
 	} else {
 		log.Error("invalid trigger ", zap.String("prefix", prefix))
 		return
@@ -1879,12 +1886,20 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 	if od.Short {
 		side = banexg.OdSideBuy
 	}
-	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, od.Enter.Amount, limitPrice, params)
+	amt := od.Enter.Amount
+	if tg.Rate > 0 && tg.Rate < 1 {
+		amt *= tg.Rate
+	}
+	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, amt, price, params)
 	if err != nil {
 		if err.BizCode == -2021 {
 			// 止损止盈立刻成交，则市价平仓
 			log.Warn("Order would immediately trigger, exit", zap.String("key", od.Key()))
-			od.SetExit(prefix, banexg.OdTypeMarket, 0)
+			exitTag := prefix
+			if tg.Tag != "" {
+				exitTag = tg.Tag
+			}
+			od.SetExit(exitTag, banexg.OdTypeMarket, 0)
 			err = o.execOrderExit(od)
 			if err != nil {
 				log.Error("exit order by trigger fail", zap.String("key", od.Key()), zap.Error(err))
@@ -1899,8 +1914,9 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 		}
 		return
 	}
+	orderId := tg.OrderId
 	if res != nil {
-		od.SetInfo(prefix+"OrderId", res.ID)
+		tg.OrderId = res.ID
 	}
 	if orderId != "" && (res == nil || res.Status == "open") {
 		_, err = exg.Default.CancelOrder(orderId, od.Symbol, map[string]interface{}{
@@ -1917,20 +1933,23 @@ cancelTriggerOds
 取消订单的关联订单。订单在平仓时，关联的止损单止盈单不会自动退出，需要调用此方法退出
 */
 func cancelTriggerOds(od *orm.InOutOrder) {
-	slOrder := od.GetInfoString(orm.OdInfoStopLossOrderId)
-	tpOrder := od.GetInfoString(orm.OdInfoTakeProfitOrderId)
+	sl := od.GetStopLoss()
+	tp := od.GetTakeProfit()
+	if sl == nil && tp == nil {
+		return
+	}
 	odKey := od.Key()
 	args := map[string]interface{}{
 		banexg.ParamAccount: orm.GetTaskAcc(od.TaskID),
 	}
-	if slOrder != "" {
-		_, err := exg.Default.CancelOrder(slOrder, od.Symbol, args)
+	if sl != nil && sl.OrderId != "" {
+		_, err := exg.Default.CancelOrder(sl.OrderId, od.Symbol, args)
 		if err != nil {
 			log.Error("cancel stopLoss fail", zap.String("key", odKey), zap.Error(err))
 		}
 	}
-	if tpOrder != "" {
-		_, err := exg.Default.CancelOrder(tpOrder, od.Symbol, args)
+	if tp != nil && tp.OrderId != "" {
+		_, err := exg.Default.CancelOrder(tp.OrderId, od.Symbol, args)
 		if err != nil {
 			log.Error("cancel takeProfit fail", zap.String("key", odKey), zap.Error(err))
 		}

@@ -52,4 +52,5 @@ type CmdArgs struct {
 	InType        string // 输入文件的数据类型
 	RunEveryTF    string // run once every n timeframe
 	BatchSize     int
+	Separate      bool // 用于回测，true时策略组合单独测试
 }
