@@ -146,5 +146,6 @@ type ExitReq struct {
 	Amount     float64 // 要退出的标的数量。指定时ExitRate无效
 	OrderID    int64   // 只退出指定订单
 	UnOpenOnly bool    // True时只退出尚未入场的订单
+	FilledOnly bool    // True时只退出已入场的订单
 	Force      bool    // 是否强制退出
 }

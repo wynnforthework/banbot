@@ -315,6 +315,9 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 			if req.UnOpenOnly && od.Enter.Filled > 0 {
 				continue
 			}
+			if req.FilledOnly && od.Enter.Filled < core.AmtDust {
+				continue
+			}
 			matches = append(matches, od)
 		}
 		lock.Unlock()
@@ -322,26 +325,6 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 	if len(matches) == 0 {
 		return nil, nil
 	}
-	slices.SortFunc(matches, func(a, b *orm.InOutOrder) int {
-		costA := a.Enter.Amount * a.InitPrice
-		fillA := a.Enter.Filled * a.InitPrice
-		unfillA := costA - fillA
-		costB := b.Enter.Amount * b.InitPrice
-		fillB := b.Enter.Filled * b.InitPrice
-		unfillB := costB - fillB
-		// 首先按未成交金额倒序
-		res := int(math.Round((unfillB - unfillA) * 100))
-		if res != 0 {
-			return res
-		}
-		// 其次按已入场金额升序
-		res = int(math.Round((fillA - fillB) * 100))
-		if res != 0 {
-			return res
-		}
-		// 最后按入场时间升序
-		return int((a.EnterAt - b.EnterAt) / 1000)
-	})
 	var exitAmount float64
 	useRate := req.ExitRate > 0 && req.ExitRate < 1
 	if useRate || req.Amount <= 0 {
@@ -373,6 +356,30 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 			isTakeProfit = true
 		}
 	}
+	slices.SortFunc(matches, func(a, b *orm.InOutOrder) int {
+		fillA := a.Enter.Filled * a.InitPrice
+		fillB := b.Enter.Filled * b.InitPrice
+		fillChg := int(math.Round((fillA - fillB) * 100))
+		if (isTakeProfit || req.FilledOnly) && fillChg != 0 {
+			// 止盈单，优先按入场金额倒序
+			return -fillChg
+		}
+		costA := a.Enter.Amount * a.InitPrice
+		unfillA := costA - fillA
+		costB := b.Enter.Amount * b.InitPrice
+		unfillB := costB - fillB
+		// 首先按未成交金额倒序
+		res := int(math.Round((unfillB - unfillA) * 100))
+		if res != 0 {
+			return res
+		}
+		// 其次按已入场金额升序
+		if fillChg != 0 {
+			return res
+		}
+		// 最后按入场时间升序
+		return int((a.EnterAt - b.EnterAt) / 1000)
+	})
 	var result []*orm.InOutOrder
 	var part *orm.InOutOrder
 	var err *errs.Error
@@ -394,9 +401,19 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 			}
 			break
 		}
+		if req.FilledOnly && od.Enter.Filled < od.Enter.Amount {
+			// 只退出已入场的订单，当前订单部分入场，切分成子订单
+			cutAmt := min(exitAmount, od.Enter.Filled)
+			part = od.CutPart(cutAmt, 0)
+			err = od.Save(sess)
+			if err != nil {
+				return result, err
+			}
+			od = part
+		}
 		q := req.Clone()
 		q.ExitRate = min(1, exitAmount/od.Enter.Amount)
-		if isTakeProfit {
+		if isTakeProfit && od.Status >= orm.InOutStatusPartEnter {
 			od.SetTakeProfit(&orm.ExitTrigger{
 				Price: q.Limit,
 				Rate:  q.ExitRate,
@@ -410,7 +427,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 			return result, err
 		}
 		if part != nil {
-			exitAmount -= part.Enter.Amount
+			exitAmount -= part.Enter.Amount * q.ExitRate
 			result = append(result, part)
 		}
 	}

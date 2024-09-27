@@ -104,6 +104,17 @@ func (i *InOutOrder) HoldCost() float64 {
 	return holdCost
 }
 
+func (i *InOutOrder) HoldAmount() float64 {
+	entAmt := i.Enter.Filled
+	if entAmt == 0 {
+		return 0
+	}
+	if i.Exit != nil {
+		entAmt -= i.Exit.Filled
+	}
+	return entAmt
+}
+
 func (i *InOutOrder) Key() string {
 	if i.idKey != "" {
 		return i.idKey
@@ -257,7 +268,7 @@ func (i *InOutOrder) SetExit(tag, orderType string, limit float64) {
 			Side:      odSide,
 			CreateAt:  btime.TimeMS(),
 			Price:     limit,
-			Amount:    i.Enter.Amount,
+			Amount:    i.Enter.Filled,
 			Status:    OdStatusInit,
 		}
 		i.DirtyExit = true
@@ -377,6 +388,9 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 	partEnter := i.Enter.CutPart(enterRate, true)
 	partEnter.InoutID = part.ID
 	part.Enter = partEnter
+	if i.Enter.Status == OdStatusInit && i.Status > InOutStatusInit {
+		i.Status = InOutStatusInit
+	}
 	if exitRate == 0 && i.Exit != nil && i.Exit.Amount > i.Enter.Amount {
 		exitRate = (i.Exit.Amount - i.Enter.Amount) / i.Exit.Amount
 	}

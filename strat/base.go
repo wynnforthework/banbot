@@ -438,39 +438,38 @@ func (s *StagyJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTri
 				od.SetExitTrigger(key, args)
 			} else {
 				entOds = append(entOds, od)
-				position += od.HoldCost()
+				position += od.HoldAmount()
 			}
 		}
 	}
 	if setAll || len(entOds) == 0 {
 		return
 	}
-	stdCost := s.Stagy.GetStakeAmount(s)
-	position /= stdCost
 	setPos := position * args.Rate
 	for _, od := range entOds {
-		size := od.HoldCost() / stdCost
+		size := od.HoldAmount()
 		if size < core.AmtDust {
 			continue
 		}
-		if setPos >= size+core.AmtDust {
-			od.SetExitTrigger(key, &orm.ExitTrigger{
-				Price: args.Price,
-				Limit: args.Limit,
-				Tag:   args.Tag,
-			})
-			setPos -= size
-		} else {
-			od.SetExitTrigger(key, &orm.ExitTrigger{
-				Price: args.Price,
-				Limit: args.Limit,
-				Rate:  setPos / size,
-				Tag:   args.Tag,
-			})
-			setPos = 0
-		}
 		if setPos < core.AmtDust {
-			break
+			od.SetExitTrigger(key, nil)
+		} else {
+			if setPos >= size+core.AmtDust {
+				od.SetExitTrigger(key, &orm.ExitTrigger{
+					Price: args.Price,
+					Limit: args.Limit,
+					Tag:   args.Tag,
+				})
+				setPos -= size
+			} else {
+				od.SetExitTrigger(key, &orm.ExitTrigger{
+					Price: args.Price,
+					Limit: args.Limit,
+					Rate:  setPos / size,
+					Tag:   args.Tag,
+				})
+				setPos = 0
+			}
 		}
 	}
 }
