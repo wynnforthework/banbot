@@ -33,7 +33,7 @@ func regApiBiz(api fiber.Router) {
 	api.Post("/delay_entry", postDelayEntry)
 	api.Get("/config", getConfig)
 	api.Post("/config", postConfig)
-	api.Get("/stg_jobs", getStagyJobs)
+	api.Get("/stg_jobs", getStratJobs)
 	api.Get("/performance", getPerformance)
 	api.Get("/log", getLog)
 	api.Get("/bot_info", getBotInfo)
@@ -452,7 +452,7 @@ func postConfig(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": 200})
 }
 
-func getStagyJobs(c *fiber.Ctx) error {
+func getStratJobs(c *fiber.Ctx) error {
 	type JobItem struct {
 		Pair     string  `json:"pair"`
 		Strategy string  `json:"strategy"`

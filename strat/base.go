@@ -14,17 +14,17 @@ import (
 )
 
 /*
-******************************  Membership methods of TradeStagy 成员方法  ***********************************
+******************************  Membership methods of TradeStrat 成员方法  ***********************************
  */
 
-func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
+func (s *TradeStrat) GetStakeAmount(j *StratJob) float64 {
 	amount := config.GetStakeAmount(j.Account)
 	// 乘以策略倍率
 	if s.StakeRate > 0 {
 		amount *= s.StakeRate
 	}
 	// 乘以此任务的开单倍率
-	key := core.KeyStagyPairTf(j.Stagy.Name, j.Symbol.Symbol, j.TimeFrame)
+	key := core.KeyStratPairTf(j.Strat.Name, j.Symbol.Symbol, j.TimeFrame)
 	pref, _ := core.JobPerfs[key]
 	if pref != nil {
 		amount = pref.GetAmount(amount)
@@ -36,7 +36,7 @@ func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
 Select the time period to trade from several candidate time periods. This method is called by the system
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
-func (s *TradeStagy) pickTimeFrame(symbol string, tfScores map[string]float64) string {
+func (s *TradeStrat) pickTimeFrame(symbol string, tfScores map[string]float64) string {
 	if len(tfScores) == 0 {
 		return ""
 	}
@@ -73,12 +73,12 @@ func (s *TradeStagy) pickTimeFrame(symbol string, tfScores map[string]float64) s
 *****************************  StagyJob的成员方法   ****************************************
  */
 
-func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
+func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Tag == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is Required")
 	}
 	if req.StgyName == "" {
-		req.StgyName = s.Stagy.Name
+		req.StgyName = s.Strat.Name
 	}
 	isLiveMode := core.LiveMode
 	symbol := s.Symbol.Symbol
@@ -90,7 +90,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		!req.Short && s.MaxOpenLong > 0 && len(s.LongOrders) >= s.MaxOpenLong {
 		if isLiveMode {
 			log.Warn("open order disabled",
-				zap.String("strategy", s.Stagy.Name),
+				zap.String("strategy", s.Strat.Name),
 				zap.String("pair", symbol),
 				zap.String("tag", req.Tag),
 				zap.Int("dir", dirType))
@@ -112,7 +112,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 		if req.CostRate == 0 {
 			req.CostRate = 1
 		}
-		req.LegalCost = s.Stagy.GetStakeAmount(s) * req.CostRate
+		req.LegalCost = s.Strat.GetStakeAmount(s) * req.CostRate
 		avgVol := s.avgVolume(5) // 最近5个蜡烛成交量
 		reqAmt := req.LegalCost / enterPrice
 		if avgVol > 0 && reqAmt/avgVol > config.OpenVolRate {
@@ -150,7 +150,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 			req.StopLoss = curSLPrice
 		} else if isLiveMode {
 			log.Warn("stopLoss disabled",
-				zap.String("strategy", s.Stagy.Name),
+				zap.String("strategy", s.Strat.Name),
 				zap.String("pair", symbol))
 		}
 	}
@@ -180,7 +180,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 			}
 			req.TakeProfit = curTPPrice
 		} else if isLiveMode {
-			log.Warn("takeProfit disabled", zap.String("stagy", s.Stagy.Name), zap.String("pair", symbol))
+			log.Warn("takeProfit disabled", zap.String("stagy", s.Strat.Name), zap.String("pair", symbol))
 		}
 	}
 	if req.Limit > 0 && req.OrderType == 0 {
@@ -189,7 +189,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Limit > 0 && core.IsLimitOrder(req.OrderType) {
 		// 是限价入场单
 		if req.StopBars == 0 {
-			req.StopBars = s.Stagy.StopEnterBars
+			req.StopBars = s.Strat.StopEnterBars
 		}
 	}
 	s.Entrys = append(s.Entrys, req)
@@ -197,7 +197,7 @@ func (s *StagyJob) OpenOrder(req *EnterReq) *errs.Error {
 	return nil
 }
 
-func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
+func (s *StratJob) CloseOrders(req *ExitReq) *errs.Error {
 	if s.GetOrderNum(float64(req.Dirt)) == 0 {
 		return nil
 	}
@@ -205,12 +205,12 @@ func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is required")
 	}
 	if req.StgyName == "" {
-		req.StgyName = s.Stagy.Name
+		req.StgyName = s.Strat.Name
 	}
 	dirtBoth := req.Dirt == core.OdDirtBoth
 	if !s.CloseShort && (dirtBoth || req.Dirt == core.OdDirtShort) || !s.CloseLong && (dirtBoth || req.Dirt == core.OdDirtLong) {
 		log.Warn("close order disabled",
-			zap.String("strategy", s.Stagy.Name),
+			zap.String("strategy", s.Strat.Name),
 			zap.String("pair", s.Symbol.Symbol),
 			zap.String("tag", req.Tag),
 			zap.Int("dirt", req.Dirt))
@@ -247,7 +247,7 @@ avgVolume
 Calculate the average trading volume of the latest num candlesticks
 计算最近num个K线的平均成交量
 */
-func (s *StagyJob) avgVolume(num int) float64 {
+func (s *StratJob) avgVolume(num int) float64 {
 	arr := s.Env.Volume.Range(0, num)
 	if len(arr) == 0 {
 		return 0
@@ -265,7 +265,7 @@ Return: Withdrawal ratio after profit, entry price, maximum profit margin
 计算当前订单，距离最大盈利的回撤
 返回：盈利后回撤比例，入场价格，最大利润率
 */
-func (s *StagyJob) getMaxTp(od *orm.InOutOrder) (float64, float64, float64) {
+func (s *StratJob) getMaxTp(od *orm.InOutOrder) (float64, float64, float64) {
 	entPrice := od.Enter.Average
 	if entPrice == 0 {
 		entPrice = od.InitPrice
@@ -317,11 +317,11 @@ func CalcDrawDownExitRate(maxChg float64) float64 {
 	return rate
 }
 
-func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
+func (s *StratJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 	_, entPrice, exmChg := s.getMaxTp(od)
 	var stopRate = float64(-1)
-	if s.Stagy.GetDrawDownExitRate != nil {
-		stopRate = s.Stagy.GetDrawDownExitRate(s, od, exmChg)
+	if s.Strat.GetDrawDownExitRate != nil {
+		stopRate = s.Strat.GetDrawDownExitRate(s, od, exmChg)
 	}
 	if stopRate < 0 {
 		// 如果策略返回负数，则表示使用默认算法
@@ -342,7 +342,7 @@ drawDownExit
 Check whether the tracking profit check has reached the drawdown threshold. If it exceeds the threshold, exit. This method is called by the system
 按跟踪止盈检查是否达到回撤阈值，超出则退出，此方法由系统调用
 */
-func (s *StagyJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
+func (s *StratJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
 	spVal := s.getDrawDownExitPrice(od)
 	if spVal == 0 {
 		return nil
@@ -367,15 +367,15 @@ customExit
 Check if the order needs to be exited, this method is called by the system
 检查订单是否需要退出，此方法由系统调用
 */
-func (s *StagyJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
+func (s *StratJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
 	var req *ExitReq
-	if s.Stagy.OnCheckExit != nil {
-		req = s.Stagy.OnCheckExit(s, od)
+	if s.Strat.OnCheckExit != nil {
+		req = s.Strat.OnCheckExit(s, od)
 		if req != nil {
 			req.OrderID = od.ID
 		}
 	}
-	if req == nil && s.Stagy.DrawDownExit && od.Status >= orm.InOutStatusFullEnter {
+	if req == nil && s.Strat.DrawDownExit && od.Status >= orm.InOutStatusFullEnter {
 		// 只对已完全入场的订单启用回撤平仓
 		req = s.drawDownExit(od)
 	}
@@ -393,7 +393,7 @@ Retrieve the position size and return a multiple based on the benchmark amount.
 side long/short/空
 enterTag 入场标签，可为空
 */
-func (s *StagyJob) Position(dirt float64, enterTag string) float64 {
+func (s *StratJob) Position(dirt float64, enterTag string) float64 {
 	var totalCost float64
 	orders := s.GetOrders(dirt)
 	for _, od := range orders {
@@ -402,10 +402,10 @@ func (s *StagyJob) Position(dirt float64, enterTag string) float64 {
 		}
 		totalCost += od.HoldCost()
 	}
-	return totalCost / s.Stagy.GetStakeAmount(s)
+	return totalCost / s.Strat.GetStakeAmount(s)
 }
 
-func (s *StagyJob) GetOrders(dirt float64) []*orm.InOutOrder {
+func (s *StratJob) GetOrders(dirt float64) []*orm.InOutOrder {
 	if dirt < 0 {
 		return s.ShortOrders
 	} else if dirt > 0 {
@@ -418,7 +418,7 @@ func (s *StagyJob) GetOrders(dirt float64) []*orm.InOutOrder {
 	}
 }
 
-func (s *StagyJob) GetOrderNum(dirt float64) int {
+func (s *StratJob) GetOrderNum(dirt float64) int {
 	if dirt > 0 {
 		return len(s.LongOrders)
 	} else if dirt < 0 {
@@ -428,12 +428,12 @@ func (s *StagyJob) GetOrderNum(dirt float64) int {
 	}
 }
 
-func (s *StagyJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTrigger) {
+func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTrigger) {
 	if s.GetOrderNum(dirt) == 0 {
 		return
 	}
 	if dirt == 0 && len(s.LongOrders) > 0 && len(s.ShortOrders) > 0 {
-		panic(fmt.Sprintf("%v SetAll%s.dirt should be 1/-1 when both long/short orders exists!", s.Stagy.Name, key))
+		panic(fmt.Sprintf("%v SetAll%s.dirt should be 1/-1 when both long/short orders exists!", s.Strat.Name, key))
 	}
 	odList := s.GetOrders(dirt)
 	var entOds = make([]*orm.InOutOrder, 0, len(odList))
@@ -481,10 +481,10 @@ func (s *StagyJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTri
 	}
 }
 
-func (s *StagyJob) SetAllStopLoss(dirt float64, args *orm.ExitTrigger) {
+func (s *StratJob) SetAllStopLoss(dirt float64, args *orm.ExitTrigger) {
 	s.setAllExitTrigger(dirt, "StopLoss", args)
 }
 
-func (s *StagyJob) SetAllTakeProfit(dirt float64, args *orm.ExitTrigger) {
+func (s *StratJob) SetAllTakeProfit(dirt float64, args *orm.ExitTrigger) {
 	s.setAllExitTrigger(dirt, "TakeProfit", args)
 }

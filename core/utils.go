@@ -43,11 +43,11 @@ func GroupByPairQuotes(items map[string][]string) string {
 }
 
 /*
-PrintStagyGroups
+PrintStratGroups
 print strategy+timeframe from `core.StgPairTfs`
 从core.StgPairTfs输出策略+时间周期的币种信息到控制台
 */
-func PrintStagyGroups() {
+func PrintStratGroups() {
 	groups := make(map[string][]string)
 	for stagy, pairMap := range StgPairTfs {
 		for pair, tf := range pairMap {
@@ -57,7 +57,7 @@ func PrintStagyGroups() {
 		}
 	}
 	text := GroupByPairQuotes(groups)
-	log.Info("group pairs by stagy_tf:\n" + text)
+	log.Info("group pairs by strat_tf:\n" + text)
 }
 
 var (

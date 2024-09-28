@@ -26,12 +26,12 @@ func TestGcdInts(t *testing.T) {
 
 func TestCopyDir(t *testing.T) {
 	name := "h01"
-	stagyDir := "E:\\trade\\go\\banstagy"
+	stagyDir := "E:\\trade\\go\\banstrat"
 	outDir := "E:\\trade\\go\\bandata\\backtest\\task_-1"
 	srcDir := fmt.Sprintf("%s/%s", stagyDir, name)
-	tgtDir := fmt.Sprintf("%s/stagy_%s", outDir, name)
+	tgtDir := fmt.Sprintf("%s/strat_%s", outDir, name)
 	err_ := CopyDir(srcDir, tgtDir)
 	if err_ != nil {
-		log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))
+		log.Error("backup strat fail", zap.String("name", name), zap.Error(err_))
 	}
 }

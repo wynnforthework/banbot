@@ -60,7 +60,7 @@ func RunExitCalls() {
 	ExitCalls = nil
 }
 
-func KeyStagyPairTf(stagy, pair, tf string) string {
+func KeyStratPairTf(stagy, pair, tf string) string {
 	var b strings.Builder
 	b.Grow(len(pair) + len(tf) + len(stagy) + 2)
 	b.WriteString(stagy)
@@ -80,10 +80,10 @@ func (p *JobPerf) GetAmount(amount float64) float64 {
 }
 
 func GetPerfSta(stagy string) *PerfSta {
-	p, ok := StagyPerfSta[stagy]
+	p, ok := StratPerfSta[stagy]
 	if !ok || p == nil {
 		p = &PerfSta{}
-		StagyPerfSta[stagy] = p
+		StratPerfSta[stagy] = p
 	}
 	return p
 }
@@ -121,7 +121,7 @@ func DumpPerfs(outDir string) {
 		data[cacheKey] = fmt.Sprintf("%v|%.5f|%.5f", pf.Num, pf.TotProfit, pf.Score)
 	}
 	res := make(map[string]interface{})
-	for name, sta := range StagyPerfSta {
+	for name, sta := range StratPerfSta {
 		perf, _ := perfs[name]
 		res[name] = map[string]interface{}{
 			"od_num":     sta.OdNum,
@@ -169,7 +169,7 @@ func LoadPerfs(inDir string) {
 			log.Error(fmt.Sprintf("decode %s fail", strtg), zap.Error(err_))
 			continue
 		}
-		StagyPerfSta[strtg] = sta
+		StratPerfSta[strtg] = sta
 		perfVal, ok := cfg["perf"]
 		if ok && perfVal != nil {
 			var perf = map[string]string{}

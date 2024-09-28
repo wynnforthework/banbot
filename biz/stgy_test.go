@@ -75,8 +75,8 @@ func TestStagyRun(t *testing.T) {
 			Data:       map[string]interface{}{"sid": exs.ID},
 		}
 		strat.Envs[envKey] = env
-		job := &strat.StagyJob{
-			Stagy:         stagy,
+		job := &strat.StratJob{
+			Strat:         stagy,
 			Env:           env,
 			Symbol:        exs,
 			TimeFrame:     tf,
@@ -88,10 +88,10 @@ func TestStagyRun(t *testing.T) {
 		}
 		jobs, ok := accJobs[envKey]
 		if !ok {
-			jobs = make(map[string]*strat.StagyJob)
+			jobs = make(map[string]*strat.StratJob)
 			accJobs[envKey] = jobs
 		}
-		jobs[job.Stagy.Name] = job
+		jobs[job.Strat.Name] = job
 	}
 	curTime := utils.AlignTfMSecs(btime.TimeMS(), tfMSecs) - tfMSecs*int64(barNum)
 	norBar := banexg.Kline{Time: curTime, Open: 0.1, High: 0.1, Low: 0.1, Close: 0.1, Volume: 0.1}
@@ -115,7 +115,7 @@ func TestStagyRun(t *testing.T) {
 			jobs, _ := accJobs[envKey]
 			for _, job := range jobs {
 				job.InitBar(nil)
-				job.Stagy.OnBar(job)
+				job.Strat.OnBar(job)
 			}
 		}
 	}

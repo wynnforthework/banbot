@@ -107,17 +107,17 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq
 	if !numOver && len(openOds) > 0 {
 		// Check whether the maximum number of orders opened by the strategy is exceeded
 		// 检查是否超出策略最大开单数量
-		stagyOdNum := make(map[string]int)
+		stratOdNum := make(map[string]int)
 		for _, od := range openOds {
-			num, _ := stagyOdNum[od.Strategy]
-			stagyOdNum[od.Strategy] = num + 1
+			num, _ := stratOdNum[od.Strategy]
+			stratOdNum[od.Strategy] = num + 1
 		}
 		res := make([]*strat.EnterReq, 0, len(enters))
 		for _, req := range enters {
-			num, _ := stagyOdNum[req.StgyName]
+			num, _ := stratOdNum[req.StgyName]
 			pol := strat.Get(env.Symbol, req.StgyName).Policy
 			if pol == nil || pol.MaxOpen == 0 || num < pol.MaxOpen {
-				stagyOdNum[req.StgyName] = num + 1
+				stratOdNum[req.StgyName] = num + 1
 				res = append(res, req)
 			}
 		}
@@ -540,7 +540,7 @@ It will be saved internally to the database during the actual trading.
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
 	od.UpdateProfits(0)
 	err := od.Save(sess)
-	cfg := strat.GetStrtgPerf(od.Symbol, od.Strategy)
+	cfg := strat.GetStratPerf(od.Symbol, od.Strategy)
 	if cfg != nil && cfg.Enable && o.Account == config.DefAcc {
 		err2 := strat.CalcJobScores(od.Symbol, od.Timeframe, od.Strategy)
 		if err2 != nil {

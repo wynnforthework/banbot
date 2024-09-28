@@ -93,7 +93,7 @@ func (o *LiveOrderMgr) makeInOutOd(sess *orm.Queries, pair string, short bool, a
 	}
 	defTF := config.GetTakeOverTF(pair, "")
 	if defTF != "" {
-		log.Error("no stagy job found for trade", zap.String("pair", pair),
+		log.Error("no strat job found for trade", zap.String("pair", pair),
 			zap.String("id", entOdId))
 		return nil
 	}

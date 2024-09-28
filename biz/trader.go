@@ -113,10 +113,10 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 		job.IsWarmUp = bar.IsWarmUp
 		job.InitBar(curOrders)
 		snap := job.SnapOrderStates()
-		job.Stagy.OnBar(job)
+		job.Strat.OnBar(job)
 		var isBatch = false
 		if !barExpired {
-			isBatch = job.Stagy.BatchInOut && job.Stagy.OnBatchJobs != nil
+			isBatch = job.Strat.BatchInOut && job.Strat.OnBatchJobs != nil
 			if isBatch {
 				AddBatchJob(account, bar.TimeFrame, job, false)
 			} else {
@@ -138,8 +138,8 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	// 更新辅助订阅数据
 	for _, job := range infoJobs {
 		job.IsWarmUp = bar.IsWarmUp
-		job.Stagy.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
-		if job.Stagy.BatchInfo && job.Stagy.OnBatchInfos != nil {
+		job.Strat.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
+		if job.Strat.BatchInfo && job.Strat.OnBatchInfos != nil {
 			AddBatchJob(account, bar.TimeFrame, job, true)
 		}
 	}
@@ -150,7 +150,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	return t.ExecOrders(odMgr, jobs, env, enters, exits, edits)
 }
 
-func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StagyJob, env *ta.BarEnv,
+func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StratJob, env *ta.BarEnv,
 	enters []*strat.EnterReq, exits []*strat.ExitReq, edits []*orm.InOutEdit) *errs.Error {
 	if len(enters)+len(exits)+len(edits) == 0 {
 		return nil
@@ -174,26 +174,26 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StagyJob, en
 		log.Error("process orders fail", zap.Error(err))
 		return err
 	}
-	var jobMap = map[string]*strat.StagyJob{}
+	var jobMap = map[string]*strat.StratJob{}
 	for _, job := range jobs {
-		if job.Stagy.OnOrderChange == nil {
+		if job.Strat.OnOrderChange == nil {
 			continue
 		}
-		jobMap[job.Stagy.Name] = job
+		jobMap[job.Strat.Name] = job
 	}
 	for _, od := range ents {
 		job, ok := jobMap[od.Strategy]
-		if !ok || job.Stagy.OnOrderChange == nil {
+		if !ok || job.Strat.OnOrderChange == nil {
 			continue
 		}
-		job.Stagy.OnOrderChange(job, od, strat.OdChgEnter)
+		job.Strat.OnOrderChange(job, od, strat.OdChgEnter)
 	}
 	for _, od := range exts {
 		job, ok := jobMap[od.Strategy]
-		if !ok || job.Stagy.OnOrderChange == nil {
+		if !ok || job.Strat.OnOrderChange == nil {
 			continue
 		}
-		job.Stagy.OnOrderChange(job, od, strat.OdChgExit)
+		job.Strat.OnOrderChange(job, od, strat.OdChgExit)
 	}
 	return nil
 }

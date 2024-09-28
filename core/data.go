@@ -29,7 +29,7 @@ var (
 	PairCopiedMs = map[string][2]int64{}              // The latest time that all targets received K lines from the crawler, as well as the waiting interval, are used to determine whether there are any that have not been received for a long time. 所有标的从爬虫收到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的。
 	TfPairHits   = map[string]map[string]int{}        // tf[pair[hits]]The number of bars for each currency in each period within a period of time, used for timing output 一段时间内各周期各币种的bar数量，用于定时输出
 	JobPerfs     = make(map[string]*JobPerf)          // stagy_pair_tf: JobPerf Record the billing amount ratio of the task. If the winning rate is low, the billing amount should be reduced. 记录任务的开单金额比率，胜率低的要减少开单金额
-	StagyPerfSta = make(map[string]*PerfSta)          // stagy: Job任务状态
+	StratPerfSta = make(map[string]*PerfSta)          // stagy: Job任务状态
 	LastBarMs    int64                                // The end time of the last bar received, a 13-digit timestamp 上次收到bar的结束时间，13位时间戳
 	OdBooks      = map[string]*banexg.OrderBook{}     // Cache all order books received from crawler 缓存所有从爬虫收到的订单簿
 	NumTaCache   = 1500                               // The number of historical values cached during indicator calculation, default 1500 指标计算时缓存的历史值数量，默认1500

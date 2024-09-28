@@ -125,7 +125,7 @@ func (r *BTResult) dumpBtFiles() {
 
 	r.dumpStrategy()
 
-	r.dumpStagyOutputs()
+	r.dumpStratOutputs()
 
 	r.dumpGraph()
 }
@@ -620,19 +620,19 @@ func (r *BTResult) dumpConfig() {
 }
 
 func (r *BTResult) dumpStrategy() {
-	stagyDir := config.GetStagyDir()
+	stratDir := config.GetStratDir()
 	for name := range core.StgPairTfs {
 		dname := strings.Split(name, ":")[0]
-		srcDir := fmt.Sprintf("%s/%s", stagyDir, dname)
-		tgtDir := fmt.Sprintf("%s/stagy_%s", r.OutDir, dname)
+		srcDir := fmt.Sprintf("%s/%s", stratDir, dname)
+		tgtDir := fmt.Sprintf("%s/strat_%s", r.OutDir, dname)
 		err_ := utils.CopyDir(srcDir, tgtDir)
 		if err_ != nil {
-			log.Error("backup stagy fail", zap.String("name", name), zap.Error(err_))
+			log.Error("backup strat fail", zap.String("name", name), zap.Error(err_))
 		}
 	}
 }
 
-func (r *BTResult) dumpStagyOutputs() {
+func (r *BTResult) dumpStratOutputs() {
 	groups := make(map[string][]string)
 	for _, items := range strat.PairStags {
 		for _, stgy := range items {

@@ -513,7 +513,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 	if isShort == isSell {
 		// Open long or short 开多或开空
 		if defTF == "" {
-			log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("stagy", config.TakeOverStgy))
+			log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("strat", config.TakeOverStgy))
 			return ods, nil
 		}
 		tag := "[LONG]"

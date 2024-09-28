@@ -8,11 +8,11 @@ import (
 	ta "github.com/banbox/banta"
 )
 
-type CalcDDExitRate func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64
+type CalcDDExitRate func(s *StratJob, od *orm.InOutOrder, maxChg float64) float64
 type PickTimeFrameFunc func(symbol string, tfScores []*core.TfScore) string
 type FnOdChange func(acc string, od *orm.InOutOrder, evt int)
 
-type TradeStagy struct {
+type TradeStrat struct {
 	Name          string
 	Version       int
 	WarmupNum     int
@@ -29,18 +29,18 @@ type TradeStagy struct {
 	Outputs       []string // The content of the text file output by the strategy, where each string is one line 策略输出的文本文件内容，每个字符串是一行
 	Policy        *config.RunPolicyConfig
 
-	OnPairInfos         func(s *StagyJob) []*PairSub
-	OnStartUp           func(s *StagyJob)
-	OnBar               func(s *StagyJob)
-	OnInfoBar           func(s *StagyJob, e *ta.BarEnv, pair, tf string)   // Other dependent bar data 其他依赖的bar数据
-	OnTrades            func(s *StagyJob, trades []*banexg.Trade)          // Transaction by transaction data 逐笔交易数据
-	OnBatchJobs         func(jobs []*StagyJob)                             // All target jobs at the current time, used for bulk opening/closing of orders 当前时间所有标的job，用于批量开单/平仓
-	OnBatchInfos        func(jobs map[string]*StagyJob)                    // All info marked jobs at the current time, used for batch processing 当前时间所有info标的job，用于批量处理
-	OnCheckExit         func(s *StagyJob, od *orm.InOutOrder) *ExitReq     // Custom order exit logic 自定义订单退出逻辑
-	OnOrderChange       func(s *StagyJob, od *orm.InOutOrder, chgType int) // Order update callback 订单更新回调
+	OnPairInfos         func(s *StratJob) []*PairSub
+	OnStartUp           func(s *StratJob)
+	OnBar               func(s *StratJob)
+	OnInfoBar           func(s *StratJob, e *ta.BarEnv, pair, tf string)   // Other dependent bar data 其他依赖的bar数据
+	OnTrades            func(s *StratJob, trades []*banexg.Trade)          // Transaction by transaction data 逐笔交易数据
+	OnBatchJobs         func(jobs []*StratJob)                             // All target jobs at the current time, used for bulk opening/closing of orders 当前时间所有标的job，用于批量开单/平仓
+	OnBatchInfos        func(jobs map[string]*StratJob)                    // All info marked jobs at the current time, used for batch processing 当前时间所有info标的job，用于批量处理
+	OnCheckExit         func(s *StratJob, od *orm.InOutOrder) *ExitReq     // Custom order exit logic 自定义订单退出逻辑
+	OnOrderChange       func(s *StratJob, od *orm.InOutOrder, chgType int) // Order update callback 订单更新回调
 	GetDrawDownExitRate CalcDDExitRate                                     // Calculate the ratio of tracking profit taking, drawdown, and exit 计算跟踪止盈回撤退出的比率
 	PickTimeFrame       PickTimeFrameFunc                                  // Choose a suitable trading cycle for the specified currency 为指定币选择适合的交易周期
-	OnShutDown          func(s *StagyJob)                                  // Callback when the robot stops 机器人停止时回调
+	OnShutDown          func(s *StratJob)                                  // Callback when the robot stops 机器人停止时回调
 }
 
 const (
@@ -57,7 +57,7 @@ const (
 )
 
 type BatchTask struct {
-	Job  *StagyJob
+	Job  *StratJob
 	Type int
 }
 
@@ -78,8 +78,8 @@ type PairSub struct {
 	WarmupNum int
 }
 
-type StagyJob struct {
-	Stagy         *TradeStagy
+type StratJob struct {
+	Strat         *TradeStrat
 	Env           *ta.BarEnv
 	Entrys        []*EnterReq
 	Exits         []*ExitReq

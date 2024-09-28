@@ -114,7 +114,7 @@ func (t *CryptoTrader) Run() *errs.Error {
 		return err
 	}
 	err = biz.CleanUpOdMgr()
-	strat.ExitStagyJobs()
+	strat.ExitStratJobs()
 	if err != nil {
 		return err
 	}

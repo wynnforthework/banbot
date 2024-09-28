@@ -25,7 +25,7 @@ func GetDataDir() string {
 	return DataDir
 }
 
-func GetStagyDir() string {
+func GetStratDir() string {
 	result := os.Getenv("BanStgyDir")
 	if result == "" {
 		panic(fmt.Errorf("`BanStgyDir` env is required"))

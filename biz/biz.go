@@ -67,11 +67,11 @@ func LoadRefreshPairs(dp data.IProvider) *errs.Error {
 		return err
 	}
 	var warms map[string]map[string]int
-	warms, err = strat.LoadStagyJobs(pairs, pairTfScores)
+	warms, err = strat.LoadStratJobs(pairs, pairTfScores)
 	if err != nil {
 		return err
 	}
-	core.PrintStagyGroups()
+	core.PrintStratGroups()
 	return dp.SubWarmPairs(warms, true)
 }
 
@@ -83,20 +83,20 @@ func AutoRefreshPairs(dp data.IProvider) {
 }
 
 func InitOdSubs() {
-	var subStagys = map[string]*strat.TradeStagy{}
+	var subStgys = map[string]*strat.TradeStrat{}
 	for _, items := range strat.PairStags {
 		for stgName, stagy := range items {
 			if stagy.OnOrderChange != nil {
-				subStagys[stgName] = stagy
+				subStgys[stgName] = stagy
 			}
 		}
 	}
-	if len(subStagys) == 0 {
+	if len(subStgys) == 0 {
 		return
 	}
 	for acc := range strat.AccJobs {
 		strat.AddOdSub(acc, func(acc string, od *orm.InOutOrder, evt int) {
-			stagy, ok := subStagys[od.Strategy]
+			stgy, ok := subStgys[od.Strategy]
 			if !ok {
 				// The current strategy does not monitor order status
 				// 当前策略未监听订单状态
@@ -113,7 +113,7 @@ func InitOdSubs() {
 			}
 			job, _ := its[od.Strategy]
 			if job != nil {
-				stagy.OnOrderChange(job, od, evt)
+				stgy.OnOrderChange(job, od, evt)
 			}
 		})
 	}
@@ -129,10 +129,10 @@ Even if the job has no entry tasks, this method should be called to postpone the
 添加批量入场任务。
 即使job没有入场任务，也应该调用此方法，用于推迟入场时间TFEnterMS
 */
-func AddBatchJob(account, tf string, job *strat.StagyJob, isInfo bool) {
+func AddBatchJob(account, tf string, job *strat.StratJob, isInfo bool) {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
-	key := fmt.Sprintf("%s_%s_%s", tf, account, job.Stagy.Name)
+	key := fmt.Sprintf("%s_%s_%s", tf, account, job.Strat.Name)
 	tasks, ok := strat.BatchTasks[key]
 	if !ok {
 		tasks = &strat.BatchMap{
@@ -177,11 +177,11 @@ func TryFireBatches(currMS int64) int {
 			}
 			continue
 		}
-		var enterJobs []*strat.StagyJob
-		var infoJobs map[string]*strat.StagyJob
-		var stagy *strat.TradeStagy
+		var enterJobs []*strat.StratJob
+		var infoJobs map[string]*strat.StratJob
+		var stgy *strat.TradeStrat
 		for pair, task := range tasks.Map {
-			stagy = task.Job.Stagy
+			stgy = task.Job.Strat
 			if task.Type == strat.BatchTypeEnter {
 				enterJobs = append(enterJobs, task.Job)
 			} else if task.Type == strat.BatchTypeInfo {
@@ -194,7 +194,7 @@ func TryFireBatches(currMS int64) int {
 		if len(enterJobs) > 0 {
 			// Check all batch tasks at this time and decide which ones to enter or exit
 			// 检查此时间所有批量任务，决定哪些入场或那些出场
-			stagy.OnBatchJobs(enterJobs)
+			stgy.OnBatchJobs(enterJobs)
 			// Perform entry/exit tasks
 			// 执行入场/出场任务
 			keyParts := strings.Split(key, "_")
@@ -206,12 +206,12 @@ func TryFireBatches(currMS int64) int {
 					continue
 				}
 				ents, exits, err = odMgr.ProcessOrders(sess, job.Env, job.Entrys, job.Exits, nil)
-				if job.Stagy.OnOrderChange != nil {
+				if job.Strat.OnOrderChange != nil {
 					for _, od := range ents {
-						job.Stagy.OnOrderChange(job, od, strat.OdChgEnter)
+						job.Strat.OnOrderChange(job, od, strat.OdChgEnter)
 					}
 					for _, od := range exits {
-						job.Stagy.OnOrderChange(job, od, strat.OdChgExit)
+						job.Strat.OnOrderChange(job, od, strat.OdChgExit)
 					}
 				}
 				if err != nil {
@@ -220,7 +220,7 @@ func TryFireBatches(currMS int64) int {
 			}
 		}
 		if len(infoJobs) > 0 {
-			stagy.OnBatchInfos(infoJobs)
+			stgy.OnBatchInfos(infoJobs)
 		}
 	}
 	return waitNum
@@ -239,9 +239,9 @@ func ResetVars() {
 	//orm.FakeOdId = 1
 	orm.ResetVars()
 	strat.Envs = make(map[string]*ta.BarEnv)
-	strat.AccJobs = make(map[string]map[string]map[string]*strat.StagyJob)
-	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StagyJob)
-	strat.PairStags = make(map[string]map[string]*strat.TradeStagy)
+	strat.AccJobs = make(map[string]map[string]map[string]*strat.StratJob)
+	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StratJob)
+	strat.PairStags = make(map[string]map[string]*strat.TradeStrat)
 	strat.BatchTasks = make(map[string]*strat.BatchMap)
 	strat.LastBatchMS = 0
 }

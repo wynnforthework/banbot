@@ -15,16 +15,16 @@ import (
 	"strings"
 )
 
-type FuncMakeStagy = func(pol *config.RunPolicyConfig) *TradeStagy
+type FuncMakeStrat = func(pol *config.RunPolicyConfig) *TradeStrat
 
 var (
-	StagyMake = make(map[string]FuncMakeStagy) // 已加载的策略缓存
+	StratMake = make(map[string]FuncMakeStrat) // 已加载的策略缓存
 )
 
-func New(pol *config.RunPolicyConfig) *TradeStagy {
+func New(pol *config.RunPolicyConfig) *TradeStrat {
 	polID := pol.ID()
-	makeFn, ok := StagyMake[pol.Name]
-	var stgy *TradeStagy
+	makeFn, ok := StratMake[pol.Name]
+	var stgy *TradeStrat
 	if ok {
 		stgy = makeFn(pol)
 	} else {
@@ -39,7 +39,7 @@ func New(pol *config.RunPolicyConfig) *TradeStagy {
 	return stgy
 }
 
-func Get(pair, strtgID string) *TradeStagy {
+func Get(pair, strtgID string) *TradeStrat {
 	data, _ := PairStags[pair]
 	if len(data) == 0 {
 		return nil
@@ -48,7 +48,7 @@ func Get(pair, strtgID string) *TradeStagy {
 	return res
 }
 
-func GetStrtgPerf(pair, strtg string) *config.StrtgPerfConfig {
+func GetStratPerf(pair, strtg string) *config.StrtgPerfConfig {
 	stg := Get(pair, strtg)
 	if stg == nil {
 		return nil
@@ -59,15 +59,15 @@ func GetStrtgPerf(pair, strtg string) *config.StrtgPerfConfig {
 	return config.Data.StrtgPerf
 }
 
-//func loadNative(stagyName string) *TradeStagy {
-//	filePath := path.Join(config.GetStagyDir(), stagyName+".o")
+//func loadNative(stratName string) *TradeStrat {
+//	filePath := path.Join(config.GetStratDir(), stratName+".o")
 //	_, err := os.Stat(filePath)
-//	nameVar := zap.String("name", stagyName)
+//	nameVar := zap.String("name", stratName)
 //	if err != nil {
 //		log.Error("strategy not found", zap.String("path", filePath), zap.Error(err))
 //		return nil
 //	}
-//	linker, err := goloader.ReadObj(filePath, stagyName)
+//	linker, err := goloader.ReadObj(filePath, stratName)
 //	if err != nil {
 //		log.Error("strategy load fail, package is `main`?", nameVar, zap.Error(err))
 //		return nil
@@ -85,7 +85,7 @@ func GetStrtgPerf(pair, strtg string) *config.StrtgPerfConfig {
 //		return nil
 //	}
 //	keys := zap.String("keys", strings.Join(utils.KeysOfMap(module.Syms), ","))
-//	prefix := stagyName + "."
+//	prefix := stratName + "."
 //	// 加载Main
 //	mainPath := prefix + "Main"
 //	mainPtr := GetModuleItem(module, mainPath)
@@ -93,9 +93,9 @@ func GetStrtgPerf(pair, strtg string) *config.StrtgPerfConfig {
 //		log.Error("module item not found", zap.String("p", mainPath), keys)
 //		return nil
 //	}
-//	runFunc := *(*func() *TradeStagy)(mainPtr)
+//	runFunc := *(*func() *TradeStrat)(mainPtr)
 //	stagy := runFunc()
-//	stagy.Name = stagyName
+//	stagy.Name = stratName
 //	// 这里不能卸载，卸载后结构体的嵌入函数无法调用
 //	// module.Unload()
 //	return stagy
@@ -114,10 +114,10 @@ func GetStrtgPerf(pair, strtg string) *config.StrtgPerfConfig {
 //	goloader.RegTypes(symPtr, &ta.BarEnv{}, &ta.Series{}, &ta.CrossLog{}, &ta.XState{}, ta.Cross, ta.Sum, ta.SMA,
 //		ta.EMA, ta.EMABy, ta.RMA, ta.RMABy, ta.TR, ta.ATR, ta.MACD, ta.MACDBy, ta.RSI, ta.Highest, ta.Lowest, ta.KDJ,
 //		ta.KDJBy, ta.StdDev, ta.StdDevBy, ta.BBANDS, ta.TD, &ta.AdxState{}, ta.ADX, ta.ROC, ta.HeikinAshi)
-//	stgy := &TradeStagy{}
+//	stgy := &TradeStrat{}
 //	goloader.RegTypes(symPtr, stgy, stgy.OnPairInfos, stgy.OnStartUp, stgy.OnBar, stgy.OnInfoBar, stgy.OnTrades,
 //		stgy.OnCheckExit, stgy.GetDrawDownExitRate, stgy.PickTimeFrame, stgy.OnShutDown)
-//	job := &StagyJob{}
+//	job := &StratJob{}
 //	goloader.RegTypes(symPtr, job, job.OpenOrder)
 //	goloader.RegTypes(symPtr, &PairSub{}, &EnterReq{}, &ExitReq{})
 //}
@@ -139,7 +139,7 @@ func (q *ExitReq) Clone() *ExitReq {
 	return res
 }
 
-func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
+func (s *StratJob) InitBar(curOrders []*orm.InOutOrder) {
 	s.CheckMS = btime.TimeMS()
 	if s.IsWarmUp {
 		s.LongOrders = nil
@@ -149,7 +149,7 @@ func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 		s.ShortOrders = nil
 		enteredNum := 0
 		for _, od := range curOrders {
-			if od.Strategy == s.Stagy.Name {
+			if od.Strategy == s.Strat.Name {
 				if od.Status >= orm.InOutStatusFullEnter {
 					enteredNum += 1
 				}
@@ -167,7 +167,7 @@ func (s *StagyJob) InitBar(curOrders []*orm.InOutOrder) {
 	s.Exits = nil
 }
 
-func (s *StagyJob) SnapOrderStates() map[int64]*orm.InOutSnap {
+func (s *StratJob) SnapOrderStates() map[int64]*orm.InOutSnap {
 	var res = make(map[int64]*orm.InOutSnap)
 	orders := s.GetOrders(0)
 	for _, od := range orders {
@@ -176,7 +176,7 @@ func (s *StagyJob) SnapOrderStates() map[int64]*orm.InOutSnap {
 	return res
 }
 
-func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOutEdit, *errs.Error) {
+func (s *StratJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOutEdit, *errs.Error) {
 	var res []*orm.InOutEdit
 	var skipSL, skipTP = 0, 0
 	orders := s.GetOrders(0)
@@ -238,12 +238,12 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 	}
 	if core.LiveMode && skipSL+skipTP > 0 {
 		log.Warn(fmt.Sprintf("%s/%s triggers on exchange is disabled, stoploss: %v, takeprofit: %v",
-			s.Stagy.Name, s.Symbol.Symbol, skipSL, skipTP))
+			s.Strat.Name, s.Symbol.Symbol, skipSL, skipTP))
 	}
 	return res, nil
 }
 
-func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOutEdit, *errs.Error) {
+func (s *StratJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOutEdit, *errs.Error) {
 	sl := od.GetStopLoss().Clone()
 	tp := od.GetTakeProfit().Clone()
 	req, err := s.customExit(od)
@@ -269,37 +269,37 @@ func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOu
 }
 
 /*
-GetJobs 返回：pair_tf: [stagyName]StagyJob
+GetJobs 返回：pair_tf: [stratName]StratJob
 */
-func GetJobs(account string) map[string]map[string]*StagyJob {
+func GetJobs(account string) map[string]map[string]*StratJob {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	jobs, ok := AccJobs[account]
 	if !ok {
-		jobs = map[string]map[string]*StagyJob{}
+		jobs = map[string]map[string]*StratJob{}
 		AccJobs[account] = jobs
 	}
 	return jobs
 }
 
-func GetInfoJobs(account string) map[string]map[string]*StagyJob {
+func GetInfoJobs(account string) map[string]map[string]*StratJob {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
 	lockInfoJobs.Lock()
 	jobs, ok := AccInfoJobs[account]
 	if !ok {
-		jobs = map[string]map[string]*StagyJob{}
+		jobs = map[string]map[string]*StratJob{}
 		AccInfoJobs[account] = jobs
 	}
 	lockInfoJobs.Unlock()
 	return jobs
 }
 
-func CalcJobScores(pair, tf, stagy string) *errs.Error {
+func CalcJobScores(pair, tf, stgy string) *errs.Error {
 	var orders []*orm.InOutOrder
-	cfg := GetStrtgPerf(pair, stagy)
+	cfg := GetStratPerf(pair, stgy)
 	if core.EnvReal {
 		// Retrieve recent orders from the database
 		// 从数据库查询最近订单
@@ -311,7 +311,7 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 		taskId := orm.GetTaskID(config.DefAcc)
 		orders, err = sess.GetOrders(orm.GetOrdersArgs{
 			TaskID:    taskId,
-			Strategy:  stagy,
+			Strategy:  stgy,
 			TimeFrame: tf,
 			Pairs:     []string{pair},
 			Status:    2,
@@ -323,7 +323,7 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 	} else {
 		// 从HistODs查询
 		for _, od := range orm.HistODs {
-			if od.Symbol != pair || od.Timeframe != tf || od.Strategy != stagy {
+			if od.Symbol != pair || od.Timeframe != tf || od.Strategy != stgy {
 				continue
 			}
 			orders = append(orders, od)
@@ -332,7 +332,7 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 			orders = orders[len(orders)-cfg.MaxOdNum:]
 		}
 	}
-	sta := core.GetPerfSta(stagy)
+	sta := core.GetPerfSta(stgy)
 	sta.OdNum += 1
 	if len(orders) < cfg.MinOdNum {
 		return nil
@@ -341,7 +341,7 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 	for _, od := range orders {
 		totalPft += od.ProfitRate
 	}
-	var prefKey = core.KeyStagyPairTf(stagy, pair, tf)
+	var prefKey = core.KeyStratPairTf(stgy, pair, tf)
 	perf, _ := core.JobPerfs[prefKey]
 	if perf == nil {
 		perf = &core.JobPerf{
@@ -355,13 +355,13 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 	}
 	var prefs []*core.JobPerf
 	for key, p := range core.JobPerfs {
-		if strings.HasPrefix(key, stagy) {
+		if strings.HasPrefix(key, stgy) {
 			prefs = append(prefs, p)
 		}
 	}
 	// Calculate billing ratio
 	// 计算开单倍率
-	perf.Score = defaultCalcJobScore(cfg, stagy, perf, prefs)
+	perf.Score = defaultCalcJobScore(cfg, stgy, perf, prefs)
 	if core.LiveMode {
 		// Real disk mode, immediately save to data directory
 		// 实盘模式，立刻保存到数据目录

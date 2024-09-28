@@ -17,7 +17,7 @@ import (
 )
 
 /*
-LoadStagyJobs Loading strategies and trading pairs 加载策略和交易对
+LoadStratJobs Loading strategies and trading pairs 加载策略和交易对
 
 更新以下全局变量：
 Update the following global variables:
@@ -32,19 +32,19 @@ strat.AccInfoJobs
 
 	返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
 */
-func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[string]map[string]int, *errs.Error) {
+func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[string]map[string]int, *errs.Error) {
 	if len(pairs) == 0 || len(tfScores) == 0 {
-		return nil, errs.NewMsg(errs.CodeParamRequired, "`pairs` and `tfScores` are required for LoadStagyJobs")
+		return nil, errs.NewMsg(errs.CodeParamRequired, "`pairs` and `tfScores` are required for LoadStratJobs")
 	}
 	// Set the global variables involved to null, as will be updated below
 	// 将涉及的全局变量置为空，下面会更新
 	core.TFSecs = make(map[string]int)
 	core.BookPairs = make(map[string]bool)
 	core.StgPairTfs = make(map[string]map[string]string)
-	PairStags = make(map[string]map[string]*TradeStagy)
+	PairStags = make(map[string]map[string]*TradeStrat)
 	lockInfoJobs.Lock()
 	for account := range AccInfoJobs {
-		AccInfoJobs[account] = make(map[string]map[string]*StagyJob)
+		AccInfoJobs[account] = make(map[string]map[string]*StratJob)
 	}
 	lockInfoJobs.Unlock()
 	pairTfWarms := make(map[string]map[string]int)
@@ -60,17 +60,17 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		}
 	}
 	var envKeys = make(map[string]bool)
-	stagyAdds := getStagyOpenPairs()
+	stagyAdds := getStratOpenPairs()
 	for _, pol := range config.RunPolicy {
-		stagy := New(pol)
+		stgy := New(pol)
 		polID := pol.ID()
-		if stagy == nil {
+		if stgy == nil {
 			return pairTfWarms, errs.NewMsg(core.ErrRunTime, "strategy %s load fail", polID)
 		}
-		Versions[stagy.Name] = stagy.Version
-		stagyMaxNum := pol.MaxPair
-		if stagyMaxNum == 0 {
-			stagyMaxNum = 999
+		Versions[stgy.Name] = stgy.Version
+		stgyMaxNum := pol.MaxPair
+		if stgyMaxNum == 0 {
+			stgyMaxNum = 999
 		}
 		holdNum := 0
 		newPairMap := make(map[string]string)
@@ -90,19 +90,19 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		}
 		dirt := pol.OdDirt()
 		for _, exs := range exsList {
-			if holdNum >= stagyMaxNum {
+			if holdNum >= stgyMaxNum {
 				break
 			}
-			curStagy := stagy
+			curStgy := stgy
 			scores, _ := tfScores[exs.Symbol]
-			tf := curStagy.pickTimeFrame(exs.Symbol, scores)
+			tf := curStgy.pickTimeFrame(exs.Symbol, scores)
 			if tf == "" {
 				failTfScores[exs.Symbol] = scores
 				continue
 			}
 			items, ok := PairStags[exs.Symbol]
 			if !ok {
-				items = make(map[string]*TradeStagy)
+				items = make(map[string]*TradeStrat)
 				PairStags[exs.Symbol] = items
 			}
 			if _, ok = items[polID]; ok {
@@ -112,16 +112,16 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			// Check for proprietary parameters of the current target and reinitialize the strategy
 			// 检查有当前标的专有参数，重新初始化策略
 			if curPol, isDiff := pol.PairDup(exs.Symbol); isDiff {
-				curStagy = New(curPol)
+				curStgy = New(curPol)
 			}
-			items[polID] = curStagy
+			items[polID] = curStgy
 			holdNum += 1
 			if _, ok = core.TFSecs[tf]; !ok {
 				core.TFSecs[tf] = utils.TFToSecs(tf)
 			}
 			newPairMap[exs.Symbol] = tf
 			envKey := strings.Join([]string{exs.Symbol, tf}, "_")
-			if curStagy.WatchBook {
+			if curStgy.WatchBook {
 				core.BookPairs[exs.Symbol] = true
 			}
 			envKeys[envKey] = true
@@ -129,15 +129,15 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			env := initBarEnv(exs, tf)
 			// Record the data that needs to be preheated; Record subscription information
 			// 记录需要预热的数据；记录订阅信息
-			logWarm(exs.Symbol, tf, curStagy.WarmupNum)
+			logWarm(exs.Symbol, tf, curStgy.WarmupNum)
 			for account := range config.Accounts {
-				ensureStagyJob(curStagy, account, tf, envKey, exs, env, dirt, envKeys, logWarm)
+				ensureStratJob(curStgy, account, tf, envKey, exs, env, dirt, envKeys, logWarm)
 			}
 		}
 		core.StgPairTfs[polID] = newPairMap
 		printFailTfScores(polID, failTfScores)
 	}
-	initStagyJobs()
+	initStratJobs()
 	// Ensure that all pairs and TFs are recorded in the returned data to prevent them from being removed by the data subscriber
 	// 确保所有pair、tf都在返回的中有记录，防止被数据订阅端移除
 	for _, pairMap := range core.StgPairTfs {
@@ -164,8 +164,8 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			if _, ok := envKeys[envKey]; !ok {
 				for _, items := range jobs {
 					for _, job := range items {
-						if job.Stagy.OnShutDown != nil {
-							job.Stagy.OnShutDown(job)
+						if job.Strat.OnShutDown != nil {
+							job.Strat.OnShutDown(job)
 						}
 					}
 				}
@@ -176,19 +176,19 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	return pairTfWarms, nil
 }
 
-func ExitStagyJobs() {
+func ExitStratJobs() {
 	for _, jobs := range AccJobs {
 		for _, items := range jobs {
 			for _, job := range items {
-				if job.Stagy.OnShutDown != nil {
-					job.Stagy.OnShutDown(job)
+				if job.Strat.OnShutDown != nil {
+					job.Strat.OnShutDown(job)
 				}
 			}
 		}
 	}
 }
 
-func printFailTfScores(stagyName string, pairTfScores map[string]map[string]float64) {
+func printFailTfScores(stratName string, pairTfScores map[string]map[string]float64) {
 	if len(pairTfScores) == 0 {
 		return
 	}
@@ -204,7 +204,7 @@ func printFailTfScores(stagyName string, pairTfScores map[string]map[string]floa
 		}
 		lines = append(lines, fmt.Sprintf("%v: %v", pair, strings.Join(scoreStrs, ", ")))
 	}
-	log.Info(fmt.Sprintf("%v filter pairs by tfScore: \n%v", stagyName, strings.Join(lines, "\n")))
+	log.Info(fmt.Sprintf("%v filter pairs by tfScore: \n%v", stratName, strings.Join(lines, "\n")))
 }
 
 func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
@@ -226,25 +226,25 @@ func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 	return env
 }
 
-func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSymbol, env *ta.BarEnv, dirt int,
+func ensureStratJob(stgy *TradeStrat, account, tf, envKey string, exs *orm.ExSymbol, env *ta.BarEnv, dirt int,
 	envKeys map[string]bool, logWarm func(pair, tf string, num int)) {
 	jobs := GetJobs(account)
 	envJobs, ok := jobs[envKey]
 	if !ok {
-		envJobs = make(map[string]*StagyJob)
+		envJobs = make(map[string]*StratJob)
 		jobs[envKey] = envJobs
 	}
-	job, ok := envJobs[stagy.Name]
+	job, ok := envJobs[stgy.Name]
 	if !ok {
-		job = &StagyJob{
-			Stagy:         stagy,
+		job = &StratJob{
+			Strat:         stgy,
 			Env:           env,
 			Symbol:        exs,
 			TimeFrame:     tf,
 			Account:       account,
 			TPMaxs:        make(map[int64]float64),
-			MaxOpenLong:   stagy.EachMaxLong,
-			MaxOpenShort:  stagy.EachMaxShort,
+			MaxOpenLong:   stgy.EachMaxLong,
+			MaxOpenShort:  stgy.EachMaxShort,
 			CloseLong:     true,
 			CloseShort:    true,
 			ExgStopLoss:   true,
@@ -255,16 +255,16 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 		} else if dirt == core.OdDirtLong {
 			job.MaxOpenShort = -1
 		}
-		if stagy.OnStartUp != nil {
-			stagy.OnStartUp(job)
+		if stgy.OnStartUp != nil {
+			stgy.OnStartUp(job)
 		}
-		envJobs[stagy.Name] = job
+		envJobs[stgy.Name] = job
 	}
 	// Load subscription information for other targets
 	// 加载订阅其他标的信息
-	if stagy.OnPairInfos != nil {
+	if stgy.OnPairInfos != nil {
 		infoJobs := GetInfoJobs(account)
-		for _, s := range stagy.OnPairInfos(job) {
+		for _, s := range stgy.OnPairInfos(job) {
 			pair := s.Pair
 			if pair == "_cur_" {
 				pair = exs.Symbol
@@ -281,16 +281,16 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 			jobKey := strings.Join([]string{pair, s.TimeFrame}, "_")
 			items, ok := infoJobs[jobKey]
 			if !ok {
-				items = make(map[string]*StagyJob)
+				items = make(map[string]*StratJob)
 				infoJobs[jobKey] = items
 			}
-			items[stagy.Name] = job
+			items[stgy.Name] = job
 			envKeys[jobKey] = true
 		}
 	}
 }
 
-func initStagyJobs() {
+func initStratJobs() {
 	// Update the EnterNum of the job
 	// 更新job的EnterNum
 	for account := range config.Accounts {
@@ -309,7 +309,7 @@ func initStagyJobs() {
 		accJobs := GetJobs(account)
 		for _, jobs := range accJobs {
 			for _, job := range jobs {
-				key := fmt.Sprintf("%s_%s_%s", job.Symbol.Symbol, job.TimeFrame, job.Stagy.Name)
+				key := fmt.Sprintf("%s_%s_%s", job.Symbol.Symbol, job.TimeFrame, job.Strat.Name)
 				odNum, _ := orderNums[key]
 				job.OrderNum = odNum
 				entNum, _ := enteredNums[key]
@@ -384,7 +384,7 @@ func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string, adds []string) 
 	return pairs, nil
 }
 
-func getStagyOpenPairs() map[string][]string {
+func getStratOpenPairs() map[string][]string {
 	var data = make(map[string]map[string]bool)
 	for account := range config.Accounts {
 		openOds, lock := orm.GetOpenODs(account)

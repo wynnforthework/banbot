@@ -3,7 +3,7 @@
 在Windows的Powershell中生成：
 ```shell
 -- 生成banbot.o包含了策略，用于启动机器人，爬虫
-cd [项目路径]/banstagy
+cd [项目路径]/banstrat
 $env:GOARCH="amd64"
 $env:GOOS="linux"
 go build -o banbot.o
@@ -16,12 +16,12 @@ go build -o banbot.exe
 ```
 ## 服务器环境准备
 ### 授予可执行权限
-将生成的`banbot`和`banstagy`文件上传到服务器合适的目录下，此处以`/app`为例。
+将生成的`banbot`和`banstrat`文件上传到服务器合适的目录下，此处以`/app`为例。
 赋予可执行权限：
 ```shell
 chmod +x /app/banbot.o
 mkdir -p /app/bandata
-mkdir -p /app/banstagy
+mkdir -p /app/banstrat
 ```
 ### 环境变量配置
 ```shell
@@ -29,7 +29,7 @@ vim ~/.bashrc
 ```
 ```shell
 export BanDataDir=/app/bandata
-export BanStgyDir=/app/banstagy
+export BanStgyDir=/app/banstrat
 ```
 执行下面命令立刻生效：
 ```shell

@@ -17,10 +17,10 @@ var env = &ta.BarEnv{
 }
 
 func TestStagyJob_DrawDownExit(t *testing.T) {
-	job := &StagyJob{
+	job := &StratJob{
 		Env: env,
-		Stagy: &TradeStagy{
-			GetDrawDownExitRate: func(s *StagyJob, od *orm.InOutOrder, maxChg float64) float64 {
+		Strat: &TradeStrat{
+			GetDrawDownExitRate: func(s *StratJob, od *orm.InOutOrder, maxChg float64) float64 {
 				return 0.5
 			},
 		},
