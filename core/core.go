@@ -20,6 +20,7 @@ func SetRunEnv(env string) {
 
 /*
 SetPairMs
+update LastBarMs/wait interval from spider
 更新bot端从爬虫收到的标的最新时间和等待间隔
 */
 func SetPairMs(pair string, barMS, waitMS int64) {

@@ -54,6 +54,10 @@ type WarmJob struct {
 
 /*
 SubWarmPairs
+Add new trading pair subscription from data provider.
+
+items: pair[timeFrame]warmNum
+Return the trading pairs with the smallest period change (new/old pairs new period), warm-up tasks
 从数据提供者添加新的交易对订阅。
 
 	items: pair[timeFrame]warmNum
@@ -182,6 +186,7 @@ func (p *HistProvider) downIfNeed() *errs.Error {
 
 func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
 	_, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther)
+	// Check whether the data needs to be downloaded during the backtest. If so, it will be downloaded automatically.
 	// 检查回测期间数据是否需要下载，如需要自动下载
 	err = p.downIfNeed()
 	if err != nil {
@@ -196,11 +201,13 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 		}
 		holders[pair] = hold
 		if hold.getNextMS() == 0 || hold.getStates()[0].NextMS != since {
+			// Ignore here the targets that still exist after refreshing the trading pairs.
 			// 这里忽略刷新交易对后，仍然存在的标的
 			hold.SetSeek(since)
 		}
 		maxSince = max(maxSince, since)
 	}
+	// Delete items that are not warmed up
 	// 删除未预热的项
 	p.holders = holders
 	btime.CurTimeMS = maxSince
@@ -261,6 +268,7 @@ func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pB
 		hold.CallNext()
 		holds = holds[1:]
 		if bar.Time > lastBarMs {
+			// Wait for concurrent batches to complete
 			// 等待并发批量完成
 			wg.Wait()
 			if retErr != nil {
@@ -279,6 +287,7 @@ func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pB
 					}
 				}
 			}
+			// The first bar of the new time, run synchronously
 			// 新时间的第一个bar，同步运行
 			err := hold.RunBar(bar)
 			if err != nil {
@@ -288,6 +297,7 @@ func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pB
 			lastBarMs = bar.Time
 		} else {
 			wg.Add(1)
+			// Different targets at the same time, executed concurrently
 			// 同一个时间的不同标的，并发执行
 			go func(hold IHistKlineFeeder, bar *banexg.Kline) {
 				defer wg.Done()
@@ -458,6 +468,7 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 			return
 		}
 		tfMSecs := int64(msg.TFSecs * 1000)
+		// The weighting factor has been calculated during the start-up or market break, and the weighting is automatically carried out internally
 		// 已在启动或休市期间计算复权因子，内部会自动进行复权
 		if msg.Interval >= msg.TFSecs {
 			_, err := hold.onNewBars(tfMSecs, msg.Arr)
@@ -466,6 +477,7 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 			}
 			return
 		}
+		// The frequency of updates is lower than the bar cycle, and what is received may not be completed
 		// 更新频率低于bar周期，收到的可能未完成
 		lastIdx := len(msg.Arr) - 1
 		doneArr, lastBar := msg.Arr[:lastIdx], msg.Arr[lastIdx]
@@ -482,13 +494,16 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 			return
 		}
 		if msg.Interval <= 5 && hold.getStates()[0].TFSecs >= 60 {
+			// The update is fast, and the cycle required is relatively long, so it is required to be considered complete when the next bar occurs (follow the above logic)
 			// 更新很快，需要的周期相对较长，则要求出现下一个bar时认为完成（走上面逻辑）
 			hold.setWaitBar(lastBar)
 			return
 		}
+		// The frequency of updates is relatively low, or the proportion of the required cycle is large, and the approximate completion is considered complete
 		// 更新频率相对不高，或占需要的周期比率较大，近似完成认为完成
 		endLackSecs := int((lastBar.Time + tfMSecs - btime.TimeMS()) / 1000)
 		if endLackSecs*2 < msg.Interval {
+			// The missing time is less than half of the update interval and is considered complete.
 			// 缺少的时间不足更新间隔的一半，认为完成。
 			_, err := hold.onNewBars(tfMSecs, []*banexg.Kline{lastBar})
 			if err != nil {

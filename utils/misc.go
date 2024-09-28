@@ -17,7 +17,9 @@ var (
 )
 
 /*
-SplitSolid 字符串分割，忽略返回结果中的空字符串
+SplitSolid
+String segmentation, ignore empty strings in the return result
+字符串分割，忽略返回结果中的空字符串
 */
 func SplitSolid(text string, sep string) []string {
 	arr := strings.Split(text, sep)
@@ -169,6 +171,7 @@ func ParallelRun[T any](items []T, concurNum int, handle func(int, T) *errs.Erro
 	guard := make(chan struct{}, concurNum)
 	var wg sync.WaitGroup
 	for i_, item_ := range items {
+		// If the concurrency limit is reached, it will block and wait here
 		// 如果达到并发限制，这里会阻塞等待
 		guard <- struct{}{}
 		if retErr != nil {
@@ -178,6 +181,7 @@ func ParallelRun[T any](items []T, concurNum int, handle func(int, T) *errs.Erro
 		wg.Add(1)
 		go func(i int, item T) {
 			defer func() {
+				// Complete a task and pop up a pop-up from chan
 				// 完成一个任务，从chan弹出一个
 				<-guard
 				wg.Done()

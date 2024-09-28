@@ -24,6 +24,7 @@ import (
 
 var (
 	aggList = []*KlineAgg{
+		// All use hypertables, and update dependent tables by themselves when inserting. Since continuous aggregation cannot be refreshed by sid, the performance is poor when refreshing after inserting historical data in batches by sid.
 		//全部使用超表，自行在插入时更新依赖表。因连续聚合无法按sid刷新，在按sid批量插入历史数据后刷新时性能较差
 		NewKlineAgg("1m", "kline_1m", "", "", "", "", "2 months", "12 months"),
 		NewKlineAgg("5m", "kline_5m", "1m", "20m", "1m", "1m", "2 months", "12 months"),
@@ -76,6 +77,7 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 	}
 	var dctSql string
 	if revRead {
+		// No start time provided, quantity limit provided, search in reverse chronological order
 		// 未提供开始时间，提供了数量限制，按时间倒序搜索
 		dctSql = fmt.Sprintf(`
 select time,open,high,low,close,volume,info from $tbl
@@ -96,6 +98,7 @@ order by time`, sid, startMs, finishEndMS)
 		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
 	if revRead {
+		// If read in reverse order, reverse it again to make the time ascending
 		// 倒序读取的，再次逆序，使时间升序
 		utils.ReverseArr(klines)
 	}
@@ -230,6 +233,7 @@ func queryHyper(sess *Queries, timeFrame, sql string, limit int, args ...interfa
 	if ok {
 		table = agg.Table
 	} else {
+		// If there is no direct match for a timeframe, aggregate from the closest child timeframe
 		// 时间帧没有直接符合的，从最接近的子timeframe聚合
 		subTF, table, rate = getSubTf(timeFrame)
 		if limit > 0 && rate > 1 {
@@ -272,6 +276,9 @@ func (q *Queries) PurgeKlineUn() *errs.Error {
 
 /*
 getUnFinish
+Query the unfinished bars for a given period. The given period can be a preservation period of 1m, 5m, 15m, 1h, 1d; It can also be an aggregation period such as 4h, 3d
+This method has two purposes: querying users for the latest data (possibly aggregation cycles); Calc updates the unfinished bar of the large cycle from the sub cycle (which cannot be an aggregation cycle)
+The returned error indicates that the data does not exist
 查询给定周期的未完成bar。给定周期可以是保存的周期1m,5m,15m,1h,1d；也可以是聚合周期如4h,3d
 此方法两种用途：query用户查询最新数据（可能是聚合周期）；calc从子周期更新大周期的未完成bar（不可能是聚合周期）
 返回的错误表示数据不存在
@@ -286,6 +293,7 @@ func getUnFinish(sess *Queries, sid int32, timeFrame string, startMS, endMS int6
 	fromTF := timeFrame
 	var bigKlines = make([]*banexg.Kline, 0)
 	if _, ok := aggMap[timeFrame]; mode == "calc" || !ok {
+		// Collect data from completed sub cycles
 		// 从已完成的子周期中归集数据
 		fromTF, _, _ = getSubTf(timeFrame)
 		aggFrom := "kline_" + fromTF
@@ -302,6 +310,7 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 			barEndMS = klines[len(klines)-1].Time + int64(utils.TFToSecs(fromTF)*1000)
 		}
 	}
+	// Querying data from unfinished cycles/sub cycles
 	// 从未完成的周期/子周期中查询数据
 	sql := fmt.Sprintf(`SELECT start_ms,open,high,low,close,volume,info,stop_ms FROM kline_un
 						where sid=%d and timeframe='%s' and start_ms >= %d
@@ -363,6 +372,7 @@ func GetAlignOff(sid int32, toTfMSecs int64) int64 {
 
 /*
 calcUnFinish
+Calculate the unfinished bars of large cycles from sub cycles
 从子周期计算大周期的未完成bar
 */
 func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr []*banexg.Kline) *KlineUn {
@@ -416,12 +426,14 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	barStartMS := utils.AlignTfMSecs(startMS, tfMSecs)
 	barEndMS := utils.AlignTfMSecs(endMS, tfMSecs)
 	if barStartMS == barEndMS {
+		// When inserting the start and end timestamps of a sub cycle, corresponding to the current cycle and belonging to the same bar, fast updates are executed
 		// 当子周期插入开始结束时间戳，对应到当前周期，属于同一个bar时，才执行快速更新
 		sql := "select start_ms,open,high,low,close,volume,info,stop_ms " + fromWhere
 		row := sess.db.QueryRow(ctx, sql)
 		var unBar KlineUn
 		err_ := row.Scan(&unBar.StartMs, &unBar.Open, &unBar.High, &unBar.Low, &unBar.Close, &unBar.Volume, &unBar.StopMs)
 		if err_ == nil && unBar.StopMs == startMS {
+			//When the start timestamp of this insertion matches exactly with the end timestamp of the unfinished bar, it is considered valid
 			//当本次插入开始时间戳，和未完成bar结束时间戳完全匹配时，认为有效
 			unBar.High = max(unBar.High, sub.High)
 			unBar.Low = min(unBar.Low, sub.Low)
@@ -437,6 +449,7 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 			return nil
 		}
 	}
+	//When rapid updates are unavailable, collect from sub cycles
 	//当快速更新不可用时，从子周期归集
 	_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
 	if err_ != nil {
@@ -484,6 +497,7 @@ func (r iterForAddKLines) Err() error {
 
 /*
 InsertKLines
+Only batch insert K-lines. To update associated information simultaneously, please use InsertKLinesAuto
 只批量插入K线，如需同时更新关联信息，请使用InsertKLinesAuto
 */
 func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
@@ -512,6 +526,8 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 
 /*
 InsertKLinesAuto
+Insert K-line into the database and call updateKRange to update associated information
+Before calling this method, it is necessary to determine whether it already exists in the database through GetKlineRange to avoid duplicate insertions
 插入K线到数据库，同时调用UpdateKRange更新关联信息
 调用此方法前必须通过GetKlineRange自行判断数据库中是否已存在，避免重复插入
 */
@@ -529,16 +545,21 @@ func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kl
 
 /*
 UpdateKRange
+1. Update the effective range of the K-line
+2. Search for holes and update Khole
+3. Update continuous aggregation with larger cycles
 1. 更新K线的有效区间
 2. 搜索空洞，更新Khole
 3. 更新更大周期的连续聚合
 */
 func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64, klines []*banexg.Kline, aggBig bool) *errs.Error {
+	// Update the effective range of intervals
 	// 更新有效区间范围
 	err := q.updateKLineRange(sid, timeFrame, startMS, endMS)
 	if err != nil {
 		return err
 	}
+	// Search for holes, update khole
 	// 搜索空洞，更新khole
 	err = q.updateKHoles(sid, timeFrame, startMS, endMS)
 	if err != nil {
@@ -547,12 +568,14 @@ func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64
 	if !aggBig {
 		return nil
 	}
+	// Update a larger super table
 	// 更新更大的超表
 	return q.updateBigHyper(sid, timeFrame, startMS, endMS, klines)
 }
 
 /*
 CalcKLineRange
+Calculate the effective range of the specified period K-line within the specified range.
 计算指定周期K线在指定范围内，有效区间。
 */
 func (q *Queries) CalcKLineRange(sid int32, timeFrame string, start, end int64) (int64, int64, *errs.Error) {
@@ -649,6 +672,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	if err != nil {
 		return err
 	}
+	// Find the missing kholes from all bar times
 	// 从所有bar时间中找到缺失的kholes
 	holes := make([][2]int64, 0)
 	if len(barTimes) == 0 {
@@ -676,6 +700,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	if len(holes) == 0 {
 		return nil
 	}
+	// Check the statutory rest periods and filter out non trading periods
 	// 检查法定休息时间段，过滤非交易时间段
 	exs := GetSymbolByID(sid)
 	if exs == nil {
@@ -686,12 +711,14 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	if err != nil {
 		return err
 	}
+	// Due to the fact that some trading days in the historical data have not been entered, the filtering of K-line in the trading calendar is not applicable
 	// 由于历史数据中部分交易日未录入，故不适用交易日历过滤K线
 	susp, err := q.GetExSHoles(exchange, exs, startMS, endMS, true)
 	if err != nil {
 		return err
 	}
 	if len(susp) > 0 {
+		// Filter out non trading time periods
 		// 过滤掉非交易时间段
 		hs := make([][2]int64, 0, len(holes))
 		si, hi := 0, -1
@@ -718,6 +745,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 		}
 		holes = hs
 	}
+	// Filter out holes that are too small
 	// 过滤太小的空洞
 	if tfMSecs == 60000 {
 		exInfo := exchange.Info()
@@ -741,6 +769,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 		//}
 		holes = hs
 	}
+	// Query the recorded kholes and merge them
 	// 查询已记录的khole，进行合并
 	ctx := context.Background()
 	resHoles, err_ := q.GetKHoles(ctx, GetKHolesParams{Sid: sid, Timeframe: timeFrame})
@@ -776,6 +805,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 			}
 		}
 	}
+	// Update or insert the merged kholes into the database
 	// 将合并后的kholes更新或插入到数据库
 	err = q.DelKHoleIDs(delIDs...)
 	if err != nil {
@@ -809,6 +839,7 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 	curMS := btime.TimeMS()
 	for _, item := range aggList {
 		if item.MSecs <= tfMSecs {
+			//Skipping small dimensions; Skip irrelevant continuous aggregation
 			//跳过过小维度；跳过无关的连续聚合
 			continue
 		}
@@ -821,6 +852,7 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 		}
 		unBarStartMs := utils.AlignTfMSecs(curMS, item.MSecs)
 		if endAlignMS >= unBarStartMs && endMS >= endAlignMS {
+			// Only attempt to update when the data involves bars that have not been completed in the current cycle; Only pass in relevant bars to improve efficiency
 			// 仅当数据涉及当前周期未完成bar时，才尝试更新；仅传入相关的bar，提高效率
 			unFinishJobs = append(unFinishJobs, item)
 		}
@@ -828,6 +860,7 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 	if len(unFinishJobs) > 0 {
 		var err *errs.Error
 		if len(klines) == 0 {
+			// Take the first time after aligning the maximum cycle as the starting time
 			// 取最大周期的对齐后第一个时间作为开始时间
 			msecs := unFinishJobs[len(unFinishJobs)-1].MSecs
 			startAlign := utils.AlignTfMSecs(startMS, msecs)
@@ -864,10 +897,12 @@ func (q *Queries) refreshAgg(item *KlineAgg, sid int32, orgStartMS, orgEndMS int
 		// start_ms < org_start_ms说明：插入的数据不是所属bar的第一个数据
 		return nil
 	}
+	// It is possible that startMs happens to be the beginning of the next bar, and the previous one requires -1
 	// 有可能startMs刚好是下一个bar的开始，前一个需要-1
 	aggStart := startMS - tfMSecs
 	oldStart, oldEnd := q.GetKlineRange(sid, item.TimeFrame)
 	if oldStart > 0 && oldEnd > oldStart {
+		// Avoid voids or data errors
 		// 避免出现空洞或数据错误
 		aggStart = min(aggStart, oldEnd)
 		endMS = max(endMS, oldStart)
@@ -888,11 +923,13 @@ insert into %s (sid, time, open, high, low, close, volume, info)
 	if err_ != nil {
 		return NewDbErr(core.ErrDbReadFail, err_)
 	}
+	// Update the effective range of intervals
 	// 更新有效区间范围
 	err := q.updateKLineRange(sid, item.TimeFrame, startMS, endMS)
 	if err != nil {
 		return err
 	}
+	// Search for holes, update khole
 	// 搜索空洞，更新khole
 	err = q.updateKHoles(sid, item.TimeFrame, startMS, endMS)
 	if err != nil {
@@ -908,6 +945,8 @@ func NewKlineAgg(TimeFrame, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefor
 
 /*
 GetDownTF
+Retrieve the download time period corresponding to the specified period.
+Only 1m and 1h allow downloading and writing to the super table. All other dimensions are aggregated from these two dimensions.
 
 	获取指定周期对应的下载的时间周期。
 	只有1m和1h允许下载并写入超表。其他维度都是由这两个维度聚合得到。
@@ -1029,6 +1068,7 @@ func mapToItems[T any](rows pgx.Rows, err_ error, assign func() (T, []any)) ([]T
 
 /*
 SyncKlineTFs
+Check the data consistency of each kline table. If there is more low dimensional data than high dimensional data, aggregate and update to high dimensional data
 检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
 */
 func SyncKlineTFs() *errs.Error {
@@ -1099,6 +1139,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		}
 		return a.TfMSecs < b.TfMSecs
 	})
+	// The kholes that need to be deleted have been filled in
 	// 已填充需要删除的khole
 	badIds := make([]int64, 0, len(rows)/10)
 	curSid := int32(0)
@@ -1119,10 +1160,13 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			return err
 		}
 		if !exchange.HasApi(banexg.ApiFetchOHLCV, exs.Market) {
+			// Not supporting downloading K-line, skip
 			// 不支持下载K线，跳过
 			continue
 		}
 		start, stop := row.Start, row.Stop
+		//There was originally a logic here to skip the large cycle KHole if the small cycle check has been filled, but it was cancelled because larger cycles cannot be collected from extra small cycles.
+		//Each cycle should independently retrieve the actual K-line range to ensure that the range is correct
 		// 这里本来有从小周期检查已填充则跳过大周期KHole的逻辑，但因较大周期无法从特小周期归集，故这里取消。
 		// 每个周期应独立检索实际K线范围，确保范围正确
 		updateKHole := func(newStart, newStop int64) bool {
@@ -1130,6 +1174,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 				return false
 			}
 			if newStart == start && newStop == stop {
+				// This interval is completely filled and added to the deletion list
 				// 此区间被完全填充，添加到删除列表
 				badIds = append(badIds, row.ID)
 				return true
@@ -1139,6 +1184,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			} else if newStop == stop {
 				stop = newStart
 			} else {
+				// Include, delete current, add two KHoles before and after
 				// 被包含，删除当前，新增前后两个KHole
 				badIds = append(badIds, row.ID)
 				newHoles = append(newHoles, [4]int64{int64(row.Sid), row.TfMSecs, start, newStart},
@@ -1147,6 +1193,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			}
 			return false
 		}
+		// First check if it already exists
 		// 先检查是否已存在
 		oldStart, oldStop, err := sess.CalcKLineRange(exs.ID, row.Timeframe, start, stop)
 		if err != nil {
@@ -1155,6 +1202,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		if updateKHole(oldStart, oldStop) {
 			continue
 		}
+		// Download K-lines and also collect higher cycle K-lines
 		// 下载K线，同时也会归集更高周期K线
 		saveNum, err := downOHLCV2DBRange(sess, exchange, exs, row.Timeframe, start, stop, 0, 0, nil)
 		if err != nil {
@@ -1167,6 +1215,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			}
 			continue
 		}
+		// Query the actual updated interval
 		// 查询实际更新的区间
 		if saveNum == 0 {
 			continue
@@ -1187,6 +1236,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 			}
 		}
 	}
+	// Delete filled IDs
 	// 删除已填充的id
 	if len(badIds) > 0 {
 		err := sess.DelKHoleIDs(badIds...)
@@ -1314,12 +1364,14 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 			if err_ != nil {
 				return NewDbErr(core.ErrDbExecFail, err_)
 			}
+			// Update KHoles to avoid holes that are not recorded
 			// 更新KHoles，避免有空洞但未记录
 			err = q.updateKHoles(sid, agg.TimeFrame, newStart, newEnd)
 			if err != nil {
 				return err
 			}
 		} else if oldStart > 0 {
+			// No data, but there are range records
 			// 没有数据，但有范围记录
 			err = q.DelKInfo(sid, agg.TimeFrame)
 			if err != nil {
@@ -1327,6 +1379,7 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 			}
 		}
 	}
+	// Attempt to aggregate updates from subintervals
 	// 尝试从子区间聚合更新
 	for _, agg := range aggList[1:] {
 		if agg.AggFrom == "" {
@@ -1365,7 +1418,9 @@ func GetKlineAggs() []*KlineAgg {
 }
 
 /*
-CalcAdjFactors 计算更新所有复权因子
+CalcAdjFactors
+Calculate and update all weighting factors
+计算更新所有复权因子
 */
 func CalcAdjFactors(args *config.CmdArgs) *errs.Error {
 	if args.OutPath == "" {
@@ -1414,10 +1469,12 @@ func calcCnFutureFactors(sess *Queries, args *config.CmdArgs) *errs.Error {
 		return exsList[i].Symbol < exsList[j].Symbol
 	})
 	var err *errs.Error
+	// Save the daily trading volume of each contract for the current variety, used to find the main contract
 	// 保存当前品种日线各个合约的成交量，用于寻找主力合约
 	dateSidVols := make(map[int64]map[int32]*banexg.Kline)
 	lastCode := ""
 	var lastExs *ExSymbol
+	// For all futures targets, obtain daily K in order and record it by time
 	// 对所有期货标的，按顺序获取日K，并按时间记录
 	var pBar = utils.NewPrgBar(len(exsList), "future")
 	defer pBar.Close()
@@ -1472,6 +1529,7 @@ func saveAdjFactors(data map[int64]map[int32]*banexg.Kline, pCode string, pExs *
 	if err != nil {
 		return err
 	}
+	// Delete the old main continuous contract compounding factor
 	// 删除旧的主力连续合约复权因子
 	ctx := context.Background()
 	err_ := sess.DelAdjFactors(ctx, exs.ID)
@@ -1482,9 +1540,11 @@ func saveAdjFactors(data map[int64]map[int32]*banexg.Kline, pCode string, pExs *
 	sort.Slice(dates, func(i, j int) bool {
 		return dates[i] < dates[j]
 	})
+	// Daily search for the contract ID with the highest trading volume and calculate the compounding factor
 	// 逐日寻找成交量最大的合约ID，并计算复权因子
 	var adds []AddAdjFactorsParams
 	var row *AddAdjFactorsParams
+	// Choose the one with the largest position on the first day of listing
 	// 上市首日选持仓量最大的
 	vols, _ := data[dates[0]]
 	vol, hold := findMaxVols(vols)
@@ -1506,6 +1566,7 @@ func saveAdjFactors(data map[int64]map[int32]*banexg.Kline, pCode string, pExs *
 		}
 		vols, _ = data[dateMS]
 		vol, hold = findMaxVols(vols)
+		// When the trading volume and position of the main force are not at their maximum, it is necessary to give up the main force
 		// 当主力的成交量和持仓量都不为最大，需让出主力
 		if vol.Sid != lastSid && hold.Sid != lastSid {
 			tgt := hold
@@ -1581,6 +1642,7 @@ type PriceVol struct {
 }
 
 /*
+Find the item with the highest trading volume and position
 查找成交量和持仓量最大的项
 */
 func findMaxVols(vols map[int32]*banexg.Kline) (*PriceVol, *PriceVol) {

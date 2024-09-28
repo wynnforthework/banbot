@@ -9,6 +9,7 @@ import (
 )
 
 /*
+Check whether there are any missing K lines, and automatically query and update if there are any.
 检查是否有缺失的K线，有则自动查询更新
 */
 func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64) ([]*banexg.Kline, *errs.Error) {
@@ -23,6 +24,7 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 	}
 	exchange := exg.Default
 	if !exchange.HasApi(banexg.ApiFetchOHLCV, exs.Market) {
+		// Downloading K lines is currently not allowed, skip
 		// 当前不允许下载K线，跳过
 		j.NextMS = endMS
 		return nil, nil

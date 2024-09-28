@@ -107,6 +107,8 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 		return err
 	}
 	defer conn.Release()
+	// Filter non-trading time periods and trading volumes of 0
+	// Since some trading days are not recorded in the historical data, the trading calendar is not applicable to filter K-lines
 	// 过滤非交易时间段，成交量为0的
 	// 由于历史数据中部分交易日未录入，故不适用交易日历过滤K线
 	holes, err := sess.GetExSHoles(exchange, exs, startMS, endMS, true)
@@ -125,9 +127,11 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 				if unExpNum > 0 {
 					h := holes[hi]
 					if h[1]-h[0] >= dayMSecs {
+						// Non-trading period exceeds 1 day
 						// 非交易时间段超过1天
 						expNum := int((h[1] - h[0]) / tfMSecs)
 						if unExpNum*20 > expNum {
+							// During non-trading hours, if the number of valid bars is at least 5%, a warning will be output
 							// 非交易时间内，有效bar数量至少5%，则输出警告
 							startStr := btime.ToDateStr(h[0], "")
 							endStr := btime.ToDateStr(h[1], "")
@@ -147,6 +151,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 				break
 			}
 			if half != nil {
+				// There are extra ones in front, merge them together.
 				// 有前面额外的，合并到一起
 				if k.High < half.High {
 					k.High = half.High
@@ -163,6 +168,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 				// 有效时间内
 				newKlines = append(newKlines, k)
 			} else if k.Volume > 0 {
+				// During non-trading hours, but there is trading volume, it will be merged into the most recent valid bar.
 				// 非交易时间段内，但有成交量，合并到最近有效bar
 				unExpNum += 1
 				if h[1]-k.Time < k.Time-h[0] {
@@ -215,9 +221,10 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 	log.Info("insert", zap.String("symbol", exs.Symbol), zap.Int32("sid", exs.ID),
 		zap.Int("num", len(klines)), zap.String("start", startDt), zap.String("end", endDt))
 	// 这里不自动归集，因有些bar成交量为0，不可使用数据库默认的归集策略；应调用BuildOHLCVOff归集
+	// There is no automatic aggregation here, because some bar volumes are 0, and the database default aggregation strategy cannot be used; BuildOHLCVOff aggregation should be called
 	num, err := sess.InsertKLinesAuto(timeFrame, exs.ID, klines, false)
 	if err == nil && num > 0 {
-		// 插入更大周期
+		// insert data for big timeframes 插入更大周期
 		aggList := orm.GetKlineAggs()
 		klines1m := klines
 		for _, agg := range aggList[1:] {
@@ -309,6 +316,7 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
 	}
 	if len(args.Pairs) == 0 {
+		// No target is provided, export all current market
 		// 未提供标的，导出当前市场所有
 		err = orm.LoadAllExSymbols()
 		if err != nil {
@@ -421,6 +429,7 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 		return err
 	}
 	// 搜索需要删除的标的
+	// Search for the target to be deleted
 	exsList := make([]*orm.ExSymbol, 0)
 	if len(config.Pairs) > 0 {
 		for _, symbol := range config.Pairs {
@@ -450,6 +459,7 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 		return errs.NewMsg(errs.CodeRunTime, "pairs is required")
 	}
 	// 输出信息要求确认
+	// Output information requires confirmation
 	pairs := make([]string, 0, len(exsList))
 	for _, exs := range exsList {
 		pairs = append(pairs, exs.Symbol)
@@ -474,6 +484,7 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 		return nil
 	}
 	// 删除符合要求的数据
+	// Delete the data that meets the requirements
 	pBar := utils.NewPrgBar(len(exsList), "purge")
 	defer pBar.Close()
 	for _, exs := range exsList {

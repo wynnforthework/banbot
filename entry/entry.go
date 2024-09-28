@@ -91,6 +91,7 @@ func RunKlineAdjFactors(args *config.CmdArgs) *errs.Error {
 func RunSpider(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeLive)
 	if args.MaxPoolSize < 15 {
+		// At least 15 database sessions on the crawler side
 		// 爬虫端至少15个数据库会话
 		args.MaxPoolSize = 15
 	}

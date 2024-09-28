@@ -98,6 +98,7 @@ func InitOdSubs() {
 		strat.AddOdSub(acc, func(acc string, od *orm.InOutOrder, evt int) {
 			stagy, ok := subStagys[od.Strategy]
 			if !ok {
+				// The current strategy does not monitor order status
 				// 当前策略未监听订单状态
 				return
 			}
@@ -118,10 +119,13 @@ func InitOdSubs() {
 	}
 }
 
+// Preventing Concurrent Modification of BatchTasks
 var lockBatch = sync.Mutex{} // 防止并发修改BatchTasks
 
 /*
 AddBatchJob
+Add batch entry tasks.
+Even if the job has no entry tasks, this method should be called to postpone the entry time TFEnterMS
 添加批量入场任务。
 即使job没有入场任务，也应该调用此方法，用于推迟入场时间TFEnterMS
 */
@@ -137,6 +141,7 @@ func AddBatchJob(account, tf string, job *strat.StagyJob, isInfo bool) {
 		}
 		strat.BatchTasks[key] = tasks
 	}
+	// Delay 3s to wait for execution
 	// 推迟3s等待执行
 	tasks.ExecMS = btime.TimeMS() + core.DelayBatchMS
 	var batchType = strat.BatchTypeEnter
@@ -153,6 +158,7 @@ func TryFireBatches(currMS int64) int {
 	var conn *pgxpool.Conn
 	var err *errs.Error
 	if core.EnvReal {
+		// In real-time mode, the order is saved to the database. In non-real-time mode, the order is temporarily saved to the memory without the need for a database.
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
 		sess, conn, err = orm.Conn(nil)
 		if err != nil {
@@ -165,6 +171,7 @@ func TryFireBatches(currMS int64) int {
 	for key, tasks := range strat.BatchTasks {
 		if currMS < tasks.ExecMS {
 			if tasks.ExecMS-currMS < tasks.TFMSecs/2 {
+				// Batch processing time has not yet arrived
 				// 尚未到达批量处理时间
 				waitNum += 1
 			}
@@ -185,8 +192,10 @@ func TryFireBatches(currMS int64) int {
 		}
 		delete(strat.BatchTasks, key)
 		if len(enterJobs) > 0 {
+			// Check all batch tasks at this time and decide which ones to enter or exit
 			// 检查此时间所有批量任务，决定哪些入场或那些出场
 			stagy.OnBatchJobs(enterJobs)
+			// Perform entry/exit tasks
 			// 执行入场/出场任务
 			keyParts := strings.Split(key, "_")
 			odMgr := GetOdMgr(keyParts[1])

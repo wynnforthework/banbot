@@ -20,6 +20,7 @@ func init() {
 
 /*
 UTCTime
+Get 10-digit second-level floating point number
 获取10位秒级浮点数
 */
 func UTCTime() float64 {
@@ -28,6 +29,7 @@ func UTCTime() float64 {
 
 /*
 UTCStamp
+Get 13-digit millisecond timestamp
 获取13位毫秒时间戳
 */
 func UTCStamp() int64 {
@@ -36,6 +38,7 @@ func UTCStamp() int64 {
 
 /*
 Time
+Get the current 10-digit second-level timestamp
 获取当前10位秒级时间戳
 */
 func Time() float64 {
@@ -51,6 +54,7 @@ func Time() float64 {
 
 /*
 TimeMS
+Get the current 13-digit millisecond timestamp
 获取当前13位毫秒时间戳
 */
 func TimeMS() int64 {
@@ -84,12 +88,14 @@ func Now() *time.Time {
 
 /*
 ParseTimeMS
+Convert time string to 13-digit millisecond timestamp
+Supported forms:
 将时间字符串转为13位毫秒时间戳
 支持的形式：
 2006
 20060102
-10位时间戳
-13位时间戳
+10-digit timestamp
+13-digit timestamp
 2006-01-02 15:04
 2006-01-02 15:04:05
 */
@@ -133,8 +139,9 @@ func ParseTimeMSBy(layout, timeStr string) int64 {
 
 /*
 ToDateStr
+Convert timestamp to time string
 将时间戳转为时间字符串
-format为空时，默认2006-01-02 15:04:05
+format default: 2006-01-02 15:04:05
 */
 func ToDateStr(timestamp int64, format string) string {
 	t := ToTime(timestamp)

@@ -32,10 +32,10 @@ type webHookItem struct {
 	MsgTypesRaw []string `mapstructure:"msg_types"`
 	AccountsRaw []string `mapstructure:"accounts"`
 	Keywords    []string `mapstructure:"keywords"`
-	RetryNum    int      `mapstructure:"retry_num"`   // 重试次数
-	RetryDelay  int      `mapstructure:"retry_delay"` // 重试间隔
+	RetryNum    int      `mapstructure:"retry_num"`   // Retry times 重试次数
+	RetryDelay  int      `mapstructure:"retry_delay"` // Retry interval 重试间隔
 	Disable     bool     `mapstructure:"disable"`     // 是否禁用
-	ChlType     string   `mapstructure:"type"`        // 渠道类型
+	ChlType     string   `mapstructure:"type"`        // Channel Type 渠道类型
 }
 
 const (
@@ -58,7 +58,8 @@ type IWebHook interface {
 	SetDisable(val bool)
 	CleanUp()
 	/*
-		发送消息，payload是msg渲染后的待发送数据
+		Send a message, payload is the data to be sent after msg rendering
+			发送消息，payload是msg渲染后的待发送数据
 	*/
 	SendMsg(msgType string, account string, payload map[string]string) bool
 	ConsumeForever()

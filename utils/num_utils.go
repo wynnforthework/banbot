@@ -12,7 +12,9 @@ import (
 const thresFloat64Eq = 1e-9
 
 /*
-NumSign 获取数字的方向；1，-1或0
+NumSign
+Obtain the direction of numbers; 1, -1 or 0
+获取数字的方向；1，-1或0
 */
 func NumSign(obj interface{}) int {
 	if val, ok := obj.(int); ok {
@@ -45,14 +47,18 @@ func NumSign(obj interface{}) int {
 }
 
 /*
-EqualNearly 判断两个float是否近似相等，解决浮点精读导致不等
+EqualNearly
+Determine whether two floats are approximately equal and solve the problem of inequality caused by floating-point close reading
+判断两个float是否近似相等，解决浮点精读导致不等
 */
 func EqualNearly(a, b float64) bool {
 	return EqualIn(a, b, thresFloat64Eq)
 }
 
 /*
-EqualIn 判断两个float是否在一定范围内近似相等
+EqualIn
+Determine whether two floats are approximately equal within a certain range
+判断两个float是否在一定范围内近似相等
 */
 func EqualIn(a, b, thres float64) bool {
 	if math.IsNaN(a) && math.IsNaN(b) {
@@ -103,6 +109,7 @@ func ConvertInt64(i interface{}) int64 {
 	}
 }
 
+// Calculate the function of the greatest common divisor (GCD) of two numbers using the Euclidean algorithm
 // 计算两个数的最大公约数（GCD）的函数，使用欧几里得算法
 func gcd(a, b int) int {
 	for b != 0 {
@@ -115,6 +122,7 @@ func gcd(a, b int) int {
 
 /*
 GcdMultiple
+Calculate the greatest common divisor of all elements in a slice
 计算一个切片中所有元素的最大公约数
 */
 func GcdInts(numbers []int) int {
@@ -122,6 +130,7 @@ func GcdInts(numbers []int) int {
 		return 0 // 没有数时返回0
 	}
 
+	// Starting from the first number, calculate its greatest common divisor with the following numbers one by one
 	// 从第一个数字开始，逐个将其与后面的数字进行最大公约数计算
 	result := numbers[0]
 	for i := 1; i < len(numbers); i++ {
@@ -155,6 +164,7 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 			RowGIds:  make([]int, len(vals)),
 		}
 	}
+	// The input value range is between 0 and 1
 	// 输入值域在0~1之间
 	minVal := slices.Min(vals)
 	scale := 1 / (slices.Max(vals) - minVal)
@@ -166,6 +176,7 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 	for _, val := range vals {
 		d = append(d, clusters.Coordinates{val*scale + offset})
 	}
+	// Perform clustering
 	// 进行聚类
 	km := kmeans.New()
 	groups, err_ := km.Partition(d, num)
@@ -175,6 +186,7 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 	slices.SortFunc(groups, func(a, b clusters.Cluster) int {
 		return int((a.Center[0] - b.Center[0]) * 1000)
 	})
+	// Generate return result
 	// 生成返回结果
 	resList := make([]*Cluster, 0, len(groups))
 	seps := make([]float64, 0, len(groups))
@@ -196,6 +208,7 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 		}
 		seps = append(seps, curMax)
 	}
+	// Calculate the grouping to which each item belongs
 	// 计算每个项所属的分组
 	rowGids := make([]int, 0, len(vals))
 	for _, v := range vals {
@@ -216,6 +229,9 @@ func KMeansVals(vals []float64, num int) *ClusterRes {
 
 /*
 StdDevVolatility
+Calculate the standard deviation of K-line volatility
+Data: It should be a set of numbers with a slight fluctuation above and below the mean of 1
+Rate: default 1. If you need to enlarge the difference, pass in a value between 1-1000
 计算K线的波动性标准差
 
 	data: 应该是均值为1的上下轻微浮动的一组数
@@ -236,6 +252,9 @@ func StdDevVolatility(data []float64, rate float64) float64 {
 
 /*
 NearScore
+Formula: y=e ^ - abs (x-a)
+At the given maxAt, i.e. a, y takes its maximum value of 1, x moves towards both sides, y gradually approaches 0, and the slope decreases from large to small
+The default rate is 1, and when x is offset by 40, it decays by 70%; When rate>1, attenuation accelerates
 公式：y=e^-abs(x-a)
 在给定的maxAt即a处，y取最大值1，x向两侧移动，y逐渐趋近于0，斜率由大变小
 rate默认1，x偏移40时，衰减70%；rate>1时，衰减加速

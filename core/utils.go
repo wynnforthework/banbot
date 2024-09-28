@@ -11,7 +11,7 @@ import (
 
 /*
 GroupByPairQuotes
-将[key]:pairs...输出为下面字符串
+format `[key]:pairs...` as below
 【key】
 Quote: Base1 Base2 ...
 */
@@ -44,6 +44,7 @@ func GroupByPairQuotes(items map[string][]string) string {
 
 /*
 PrintStagyGroups
+print strategy+timeframe from `core.StgPairTfs`
 从core.StgPairTfs输出策略+时间周期的币种信息到控制台
 */
 func PrintStagyGroups() {
@@ -66,7 +67,7 @@ var (
 
 /*
 SplitSymbol
-返回：Base，Quote，Settle，Identifier
+return Base，Quote，Settle，Identifier
 */
 func SplitSymbol(pair string) (string, string, string, string) {
 	if cache, ok := splitCache[pair]; ok {

@@ -3,7 +3,7 @@ package core
 type DownRange struct {
 	Start   int64
 	End     int64
-	Reverse bool // 指示是否应该从后往前下载
+	Reverse bool // Indicates whether downloading should be done from back to front 指示是否应该从后往前下载
 }
 
 type TfScore struct {
@@ -13,18 +13,18 @@ type TfScore struct {
 
 type JobPerf struct {
 	Num       int
-	TotProfit float64 // 总利润
-	Score     float64 // 开单倍率，小于1表示减少开单
+	TotProfit float64 // TOTAL PROFIT 总利润
+	Score     float64 // Order opening ratio, less than 1 means reducing the order opening 开单倍率，小于1表示减少开单
 }
 
 /*
-PerfSta 某个策略针对所有标的的统计信息
+PerfSta Statistics of a certain strategy for all targets 某个策略针对所有标的的统计信息
 */
 type PerfSta struct {
 	OdNum    int         `yaml:"od_num" mapstructure:"od_num"`
-	LastGpAt int         `yaml:"last_gp_at" mapstructure:"last_gp_at"` // 上次执行聚类的订单数量
+	LastGpAt int         `yaml:"last_gp_at" mapstructure:"last_gp_at"` // The number of orders for the last time clustering was performed 上次执行聚类的订单数量
 	Splits   *[4]float64 `yaml:"splits" mapstructure:"splits"`
-	Delta    float64     `yaml:"delta" mapstructure:"delta"` // 对TotProfit进行对数处理前的乘数
+	Delta    float64     `yaml:"delta" mapstructure:"delta"` // Multiplier before logarithmizing TotProfit 对TotProfit进行对数处理前的乘数
 }
 
 type StrVal struct {
@@ -38,6 +38,6 @@ type Param struct {
 	Min   float64
 	Max   float64
 	Mean  float64
-	Rate  float64 // 正态分布时有效，默认1，值越大，随机值越趋向于Mean
-	edgeY float64 // 计算正态分布边缘y的缓存
+	Rate  float64 // Valid for normal distribution, defaults to 1. The larger the value, the more the random values tend to be Mean. 正态分布时有效，默认1，值越大，随机值越趋向于Mean
+	edgeY float64 // Calculate cache of normal distribution edge y 计算正态分布边缘y的缓存
 }

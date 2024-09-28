@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	keyIntv = int64(60000) // 重复消息发送间隔，单位：秒
+	keyIntv = int64(60000) // Repeat message sending interval, unit: seconds 重复消息发送间隔，单位：秒
 )
 
 var (
@@ -124,10 +124,10 @@ func TrySendExc(cacheKey string, content string) {
 	ttl, valid := core.Cache.GetTTL(cacheKey)
 	var numVal int
 	if valid {
-		// 有内容，更新数量和最后的消息
+		// With content, number of updates and last message. 有内容，更新数量和最后的消息
 		numVal = core.GetCacheVal(cacheKey, 0)
 	} else {
-		// 没有内容，保存并设置发送时间
+		// No content, save and set the sending time. 没有内容，保存并设置发送时间
 		ttl = time.Millisecond * time.Duration(keyIntv)
 	}
 	core.Cache.SetWithTTL(cacheKey, numVal+1, 1, ttl)
@@ -138,14 +138,18 @@ func TrySendExc(cacheKey string, content string) {
 	curMS := time.Now().UnixMilli()
 	waitMS := int64(0)
 	if !ok || curMS-lastMS > keyIntv {
+		// The distance from the last time has exceeded the interval, send immediately
 		// 距离上次已超过间隔，立刻发送
 		sendExcAfter(1000, cacheKey)
+		// Update the next execution time
 		// 更新下次执行时间
 		waitMS = keyIntv
 	} else if curMS < lastMS {
+		// Existing deployed timer, exit
 		// 已有部署的定时器，退出
 		return
 	} else {
+		// There is no timer, it has not reached the next time yet
 		// 没有定时器，还未达到下次时间
 		waitMS = lastMS + keyIntv - 1000 - curMS
 	}

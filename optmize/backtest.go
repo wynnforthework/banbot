@@ -28,12 +28,12 @@ const (
 type BackTest struct {
 	biz.Trader
 	*BTResult
-	lastDumpMs int64 // 上一次保存回测状态的时间
+	lastDumpMs int64 // The last time the backtest status was saved 上一次保存回测状态的时间
 	dp         *data.HistProvider
 }
 
 var (
-	nextRefresh int64 // 下一次刷新交易对的时间
+	nextRefresh int64 // The time of the next refresh of the trading pair 下一次刷新交易对的时间
 	schedule    cron.Schedule
 )
 
@@ -81,6 +81,7 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	core.CheckWallets = false
 	if !bar.IsWarmUp {
 		if curTime > strat.LastBatchMS {
+			// Enter the next timeframe and trigger the batch entry callback
 			// 进入下一个时间帧，触发批量入场回调
 			waitNum := biz.TryFireBatches(curTime)
 			if waitNum > 0 {
@@ -274,6 +275,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 	b.Plots.tmpOdNum = 0
 	splStep := 5
 	if len(b.Plots.Real) >= ShowNum*splStep {
+		// Check whether there is too much data and resample if the total number of samples exceeds 5 times
 		// 检查数据是否太多，超过采样总数5倍时，进行重采样
 		b.PlotEvery *= splStep
 		oldNum := len(b.Plots.Real)

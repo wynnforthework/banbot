@@ -26,6 +26,7 @@ import (
 
 /*
 CompareExgBTOrders
+Compare the exchange export order records with the backtest order records.
 对比交易所导出订单记录和回测订单记录。
 */
 func CompareExgBTOrders(args []string) {
@@ -100,6 +101,7 @@ func CompareExgBTOrders(args []string) {
 		if iod.Short {
 			dirt = "short"
 		}
+		// Find out if there are matching exchange orders
 		// 查找是否有匹配的交易所订单
 		var matOd *orm.InOutOrder
 		for i, exod := range exgOds {
@@ -110,6 +112,7 @@ func CompareExgBTOrders(args []string) {
 			}
 		}
 		if matOd == nil {
+			// There is no corresponding record for backtesting orders
 			// 回测订单没有对应记录
 			entMSStr := btime.ToDateStr(iod.EnterAt, "")
 			exitMSStr := btime.ToDateStr(iod.ExitAt, "")
@@ -151,6 +154,7 @@ func CompareExgBTOrders(args []string) {
 			profitDfStr := strconv.FormatFloat(profitDf, 'f', 6, 64)
 			reason := "OK"
 			if math.Abs(float64(entDelay)) < tfMSecsFlt && math.Abs(float64(exitDelay)) < tfMSecsFlt {
+				// The time of entry and exit is matched
 				// 入场和出场的时间匹配
 				if math.Abs(profitDfPct) < 20 {
 					reason = "OK"
@@ -307,6 +311,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 			})
 		}
 	}
+	// Move the end time back by 2 bars to prevent the exchange order section from being filtered
 	// 将结束时间，往后推移2个bar，防止交易所订单部分被过滤
 	endMS += int64(maxTfSecs*1000) * 2
 	return res, startMS, endMS
@@ -314,6 +319,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 
 /*
 buildExgOrders
+Construct an InOutOrder from an exchange order for comparison; It is not used for real/backtesting
 从交易所订单构建InOutOrder用于对比；非实盘/回测时使用
 */
 func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.InOutOrder {
@@ -354,6 +360,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.
 			}
 			newList = odList
 		} else {
+			// An order placed by a non-robot attempts to close the robot's position
 			// 非机器人下的订单，尝试平机器人的仓
 			for i, iod := range odList {
 				if iod.Enter.Side == od.Side || iod.Exit != nil {

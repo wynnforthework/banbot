@@ -73,7 +73,7 @@ func KeyStagyPairTf(stagy, pair, tf string) string {
 
 func (p *JobPerf) GetAmount(amount float64) float64 {
 	if p.Score == PrefMinRate {
-		// 按最小金额开单
+		// Open an order based on the minimum amount 按最小金额开单
 		return MinStakeAmount
 	}
 	return amount * p.Score
@@ -195,7 +195,7 @@ func LoadPerfs(inDir string) {
 }
 
 /*
-IsFiat 是否是法币
+IsFiat Is it legal tender? 是否是法币
 */
 func IsFiat(code string) bool {
 	return strings.Contains(code, "USD") || strings.Contains(code, "CNY")
@@ -228,7 +228,7 @@ func PUniform(min, max float64) *Param {
 }
 
 /*
-OptSpace 返回一个均匀分布的区间，用于超参数搜索
+OptSpace Returns a uniformly distributed interval for use in hyperparameter searches 返回一个均匀分布的区间，用于超参数搜索
 */
 func (p *Param) OptSpace() (float64, float64) {
 	if p.VType == VTypeNorm {
@@ -239,7 +239,7 @@ func (p *Param) OptSpace() (float64, float64) {
 }
 
 /*
-ToRegular 将均匀分布映射为正态分布的超参数值
+ToRegular Hyperparameter values that map a uniform distribution to a normal distribution 将均匀分布映射为正态分布的超参数值
 */
 func (p *Param) ToRegular(x float64) (float64, bool) {
 	if p.VType == VTypeNorm {
@@ -261,6 +261,7 @@ func (p *Param) getEdgeY() float64 {
 }
 
 /*
+Given the current y value range, return the x corresponding value range of the inverse normal distribution
 已知当前y值域，返回反正态分布的x对应值域
 */
 func (p *Param) toNormXSpace() (float64, float64) {
@@ -290,13 +291,14 @@ func (p *Param) norm(x float64) float64 {
 }
 
 /*
-norm的导数
+Derivative of norm
 */
 func (p *Param) dNorm(x float64) float64 {
 	return 3*math.Pow(x, 2) + 1/(p.Rate*20)
 }
 
 /*
+Calculate y=pow(x, 3) + x/20 when y is given, the value of x
 计算y=pow(x, 3) + x/20当给定y时，x的值
 */
 func (p *Param) calcNormX(y, tol float64, maxIter int) float64 {

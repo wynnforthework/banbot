@@ -21,6 +21,8 @@ import (
 
 /*
 FetchApiOHLCV
+Download the K-line data of the trading pair according to the given time period.
+If you need to download from the end to the beginning, you should make startMS>endMS
 按给定时间段下载交易对的K线数据。
 如果需要从后往前下载，应该使startMS>endMS
 */
@@ -29,6 +31,7 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	if startMS < 1000000000000 {
 		panic(fmt.Sprintf("startMS should be milli seconds, cur: %v", startMS))
 	}
+	// 1 downloads from front to back, -1 downloads from back to front
 	dirt := 1 // 1从前往后下载， -1从后往前下载
 	if startMS > endMS {
 		startMS, endMS = endMS, startMS
@@ -46,7 +49,7 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 			}
 			return stop, min(endMS, stop+rangeMSecs)
 		} else {
-			// 从后往前下载
+			// downloads from back to front 从后往前下载
 			if start <= startMS {
 				return 0, 0
 			}
@@ -55,7 +58,7 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	}
 	since, until := nextRange(startMS, startMS)
 	if dirt == -1 {
-		// 从后往前下载
+		// downloads from front to back 从后往前下载
 		since, until = nextRange(endMS, endMS)
 	}
 	for since > 0 && until > since {
@@ -64,7 +67,7 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 		if err != nil {
 			return err
 		}
-		// 移除末尾超出范围的K线
+		// Remove the K-line whose end is out of range 移除末尾超出范围的K线
 		for len(data) > 0 && data[len(data)-1].Time >= until {
 			data = data[:len(data)-1]
 		}
@@ -94,6 +97,7 @@ func DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, 
 
 /*
 DownOHLCV2DB
+Download K-line to database. This method should be called in a transaction, otherwise there will be errors in querying and updating related data.
 下载K线到数据库，应在事务中调用此方法，否则查询更新相关数据会有错误
 */
 func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
@@ -105,6 +109,8 @@ func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeF
 
 /*
 downOHLCV2DBRange
+This function will be used for multi-threaded downloads. A database session can only be used for one thread, so Queries cannot be passed in.
+stepCB is used to update the progress. The total value is fixed at 1000 to prevent the internal download interval from being larger than the passed interval.
 此函数会用于多线程下载，一个数据库会话只能用于一个线程，所以不能传入Queries
 stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传入区间
 */
@@ -112,6 +118,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	oldStart, oldEnd int64, pBar *utils.PrgBar) (int, *errs.Error) {
 	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs ||
 		exs.Combined || exs.DelistMs > 0 {
+		// If you are completely in the downloaded interval or the download interval is less than the time of availability, you don't need to download it
 		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
 		if pBar != nil {
 			pBar.Add(core.StepTotal)
@@ -134,16 +141,19 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	var totalNum int
 	chanDown := make(chan *core.DownRange, 10)
 	if oldStart == 0 {
+		// The data does not exist, and all intervals are downloaded
 		// 数据不存在，下载全部区间
 		chanDown <- &core.DownRange{Start: startMS, End: endMS}
 		totalNum = int((endMS-startMS)/1000) / tfSecs
 	} else {
 		if endMS > oldEnd {
+			// The rear part exceeds the downloaded range, and the download is behind
 			// 后部超过已下载范围，下载后面
 			chanDown <- &core.DownRange{Start: oldEnd, End: endMS}
 			totalNum += int((endMS-oldEnd)/1000) / tfSecs
 		}
 		if startMS < oldStart {
+			// The front part exceeds the downloaded range, and the front part is downloaded
 			// 前部超过已下载范围，下载前面
 			chanDown <- &core.DownRange{Start: startMS, End: oldStart, Reverse: true}
 			totalNum += int((oldStart-startMS)/1000) / tfSecs
@@ -167,6 +177,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Start a goroutine to download the candlestick and write it to chanDown
 	// 启动一个goroutine下载K线，写入到chanDown
 	go func() {
 		defer func() {
@@ -200,6 +211,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 			}
 		}
 	}()
+	// Start a goroutine to save the candlestick to the database
 	// 启动一个goroutine将K线保存到数据库
 	realStart, realEnd := int64(0), int64(0)
 	go func() {
@@ -250,6 +262,8 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 /*
 AutoFetchOHLCV
 
+	Get K-line data for a given trading pair, a given time dimension, and a given range.
+	Try to read from local first, download from the exchange if it doesn't exist, and then return.
 	获取给定交易对，给定时间维度，给定范围的K线数据。
 	先尝试从本地读取，不存在时从交易所下载，然后返回。
 */
@@ -281,7 +295,9 @@ func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string
 }
 
 /*
-GetOHLCV 获取品种K线，如需复权自动前复权
+GetOHLCV
+Get the variety K-line, if you need to rebalance, it will be automatically reweighted
+获取品种K线，如需复权自动前复权
 */
 func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*AdjInfo, []*banexg.Kline, *errs.Error) {
 	retry, maxRetry := 0, 3
@@ -304,15 +320,19 @@ func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, 
 }
 
 /*
-GetOHLCV 获取品种K线，返回未复权K线和复权因子，调用方可调用ApplyAdj进行复权
+GetOHLCV
+Obtain the variety K-line, return the unweighted K-line and the weighting factor, and the caller can call ApplyAdj to re-weight
+获取品种K线，返回未复权K线和复权因子，调用方可调用ApplyAdj进行复权
 */
 func (q *Queries) GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*AdjInfo, []*banexg.Kline, *errs.Error) {
 	if exs.Exchange == "china" && exs.Market != banexg.MarketSpot {
+		// China's non stock market may include futures, options, funds
 		// 国内非股票，可能是：期货、期权、基金、、、
 		parts := utils2.SplitParts(exs.Symbol)
 		if len(parts) >= 2 {
 			p2val := parts[1].Val
 			if p2val == "888" {
+				// Futures 888 is the main continuous contract, while 000 is the index contract
 				// 期货888是主力连续合约，000是指数合约
 				adjs, err := q.GetAdjs(exs.ID)
 				if err != nil {
@@ -339,6 +359,7 @@ func (q *Queries) GetAdjs(sid int32) ([]*AdjInfo, *errs.Error) {
 	if err_ != nil {
 		return nil, NewDbErr(core.ErrDbReadFail, err_)
 	}
+	// FACS has recorded the deadline in ascending order of time, from back to front
 	// facs已按时间升序，从后往前，记录截止时间
 	adjs := make([]*AdjInfo, 0, len(rows))
 	curEnd := btime.UTCStamp()
@@ -364,7 +385,9 @@ func (q *Queries) GetAdjs(sid int32) ([]*AdjInfo, *errs.Error) {
 }
 
 /*
-GetAdjOHLCV 获取K线和复权信息（返回的是尚未复权的K线，需调用ApplyAdj复权）
+GetAdjOHLCV
+Obtain K-line and weighted information (returns K-line that has not been weighted yet, needs to call ApplyAdj for weighted)
+获取K线和复权信息（返回的是尚未复权的K线，需调用ApplyAdj复权）
 */
 func (q *Queries) GetAdjOHLCV(adjs []*AdjInfo, timeFrame string, startMS, endMS int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
 	if len(adjs) == 0 {
@@ -386,6 +409,7 @@ func (q *Queries) GetAdjOHLCV(adjs []*AdjInfo, timeFrame string, startMS, endMS 
 		start := max(f.StartMS, startMS)
 		stop := min(f.StopMS, endMS)
 		if revRead {
+			// Read in reverse order, from back to front, starting from 0
 			// 逆序读取，从后往前，开始置为0
 			start = 0
 		}
@@ -414,13 +438,14 @@ func (q *Queries) GetAdjOHLCV(adjs []*AdjInfo, timeFrame string, startMS, endMS 
 }
 
 /*
-ApplyAdj 计算复权后K线
-adjs 必须已升序
-cutEnd 截取的最大结束时间
-adj 复权类型
+ApplyAdj Calculate the K-line after adjustment 计算复权后K线
+adjs Must be in ascending order 必须已升序
+cutEnd Maximum end time of interception 截取的最大结束时间
+adj Type of adjustment of Rights 复权类型
 limit 返回数量
 */
 func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, limit int) []*banexg.Kline {
+	// When adjs is empty, it should not be returned directly, as klines may need to be trimmed
 	// adjs为空时不应直接返回，因klines可能需要裁剪
 	if len(klines) == 0 {
 		return klines
@@ -430,6 +455,7 @@ func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, li
 		cutEnd = klines[len(klines)-1].Time + 1000
 		doCutKlineEnd = false
 	}
+	// Ignore tail out of range adjs
 	// 忽略尾部超出范围的adjs
 	match := false
 	for i := len(adjs) - 1; i >= 0; i-- {
@@ -443,6 +469,7 @@ func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, li
 		adjs = nil
 	}
 	if doCutKlineEnd {
+		// Ignore K-lines with tails outside the range
 		// 忽略尾部超出范围的K线
 		match = false
 		for i := len(klines) - 1; i >= 0; i-- {
@@ -459,6 +486,7 @@ func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, li
 	if limit > 0 && len(klines) > limit {
 		klines = klines[len(klines)-limit:]
 	}
+	// Filter irrelevant items before adfs
 	// 过滤adjs前面的无关项
 	if len(adjs) > 0 {
 		startMS := klines[0].Time
@@ -478,6 +506,7 @@ func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, li
 	}
 	// factor(i) = newClose(i-1) / oldClose(i-1)
 	if adj == core.AdjBehind {
+		// Post weighted, from front to back, multiply the weighted factors cumulatively as factors for the new date; New data divided by factor
 		// 后复权，从前往后，复权因子累乘，作为新日期的因子；新数据除以因子
 		lastFac := float64(1)
 		for _, f := range adjs {
@@ -485,6 +514,7 @@ func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, li
 			lastFac = f.CumFactor
 		}
 	} else if adj == core.AdjFront {
+		// Forward weighted, from back to front, the cumulative multiplication of weighted factors serves as the factor for the old date; Multiply old data by factor
 		// 前复权，从后往前，复权因子累乘，作为旧日期的因子；旧数据乘以因子
 		lastFac := float64(1)
 		for i := len(adjs) - 1; i >= 0; i-- {
@@ -525,6 +555,7 @@ func ApplyAdj(adjs []*AdjInfo, klines []*banexg.Kline, adj int, cutEnd int64, li
 
 /*
 BulkDownOHLCV
+Batch simultaneous download of K-line
 批量同时下载K线
 */
 func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, timeFrame string, startMS, endMS int64, limit int) *errs.Error {
@@ -545,6 +576,7 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 		return err
 	}
 	sidList := utils.KeysOfMap(exsList)
+	// A smaller downTF should be used here
 	// 这里应该使用更小的downTF
 	kRanges := sess.GetKlineRanges(sidList, downTF)
 	conn.Release()
@@ -564,6 +596,9 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 
 /*
 FastBulkOHLCV
+Quickly obtain K-lines in bulk. Download all the required currencies first, then perform batch queries and group returns.
+Suitable for situations where there are multiple currencies, the required start and end times are consistent, and most of them have already been downloaded.
+For combination varieties, return the unweighted candlestick and the weighting factor, and call ApplyAdj for weighting as needed
 快速批量获取K线。先下载所有需要的币种，然后批量查询再分组返回。
 
 	适用于币种较多，且需要的开始结束时间一致，且大部分已下载的情况。
@@ -746,6 +781,8 @@ func (q *Queries) SetCalendars(name string, items [][2]int64) *errs.Error {
 
 /*
 GetExSHoles
+Retrieve all non trading time ranges for the specified Sid within a certain time period.
+For the 365 * 24 coin circle, it will not stop and return empty
 获取指定Sid在某个时间段内，所有非交易时间范围。
 对于币圈365*24不休，返回空
 */

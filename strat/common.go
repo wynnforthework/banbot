@@ -184,11 +184,13 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 		shot := od.TakeSnap()
 		old, ok := snap[od.ID]
 		if !od.CanClose() || od.Status < orm.InOutStatusFullEnter {
+			// Not fully entered yet, check if the limit price or trigger price has been updated
 			// 尚未完全入场，检查限价或触发价格是否更新
 			if !ok {
 				continue
 			}
 			if old.EnterLimit != shot.EnterLimit {
+				// Modify the entry price
 				// 修改入场价格
 				res = append(res, &orm.InOutEdit{
 					Order:  od,
@@ -196,6 +198,7 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 				})
 			}
 		} else {
+			// Those who have fully entered, check if they have exited
 			// 已完全入场的，检查是否退出
 			slEdit, tpEdit, err := s.checkOrderExit(od)
 			if err != nil {
@@ -208,6 +211,7 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 					res = append(res, slEdit)
 				}
 			} else if old != nil && (old.StopLoss != shot.StopLoss || old.StopLossLimit != shot.StopLossLimit) {
+				// Updated stop loss elsewhere
 				// 在其他地方更新了止损
 				res = append(res, &orm.InOutEdit{Order: od, Action: orm.OdActionStopLoss})
 			}
@@ -218,10 +222,12 @@ func (s *StagyJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 					res = append(res, tpEdit)
 				}
 			} else if old != nil && (old.TakeProfit != shot.TakeProfit || old.TakeProfitLimit != shot.TakeProfitLimit) {
+				// Updated profit taking in other places
 				// 在其他地方更新了止盈
 				res = append(res, &orm.InOutEdit{Order: od, Action: orm.OdActionTakeProfit})
 			}
 			if old.ExitLimit != shot.ExitLimit {
+				// Modify the appearance price
 				// 修改出场价格
 				res = append(res, &orm.InOutEdit{
 					Order:  od,
@@ -247,6 +253,7 @@ func (s *StagyJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOu
 	var slEdit, tpEdit *orm.InOutEdit
 	newSL := od.GetStopLoss()
 	newTP := od.GetTakeProfit()
+	// Check if the condition sheet needs to be modified
 	// 检查是否需要修改条件单
 	if sl != nil || newSL != nil {
 		if sl == nil || newSL == nil || sl.Price != newSL.Price || sl.Limit != newSL.Limit {
@@ -294,6 +301,7 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 	var orders []*orm.InOutOrder
 	cfg := GetStrtgPerf(pair, stagy)
 	if core.EnvReal {
+		// Retrieve recent orders from the database
 		// 从数据库查询最近订单
 		sess, conn, err := orm.Conn(nil)
 		if err != nil {
@@ -351,9 +359,11 @@ func CalcJobScores(pair, tf, stagy string) *errs.Error {
 			prefs = append(prefs, p)
 		}
 	}
+	// Calculate billing ratio
 	// 计算开单倍率
 	perf.Score = defaultCalcJobScore(cfg, stagy, perf, prefs)
 	if core.LiveMode {
+		// Real disk mode, immediately save to data directory
 		// 实盘模式，立刻保存到数据目录
 		core.DumpPerfs(config.GetDataDir())
 	}
@@ -393,6 +403,8 @@ func CalcJobPerfs(cfg *config.StrtgPerfConfig, p *core.PerfSta, perfs []*core.Jo
 		profits = append(profits, pf.TotProfit)
 		sumProfit += math.Abs(pf.TotProfit)
 	}
+	//Logarithmic processing of returns to make clustering more accurate
+	//Map the average positive rate of return to x=9 in log2, ensuring that the logarithmic processing results in an appropriate distribution divergence
 	// 对收益率对数处理，使聚类更准确
 	// 将平均正收益率固定映射为log2的x=9，确保对数处理后能在合适的分布散度
 	avgProfit := sumProfit / float64(len(profits))
@@ -409,9 +421,11 @@ func CalcJobPerfs(cfg *config.StrtgPerfConfig, p *core.PerfSta, perfs []*core.Jo
 	for _, gp := range groups {
 		maxList = append(maxList, slices.Max(gp.Items))
 	}
+	// Calculate the upper and lower bounds of the rate of return for each group
 	// 计算每组的收益率上下界
 	p.Splits = &[4]float64{maxList[0], maxList[1], maxList[2], maxList[3]}
 	p.LastGpAt = p.OdNum
+	// Recalculate the weight of each job
 	// 重新计算每个job的权重
 	idxList := make([]int, 0, len(perfs))
 	var totalAdd, goodNum, bestNum = 0.0, 0, 0
@@ -437,6 +451,7 @@ func CalcJobPerfs(cfg *config.StrtgPerfConfig, p *core.PerfSta, perfs []*core.Jo
 		idxList = append(idxList, gid)
 	}
 	if totalAdd > 0 {
+		// Overlay the weight of losses onto profitable jobs
 		// 将亏损的权重，叠加到盈利的job上
 		totalWeight := float64(goodNum) + float64(bestNum)*2
 		unitAdd := totalAdd / totalWeight

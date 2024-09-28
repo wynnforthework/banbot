@@ -191,6 +191,7 @@ func AddTriggerOd(account string, od *InOutOrder) {
 
 /*
 OpenNum
+Returns the number of open orders that match the specified status
 返回符合指定状态的尚未平仓订单的数量
 */
 func OpenNum(account string, status int16) int {
@@ -208,6 +209,7 @@ func OpenNum(account string, status int16) int {
 
 /*
 SaveDirtyODs
+Find unsaved orders from open orders and save them all to the database
 从打开的订单中查找未保存的订单，全部保存到数据库
 */
 func SaveDirtyODs(account string) *errs.Error {
@@ -265,6 +267,7 @@ func LoadMarkets(exchange banexg.BanExchange, reload bool) (banexg.MarketMap, *e
 }
 
 func InitExg(exchange banexg.BanExchange) *errs.Error {
+	// LoadMarkets will be called internally
 	// 内部会调用LoadMarkets
 	err := EnsureExgSymbols(exchange)
 	if err != nil {

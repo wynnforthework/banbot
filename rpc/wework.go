@@ -11,9 +11,9 @@ import (
 )
 
 /**
-获取AccessToken
+Get AccessToken
 https://developer.work.weixin.qq.com/document/path/91039
-企业微信推送消息
+Enterprise WeChat push message. 企业微信推送消息
 https://developer.work.weixin.qq.com/document/path/90236
 */
 
@@ -93,9 +93,11 @@ func (w *WeCred) getToken() string {
 	defer w.lock.Unlock()
 	curTime := btime.TimeMS()
 	if w.expireAt > curTime {
+		// The accessToken here may be valid or empty. If it is empty, it means that the last acquisition failed and the current state is in the waiting and prohibited retry phase.
 		// 这里accessToken可能有效，也可能为空。为空表示上次获取失败，当前处于等待禁止重试阶段
 		return w.accessToken
 	}
+	// Only one token request retry is allowed per minute.
 	// 1分钟仅允许重试一次请求token
 	w.expireAt = curTime + 60000
 	name := w.corpId

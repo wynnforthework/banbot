@@ -60,6 +60,8 @@ func parseTimeFrame(timeframe string) (int, error) {
 
 /*
 TFToSecs
+Convert the time cycle to seconds
+Supporting units: s, m, h, d, M, Q, Y
 将时间周期转为秒
 支持单位：s, m, h, d, M, Q, Y
 */
@@ -91,6 +93,7 @@ func GetTfAlignOrigin(secs int) (string, int) {
 
 /*
 AlignTfSecsOffset
+Convert the given 10 second timestamp to the header start timestamp for the specified time period, using the specified offset
 将给定的10位秒级时间戳，转为指定时间周期下，的头部开始时间戳，使用指定偏移
 */
 func AlignTfSecsOffset(timeSecs int64, tfSecs int, offset int) int64 {
@@ -107,6 +110,7 @@ func AlignTfSecsOffset(timeSecs int64, tfSecs int, offset int) int64 {
 
 /*
 AlignTfSecs
+Convert the given 10 second timestamp to the header start timestamp for the specified time period
 将给定的10位秒级时间戳，转为指定时间周期下，的头部开始时间戳
 */
 func AlignTfSecs(timeSecs int64, tfSecs int) int64 {
@@ -116,6 +120,7 @@ func AlignTfSecs(timeSecs int64, tfSecs int) int64 {
 
 /*
 AlignTfMSecs
+Convert the given 13 millisecond timestamp to the header start timestamp for the specified time period
 将给定的13位毫秒级时间戳，转为指定时间周期下，的头部开始时间戳
 */
 func AlignTfMSecs(timeMSecs int64, tfMSecs int64) int64 {
@@ -140,6 +145,7 @@ func AlignTfMSecsOffset(timeMSecs, tfMSecs, offset int64) int64 {
 
 /*
 SecsToTF
+Convert the seconds of a time period into a time period
 将时间周期的秒数，转为时间周期
 */
 func SecsToTF(tfSecs int) string {
@@ -172,6 +178,13 @@ func SecsToTF(tfSecs int) string {
 
 /*
 BuildOHLCV
+Build or update coarser grained OHLC arrays from transactions or sub OHLC arrays.
+Arr: List of sub OHLC.
+ToTFSecs: Specify the time granularity to be built, in milliseconds
+PreFire: The rate at which builds are triggered ahead of schedule;
+ResOHLCV: Existing array to be updated
+From TFSets: The interval between the arr subarrays passed in, calculated when not provided, in milliseconds
+OffMS: offset of alignment time
 从交易或子OHLC数组中，构建或更新更粗粒度OHLC数组。
 arr: 子OHLC列表。
 toTFSecs: 指定要构建的时间粒度，单位：毫秒

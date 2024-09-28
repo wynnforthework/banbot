@@ -23,22 +23,22 @@ type BaseFilter struct {
 	NeedTickers bool
 }
 
-// VolumePairFilter 用于表示按成交量价值倒序排序所有交易对的配置
+// VolumePairFilter Used to represent a configuration that sorts all trading pairs in reverse order by volume value 用于表示按成交量价值倒序排序所有交易对的配置
 type VolumePairFilter struct {
 	BaseFilter
-	Limit         int     `yaml:"limit" mapstructure:"limit,omitempty"`                   // 返回结果的数量限制，取前100个
-	MinValue      float64 `yaml:"min_value" mapstructure:"min_value,omitempty"`           // 最低成交量价值
-	RefreshSecs   int     `yaml:"refresh_secs" mapstructure:"refresh_secs,omitempty"`     // 缓存时间，以秒为单位
-	BackTimeframe string  `yaml:"back_timeframe" mapstructure:"back_timeframe,omitempty"` // 计算成交量的时间周期，默认为天
-	BackPeriod    int     `yaml:"back_period" mapstructure:"back_period,omitempty"`       // 与BackTimeframe相乘得到的时间范围的乘数
+	Limit         int     `yaml:"limit" mapstructure:"limit,omitempty"`                   // The number of returned results is limited to the first 100 返回结果的数量限制，取前100个
+	MinValue      float64 `yaml:"min_value" mapstructure:"min_value,omitempty"`           // Minimum volume value 最低成交量价值
+	RefreshSecs   int     `yaml:"refresh_secs" mapstructure:"refresh_secs,omitempty"`     // Cache time, in seconds 缓存时间，以秒为单位
+	BackTimeframe string  `yaml:"back_timeframe" mapstructure:"back_timeframe,omitempty"` // The time period for calculating the volume, which is set to days by default 计算成交量的时间周期，默认为天
+	BackPeriod    int     `yaml:"back_period" mapstructure:"back_period,omitempty"`       // The multiplier for the time range obtained by multiplying it by the BackTimeframe 与BackTimeframe相乘得到的时间范围的乘数
 }
 
 /*
-PriceFilter 价格过滤器配置结构体
-Precision: 0.001，按价格精度过滤交易对，默认要求价格变动最小单位是0.1%
-Min: 最低价格
-Max: 最高价格
-MaxUnitValue: 最大允许的单位价格变动对应的价值(针对定价货币，一般是USDT)。
+PriceFilter The price filter configuration 价格过滤器配置结构体
+Precision: 0.001，Filter trading pairs by price precision, and the minimum unit of price change is 0.1% by default 按价格精度过滤交易对，默认要求价格变动最小单位是0.1%
+Min: Lowest price 最低价格
+Max: Highest price 最高价格
+MaxUnitValue: The value of the maximum allowable unit price change (for the pricing currency, it is generally USDT). 最大允许的单位价格变动对应的价值(针对定价货币，一般是USDT)。
 */
 type PriceFilter struct {
 	BaseFilter

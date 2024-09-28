@@ -27,19 +27,19 @@ type FuncHandleMyOrder = func(trade *banexg.Order) bool
 type LiveOrderMgr struct {
 	OrderMgr
 	queue            chan *OdQItem
-	doneKeys         map[string]bool            // 已完成的订单：symbol+orderId
+	doneKeys         map[string]bool            // Completed Orders 已完成的订单：symbol+orderId
 	exgIdMap         map[string]*orm.InOutOrder // symbol+orderId: InOutOrder
-	doneTrades       map[string]bool            // 已处理的交易：symbol+tradeId
+	doneTrades       map[string]bool            // Processed trades 已处理的交易：symbol+tradeId
 	lockDoneKeys     sync.Mutex
 	lockExgIdMap     sync.Mutex
 	lockDoneTrades   sync.Mutex
-	isWatchMyTrade   bool                       // 是否正在监听账户交易流
-	isTrialUnMatches bool                       // 是否正在监听未匹配交易
-	isConsumeOrderQ  bool                       // 是否正在从订单队列消费
-	isWatchAccConfig bool                       // 是否正在监听杠杆倍数变化
-	unMatchTrades    map[string]*banexg.MyTrade // 从ws收到的暂无匹配的订单的交易
-	lockUnMatches    sync.Mutex                 // 防止并发读写unMatchTrades
-	exitByMyOrder    FuncHandleMyOrder          // 尝试使用其他端操作的交易结果，更新当前订单状态
+	isWatchMyTrade   bool                       // Is the account transaction flow being monitored? 是否正在监听账户交易流
+	isTrialUnMatches bool                       // Is monitoring unmatched transactions? 是否正在监听未匹配交易
+	isConsumeOrderQ  bool                       // Is it consuming from the order queue? 是否正在从订单队列消费
+	isWatchAccConfig bool                       // Is the leverage ratio being monitored? 是否正在监听杠杆倍数变化
+	unMatchTrades    map[string]*banexg.MyTrade // Transactions received from ws that have no matching orders 从ws收到的暂无匹配的订单的交易
+	lockUnMatches    sync.Mutex                 // Prevent concurrent reading and writing of unMatchTrades 防止并发读写unMatchTrades
+	exitByMyOrder    FuncHandleMyOrder          // Try to use the transaction results of other end operations to update the current order status 尝试使用其他端操作的交易结果，更新当前订单状态
 	traceExgOrder    FuncHandleMyOrder
 }
 
@@ -103,6 +103,16 @@ func newLiveOrderMgr(account string, callBack func(od *orm.InOutOrder, isEnter b
 
 /*
 SyncExgOrders
+Synchronize the latest local orders of the exchange
+
+First, use fetch_account_positions to fetch the positions of all coins in the exchange.
+If there are no open orders locally:
+If the exchange has no positions: Ignore
+If the exchange has all positions: Treat it as a new order opened by the user and create a new order tracking
+If there are open orders locally:
+Get the last time of the local order as the start time, and query all subsequent orders through the fetch_orders interface.
+Determine the current status of open orders from the exchange order records: closed, partially closed, unclosed
+For redundant positions, treat them as new orders opened by the user and create new order tracking.
 将交易所最新状态本地订单进行同步
 
 	先通过fetch_account_positions抓取交易所所有币的仓位情况。
@@ -117,6 +127,7 @@ SyncExgOrders
 func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	exchange := exg.Default
 	task := orm.GetTask(o.Account)
+	// Get the exchange order
 	// 获取交易所挂单
 	exOdList, err := exchange.FetchOpenOrders("", task.CreateAt, 1000, map[string]interface{}{
 		banexg.ParamAccount: o.Account,
@@ -132,6 +143,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// Loading orders from the database
 	// 从数据库加载订单
 	openOds, lock := orm.GetOpenODs(o.Account)
 	orders, err := sess.GetOrders(orm.GetOrdersArgs{
@@ -143,6 +155,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		conn.Release()
 		return nil, nil, nil, err
 	}
+	// Query the most recent usage time period of a task
 	// 查询任务的最近使用时间周期
 	var pairLastTfs = make(map[string]string)
 	if config.TakeOverStgy != "" {
@@ -174,8 +187,10 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 			log.Error("save order in SyncExgOrders fail", zap.String("key", od.Key()), zap.Error(err))
 		}
 	}
+	// Release it after use to prevent long-term connection occupation
 	// 这里用完就释放，防止长时间占用连接
 	conn.Release()
+	// Get exchange positions
 	// 获取交易所仓位
 	posList, err := exchange.FetchAccountPositions(nil, map[string]interface{}{
 		banexg.ParamAccount: o.Account,
@@ -247,10 +262,10 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	}
 	lock.Unlock()
 	if len(oldList) > 0 {
-		log.Info(fmt.Sprintf("%s: 恢复%v个未平仓订单", o.Account, len(oldList)))
+		log.Info(fmt.Sprintf("%s: Restore %v open orders", o.Account, len(oldList)))
 	}
 	if len(newList) > 0 {
-		log.Info(fmt.Sprintf("%s: 新开始跟踪%v个用户下单", o.Account, len(newList)))
+		log.Info(fmt.Sprintf("%s: Started tracking %v users' orders", o.Account, len(newList)))
 	}
 	err = orm.SaveDirtyODs(o.Account)
 	if err != nil {
@@ -261,6 +276,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 
 /*
 restoreInOutOrder
+Restore order status
 恢复订单状态
 */
 func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string]*banexg.Order) *errs.Error {
@@ -270,18 +286,21 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 	}
 	var err *errs.Error
 	if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
+		// The order has not been submitted to the exchange and is an entry order
 		// 订单未提交到交易所，且是入场订单
 		if isFarEnter(od) {
 			orm.AddTriggerOd(o.Account, od)
 		} else {
-			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "重启取消未入场订单", "")
+			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "Restart and cancel orders that haven't been filled", "")
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			return err
 		}
 	} else if tryOd.OrderID != "" && tryOd.Status != orm.OdStatusClosed {
+		// Submitted to the exchange, not yet completed
 		// 已提交到交易所，尚未完成
 		exOd, ok := exgOdMap[tryOd.OrderID]
 		if !ok {
+			// The order has been cancelled or completed. Check the exchange order
 			// 订单已取消或已成交，查询交易所订单
 			exOd, err = exg.Default.FetchOrder(od.Symbol, tryOd.OrderID, map[string]interface{}{
 				banexg.ParamAccount: o.Account,
@@ -297,6 +316,7 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 			}
 		}
 	} else if !tryOd.Enter {
+		// Close order. It is impossible that it has been submitted to the exchange but not yet completed. It belongs to the previous else if
 		// 平仓订单，这里不可能是已提交到交易所尚未完成，属于上一个else if
 		err = o.tryExitEnter(od)
 		if err != nil {
@@ -312,10 +332,12 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			return nil
 		} else if tryOd.Status > orm.OdStatusInit {
+			// You shouldn't go here.
 			// 这里不应该走到
 			log.Error("Exit Status Invalid", zap.String("key", od.Key()), zap.Int16("sta", tryOd.Status),
 				zap.String("orderId", tryOd.OrderID))
 		} else {
+			// Here OrderID must be empty, and the number of entry orders must be filled.
 			// 这里OrderID一定为空，并且入场单数量一定有成交的。
 			o.queue <- &OdQItem{
 				Action: orm.OdActionExit,
@@ -327,6 +349,7 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 }
 
 /*
+For the specified currency, synchronize the exchange order status to the local machine. Executed when the robot is just started.
 对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
 */
 func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, sinceMs int64,
@@ -334,6 +357,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	var exOrders []*banexg.Order
 	var err *errs.Error
 	if len(openOds) > 0 {
+		// There are open orders locally. Get order records from the exchange and try to restore the order status.
 		// 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
 		exOrders, err = exg.Default.FetchOrders(pair, sinceMs, 0, map[string]interface{}{
 			banexg.ParamAccount: o.Account,
@@ -342,6 +366,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			return openOds, err
 		}
 	}
+	// Get the exchange order before getting the connection to reduce the time taken
 	// 获取交易所订单后再获取连接，减少占用时长
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
@@ -351,6 +376,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	if len(openOds) > 0 {
 		for _, exod := range exOrders {
 			if !banexg.IsOrderDone(exod.Status) {
+				// Skip uncompleted orders
 				// 跳过未完成订单
 				continue
 			}
@@ -366,6 +392,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 		if shortPos != nil {
 			shortPosAmt = shortPos.Contracts
 		}
+		// Check if the remaining open orders match the position. If not, close the corresponding orders.
 		// 检查剩余的打开订单是否和仓位匹配，如不匹配强制关闭对应的订单
 		for _, iod := range openOds {
 			odAmt := iod.Enter.Filled
@@ -374,8 +401,9 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			}
 			if odAmt == 0 {
 				if iod.Status == 0 && iod.Enter.OrderID == "" {
+					// Not submitted to the exchange yet, cancel directly
 					// 尚未提交到交易所，直接取消
-					msg := "取消未提交的订单"
+					msg := "Cancel unsubmitted orders"
 					err = iod.LocalExit(core.ExitTagCancel, iod.Enter.Price, msg, "")
 					strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 					if err != nil {
@@ -385,9 +413,10 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				continue
 			}
 			if odAmt*iod.InitPrice < 1 {
+				// TODO: The quote value calculated here needs to be changed to the legal currency value later
 				// TODO: 这里计算的quote价值，后续需要改为法币价值
 				if iod.Status < orm.InOutStatusFullExit {
-					msg := "订单没有入场仓位"
+					msg := "The order has no corresponding position"
 					err = iod.LocalExit(core.ExitTagFatalErr, iod.InitPrice, msg, "")
 					strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 					if err != nil {
@@ -408,7 +437,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				longPosAmt = posAmt
 			}
 			if posAmt < odAmt*-0.01 {
-				msg := fmt.Sprintf("订单在交易所没有对应仓位，交易所：%.5f", posAmt+odAmt)
+				msg := fmt.Sprintf("The order has no corresponding position in the exchange: %.5f", posAmt+odAmt)
 				err = iod.LocalExit(core.ExitTagFatalErr, iod.InitPrice, msg, "")
 				strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 				if err != nil {
@@ -482,14 +511,14 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 	defTF = config.GetTakeOverTF(od.Symbol, defTF)
 
 	if isShort == isSell {
-		// 开多或开空
+		// Open long or short 开多或开空
 		if defTF == "" {
 			log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("stagy", config.TakeOverStgy))
 			return ods, nil
 		}
-		tag := "开多"
+		tag := "[LONG]"
 		if isShort {
-			tag = "开空"
+			tag = "[SHORT]"
 		}
 		log.Info(fmt.Sprintf("%s %s: price:%.5f, amount: %.5f, %v, fee: %.5f, %v id:%v",
 			o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
@@ -501,7 +530,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 		}
 		ods = append(ods, iod)
 	} else {
-		// 平多或平空
+		// Close long or short 平多或平空
 		var part *orm.InOutOrder
 		var res []*orm.InOutOrder
 		for _, iod := range ods {
@@ -513,9 +542,9 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 			if err != nil {
 				return ods, err
 			}
-			tag := "平多"
+			tag := "Close Long"
 			if isShort {
-				tag = "平空"
+				tag = "Close Short"
 			}
 			log.Info(fmt.Sprintf("%s %v: price:%.5f, amount: %.5f, %v, %v id: %v",
 				o.Account, tag, price, part.Exit.Filled, od.Type, odTime, od.ID))
@@ -531,14 +560,14 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 			}
 		}
 		if !od.ReduceOnly && amount > AmtDust {
-			// 剩余数量，创建相反订单
+			// Remaining quantity, create opposite order 剩余数量，创建相反订单
 			if defTF == "" {
 				log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("stagy", config.TakeOverStgy))
 				return ods, nil
 			}
-			tag := "开多"
+			tag := "[long]"
 			if isShort {
-				tag = "开空"
+				tag = "[short]"
 			}
 			log.Info(fmt.Sprintf("%s %v: price:%.5f, amount: %.5f, %v, fee: %.5f %v id: %v",
 				o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
@@ -626,13 +655,14 @@ func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*orm
 	}
 	average, filled, entOdType := pos.EntryPrice, pos.Contracts, config.OrderType
 	isShort := pos.Side == banexg.PosSideShort
+	// There is no handling fee for position information. The handling fee is inferred directly from the current robot order type, which may be different from the actual handling fee.
 	//持仓信息没有手续费，直接从当前机器人订单类型推断手续费，可能和实际的手续费不同
 	feeName, feeCost := getFeeNameCost(nil, pos.Symbol, "", pos.Side, pos.Contracts, pos.EntryPrice)
-	tag := "开多"
+	tag := "LONG"
 	if isShort {
-		tag = "开空"
+		tag = "SHORT"
 	}
-	log.Info(fmt.Sprintf("%s [仓]%v: price:%.5f, amount:%.5f, fee: %.5f", o.Account, tag, average, filled, feeCost))
+	log.Info(fmt.Sprintf("%s [Pos]%v: price:%.5f, amount:%.5f, fee: %.5f", o.Account, tag, average, filled, feeCost))
 	enterAt := btime.TimeMS()
 	entStatus := orm.OdStatusClosed
 	iod := o.createInOutOd(exs, isShort, average, filled, entOdType, feeCost, feeName, enterAt, entStatus, "", defTF)
@@ -641,6 +671,7 @@ func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*orm
 
 /*
 tryFillExit
+Try to close a position, used to update the closing status of the robot's order from a third-party transaction
 尝试平仓，用于从第三方交易中更新机器人订单的平仓状态
 */
 func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, odTime int64, orderID, odType,
@@ -654,6 +685,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 		return filled, feeCost, iod
 	}
 	var avaAmount float64
+	// Should a small order be split?
 	var doCut = false // 是否应该分割一个小订单
 	if iod.Exit != nil && iod.Exit.Amount > 0 {
 		avaAmount = iod.Exit.Amount - iod.Exit.Filled
@@ -740,6 +772,7 @@ func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
 	return func(order *orm.InOutOrder) *errs.Error {
 		fields := []zap.Field{zap.String("acc", o.Account), zap.String("key", order.Key())}
 		if isFarEnter(order) {
+			// Limit orders that are difficult to execute for a long time will not be submitted to the exchange to prevent funds from being occupied.
 			// 长时间难以成交的限价单，先不提交到交易所，防止资金占用
 			orm.AddTriggerOd(o.Account, order)
 			log.Info("NEW Enter trigger", fields...)
@@ -893,6 +926,7 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	iod, ok := o.exgIdMap[odKey]
 	o.lockExgIdMap.Unlock()
 	if !ok {
+		// Check whether the order is placed by a robot
 		// 检查是否是机器人下单
 		orderId := getClientOrderId(trade.ClientID)
 		if orderId > 0 {
@@ -902,6 +936,7 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 			lock.Unlock()
 		}
 		if iod == nil {
+			// No matching order, recorded in unMatchTrades
 			// 没有匹配订单，记录到unMatchTrades
 			o.lockUnMatches.Lock()
 			o.unMatchTrades[tradeKey] = trade
@@ -910,6 +945,7 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 		}
 	}
 	if strings.Contains(trade.Type, banexg.OdTypeStop) || strings.Contains(trade.Type, banexg.OdTypeTakeProfit) {
+		// Ignore stop loss and take profit orders
 		// 忽略止损止盈订单
 		return
 	}
@@ -937,6 +973,7 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	}
 	if iod.IsDirty() {
 		if iod.Status == orm.InOutStatusFullEnter {
+			// Place stop loss and take profit orders only after full entry
 			// 仅在完全入场后，下止损止盈单
 			o.editTriggerOd(iod, orm.OdActionStopLoss)
 			o.editTriggerOd(iod, orm.OdActionTakeProfit)
@@ -949,6 +986,7 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 }
 
 /*
+Parse the order ClientID passed into the exchange, generally in the form of: botName_inOutId_randNum
 解析传入交易所的订单ClientID，一般形如：botName_inOutId_randNum
 */
 func getClientOrderId(clientId string) int64 {
@@ -1004,6 +1042,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 					continue
 				}
 				if getClientOrderId(trade.ClientID) == 0 {
+					// Record non-robot orders to check if a third party closes or places an order
 					// 记录非机器人订单，检查是否第三方平仓或下单
 					odTrades, _ := pairTrades[odKey]
 					pairTrades[odKey] = append(odTrades, trade)
@@ -1011,6 +1050,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			}
 			unHandleNum := 0
 			allowTakeOver := config.TakeOverStgy != ""
+			// Traverse third-party orders to check whether they are closed or tracked
 			// 遍历第三方订单，检查是否平仓或跟踪
 			for _, trades := range pairTrades {
 				exOd, err := banexg.MergeMyTrades(trades)
@@ -1053,6 +1093,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 		subOd = od.Enter
 		dirtTag = "exit"
 	} else if subOd == nil {
+		// Exit order. This is mostly caused by stop loss or take profit. No exit sub-order has been created yet.
 		// 退出订单，这里多半是止损止盈导致的退出，尚未创建退出子订单
 		if isStopLoss {
 			od.SetExit(core.ExitTagStopLoss, banexg.OdTypeMarket, 0)
@@ -1124,6 +1165,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 		log.Error(fmt.Sprintf("unknown bnb order status: %s", state))
 	}
 	if od.Status == orm.InOutStatusFullExit {
+		// May be triggered by stop loss or take profit, delete and set to completed
 		// 可能由止盈止损触发，删除置为已完成
 		if sl != nil && sl.OrderId != "" {
 			if isStopLoss {
@@ -1194,6 +1236,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 			}
 		}
 		realPrice := core.GetPrice(od.Symbol)
+		// The market price should be used to calculate the quantity here, because the input price may be very different from the market price
 		// 这里应使用市价计算数量，因传入价格可能和市价相差很大
 		od.Enter.Amount, err = exg.PrecAmount(exg.Default, od.Symbol, od.QuoteCost/realPrice)
 		if err != nil {
@@ -1221,6 +1264,7 @@ func (o *LiveOrderMgr) tryExitEnter(od *orm.InOutOrder) *errs.Error {
 	if od.Enter.Status == orm.OdStatusClosed {
 		return nil
 	}
+	// May not have entered yet, or may not have fully entered
 	// 可能尚未入场，或未完全入场
 	if od.Enter.OrderID != "" {
 		order, err := exg.Default.CancelOrder(od.Enter.OrderID, od.Symbol, map[string]interface{}{
@@ -1297,6 +1341,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 			if err != nil {
 				return err
 			}
+			// The leverage of this currency is relatively small, so the corresponding amount is reduced
 			// 此币种杠杆比较小，对应缩小金额
 			rate := newLeverage / od.Leverage
 			od.Leverage = newLeverage
@@ -1311,6 +1356,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		setDirty()
 	}
 	if subOd.Price == 0 && subOd.OrderType != banexg.OdTypeMarket {
+		// calculate the price when it is not a market order
 		// 非市价单时，计算价格
 		buyPrice, sellPrice := o.getLimitPrice(od.Symbol, config.LimitVolSecs)
 		price := sellPrice
@@ -1329,6 +1375,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		}
 		subOd.Amount = od.Enter.Filled
 		if subOd.Amount == 0 {
+			// No amount, direct local exit.
 			// 没有入场，直接本地退出。
 			od.Status = orm.InOutStatusFullExit
 			subOd.Price = od.Enter.Price
@@ -1364,11 +1411,13 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 	}
 	if isEnter {
 		if od.Status == orm.InOutStatusFullEnter {
+			// Place stop loss and take profit orders only after full entry
 			// 仅在完全入场后，下止损止盈单
 			o.editTriggerOd(od, orm.OdActionStopLoss)
 			o.editTriggerOd(od, orm.OdActionTakeProfit)
 		}
 	} else {
+		// Close a position and cancel associated orders
 		// 平仓，取消关联订单
 		cancelTriggerOds(od)
 	}
@@ -1387,6 +1436,7 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 		od.DirtyExit = true
 	}
 	if subOd.OrderID != "" && subOd.OrderID != res.ID {
+		// If you modify the order price, order_id will change
 		// 如修改订单价格，order_id会变化
 		o.lockDoneKeys.Lock()
 		o.doneKeys[od.Symbol+subOd.OrderID] = true
@@ -1429,9 +1479,11 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 			}
 			if res.Filled == 0 {
 				if isEnter {
+					// Entry order, 0 trades, closed; overall status: fully exited
 					// 入场订单，0成交，被关闭；整体状态为：完全退出
 					od.Status = orm.InOutStatusFullExit
 				} else {
+					// Exit order, 0 transactions, closed, overall status: entered
 					// 出场订单，0成交，被关闭，整体状态为：已入场
 					od.Status = orm.InOutStatusFullEnter
 				}
@@ -1517,6 +1569,7 @@ type VolPrice struct {
 
 /*
 getLimitPrice
+Get the approximate limit order price for a specified number of seconds
 获取等待指定秒数的大概限价单价格
 */
 func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float64) {
@@ -1527,12 +1580,14 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 	if ok && cache.ExpireMS > btime.TimeMS() {
 		return cache.BuyPrice, cache.SellPrice
 	}
+	// Invalid or expired, need to be recalculated
 	// 无效或过期，需要重新计算
 	avgVol, lastVol, err := getPairMinsVol(pair, 5)
 	if err != nil {
 		log.Error("getPairMinsVol fail for getLimitPrice", zap.String("pair", pair), zap.Error(err))
 	}
 	secsFlt := float64(waitSecs)
+	// 5-minute trading volume per second * waiting seconds * 2: The final multiplication by 2 here is to prevent the trading volume from being too low
 	// 5分钟每秒成交量*等待秒数*2：这里最后乘2是以防成交量过低
 	depth := min(avgVol/30*secsFlt, lastVol/60*secsFlt)
 	book, err := exg.GetOdBook(pair)
@@ -1544,6 +1599,7 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 		buyPrice = book.LimitPrice(banexg.OdSideBuy, depth)
 		sellPrice = book.LimitPrice(banexg.OdSideSell, depth)
 	}
+	// The longest price cache is 3 seconds, and the shortest is 1/10 of the incoming price.
 	// 价格缓存最长3s，最短传入的1/10
 	expMS := min(3000, int64(waitSecs)*100)
 	lockVolPrices.Lock()
@@ -1558,6 +1614,7 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 
 /*
 getPairMinsVol
+Get the average volume per minute and the volume of the last minute over a period of time. This function has a cache and is updated every minute.
 获取一段时间内，每分钟平均成交量，以及最后一分钟成交量
 此函数有缓存，每分钟更新
 */
@@ -1610,6 +1667,7 @@ func isFarEnter(od *orm.InOutOrder) bool {
 }
 
 /*
+Determine whether an order is a limit order that is difficult to execute for a long time
 判断一个订单是否是长时间难以成交的限价单
 */
 func isFarLimit(od *orm.ExOrder) bool {
@@ -1631,6 +1689,8 @@ func isFarLimit(od *orm.ExOrder) bool {
 
 /*
 VerifyTriggerOds
+Check if there is a triggerable limit order. If so, submit it to the exchange and it should be called every minute.
+Only for real trading
 检查是否有可触发的限价单，如有，提交到交易所，应被每分钟调用
 仅实盘使用
 */
@@ -1659,6 +1719,7 @@ func verifyAccountTriggerOds(account string) {
 		}
 		var secsVol float64
 		var book *banexg.OrderBook
+		// Calculate the past 50 minutes, average volume, and last minute volume
 		// 计算过去50分钟，平均成交量，以及最后一分钟成交量
 		avgVol, lastVol, err := getPairMinsVol(pair, 50)
 		if err == nil {
@@ -1688,8 +1749,10 @@ func verifyAccountTriggerOds(account string) {
 			if od.Exit != nil {
 				subOd = od.Exit
 			}
+			// Calculate the amount to be purchased and the price ratio to reach the specified price
 			// 计算到指定价格，需要吃进的量，以及价格比例
 			waitVol, rate := book.SumVolTo(subOd.Side, subOd.Price)
+			// Fastest transaction time = total volume / transaction volume per second
 			// 最快成交时间 = 总吃进量 / 每秒成交量
 			waitSecs := int(math.Round(waitVol / secsVol))
 			if waitSecs < config.PutLimitSecs && rate >= 0.8 {
@@ -1734,6 +1797,7 @@ func verifyAccountTriggerOds(account string) {
 
 /*
 getSecsByLimit
+Based on the target price, calculate the approximate waiting time for the transaction.
 根据目标价格，计算大概成交需要等待的时长。
 */
 func getSecsByLimit(pair, side string, price float64) (int, float64, *errs.Error) {
@@ -1754,6 +1818,7 @@ func getSecsByLimit(pair, side string, price float64) (int, float64, *errs.Error
 }
 
 func saveIOrders(saveOds []*orm.InOutOrder) {
+	// There are orders that need to be saved
 	// 有需要保存的订单
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
@@ -1786,6 +1851,7 @@ func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *orm.InOutOrder) {
 		}
 	}
 	if od.Enter.Filled == 0 {
+		// Not yet filled, exit directly
 		// 尚未入场，直接退出
 		err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars", "")
 		strat.FireOdChange(odMgr.Account, od, strat.OdChgExitFill)
@@ -1793,6 +1859,7 @@ func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *orm.InOutOrder) {
 			log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
 		}
 	} else {
+		// Partial filled, set to fully admitted
 		// 部分入场，置为已完全入场
 		od.Enter.Status = orm.OdStatusClosed
 		od.Status = orm.InOutStatusFullEnter
@@ -1812,6 +1879,7 @@ func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Erro
 		banexg.ParamAccount: o.Account,
 	}
 	if core.Market != banexg.MarketLinear && core.Market != banexg.MarketInverse {
+		// Spot, Margin, Options. Cancel the old order first, then create a new order
 		// 现货，保证金，期权。先取消旧订单，再创建新订单
 		_, err := exchange.CancelOrder(subOd.OrderID, od.Symbol, args)
 		if err != nil {
@@ -1826,6 +1894,7 @@ func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Erro
 			return o.execOrderExit(od)
 		}
 	}
+	// Only U-based & coin-based, modify order
 	// 只有U本位 & 币本位，修改订单
 	res, err := exchange.EditOrder(od.Symbol, subOd.OrderID, subOd.Side, subOd.Amount, subOd.Price, args)
 	if err != nil {
@@ -1844,6 +1913,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 	}
 	tg.SaveOld()
 	if tg.Price <= 0 {
+		// Stop loss/take profit is not set, or needs to be cancelled
 		// 未设置止损/止盈，或需要撤销
 		if tg.OrderId != "" {
 			_, err := exg.Default.CancelOrder(tg.OrderId, od.Symbol, map[string]interface{}{
@@ -1893,6 +1963,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, amt, price, params)
 	if err != nil {
 		if err.BizCode == -2021 {
+			// Stop loss and stop profit are executed immediately, and the position is closed at the market price
 			// 止损止盈立刻成交，则市价平仓
 			log.Warn("Order would immediately trigger, exit", zap.String("key", od.Key()))
 			exitTag := prefix
@@ -1909,6 +1980,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 				log.Error("save order by trigger fail", zap.String("key", od.Key()), zap.Error(err))
 			}
 		} else {
+			// When the update of stop loss and stop profit fails, the old stop profit and stop loss will not be cancelled
 			// 更新止损止盈失败时，不取消旧的止盈止损
 			log.Error("put trigger order fail", zap.String("key", od.Key()), zap.Error(err))
 		}
@@ -1930,6 +2002,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 
 /*
 cancelTriggerOds
+Cancel the associated order of the order. When the order is closed, the associated stop loss order and take profit order will not be automatically exited, and this method needs to be called to exit
 取消订单的关联订单。订单在平仓时，关联的止损单止盈单不会自动退出，需要调用此方法退出
 */
 func cancelTriggerOds(od *orm.InOutOrder) {
@@ -1959,6 +2032,7 @@ func cancelTriggerOds(od *orm.InOutOrder) {
 /*
 finishOrder
 sess 可为nil
+When the transaction is in progress, it will be saved to the database internally.
 实盘时，内部会保存到数据库
 */
 func (o *LiveOrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
@@ -2001,6 +2075,7 @@ func (o *LiveOrderMgr) WatchLeverages() {
 
 /*
 CheckFatalStop
+Check if the global stop loss is triggered. This method should be called regularly via cron
 检查是否触发全局止损，此方法应通过cron定期调用
 */
 func MakeCheckFatalStop(maxIntv int) func() {
@@ -2039,8 +2114,8 @@ func checkAccFatalStop(account string, maxIntv int) {
 		if lossRate >= rate {
 			lossPct := int(lossRate * 100)
 			core.NoEnterUntil[account] = btime.TimeMS() + int64(config.FatalStopHours)*3600*1000
-			log.Error(fmt.Sprintf("%v: %v分钟内损失%v%%, 禁止下单%v小时！", account,
-				backMins, lossPct, config.FatalStopHours))
+			log.Error(fmt.Sprintf("%v: Loss of %v%% in %v minutes, prohibition of placing orders for %v hours!", account,
+				lossPct, backMins, config.FatalStopHours))
 			break
 		}
 	}
@@ -2048,6 +2123,7 @@ func checkAccFatalStop(account string, maxIntv int) {
 
 /*
 calcFatalLoss
+Calculate the percentage of account balance loss in the last n minutes at the system level
 计算系统级别最近n分钟内，账户余额损失百分比
 */
 func calcFatalLoss(wallets *BanWallets, orders []*orm.InOutOrder, backMins int) float64 {
@@ -2092,13 +2168,13 @@ func StartLiveOdMgr() {
 	}
 	for account := range config.Accounts {
 		odMgr := GetLiveOdMgr(account)
-		// 监听账户订单流
+		// Monitor account order flow 监听账户订单流
 		odMgr.WatchMyTrades()
-		// 跟踪用户下单
+		// Track user orders 跟踪用户下单
 		odMgr.TrialUnMatchesForever()
-		// 消费订单队列
+		// Consumption order queue 消费订单队列
 		odMgr.ConsumeOrderQueue()
-		// 监听杠杆倍数变化
+		// Monitor leverage changes 监听杠杆倍数变化
 		odMgr.WatchLeverages()
 	}
 }

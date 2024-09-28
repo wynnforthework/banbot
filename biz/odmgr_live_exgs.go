@@ -27,6 +27,7 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 		}
 		lock.Unlock()
 		if len(openOds) == 0 {
+			// There are no orders that can be closed in the same direction or opposite direction.
 			// 没有同方向，相反操作的可平仓订单
 			return false
 		}
@@ -50,7 +51,7 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 				break
 			}
 		}
-		// 检查是否有剩余数量，创建相反订单
+		// 检查是否有剩余数量，创建相反订单 Check if there is a remaining quantity and create an opposite order
 		createInv := !od.ReduceOnly && filled > AmtDust && config.TakeOverStgy != ""
 		if len(doneParts) == 0 && !createInv {
 			return true
@@ -113,13 +114,13 @@ func (o *LiveOrderMgr) makeInOutOd(sess *orm.Queries, pair string, short bool, a
 func bnbTraceExgOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 	return func(od *banexg.Order) bool {
 		if od.ReduceOnly || od.Status != banexg.OdStatusFilled {
-			// 忽略只减仓订单  只对完全入场的尝试跟踪
+			// 忽略只减仓订单  只对完全入场的尝试跟踪Ignore Reduction Only Orders Only track attempts for full entry
 			return false
 		}
 		isShort := od.PositionSide == banexg.PosSideShort
 		if core.IsContract {
 			if !isShort && od.Side == banexg.OdSideSell || isShort && od.Side == banexg.OdSideBuy {
-				// 忽略平仓的订单
+				// Ignore closed orders 忽略平仓的订单
 				return false
 			}
 		} else if od.Side == banexg.OdSideSell {

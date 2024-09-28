@@ -15,6 +15,7 @@ import (
 	"slices"
 )
 
+// Calculate the K-line quality score of each dimension of the trading pair
 // 计算交易对各维度K线质量分数
 func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]map[string]float64, *errs.Error) {
 	pairTfScores := make(map[string]map[string]float64)
@@ -66,6 +67,12 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]m
 
 /*
 calcKlineScore
+Calculate the quality of K-line. Used to eliminate trading pairs with too small changes and insufficient volatility; or calculate the best cycle of trading pairs. The threshold of 0.8 is more appropriate
+
+Price change: four prices are the same -1 point; bar change = minimum change unit -1 point 40% weight
+Average weighted entity share: 30% weight
+Bar overlap ratio score, the entity part of a bar, the overlap interval of the entity range of the previous two bars, the ratio of the current bar entity, the lower the score, the higher the weight, 30% weight
+
 计算K线质量。用于淘汰变动太小，波动不足的交易对；或计算交易对的最佳周期。阈值取0.8较合适
 
 	价格变动：四价相同-1分；bar变动=最小变动单位-1分 40%权重
@@ -98,6 +105,7 @@ func calcKlineScore(arr []*banexg.Kline, pipChg float64, prevNum int) float64 {
 		}
 		if i >= prevNum && cMin != cMax {
 			pMax, pMin := slices.Max(pRanges), slices.Min(pRanges)
+			// Calculate the overlap rate between the current bar and the previous n bars
 			// 计算当前bar与前面n个bar的重合率
 			olRate := max(min(cMax, pMax)-max(cMin, pMin), 0) / barLen
 			overlaps = append(overlaps, olRate*weight)
@@ -107,11 +115,14 @@ func calcKlineScore(arr []*banexg.Kline, pipChg float64, prevNum int) float64 {
 		pRanges[nextIdx+1] = cMax
 		nextIdx = (nextIdx + 2) % (prevNum * 2)
 	}
+	// Price Change Unit Fraction
 	// 价格变动单位分数
 	chgScore := math.Pow(pipScore/float64(totalLen), 2)
+	// Entity proportion
 	// 实体部分占比分数
 	jRateScore := floats.Sum(solidRates) / solWeightSum
 	jRateScore = 1 - math.Pow(1-jRateScore, 2)
+	// Calculate the overlap rate score with the previous n bars
 	// 计算与前面n个bar重合率分数
 	overlapScore := 1 - floats.Sum(overlaps)/olWeightSum
 	overlapScore = 1 - math.Pow(1-overlapScore, 3)
@@ -129,6 +140,7 @@ func allAllowTFs() []string {
 			continue
 		}
 		if len(pol.RunTimeframes) > 0 {
+			// The configured time period takes precedence over the hard-coded policy period.
 			// 配置的时间周期优先级高于策略写死的
 			groups = append(groups, pol.RunTimeframes)
 		} else {

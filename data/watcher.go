@@ -82,6 +82,7 @@ func (w *KLineWatcher) getPrefixs(exgName, marketType, jobType string) []string 
 
 /*
 WatchJobs
+Subscribe data from crawlers.
 从爬虫订阅数据。ohlcv/uohlcv/ws/trade/book
 */
 func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...WatchJob) *errs.Error {
@@ -115,6 +116,7 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 		return err
 	}
 	if minTfSecs < 60 && banexg.IsContract(marketType) && jobType == "ohlcv" {
+		//The contract market does not support OHLCV below 1M, and WS is used to listen to transaction aggregation
 		//合约市场不支持1m以下的ohlcv，使用ws监听交易归集
 		jobType = "trade"
 	}

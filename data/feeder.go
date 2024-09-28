@@ -26,14 +26,21 @@ type FuncEnvEnd = func(bar *banexg.PairTFKline, adj *orm.AdjInfo)
 type PairTFCache struct {
 	TimeFrame  string
 	TFSecs     int
-	NextMS     int64         // 记录下一个期待收到的bar起始时间戳，如果不一致，则出现了bar缺失，需查询更新。
-	WaitBar    *banexg.Kline // 记录尚未完成的bar。已完成时应置为nil
-	Latest     *banexg.Kline // 记录最新bar数据，可能未完成，可能已完成
+	NextMS     int64         // Record the start timestamp of the next bar expected to be received. If it is inconsistent, the bar is missing and needs to be queried and updated. 记录下一个期待收到的bar起始时间戳，如果不一致，则出现了bar缺失，需查询更新。
+	WaitBar    *banexg.Kline // Record unfinished bars. Should be set to nil when completed 记录尚未完成的bar。已完成时应置为nil
+	Latest     *banexg.Kline // Record the latest bar data, which may not be completed or may be completed 记录最新bar数据，可能未完成，可能已完成
 	AlignOffMS int64
 }
 
 /*
 Feeder
+Each Feeder corresponds to a trading pair. Can contain multiple time dimensions.
+
+Supports dynamic addition of time dimension.
+Backtest mode: Call execution callbacks in sequence according to the next update time of the Feeder.
+Real mode: Subscribe to new data for this trading pair's time period and execute a callback when it is awakened.
+Support warm-up data. Each strategy + trading pair is preheated independently throughout the entire process, and cross-preheating is not allowed to avoid btime contamination.
+LiveFeeder requires preheating for both new trading pairs and new cycles; HistFeeder only requires preheating for new cycles.
 每个Feeder对应一个交易对。可包含多个时间维度。
 
 	支持动态添加时间维度。
@@ -47,11 +54,11 @@ type Feeder struct {
 	States   []*PairTFCache
 	WaitBar  *banexg.Kline
 	CallBack FnPairKline
-	OnEnvEnd FuncEnvEnd                 // 期货主力切换或股票除权，需先平仓
-	tfBars   map[string][]*banexg.Kline // 缓存各周期的原始K线（未复权）
-	adjs     []*orm.AdjInfo             // 复权因子列表
+	OnEnvEnd FuncEnvEnd                 // If the futures main force switches or the stock is ex-rights, the position needs to be closed first 期货主力切换或股票除权，需先平仓
+	tfBars   map[string][]*banexg.Kline // Cache the original K-line of each cycle (not restored) 缓存各周期的原始K线（未复权）
+	adjs     []*orm.AdjInfo             // List of weighting factors 复权因子列表
 	adj      *orm.AdjInfo
-	isWarmUp bool // 当前是否预热状态
+	isWarmUp bool // Is it currently in preheating state? 当前是否预热状态
 }
 
 func (f *Feeder) getStates() []*PairTFCache {
@@ -72,6 +79,7 @@ func (f *Feeder) setWaitBar(bar *banexg.Kline) {
 
 /*
 subTfs
+Add monitoring to States and return the newly added TimeFrames
 添加监听到States中，返回新增的TimeFrames
 */
 func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
@@ -87,6 +95,7 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 			}
 		}
 	}
+	// New records are added to adds, existing ones are deleted from oldTfs, and stateMap retains all
 	// 新增的记录到adds中，已有的从oldTfs中删除，stateMap保留全部的
 	exchange, err := exg.GetWith(f.Exchange, f.Market, "")
 	if err != nil {
@@ -112,9 +121,11 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 		}
 		adds = append(adds, tf)
 	}
+	// If you need to delete the unintroduced state, record the state of the minimum period to prevent rebuilding from blank again.
 	// 如果需要删除未传入的，记录下最小周期的state，防止再次从空白重建
 	var minDel *PairTFCache
 	if delOther && len(oldTfs) > 0 {
+		// Delete the time period passed in this time
 		// 删除此次为传入的时间周期
 		for tf := range oldTfs {
 			if sta, ok := stateMap[tf]; ok {
@@ -126,6 +137,7 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 		}
 	}
 	var newStates = utils.ValsOfMap(stateMap)
+	// Sort all periods from small to large. The first one must be the least common multiple of all subsequent states, so that all subsequent states can be updated from the first one.
 	// 对所有周期从小到大排序，第一个必须是后续所有states的最小公倍数，以便能从第一个更新后续所有
 	slices.SortFunc(newStates, func(a, b *PairTFCache) int {
 		return a.TFSecs - b.TFSecs
@@ -148,6 +160,8 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 }
 
 /*
+Update State and trigger callback (internal automatic restoration)
+bars original unweighted K-line
 更新State并触发回调（内部自动复权）
 bars 原始未复权的K线
 */
@@ -245,11 +259,11 @@ type IKlineFeeder interface {
 	getWaitBar() *banexg.Kline
 	setWaitBar(bar *banexg.Kline)
 	/*
-		SubTfs 为当前标的订阅指定时间周期的数据，可多个
+		SubTfs Subscribe to data for a specified time period for the current target. Multiple 为当前标的订阅指定时间周期的数据，可多个
 	*/
 	SubTfs(timeFrames []string, delOther bool) []string
 	/*
-		WarmTfs 预热时间周期给定K线数量到指定时间
+		WarmTfs The preheating time period gives the number of K lines to the specified time. 预热时间周期给定K线数量到指定时间
 	*/
 	WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error)
 	onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *errs.Error)
@@ -258,6 +272,15 @@ type IKlineFeeder interface {
 
 /*
 KlineFeeder
+Each Feeder corresponds to a trading pair. Can contain multiple time dimensions. Real use.
+
+Supports dynamic addition of time dimension.
+Supports returning preheating data. Each strategy + trading pair is preheated independently throughout the entire process, and cross-preheating is not allowed to avoid btime contamination.
+
+Backtest mode: Use derived structure: DbKlineFeeder
+
+Real mode: Subscribe to new data for this trading pair's time period and execute a callback when it is awakened.
+Check whether this trading pair has been refreshed in the spider monitor. If not, send a message to the crawler monitor.
 每个Feeder对应一个交易对。可包含多个时间维度。实盘使用。
 
 	支持动态添加时间维度。
@@ -270,9 +293,9 @@ KlineFeeder
 */
 type KlineFeeder struct {
 	Feeder
-	PreFire  float64        // 提前触发bar的比率
+	PreFire  float64        // Ratio of triggering bar early 提前触发bar的比率
 	adjIdx   int            // adjs的索引
-	warmNums map[string]int // 各周期预热数量
+	warmNums map[string]int // Preheating quantity in each cycle 各周期预热数量
 }
 
 func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*KlineFeeder, *errs.Error) {
@@ -336,6 +359,13 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 
 /*
 WarmTfs
+Warm-up cycle data. When dynamically adding cycles to an existing HistDataFeeder, this method should be called to warm up the data.
+If TaEnv already exists it will be reset.
+
+LiveFeeder should also call this function when initializing
+The incoming bars are the K-lines after the restoration of rights.
+
+Returns the ending timestamp (i.e. the starting timestamp of the next bar)
 预热周期数据。当动态添加周期到已有的HistDataFeeder时，应调用此方法预热数据。
 如果TaEnv已存在会被重置。
 
@@ -399,6 +429,8 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 
 /*
 onNewBars
+There is newly completed sub-period candle data, try to update
+bars are K lines that have not been re-righted and will be re-righted internally.
 有新完成的子周期蜡烛数据，尝试更新
 bars 是未复权的K线，内部会进行复权
 */
@@ -426,9 +458,12 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 	minState, minOhlcvs := state, ohlcvs
 	// 应该按周期从大到小触发
 	if len(f.States) > 1 {
+		// For the 2nd and subsequent coarse grains. OHLC updates from the first
+		// Even if the first one is not completed, the coarser period dimension must be updated, otherwise data loss will occur
 		// 对于第2个及后续的粗粒度。从第一个得到的OHLC更新
 		// 即使第一个没有完成，也要更新更粗周期维度，否则会造成数据丢失
 		if barTfMSecs < staMSecs {
+			// The last unfinished data should be kept here
 			// 这里应该保留最后未完成的数据
 			ohlcvs, _ = utils.BuildOHLCV(bars, staMSecs, f.PreFire, nil, barTfMSecs, state.AlignOffMS)
 		} else {
@@ -445,6 +480,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 			f.onStateOhlcvs(state, curOhlcvs, lastOk)
 		}
 	}
+	//Subsequence period dimension <= current dimension. When receiving the data sent by the spider, there may be 3 or more ohlcvs
 	//子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
 	doneBars := f.onStateOhlcvs(minState, minOhlcvs, lastOk)
 	return len(doneBars) > 0, nil
@@ -454,29 +490,32 @@ type IHistKlineFeeder interface {
 	IKlineFeeder
 	getNextMS() int64
 	/*
-		DownIfNeed 下载整个范围的K线，需在SetSeek前调用
+		DownIfNeed Download the entire range of K lines, which needs to be called before SetSeek  下载整个范围的K线，需在SetSeek前调用
 	*/
 	DownIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error
 	/*
-		SetSeek 设置读取位置，在循环读取前调用
+		SetSeek Set the reading position and call it before loop reading   设置读取位置，在循环读取前调用
 	*/
 	SetSeek(since int64)
 	/*
-		GetBar 获取当前K线，然后可调用CallNext移动指针到下一个
+		GetBar Get the current K line, and then call CallNext to move the pointer to the next 获取当前K线，然后可调用CallNext移动指针到下一个
 	*/
 	GetBar() *banexg.Kline
 	/*
-		RunBar 运行Bar对应的回调函数
+		RunBar Run the callback function corresponding to Bar 运行Bar对应的回调函数
 	*/
 	RunBar(bar *banexg.Kline) *errs.Error
 	/*
-		CallNext 移动指针到下一个K线
+		CallNext Move the pointer to the next K line 移动指针到下一个K线
 	*/
 	CallNext()
 }
 
 /*
 HistKLineFeeder
+Historical data feedback device. Is the base class for file feedback and database feedback.
+
+Backtest mode: Read 3K bars each time, and backtest triggers in sequence according to nextMS size.
 历史数据反馈器。是文件反馈器和数据库反馈器的基类。
 
 	回测模式：每次读取3K个bar，按nextMS大小依次回测触发。
@@ -484,12 +523,12 @@ HistKLineFeeder
 type HistKLineFeeder struct {
 	KlineFeeder
 	TimeRange  *config.TimeTuple
-	rowIdx     int             // 缓存中下一个Bar的索引，-1表示已结束
-	caches     []*banexg.Kline // 缓存的Bar，逐个fire，读取完重新加载
-	nextMS     int64           // 下一个bar的13位毫秒时间戳，math.MaxInt32表示结束
-	minGapMs   int64           // caches中最小的间隔毫秒数
+	rowIdx     int             // The index of the next Bar in the cache, -1 means it has ended 缓存中下一个Bar的索引，-1表示已结束
+	caches     []*banexg.Kline // Cached Bar, fire one by one, reload after reading 缓存的Bar，逐个fire，读取完重新加载
+	nextMS     int64           // The 13-digit millisecond timestamp of the next bar, math.MaxInt32 indicates the end 下一个bar的13位毫秒时间戳，math.MaxInt32表示结束
+	minGapMs   int64           // Minimum number of milliseconds between caches caches中最小的间隔毫秒数
 	setNext    func()
-	TradeTimes [][2]int64 // 可交易时间
+	TradeTimes [][2]int64 // Trading time 可交易时间
 }
 
 func (f *HistKLineFeeder) getNextMS() int64 {
@@ -497,6 +536,7 @@ func (f *HistKLineFeeder) getNextMS() int64 {
 }
 
 /*
+Get the current bar for invokeBar; callNext should be called afterwards to set the cursor to the next bar.
 获取当前bar，用于invokeBar；之后应调用callNext设置光标到下一个bar
 */
 func (f *HistKLineFeeder) GetBar() *banexg.Kline {
@@ -518,6 +558,7 @@ func (f *HistKLineFeeder) CallNext() {
 
 /*
 DBKlineFeeder
+The database reads the K-line Feeder for backtesting
 数据库读取K线的Feeder，用于回测
 */
 type DBKlineFeeder struct {
@@ -563,6 +604,8 @@ func (f *DBKlineFeeder) SetSeek(since int64) {
 
 /*
 DownIfNeed
+Download data for a specified interval
+pBar is used for progress update, the total is 1000, and the amount is updated each time
 下载指定区间的数据
 pBar 用于进度更新，总和为1000，每次更新此次的量
 */
@@ -618,6 +661,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 					TimeFrame: tf,
 					Kline:     *old,
 				}, f.adj)
+				// Warm up again
 				// 重新复权预热
 				_, err := f.WarmTfs(f.nextMS, nil, nil)
 				if err != nil {
@@ -627,6 +671,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 			}
 			return
 		}
+		// After the cache reading is completed, re-read the database
 		// 缓存读取完毕，重新读取数据库
 		state := f.States[0]
 		tfMSecs := int64(state.TFSecs * 1000)

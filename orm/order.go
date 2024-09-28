@@ -143,6 +143,7 @@ func (i *InOutOrder) SetEnterLimit(price float64) *errs.Error {
 
 /*
 CalcProfit
+Return profit (before deducting commission)
 返回利润（未扣除手续费）
 */
 func (i *InOutOrder) CalcProfit(price float64) float64 {
@@ -203,6 +204,7 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 
 /*
 UpdateFee
+Calculates commission for entry/exit orders. Must be called after Filled is assigned a value, otherwise the calculation is empty
 为入场/出场订单计算手续费，必须在Filled赋值后调用，否则计算为空
 */
 func (i *InOutOrder) UpdateFee(price float64, forEnter bool, isHistory bool) *errs.Error {
@@ -286,6 +288,8 @@ func (i *InOutOrder) SetExit(tag, orderType string, limit float64) {
 
 /*
 LocalExit
+Forcefully exiting the order locally takes effect immediately, without waiting for the next bar. This does not involve wallet updates, the wallet needs to be updated on its own.
+When calling this function on a real drive, it will be saved to the database
 在本地强制退出订单，立刻生效，无需等到下一个bar。这里不涉及钱包更新，钱包需要自行更新。
 实盘时调用此函数会保存到数据库
 */
@@ -336,6 +340,11 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg, odType string) *e
 
 /*
 ForceExit
+Force exit order, if already purchased, exit at market price. If the purchase is not executed, cancel the pending order. If it has not been submitted, delete the order directly
+
+	Generation mode: Submit a request to the exchange.
+	Simulation mode: Exit after the next bar appears
+
 强制退出订单，如已买入，则以市价单退出。如买入未成交，则取消挂单，如尚未提交，则直接删除订单
 
 	生成模式：提交请求到交易所。
@@ -347,6 +356,7 @@ func (i *InOutOrder) ForceExit(tag string, msg string) {
 
 /*
 CutPart
+Split a small InOutOrder from the current order to solve the problem of one buy and multiple sell
 从当前订单分割出一个小的InOutOrder，解决一次买入，多次卖出问题
 */
 func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
@@ -380,6 +390,7 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 	for key, val := range i.Info {
 		part.Info[key] = val
 	}
+	// The enter.at of the original order needs to be+1 to prevent conflicts with sub orders that have been split.
 	// 原来订单的enter_at需要+1，防止和拆分的子订单冲突。
 	i.EnterAt += 1
 	i.QuoteCost -= part.QuoteCost
@@ -406,6 +417,7 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 			part.Status = InOutStatusFullEnter
 		}
 	} else if part.Status > InOutStatusFullEnter {
+		// No Exit, the status should not be Exit
 		// 无Exit，状态不应该为退出
 		part.Status = InOutStatusFullEnter
 	}
@@ -592,6 +604,7 @@ func (i *InOutOrder) GetTakeProfit() *TriggerState {
 
 /*
 ClientId
+Generate the exchange's ClientOrderId
 生成交易所的ClientOrderId
 */
 func (i *InOutOrder) ClientId(random bool) string {
@@ -632,6 +645,7 @@ func (i *InOutOrder) TakeSnap() *InOutSnap {
 }
 
 /*
+Return to modify the lock of the current order. A successful return indicates that the lock has been obtained
 返回修改当前订单的锁，返回成功表示已获取锁
 */
 func (i *InOutOrder) Lock() *sync.Mutex {
@@ -645,6 +659,7 @@ func (i *InOutOrder) Lock() *sync.Mutex {
 	}
 	var got = false
 	if core.LiveMode {
+		// Real time mode with added deadlock detection
 		// 实时模式，增加死锁检测
 		time.AfterFunc(time.Second*5, func() {
 			if got {
@@ -906,10 +921,10 @@ type GetOrdersArgs struct {
 	Strategy    string
 	Pairs       []string
 	TimeFrame   string
-	Status      int   // 0表示所有，1表示未平仓，2表示历史订单
-	TaskID      int64 // 0表示所有，>0表示指定任务
-	CloseAfter  int64 // 开始时间戳
-	CloseBefore int64 // 结束时间戳
+	Status      int   // 0 represents all, 1 represents open interest, 2 represents historical orders 0表示所有，1表示未平仓，2表示历史订单
+	TaskID      int64 // 0 represents all,>0 represents specified task 0表示所有，>0表示指定任务
+	CloseAfter  int64 // Start timestamp 开始时间戳
+	CloseBefore int64 // End timestamp 结束时间戳
 	Limit       int
 	AfterID     int
 	OrderBy     string
@@ -1034,6 +1049,7 @@ func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
 	lock.Lock()
 	delete(openOds, od.ID)
 	lock.Unlock()
+	// The setting has been completed to prevent incorrect usage elsewhere
 	// 设置已完成，防止其他地方错误使用
 	od.Status = InOutStatusDelete
 	ctx := context.Background()
@@ -1064,6 +1080,7 @@ func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
 
 /*
 GetHistOrderTfs
+Retrieve the specified task and the latest usage time period of the specified policy
 获取指定任务，指定策略的最新使用的时间周期
 */
 func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string, *errs.Error) {

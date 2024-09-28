@@ -60,6 +60,7 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 			banexg.OptApiSecret: acc.APISecret,
 		}
 		if defAcc == "" {
+			// Non-trading accounts are designated as default accounts for public information acquisition, etc
 			// 非交易账户指定为默认账户，进行公开信息获取等
 			defAcc = key
 		}
@@ -173,7 +174,7 @@ func GetTickers() (map[string]*banexg.Ticker, *errs.Error) {
 }
 
 /*
-GetAlignOff 获取指定周期聚合的时间偏移，单位：秒
+GetAlignOff Obtain the time offset of the aggregation for the specified period, in seconds 获取指定周期聚合的时间偏移，单位：秒
 */
 func GetAlignOff(exgName string, tfSecs int) int {
 	if tfSecs < 86400 {

@@ -28,9 +28,9 @@ import (
 type BTResult struct {
 	MaxOpenOrders   int
 	MinReal         float64
-	MaxReal         float64 // 最大资产
-	MaxDrawDownPct  float64 // 最大回撤百分比
-	ShowDrawDownPct float64 // 显示最大回撤百分比
+	MaxReal         float64 // Maximum Assets 最大资产
+	MaxDrawDownPct  float64 // Maximum drawdown percentage 最大回撤百分比
+	ShowDrawDownPct float64 // Displays the maximum drawdown percentage 显示最大回撤百分比
 	BarNum          int
 	TimeNum         int
 	OrderNum        int
@@ -186,6 +186,7 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 		r.MinReal = r.MaxReal
 	}
 	table.Append([]string{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)})
+	// Calculate the maximum drawdown on the chart
 	// 计算图表上的最大回撤
 	r.ShowDrawDownPct = r.Plots.calcDrawDown() * 100
 	drawDownRate := strconv.FormatFloat(r.ShowDrawDownPct, 'f', 1, 64) + "%"
@@ -273,6 +274,7 @@ func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
 	var bestTF string
 	var bestTFSecs int
 	var bestScore float64
+	// Find the optimal granularity for grouping
 	// 查找分组的最佳粒度
 	for _, tf := range units {
 		tfSecs := utils.TFToSecs(tf)
@@ -672,7 +674,7 @@ func (r *BTResult) dumpGraph() {
 		fileData = btGraphData
 	}
 	content := string(fileData)
-	content = strings.Replace(content, "$title", "实时资产/余额/未实现盈亏/提现/并发订单数", 1)
+	content = strings.Replace(content, "$title", "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders", 1)
 	items := map[string]interface{}{
 		"\"$labels\"":    r.Plots.Labels,
 		"\"$odNum\"":     r.Plots.OdNum,

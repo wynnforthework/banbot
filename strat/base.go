@@ -14,7 +14,7 @@ import (
 )
 
 /*
-******************************  TradeStagy的成员方法  ***********************************
+******************************  Membership methods of TradeStagy 成员方法  ***********************************
  */
 
 func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
@@ -33,6 +33,7 @@ func (s *TradeStagy) GetStakeAmount(j *StagyJob) float64 {
 }
 
 /*
+Select the time period to trade from several candidate time periods. This method is called by the system
 从若干候选时间周期中选择要交易的时间周期。此方法由系统调用
 */
 func (s *TradeStagy) pickTimeFrame(symbol string, tfScores map[string]float64) string {
@@ -243,6 +244,7 @@ func (s *StagyJob) CloseOrders(req *ExitReq) *errs.Error {
 
 /*
 avgVolume
+Calculate the average trading volume of the latest num candlesticks
 计算最近num个K线的平均成交量
 */
 func (s *StagyJob) avgVolume(num int) float64 {
@@ -258,6 +260,8 @@ func (s *StagyJob) avgVolume(num int) float64 {
 }
 
 /*
+Calculate the current order and the drawdown distance from maximum profit
+Return: Withdrawal ratio after profit, entry price, maximum profit margin
 计算当前订单，距离最大盈利的回撤
 返回：盈利后回撤比例，入场价格，最大利润率
 */
@@ -335,6 +339,7 @@ func (s *StagyJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
 
 /*
 drawDownExit
+Check whether the tracking profit check has reached the drawdown threshold. If it exceeds the threshold, exit. This method is called by the system
 按跟踪止盈检查是否达到回撤阈值，超出则退出，此方法由系统调用
 */
 func (s *StagyJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
@@ -359,6 +364,7 @@ func (s *StagyJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
 
 /*
 customExit
+Check if the order needs to be exited, this method is called by the system
 检查订单是否需要退出，此方法由系统调用
 */
 func (s *StagyJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
@@ -382,6 +388,7 @@ func (s *StagyJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
 
 /*
 Position
+Retrieve the position size and return a multiple based on the benchmark amount.
 获取仓位大小，返回基于基准金额的倍数。
 side long/short/空
 enterTag 入场标签，可为空

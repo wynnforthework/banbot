@@ -61,6 +61,7 @@ func GetExSymbolCur(symbol string) (*ExSymbol, *errs.Error) {
 
 func GetExSymbol(exchange banexg.BanExchange, symbol string) (*ExSymbol, *errs.Error) {
 	market, err := exchange.GetMarket(symbol)
+	// It is not immediately exited here, it may be delisted, and it is returned empty, but there is historical data, you can try to get it from the cache below
 	// 这里不立即退出，可能退市了这里返回空，但有历史数据，可尝试从下面缓存获取
 	exgInfo := exchange.Info()
 	var marketType = exgInfo.MarketType
@@ -100,6 +101,7 @@ func EnsureExgSymbols(exchange banexg.BanExchange) *errs.Error {
 		return err
 	}
 	if len(exInfo.Markets) == 0 {
+		// China Futures needs to call LoadMarkets again after EnsureSymbols to pass in symbols for the loading to be successful
 		// 中国期货需要在EnsureSymbols后再次调用LoadMarkets传入symbols才能加载成功
 		_, err = LoadMarkets(exchange, false)
 	} else {
@@ -171,6 +173,7 @@ func EnsureSymbols(symbols []*ExSymbol, exchanges ...string) *errs.Error {
 	}
 	defer conn.Release()
 	if len(keySymbolMap) == 0 {
+		// Not yet loaded, load the information of all the underlying assets of the specified exchange
 		// 尚未加载，加载指定交易所所有标的信息
 		for exgId := range exgNames {
 			err = sess.LoadExgSymbols(exgId)
@@ -179,6 +182,7 @@ func EnsureSymbols(symbols []*ExSymbol, exchanges ...string) *errs.Error {
 			}
 		}
 	}
+	// Check the subject matter that needs to be inserted
 	// 检查需要插入的标的
 	adds := map[string]*ExSymbol{}
 	for _, exs := range symbols {
@@ -195,6 +199,7 @@ func EnsureSymbols(symbols []*ExSymbol, exchanges ...string) *errs.Error {
 	if len(adds) == 0 {
 		return nil
 	}
+	// Lock, reload, and add the data that needs to be added
 	// 加锁，重新加载，然后添加需要添加的数据
 	symbolLock.Lock()
 	defer symbolLock.Unlock()
@@ -257,7 +262,9 @@ func LoadAllExSymbols() *errs.Error {
 }
 
 /*
-GetAllExSymbols 获取已加载到缓存的所有标的
+GetAllExSymbols
+Gets all the objects that have been loaded into the cache
+获取已加载到缓存的所有标的
 */
 func GetAllExSymbols() []*ExSymbol {
 	res := make([]*ExSymbol, 0, len(idSymbolMap))

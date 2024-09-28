@@ -27,6 +27,9 @@ import (
 )
 
 /*
+The problem with tick data
+1. In the compressed tick package every day, a symbol file may have multiple symbol data, which coincide with other valid ticks, and need to be deduplicated
+2. When there is a night session, the date of the night session data is actually the previous day
 tick数据的问题
 1. 每天的压缩tick包内，一个symbol文件可能有多个symbol的数据，且和其他有效的tick重合，需要去重
 2. 有夜盘时，夜盘数据的日期实际是前一天
@@ -34,8 +37,9 @@ tick数据的问题
 
 var (
 	ConcurNum = 5 // 并发处理的数量
+	// The following are used in Build1mWithTicks to build 1m candlesticks from ticks
 	// 下面几个在Build1mWithTicks中使用，从tick构建1m K线
-	symKLines = make(map[string][]*banexg.Kline) // 当前年的1m数据，键是合约ID
+	symKLines = make(map[string][]*banexg.Kline) // 1M data for the current year, the key is the contract ID 当前年的1m数据，键是合约ID
 	klineLock sync.Mutex                         //symKlines的并发读写锁
 	timeMsMin = int64(0)
 	timeMsMax = int64(0)
@@ -82,7 +86,11 @@ func zipConvert(inPath, outPath, suffix string, convert FuncConvert, pBar *utils
 }
 
 /*
-FindPathNames 查找给定路径所有指定类型的文件路径
+FindPathNames
+Finds all file paths of the specified type for a given path
+
+An array of paths is returned, with the first being the parent directory followed by the relative child paths
+查找给定路径所有指定类型的文件路径
 
 返回路径数组，第一个是父目录，后续是相对子路径
 */
@@ -293,6 +301,8 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if timeMsMin > 0 || timeMsMax > 0 {
 		log.Info("enable time filter", zap.Int64("min", timeMsMin), zap.Int64("maz", timeMsMax))
 	}
+	// Input: There is only a folder of years in the root directory, and a zip package for each trading day under each year folder, and the tick data of the day is stored in the contract name in each zip
+	// Output: A ZIP archive in the root directory every year, and each zip stores 1M data of the contract in CSV with the contract name
 	// 输入：根目录下只有年份的文件夹，每个年份文件夹下每个交易日一个zip压缩包，每个zip内以合约名称存储当日tick数据
 	// 输出：根目录下每年一个zip压缩包，每个zip内以合约名称csv存储当年该合约的1m数据
 	layout := "20060102 15:04:05"
@@ -344,6 +354,7 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 		}
 		off := timeMS % dayMSecs
 		if off > nightMSecs && off < nightZeroMs {
+			// Night trading time, and before 24 o'clock, is the day before; It doesn't have to be a day, it could be Monday, it needs to be minus two days, 1 day for simplicity
 			// 夜盘时间，且24点前，是日前的；不一定是一天，可能是周一，需要减两天，简单起见1天
 			timeMS -= dayMSecs
 		}
@@ -415,6 +426,7 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 			if b.Len() > 0 {
 				fmt.Printf("check duplicate: %s  %s\n", name, b.String())
 			}
+			// For the same target, on the same day, tick data may exist in multiple files, choose the one with the highest volume
 			// 同一个标的，在同一天，tick数据可能存在于多个文件，选择成交量最高的那个
 			symbolVolMap := make(map[string]map[string]float64)
 			for key, items := range dayKlines {
@@ -551,8 +563,8 @@ func ReadZipCSVs(inPath string, pBar *utils.PrgBar, handle FuncReadZipItem, arg 
 type tkInfo struct {
 	symbol   string
 	timeMS   int64   // 13位毫秒时间戳
-	price    float64 // 最新价格
-	volume   float64 // 累计日成交量
+	price    float64 // latest price 最新价格
+	volume   float64 // Cumulative daily volume 累计日成交量
 	avgPrice float64 // 平均价格
 	turnOver float64 // 换手率
 	openInt  float64 // 持仓量

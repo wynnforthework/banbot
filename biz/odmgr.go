@@ -97,6 +97,7 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq
 		return nil
 	}
 	if core.RunMode == core.RunModeOther {
+		// Does not involve order mode, prohibit opening orders
 		// 不涉及订单模式，禁止开单
 		return nil
 	}
@@ -104,6 +105,7 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq
 	lock.Lock()
 	numOver := len(openOds) >= config.MaxOpenOrders
 	if !numOver && len(openOds) > 0 {
+		// Check whether the maximum number of orders opened by the strategy is exceeded
 		// 检查是否超出策略最大开单数量
 		stagyOdNum := make(map[string]int)
 		for _, od := range openOds {
@@ -131,9 +133,11 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq
 		return nil
 	}
 	if !core.LiveMode {
+		// In non-real-time mode, no delay check is performed and the
 		// 非实时模式，不检查延迟，直接允许
 		return enters
 	}
+	// The real order is submitted to the exchange, and the inspection delay cannot exceed 80%
 	// 实盘订单提交到交易所，检查延迟不能超过80%
 	rate := float64(btime.TimeMS()-env.TimeStop) / float64(env.TimeStop-env.TimeStart)
 	if rate <= 0.8 {
@@ -143,7 +147,12 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq
 }
 
 /*
-ProcessOrders 执行订单入场出场请求
+ProcessOrders
+Execute order entry and exit requests
+Create pending orders, the returned orders are not actually entered or exited;
+Backtest: the caller executes the entry/exit order according to the next bar and updates the status
+Live trading: monitor the exchange to return the order status to update the entry and exit
+执行订单入场出场请求
 创建待执行订单，返回的订单实际并未入场或出场；
 回测：调用方根据下一个bar执行入场/出场订单，更新状态
 实盘：监听交易所返回订单状态更新入场出场
@@ -269,11 +278,11 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 }
 
 func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.ExitReq) ([]*orm.InOutOrder, *errs.Error) {
-	// 筛选匹配的订单
+	// Filter matching orders 筛选匹配的订单
 	var matches []*orm.InOutOrder
 	openOds, lock := orm.GetOpenODs(o.Account)
 	if req.OrderID > 0 {
-		// 精确指定退出的订单ID
+		// Specify the exact order ID to exit 精确指定退出的订单ID
 		lock.Lock()
 		od, ok := openOds[req.OrderID]
 		lock.Unlock()
@@ -309,7 +318,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 				continue
 			}
 			if od.ExitTag != "" || (od.Exit != nil && od.Exit.Amount > 0) {
-				// 订单已退出
+				// Order Exited 订单已退出
 				continue
 			}
 			if req.UnOpenOnly && od.Enter.Filled > 0 {
@@ -328,7 +337,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 	var exitAmount float64
 	useRate := req.ExitRate > 0 && req.ExitRate < 1
 	if useRate || req.Amount <= 0 {
-		// 计算要退出的数量
+		// Calculate the amount to withdraw 计算要退出的数量
 		allAmount := float64(0)
 		for _, od := range matches {
 			allAmount += od.Enter.Amount
@@ -360,6 +369,8 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 		fillA := a.Enter.Filled * a.InitPrice
 		fillB := b.Enter.Filled * b.InitPrice
 		fillChg := int(math.Round((fillA - fillB) * 100))
+		// For profit taking or filled only, descending order by filled amount.
+		// 对于止盈或退出已入场的，优先按已入场金额降序
 		if (isTakeProfit || req.FilledOnly) && fillChg != 0 {
 			// 止盈单，优先按入场金额倒序
 			return -fillChg
@@ -368,16 +379,16 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 		unfillA := costA - fillA
 		costB := b.Enter.Amount * b.InitPrice
 		unfillB := costB - fillB
-		// 首先按未成交金额倒序
+		// First, in descending order by unsold amount. 首先按未成交金额倒序
 		res := int(math.Round((unfillB - unfillA) * 100))
 		if res != 0 {
 			return res
 		}
-		// 其次按已入场金额升序
+		// Secondly, in ascending order by deposit amount 其次按已入场金额升序
 		if fillChg != 0 {
 			return res
 		}
-		// 最后按入场时间升序
+		// Last entry time ascending 最后按入场时间升序
 		return int((a.EnterAt - b.EnterAt) / 1000)
 	})
 	var result []*orm.InOutOrder
@@ -390,6 +401,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 		dust := od.Enter.Amount * 0.01
 		if exitAmount < dust {
 			if isTakeProfit {
+				// reset TakeProfit for remaining orders
 				// 剩余订单重置TakeProfit
 				for _, odr := range matches[i:] {
 					odr.SetTakeProfit(nil)
@@ -402,6 +414,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 			break
 		}
 		if req.FilledOnly && od.Enter.Filled < od.Enter.Amount {
+			// Only exit the entered orders, the current order is partially entered and divided into sub-orders
 			// 只退出已入场的订单，当前订单部分入场，切分成子订单
 			cutAmt := min(exitAmount, od.Enter.Filled)
 			part = od.CutPart(cutAmt, 0)
@@ -445,6 +458,7 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.E
 	if req.Limit > 0 && core.IsLimitOrder(req.OrderType) {
 		price := core.GetPrice(od.Symbol)
 		if price > 0 && (req.Limit-price)*float64(req.Dirt) > 0 {
+			// It is a valid limit order, set to take profit
 			// 是有效的限价出场单，设置到止盈中
 			od.SetTakeProfit(&orm.ExitTrigger{
 				Price: req.Limit,
@@ -458,12 +472,14 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.E
 }
 
 func (o *OrderMgr) exitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.ExitReq) (*orm.InOutOrder, *errs.Error) {
+	// It has been confirmed externally that it is not a limit price stop profit
 	// 外部已确认不是限价止盈
 	odType := core.OrderTypeEnums[req.OrderType]
 	if odType == "" {
 		odType = config.OrderType
 	}
 	if req.ExitRate < 0.99 {
+		// The portion to be exited is less than 99%, so a small order is split out for exit.
 		// 要退出的部分不足99%，分割出一个小订单，用于退出。
 		part := o.CutOrder(od, req.ExitRate, 0)
 		req.ExitRate = 1
@@ -490,6 +506,7 @@ func (o *OrderMgr) postOrderExit(sess *orm.Queries, od *orm.InOutOrder) (*orm.In
 
 /*
 UpdateByBar
+Use the price to update the profit of the order, etc. It may trigger a margin call
 使用价格更新订单的利润等。可能会触发爆仓
 */
 func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *errs.Error {
@@ -504,6 +521,7 @@ func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *
 
 func (o *OrderMgr) CutOrder(od *orm.InOutOrder, enterRate, exitRate float64) *orm.InOutOrder {
 	part := od.CutPart(od.Enter.Amount*enterRate, od.Enter.Amount*exitRate)
+	// Here the key of part is the same as the original one, so part is used as src_key
 	// 这里part的key和原始的一样，所以part作为src_key
 	tgtKey, srcKey := od.Key(), part.Key()
 	base, quote, _, _ := core.SplitSymbol(od.Symbol)
@@ -516,6 +534,7 @@ func (o *OrderMgr) CutOrder(od *orm.InOutOrder, enterRate, exitRate float64) *or
 /*
 finishOrder
 sess 可为nil
+It will be saved internally to the database during the actual trading.
 实盘时内部会保存到数据库。
 */
 func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
@@ -530,6 +549,7 @@ func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Erro
 		}
 	}
 	tipAmtLock.Lock()
+	// Order opened successfully, prompt allowed
 	delete(tipAmtZeros, od.Symbol) // 开单成功，允许提示
 	tipAmtLock.Unlock()
 	return err

@@ -17,9 +17,10 @@ import (
 )
 
 /*
-LoadStagyJobs 加载策略和交易对
+LoadStagyJobs Loading strategies and trading pairs 加载策略和交易对
 
 更新以下全局变量：
+Update the following global variables:
 core.TFSecs
 core.StgPairTfs
 core.BookPairs
@@ -35,6 +36,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	if len(pairs) == 0 || len(tfScores) == 0 {
 		return nil, errs.NewMsg(errs.CodeParamRequired, "`pairs` and `tfScores` are required for LoadStagyJobs")
 	}
+	// Set the global variables involved to null, as will be updated below
 	// 将涉及的全局变量置为空，下面会更新
 	core.TFSecs = make(map[string]int)
 	core.BookPairs = make(map[string]bool)
@@ -107,6 +109,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 				// 当前pair+strtgID已有任务，跳过
 				continue
 			}
+			// Check for proprietary parameters of the current target and reinitialize the strategy
 			// 检查有当前标的专有参数，重新初始化策略
 			if curPol, isDiff := pol.PairDup(exs.Symbol); isDiff {
 				curStagy = New(curPol)
@@ -124,6 +127,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			envKeys[envKey] = true
 			// 初始化BarEnv
 			env := initBarEnv(exs, tf)
+			// Record the data that needs to be preheated; Record subscription information
 			// 记录需要预热的数据；记录订阅信息
 			logWarm(exs.Symbol, tf, curStagy.WarmupNum)
 			for account := range config.Accounts {
@@ -134,6 +138,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		printFailTfScores(polID, failTfScores)
 	}
 	initStagyJobs()
+	// Ensure that all pairs and TFs are recorded in the returned data to prevent them from being removed by the data subscriber
 	// 确保所有pair、tf都在返回的中有记录，防止被数据订阅端移除
 	for _, pairMap := range core.StgPairTfs {
 		for pair, tf := range pairMap {
@@ -147,6 +152,7 @@ func LoadStagyJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			}
 		}
 	}
+	// Remove useless items from Envs, AccJobs
 	// 从Envs, AccJobs中删除无用的项
 	for envKey := range Envs {
 		if _, ok := envKeys[envKey]; !ok {
@@ -254,6 +260,7 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 		}
 		envJobs[stagy.Name] = job
 	}
+	// Load subscription information for other targets
 	// 加载订阅其他标的信息
 	if stagy.OnPairInfos != nil {
 		infoJobs := GetInfoJobs(account)
@@ -284,6 +291,7 @@ func ensureStagyJob(stagy *TradeStagy, account, tf, envKey string, exs *orm.ExSy
 }
 
 func initStagyJobs() {
+	// Update the EnterNum of the job
 	// 更新job的EnterNum
 	for account := range config.Accounts {
 		openOds, lock := orm.GetOpenODs(account)
@@ -317,6 +325,7 @@ func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string, adds []string) 
 	if len(pairs) == 0 {
 		return pairs, nil
 	}
+	// According to pol Pair determines the subject of the transaction
 	// 根据pol.Pairs确定交易的标的
 	if len(pol.Pairs) > 0 {
 		allAllows := make(map[string]bool)
@@ -334,6 +343,7 @@ func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string, adds []string) 
 	if len(pol.Filters) == 0 {
 		return pairs, nil
 	}
+	// Filter based on filters
 	// 根据filters过滤筛选
 	polID := pol.ID()
 	filters, ok := polFilters[polID]

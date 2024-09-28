@@ -306,11 +306,13 @@ func initExgAccs() {
 		if val.NoTrade {
 			BakAccounts[name] = val
 		} else if !core.EnvReal {
+			// Non-production environment, only enable one account
 			// 非生产环境，只启用一个账号
 			Accounts[DefAcc] = val
 		} else {
 			Accounts[name] = val
 			if DefAcc == "" {
+				// Production environment, the first record is the default account
 				// 生产环境，第一个记录为默认账户
 				DefAcc = name
 			}
@@ -346,18 +348,21 @@ func ParsePath(path string) string {
 func GetStakeAmount(accName string) float64 {
 	var amount float64
 	acc, ok := Accounts[accName]
+	// Prioritize using percentage to open orders
 	// 优先使用百分比开单
 	if ok && acc.StakePctAmt > 0 {
 		amount = acc.StakePctAmt
 	} else {
 		amount = StakeAmount
 	}
+	// Check if the maximum amount is exceeded
 	// 检查是否超出最大金额
 	if ok && acc.MaxStakeAmt > 0 && acc.MaxStakeAmt < amount {
 		amount = acc.MaxStakeAmt
 	} else if MaxStakeAmt > 0 && MaxStakeAmt < amount {
 		amount = MaxStakeAmt
 	}
+	// Multiply by the account multiplier
 	// 乘以账户倍率
 	if ok && acc.StakeRate > 0 {
 		amount *= acc.StakeRate

@@ -48,6 +48,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 		config.Args.Logfile = outDir + "/out.log"
 	}
 	log.Setup(config.Args.LogLevel, config.Args.Logfile)
+	// Trading pair initialization
 	// 交易对初始化
 	log.Info("loading exchange markets ...")
 	err = orm.InitExg(exg.Default)
@@ -66,6 +67,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
+	// Order Manager initialization
 	// 订单管理器初始化
 	err = t.initOdMgr()
 	if err != nil {
@@ -90,7 +92,7 @@ func (t *CryptoTrader) initOdMgr() *errs.Error {
 		}
 		openOds, lock := orm.GetOpenODs(account)
 		lock.Lock()
-		msg := fmt.Sprintf("订单恢复%d，删除%d，新增%d，已开启%d单", len(oldList), len(delList), len(newList), len(openOds))
+		msg := fmt.Sprintf("orders: %d restored, %d deleted, %d added, %d opened", len(oldList), len(delList), len(newList), len(openOds))
 		lock.Unlock()
 		rpc.SendMsg(map[string]interface{}{
 			"type":    rpc.MsgTypeStatus,
@@ -138,6 +140,7 @@ func delayExecBatch() {
 	time.AfterFunc(time.Millisecond*core.DelayBatchMS, func() {
 		waitNum := biz.TryFireBatches(btime.UTCStamp())
 		if waitNum > 0 {
+			// There are TF cycles that have not yet been completed, and they are postponed for a few seconds to trigger again
 			// 有尚未完成的tf周期，推迟几秒再次触发
 			delayExecBatch()
 		}
@@ -147,16 +150,16 @@ func delayExecBatch() {
 func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 	msgType := rpc.MsgTypeExit
 	subOd := od.Exit
-	action := "平多"
+	action := "Close Long"
 	if od.Short {
-		action = "平空"
+		action = "Close Short"
 	}
 	if isEnter {
 		msgType = rpc.MsgTypeEntry
 		subOd = od.Enter
-		action = "开多"
+		action = "Open Long"
 		if od.Short {
-			action = "开空"
+			action = "Open Short"
 		}
 	}
 	if subOd.Status != orm.OdStatusClosed || subOd.Amount == 0 {
@@ -186,20 +189,28 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 }
 
 func (t *CryptoTrader) startJobs() {
+	// Listen to the balance
 	// 监听余额
 	biz.WatchLiveBalances()
+	// Listen to account order flow, process user orders, and consume order queues
 	// 监听账户订单流、处理用户下单、消费订单队列
 	biz.StartLiveOdMgr()
+	// Refresh trading pairs regularly
 	// 定期刷新交易对
 	CronRefreshPairs(t.dp)
+	// Refresh the market regularly
 	// 定时刷新市场行情
 	CronLoadMarkets()
+	// Check every 5 minutes to see if the global stop loss is triggered
 	// 每5分钟检查是否触发全局止损
 	CronFatalLossCheck()
+	// Regularly check the candlestick timeout, updated every minute
 	// 定期检查K线超时，每分钟更新
 	CronKlineDelays()
+	// The timer output is executed every 5 minutes: 01:30 06:30 11:30
 	// 定时输出收到K线情况，每5分钟执行：01:30  06:30  11:30
 	CronKlineSummary()
+	// Check every 15th minute to see if the limit order submission is triggered
 	// 每分钟第15s检查是否触发限价单提交
 	CronCheckTriggerOds()
 	core.Cron.Start()

@@ -69,9 +69,10 @@ func CronKlineDelays() {
 		}
 		if len(fails) > 0 {
 			failText := core.GroupByPairQuotes(fails)
-			msgText := "监听爬虫K线超时：" + failText
+			msgText := "Listen to the spider kline timeout:" + failText
 			log.Warn(msgText)
 			if curMS-lastNotifyDelay > 600000 {
+				// Delay reminders are sent every 10 minutes
 				// 10 分钟发送一次延迟提醒
 				lastNotifyDelay = curMS
 				rpc.SendMsg(map[string]interface{}{
@@ -112,6 +113,7 @@ func CronKlineSummary() {
 }
 
 func CronCheckTriggerOds() {
+	// Check every minute 15 seconds to see if the limit order submission is triggered
 	// 在每分钟的15s检查是否触发限价单提交
 	_, err_ := core.Cron.AddFunc("15 * * * * *", biz.VerifyTriggerOds)
 	if err_ != nil {

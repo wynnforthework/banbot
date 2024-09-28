@@ -28,13 +28,19 @@ type NotifyKLines struct {
 
 type KLineMsg struct {
 	NotifyKLines
-	ExgName string // 交易所名称
-	Market  string // 市场
-	Pair    string //币种
+	ExgName string // The name of the exchange 交易所名称
+	Market  string // market 市场
+	Pair    string // symbol  币种
 }
 
 /*
 getCheckInterval
+Based on the trading pair and timeframe being monitored. Calculate the minimum check interval.
+
+< 60s to fetch data through WebSocket, check the update interval can be relatively small.
+
+	If the data is 1 m or more and obtained through the second-level interface of the API, it will be updated once every 3s
+
 根据监听的交易对和时间帧。计算最小检查间隔。
 
 	<60s的通过WebSocket获取数据，检查更新间隔可以比较小。
@@ -63,11 +69,11 @@ func getCheckInterval(tfSecs int) float64 {
 	return checkIntv
 }
 
-/** *******************************  爬虫部分   ****************************
+/** *******************************  Spider 爬虫部分   ****************************
  */
 var (
-	initSids  = map[int32]bool{} // 标记sid是否已初始化数据
-	initMutex sync.Mutex         // 防止出现initSids并发读和写
+	initSids  = map[int32]bool{} // Mark whether the SID has been initialized or not 标记sid是否已初始化数据
+	initMutex sync.Mutex         // Prevent initSids from concurrent reads and writes 防止出现initSids并发读和写
 	writeQ    = make(chan *SaveKline, 1000)
 )
 
@@ -94,6 +100,7 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
 
 	var err *errs.Error
 	if endMS == 0 || fetchEndMS <= endMS {
+		// The new coin has no historical data, or the current bar and the inserted data are continuous, and the subsequent new bar can be directly inserted
 		// 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
 		log.Info("first fetch ok", zap.Int32("sid", save.Sid), zap.Int64("end", endMS))
 		return endMS, nil
@@ -128,6 +135,7 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
 		if newEndMS >= fetchEndMS {
 			break
 		} else {
+			//If the latest bar is not obtained, wait for 2s to try again (the request ohlcv may not be obtained at the end of 1M)
 			//如果未成功获取最新的bar，等待2s重试（1m刚结束时请求ohlcv可能取不到）
 			log.Info("query first fail, wait 2s", zap.String("pair", exs.Symbol),
 				zap.Int("ins", saveNum), zap.Int64("last", lastMS))
@@ -190,6 +198,7 @@ func consumeWriteQ(workNum int) {
 			if err != nil {
 				log.Error("consumeWriteQ: fail", zap.Int32("sid", job.Sid), zap.Error(err))
 			}
+			// After the K-line is written to the database, a message will be sent to notify the robot to avoid repeated insertion of K-line
 			// 写入K线到数据库后，才发消息通知机器人，避免重复插入K线
 			tfSecs := utils.TFToSecs(job.TimeFrame)
 			err = Spider.Broadcast(&utils.IOMsg{
@@ -265,6 +274,7 @@ func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 		if len(pairs) > 0 {
 			return nil
 		}
+		// If the incoming is empty, take all the underlying of the current exchange + market
 		// 传入为空，取当前交易所+市场的所有标的
 		markets := m.exchange.GetCurMarkets()
 		valids = make([]string, 0, len(markets))
@@ -491,6 +501,7 @@ func (m *Miner) watchKLines(pairs []string) {
 		return res
 	}
 
+	// The candlestick is received, sent to the robot, and saved to the database
 	// 收到K线，发送到机器人，保存到数据库
 	handleSubKLines := func(key string, arr []*banexg.Kline) {
 		parts := strings.Split(key, "_")
@@ -501,6 +512,7 @@ func (m *Miner) watchKLines(pairs []string) {
 		}
 		curTS := btime.Time()
 		var err_ *errs.Error
+		// Send uohlcv subscription messages
 		// 发送uohlcv订阅消息
 		if curTS > state.NextNotify {
 			err_ = m.spider.Broadcast(&utils.IOMsg{
@@ -511,9 +523,11 @@ func (m *Miner) watchKLines(pairs []string) {
 					Arr:      arr,
 				},
 			})
+			// A maximum of 1 K-line message can be sent in 1s
 			// 1s最多发送1次k线消息
 			state.NextNotify = curTS + 0.9
 		}
+		// Check the completed candlesticks
 		// 检查已完成的k线
 		finishes := arr[:len(arr)-1]
 		last := arr[len(arr)-1]
@@ -526,6 +540,7 @@ func (m *Miner) watchKLines(pairs []string) {
 			state.PrevBar = last
 		}
 		if len(finishes) > 0 {
+			// There are completed k-lines, written to the database, and only then the message is broadcast
 			// 有已完成的k线，写入到数据库，然后才广播消息
 			writeQ <- &SaveKline{
 				Sid:       state.Sid,

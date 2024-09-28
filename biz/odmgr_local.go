@@ -22,7 +22,7 @@ type LocalOrderMgr struct {
 }
 
 var (
-	tipAmtZeros = map[string]bool{} // 已提示数量太小无法开单的标的
+	tipAmtZeros = map[string]bool{} // symbols which has been prompted that the quantity is too small to open an order. 已提示数量太小无法开单的标的
 	tipAmtLock  sync.Mutex
 )
 
@@ -50,6 +50,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKli
 	if len(allOpens) == 0 || core.EnvReal {
 		return nil
 	}
+	// Simulate order entry and exit, which are usually executed at the beginning of the bar
 	// 模拟订单入场出场，入场出场一般在bar开始时执行
 	var curOrders []*orm.InOutOrder
 	for _, od := range allOpens {
@@ -61,12 +62,14 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKli
 	if err != nil {
 		return err
 	}
+	// Update all orders to profit at the end of the bar
 	// 更新所有订单在bar结束时利润
 	err = o.OrderMgr.UpdateByBar(allOpens, bar)
 	if err != nil {
 		return err
 	}
 	if core.IsContract && core.CheckWallets {
+		// Update all order margins and wallet status of this pricing currency for the contract
 		// 为合约更新此定价币的所有订单保证金和钱包情况
 		_, _, code, _ := core.SplitSymbol(bar.Symbol)
 		var orders []*orm.InOutOrder
@@ -84,6 +87,7 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKli
 
 /*
 fillPendingOrders
+Fills orders waiting for exchange response. Cannot be used for real trading; can be used for backtesting, simulated real trading, etc.
 填充等待交易所响应的订单。不可用于实盘；可用于回测、模拟实盘等。
 */
 func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.InfoKline) (int, *errs.Error) {
@@ -99,7 +103,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.Inf
 			exOrder = od.Enter
 		} else {
 			if od.ExitTag == "" {
-				// 已入场完成，尚未出现出场信号，检查是否触发止损
+				// 已入场完成，尚未出现出场信号，检查是否触发止损The entry has been completed, but the exit signal has not yet appeared. Check whether the stop loss is triggered.
 				err := o.tryFillTriggers(od, &bar.Kline, 0)
 				if err != nil {
 					return 0, err
@@ -123,12 +127,14 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.Inf
 					continue
 				} else if price > bar.Open {
 					// 买价高于市价，以市价成交
+					// If the purchase price is higher than the market price, the transaction will be completed at the market price.
 					price = bar.Open
 				}
 			} else if exOrder.Side == banexg.OdSideSell {
 				if price > bar.High {
 					continue
 				} else if price < bar.Open {
+					// If the selling price is lower than the market price, the transaction will be done at the market price.
 					// 卖价低于市价，以市价成交
 					price = bar.Open
 				}
@@ -137,7 +143,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.Inf
 			fillBarRate = simMarketRate(&bar.Kline, exOrder.Price, odIsBuy, false, 0)
 			fillMS = bar.Time + int64(float64(odTFSecs)*fillBarRate)*1000
 		} else {
-			// 按网络延迟，模拟成交价格，和开盘价接近
+			// 按网络延迟，模拟成交价格，和开盘价接近According to the network delay, the simulated transaction price is close to the opening price
 			rate := config.BTNetCost / float64(odTFSecs)
 			price = simMarketPrice(&bar.Kline, rate)
 		}
@@ -156,11 +162,13 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.Inf
 		}
 		affectNum += 1
 	}
+	// Forced liquidation of limit entry orders that have not been executed within a timeout period
 	// 强制平仓超时未成交的限价入场单
 	curMS := btime.TimeMS()
 	for _, od := range orders {
 		if od.Status > orm.InOutStatusInit || od.Enter.Price == 0 ||
 			!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
+			// Skip entered and non-limit orders
 			// 跳过已入场的以及非限价单
 			continue
 		}
@@ -200,6 +208,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 	exOrder := od.Enter
 	if exOrder.Amount == 0 {
 		if od.Short && !core.IsContract {
+			// Spot short order, quantity must be given
 			// 现货空单，必须给定数量
 			return errs.NewMsg(core.ErrInvalidCost, "EnterAmount is required")
 		}
@@ -233,11 +242,12 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 		exOrder.CreateAt = updateTime
 	}
 	if exOrder.OrderType == banexg.OdTypeLimit && updateTime-od.EnterAt < 60000 {
-		// 以限价单入场，但很快成交的话，认为是市价单成交
+		// 以限价单入场，但很快成交的话，认为是市价单成交If you enter the market with a limit order but the transaction is completed quickly, it will be considered a market order.
 		exOrder.OrderType = banexg.OdTypeMarket
 	}
 	if exOrder.Filled == 0 {
 		// 将EnterAt更新为实际入场时间
+		// Update EnterAt to the actual entry time
 		od.EnterAt = updateTime
 	}
 	exOrder.Filled = exOrder.Amount
@@ -291,12 +301,16 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 	}
 	if sl != nil && !sl.Hit {
 		// 空单止损，最高价超过止损价触发
+		// Short order stop loss, triggered when the highest price exceeds the stop loss price
 		// 多单止损，最低价跌破止损价触发
+		// Stop loss for long orders, triggered when the lowest price falls below the stop loss price
 		sl.Hit = od.Short && bar.High >= sl.Price || !od.Short && bar.Low <= sl.Price
 	}
 	if tp != nil && !tp.Hit {
 		// 空单止盈，最低价跌破止盈价触发
+		// Short order stop profit, the lowest price falls below the stop profit price to trigger
 		// 多单止盈，最高价突破止盈价触发
+		// Long order stop profit, the highest price breaks through the stop profit price to trigger
 		tp.Hit = od.Short && bar.Low <= tp.Price || !od.Short && bar.High >= tp.Price
 	}
 	if (sl == nil || !sl.Hit) && (tp == nil || !tp.Hit) {
@@ -306,6 +320,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 	od.DirtyInfo = true
 	tfSecs := float64(utils2.TFToSecs(od.Timeframe))
 	// 计算平仓成交价格，0市价，-1不平仓，>0指定价格
+	// Calculate the transaction price for closing the position, 0 market price, -1 for not closing the position, >0 specified price
 	getExcPrice := func(trigPrice, limit float64) float64 {
 		if limit > 0 {
 			if od.Short && limit < bar.Low || !od.Short && limit > bar.High {
@@ -314,7 +329,9 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 				return -1
 			}
 			if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
+				// Short order, the closing limit price is lower than the trigger price, it may be a limit order
 				// 空单，平仓限价低于触发价，可能是限价单
+				// For long orders, the closing limit price is higher than the trigger price, which may be a limit order.
 				// 多单，平仓限价高于触发价，可能是限价单
 				trigRate := simMarketRate(bar, trigPrice, od.Short, true, afterRate)
 				rate := simMarketRate(bar, limit, od.Short, true, afterRate)
@@ -329,6 +346,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 	var fillPrice, trigPrice, amtRate float64
 	var exitTag string
 	if sl != nil && sl.Hit {
+		// Trigger stop loss and calculate execution price
 		// 触发止损，计算执行价格
 		trigPrice = sl.Price
 		amtRate = sl.Rate
@@ -342,6 +360,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 			}
 		}
 	} else if tp != nil && tp.Hit {
+		// Trigger take profit and calculate execution price
 		// 触发止盈，计算执行价格
 		trigPrice = tp.Price
 		amtRate = tp.Rate
@@ -358,6 +377,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 		return nil
 	}
 	curMS := btime.TimeMS()
+	// The time when the simulation is triggered
 	// 模拟触发时的时间
 	var rate = config.BTNetCost / tfSecs
 	odType := banexg.OdTypeMarket
@@ -365,12 +385,15 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 		odType = banexg.OdTypeLimit
 		rate += simMarketRate(bar, fillPrice, od.Short, true, afterRate)
 	} else {
+		// Trigger time + network delay
 		// 触发时间+网络延迟
 		rate += simMarketRate(bar, trigPrice, od.Short, true, afterRate)
+		// Stop loss at market price and sell immediately
 		// 市价止损，立刻卖出
 		fillPrice = simMarketPrice(bar, rate)
 	}
 	if amtRate > 0 && amtRate <= 0.99 {
+		// Partial withdrawal
 		// 部分退出
 		part := o.CutOrder(od, amtRate, 0)
 		if sl != nil && sl.Hit {
@@ -403,6 +426,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 }
 
 func (o *LocalOrderMgr) onLowFunds() {
+	// If the balance is insufficient and there are no orders entered, the backtest will be terminated early.
 	// 如果余额不足，且没有入场的订单，则提前终止回测
 	openNum := orm.OpenNum(o.Account, orm.InOutStatusPartEnter)
 	if openNum > 0 {
@@ -461,12 +485,14 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 	if err != nil {
 		return err
 	}
+	// Reset Unrealized P&L
 	// 重置未实现盈亏
 	wallets := GetWallets(o.Account)
 	for _, item := range wallets.Items {
 		item.UnrealizedPOL = 0
 		item.UsedUPol = 0
 	}
+	// Filter unfilled orders
 	// 过滤未入场订单
 	var validOds = make([]*orm.InOutOrder, 0, len(orm.HistODs))
 	for _, od := range orm.HistODs {
@@ -496,6 +522,7 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 	}
 
 	if openP <= closeP {
+		// close > open, generally first moves down to the lower shadow line, then rises to the highest point, and finally retreats slightly to form the upper shadow line.
 		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
 		a = openP - lowP
 		b = highP - lowP
@@ -514,6 +541,7 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 			start, end, posRate = highP, closeP, (rate-bEndRate)/(1-bEndRate)
 		}
 	} else {
+		// close < open. generally rises first and goes out of the upper shadow line, then drops to the lowest point, and finally pulls back slightly to form a lower shadow line.
 		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
 		a = highP - openP
 		b = highP - lowP
@@ -538,11 +566,13 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 
 func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minRate float64) float64 {
 	if isTrigger {
+		// For the order that triggers the price, it is not a pending order. If it is judged that it is not within the bar range, it is considered to be completed immediately.
 		// 对于触发价格的订单，不是挂单，判断如果未在bar范围内，则认为立刻成交
 		if price < bar.Low || price > bar.High {
 			return minRate
 		}
 	} else {
+		// Non-trigger mode, directly compare with the opening price
 		// 非触发模式，直接和开盘价对比
 		if isBuy && price >= bar.Open || !isBuy && price <= bar.Open {
 			// 开盘立刻成交。
@@ -560,53 +590,63 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minR
 	closeP := bar.Close
 
 	if openP <= closeP {
+		// close > open. generally first moves down to the lower shadow line, then rises to the highest point, and finally retreats slightly to form the upper shadow line.
 		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
-		a = openP - lowP   // 开盘~最低
-		b = highP - lowP   // 最低~最高
-		c = highP - closeP // 最高~收盘
+		a = openP - lowP   // open~low. 开盘~最低
+		b = highP - lowP   // low~high. 最低~最高
+		c = highP - closeP // high~close. 最高~收盘
 		totalLen = a + b + c
 		if totalLen == 0 {
 			return 0.5
 		}
 		if isTrigger {
+			// Trigger price, no need to consider buying and selling direction, direct comparison
 			// 触发价格，无需考虑买卖方向，直接比较
 			if price < openP {
+				// The trigger bid price is lower than the opening price, and it is triggered when the opening price is the lowest
 				// 触发买价低于开盘，在开盘~最低时触发
 				rate := (openP - price) / totalLen
 				if rate >= minRate {
 					return rate
 				}
 			}
+			// Otherwise, it will be triggered from the lowest to the highest
 			// 否则在最低~最高中触发
 			rate := (a + price - lowP) / totalLen
 			if rate >= minRate {
 				return rate
 			} else {
+				// Triggered during the highest to closing time
 				// 在最高~收盘中触发
 				return (a + b + highP - price) / totalLen
 			}
 		} else {
 			if isBuy {
+				// Buy order, triggered at opening ~ lowest price
 				// 买单，在开盘~最低时触发
 				rate := (openP - price) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
+					// Trigger at minimum to maximum
 					// 在最低~最高时触发
 					return (a + price - lowP) / totalLen
 				}
 			} else {
+				// Sell order, triggered between the lowest and highest levels
 				// 卖单，在最低~最高中触发
 				rate := (a + price - lowP) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
+					// Triggered during the highest to closing time
 					// 在最高~收盘中触发
 					return (a + b + highP - price) / totalLen
 				}
 			}
 		}
 	} else {
+		// close < open. generally rises first and goes out of the upper shadow line, then drops to the lowest point, and finally pulls back slightly to form a lower shadow line.
 		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
 		a = highP - openP // 开盘~最高
 		b = highP - lowP  // 最高~最低
@@ -616,42 +656,51 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minR
 			return 0.5
 		}
 		if isTrigger {
+			// Trigger price, no need to consider buying and selling direction, direct comparison
 			// 触发价格，无需考虑买卖方向，直接比较
 			if price < openP {
+				// If the trigger price is lower than the opening price, it must be triggered between the highest and lowest prices.
 				// 触发价低于开盘，必然在最高~最低中触发
 				rate := (a + highP - price) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
+					// Triggered at the lowest price ~ closing price
 					// 在最低~收盘中触发
 					return (a + b + price - lowP) / totalLen
 				}
 			} else {
+				// The trigger price is higher than the opening price, and is triggered between the opening price and the highest price.
 				// 触发价高于开盘，在开盘~最高中触发
 				rate := (price - openP) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
+					// Trigger between highest and lowest
 					// 在最高~最低中触发
 					return (a + highP - price) / totalLen
 				}
 			}
 		} else {
 			if isBuy {
+				// Buy orders must be triggered between the highest and lowest prices.
 				// 买单，必然在最高~最低中触发
 				rate := (a + highP - price) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
+					// Triggered at the lowest price ~ closing price
 					// 在最低~收盘中触发
 					return (a + b + price - lowP) / totalLen
 				}
 			} else {
+				// Sell order, triggered from the opening to the highest price
 				// 卖单，在开盘~最高中触发
 				rate := (price - openP) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
+					// Trigger between highest and lowest
 					// 在最高~最低中触发
 					return (a + highP - price) / totalLen
 				}

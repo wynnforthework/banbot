@@ -7,29 +7,29 @@ import (
 var (
 	Data        Config
 	Args        *CmdArgs
-	Accounts    map[string]*AccountConfig // 交易所可交易账户
-	BakAccounts map[string]*AccountConfig // 交易所账户，不可交易
-	DefAcc      = "default"               // 非实盘交易时，账户默认的key（回测、模拟交易）
+	Accounts    map[string]*AccountConfig // Exchange tradable account 交易所可交易账户
+	BakAccounts map[string]*AccountConfig // Exchange account, not tradable 交易所账户，不可交易
+	DefAcc      = "default"               // For non-real trading, the default key of the account (backtesting, simulated trading) 非实盘交易时，账户默认的key（回测、模拟交易）
 
 	Name             string
 	Loaded           bool
 	NoDB             bool
 	Leverage         float64
-	LimitVolSecs     int // 限价单预期等待多长时间成交，单位秒
-	PutLimitSecs     int // 在此预期时间内成交的限价单，才提交到交易所
+	LimitVolSecs     int // How long the limit order is expected to wait for execution, in seconds 限价单预期等待多长时间成交，单位秒
+	PutLimitSecs     int // Only limit orders executed within this expected time will be submitted to the exchange. 在此预期时间内成交的限价单，才提交到交易所
 	OdBookTtl        int64
-	StopEnterBars    int // 入场限价单超过多少个蜡烛未成交则取消
+	StopEnterBars    int // The entry limit order will be canceled if it is not filled after the number of candles. 入场限价单超过多少个蜡烛未成交则取消
 	OrderType        string
 	PreFire          float64
-	MarginAddRate    float64 // 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
+	MarginAddRate    float64 // When trading contracts, if a loss occurs and the loss reaches this value of the initial margin ratio, additional margin will be required to avoid forced liquidation. 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
 	ChargeOnBomb     bool
 	TakeOverStgy     string
-	StakeAmount      float64 // 单笔开单金额，优先级低于StakePct
-	StakePct         float64 // 单笔开单金额百分比
-	MaxStakeAmt      float64 // 单笔最大开单金额
-	OpenVolRate      float64 // 未指定数量开单时，最大允许开单数量/平均蜡烛成交量的倍数，默认1
-	MinOpenRate      float64 // 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
-	BTNetCost        float64 // 回测时下单延迟，模拟滑点，单位秒
+	StakeAmount      float64 // The amount of a single order, the priority is lower than StakePct 单笔开单金额，优先级低于StakePct
+	StakePct         float64 // Percentage of single bill amount 单笔开单金额百分比
+	MaxStakeAmt      float64 // Maximum bill amount for a single transaction 单笔最大开单金额
+	OpenVolRate      float64 // When opening an order without specifying a quantity, the multiple of the maximum allowed order quantity/average candle trading volume, defaults to 1 未指定数量开单时，最大允许开单数量/平均蜡烛成交量的倍数，默认1
+	MinOpenRate      float64 // When the wallet balance is less than the single amount, orders are allowed to be issued when it reaches this ratio of the single amount. 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
+	BTNetCost        float64 // Order placement delay during backtesting, simulated slippage, unit seconds 回测时下单延迟，模拟滑点，单位秒
 	MaxOpenOrders    int
 	WalletAmounts    map[string]float64
 	DrawBalanceOver  float64
@@ -63,7 +63,7 @@ var (
 	}
 )
 
-// Config 是根配置结构体
+// Config Is the root configuration structure 是根配置结构体
 type Config struct {
 	Name            string                            `yaml:"name" mapstructure:"name"`
 	Env             string                            `yaml:"env" mapstructure:"env"`
@@ -110,7 +110,7 @@ type Config struct {
 	Webhook         map[string]map[string]string      `yaml:"webhook" mapstructure:"webhook"`
 }
 
-// 运行的策略，可以多个策略同时运行
+// The strategy to run, multiple strategies can be run at the same time 运行的策略，可以多个策略同时运行
 type RunPolicyConfig struct {
 	Name          string                        `yaml:"name" mapstructure:"name"`
 	Filters       []*CommonPairFilter           `yaml:"filters" mapstructure:"filters"`
@@ -142,23 +142,23 @@ type DatabaseConfig struct {
 }
 
 type APIServerConfig struct {
-	Enable       bool          `yaml:"enable" mapstructure:"enable"`                 // 是否启用
-	BindIPAddr   string        `yaml:"bind_ip" mapstructure:"bind_ip"`               // 绑定地址，0.0.0.0表示暴露到公网
-	Port         int           `yaml:"port" mapstructure:"port"`                     // 本地监听端口
-	Verbosity    string        `yaml:"verbosity" mapstructure:"verbosity"`           // 详细程度
-	JWTSecretKey string        `yaml:"jwt_secret_key" mapstructure:"jwt_secret_key"` // 用于密码加密的密钥
-	CORSOrigins  []string      `yaml:"CORS_origins" mapstructure:"CORS_origins"`     // banweb访问时，要这里添加banweb的地址放行
-	Users        []*UserConfig `yaml:"users" mapstructure:"users"`                   // 登录用户
+	Enable       bool          `yaml:"enable" mapstructure:"enable"`                 // Whether to enable 是否启用
+	BindIPAddr   string        `yaml:"bind_ip" mapstructure:"bind_ip"`               // Binding address, 0.0.0.0 means exposed to the public network 绑定地址，0.0.0.0表示暴露到公网
+	Port         int           `yaml:"port" mapstructure:"port"`                     // LOCAL LISTENING PORT 本地监听端口
+	Verbosity    string        `yaml:"verbosity" mapstructure:"verbosity"`           // Detail level 详细程度
+	JWTSecretKey string        `yaml:"jwt_secret_key" mapstructure:"jwt_secret_key"` // Key used for password encryption 用于密码加密的密钥
+	CORSOrigins  []string      `yaml:"CORS_origins" mapstructure:"CORS_origins"`     // When accessing banweb, you need to add the address of banweb here to allow access. banweb访问时，要这里添加banweb的地址放行
+	Users        []*UserConfig `yaml:"users" mapstructure:"users"`                   // Login user 登录用户
 }
 
 type UserConfig struct {
 	Username    string            `yaml:"user" mapstructure:"user"`           // 用户名
 	Password    string            `yaml:"pwd" mapstructure:"pwd"`             // 密码
-	AccRoles    map[string]string `yaml:"acc_roles" mapstructure:"acc_roles"` // 对不同账户的角色权限
-	ExpireHours float64           `yaml:"exp_hours" mapstructure:"exp_hours"` // token过期时间，默认168小时
+	AccRoles    map[string]string `yaml:"acc_roles" mapstructure:"acc_roles"` // Role permissions for different accounts 对不同账户的角色权限
+	ExpireHours float64           `yaml:"exp_hours" mapstructure:"exp_hours"` // Token expiration time, default 168 hours token过期时间，默认168小时
 }
 
-/** ********************************** RPC渠道配置 ******************************** */
+/** ********************************** RPC Channel Configuration 渠道配置 ******************************** */
 
 type WeWorkChannel struct {
 	Enable     bool     `yaml:"enable" mapstructure:"enable"`
@@ -178,47 +178,47 @@ type TelegramChannel struct {
 	Channel  string   `yaml:"channel" mapstructure:"channel"`
 }
 
-/** ********************************** 标的筛选器 ******************************** */
+/** ********************************** Symbol FILTER标的筛选器  ******************************** */
 
 type PairMgrConfig struct {
 	Cron string `yaml:"cron" mapstructure:"cron"`
-	// 偏移限定数量选择。
+	// Offset limited quantity selection. 偏移限定数量选择。
 	Offset int `yaml:"offset" mapstructure:"offset,omitempty"`
-	// 限制币种数量
+	// Limit the number of currencies 限制币种数量
 	Limit int `yaml:"limit" mapstructure:"limit,omitempty"`
 	// apply filters to static pairs force
 	ForceFilters bool `yaml:"force_filters" mapstructure:"force_filters,omitempty"`
 }
 
-// 通用的过滤器
+// UNIVERSAL FILTER 通用的过滤器
 type CommonPairFilter struct {
 	Name  string                 `yaml:"name" mapstructure:"name"`
 	Items map[string]interface{} `mapstructure:",remain"`
 }
 
-/** ********************************** 交易所部分配置 ******************************** */
+/** ********************************** Exchange part configuration 交易所部分配置 ******************************** */
 
-// ExchangeConfig 表示交易所的配置信息
+// ExchangeConfig Represents the configuration information of the exchange 表示交易所的配置信息
 type ExchangeConfig struct {
 	Name  string                    `yaml:"name" mapstructure:"name"`
 	Items map[string]*ExgItemConfig `mapstructure:",remain"`
 }
 
-// 具体交易所的配置
+// Configuration of specific exchanges 具体交易所的配置
 type ExgItemConfig struct {
 	AccountProds map[string]*AccountConfig `yaml:"account_prods,omitempty" mapstructure:"account_prods,omitempty"`
 	AccountTests map[string]*AccountConfig `yaml:"account_tests,omitempty" mapstructure:"account_tests,omitempty"`
 	Options      map[string]interface{}    `yaml:"options,omitempty" mapstructure:"options,omitempty"`
 }
 
-// AccountConfig 存储 API 密钥和秘密的配置
+// AccountConfig Configuration to store API keys and secrets 存储 API 密钥和秘密的配置
 type AccountConfig struct {
 	APIKey      string  `yaml:"api_key" mapstructure:"api_key"`
 	APISecret   string  `yaml:"api_secret" mapstructure:"api_secret"`
 	NoTrade     bool    `yaml:"no_trade" mapstructure:"no_trade"`
-	MaxStakeAmt float64 `yaml:"max_stake_amt" mapstructure:"max_stake_amt"` // 允许的单笔最大金额
-	StakeRate   float64 `yaml:"stake_rate" mapstructure:"stake_rate"`       // 相对基准的开单金额倍数
-	StakePctAmt float64 // 按百分比开单时，当前允许的金额
+	MaxStakeAmt float64 `yaml:"max_stake_amt" mapstructure:"max_stake_amt"` // Maximum amount allowed for a single transaction 允许的单笔最大金额
+	StakeRate   float64 `yaml:"stake_rate" mapstructure:"stake_rate"`       // Multiple of billing amount relative to benchmark  相对基准的开单金额倍数
+	StakePctAmt float64 // The amount currently allowed when billing by percentage按百分比开单时，当前允许的金额
 	Leverage    float64 `yaml:"leverage" mapstructure:"leverage"`
 }
 

@@ -17,10 +17,10 @@ var (
 	PairStags   = make(map[string]map[string]*TradeStagy)          // pair:[stagyName]TradeStagy 所有的订阅策略
 
 	BatchTasks  = map[string]*BatchMap{} // tf_account_stagy: pair: task 每个bar周期更新（只适用于单交易所单市场）
-	LastBatchMS = int64(0)               // timeMS 上次批量执行的时间戳，仅用于回测
+	LastBatchMS = int64(0)               // timeMS The timestamp of the last batch execution is only used for backtesting 上次批量执行的时间戳，仅用于回测
 
 	lockInfoJobs sync.Mutex
 
-	accOdSubs = map[string][]FnOdChange{} // acc: listeners 订阅订单状态变化事件列表
+	accOdSubs = map[string][]FnOdChange{} // acc: listeners List of subscription order status change events 订阅订单状态变化事件列表
 	lockOdSub sync.Mutex
 )

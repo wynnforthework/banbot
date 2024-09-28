@@ -119,7 +119,7 @@ func getStatistics(c *fiber.Ctx) error {
 			return err
 		}
 		wallets := biz.GetWallets(acc)
-		var totalDuration int64 // 所有订单持仓秒数
+		var totalDuration int64 // All order holding seconds 所有订单持仓秒数
 		var profitSum, profitRateSum, totalCost float64
 		var doneProfitSum, doneProfitRateSum, doneTotalCost float64
 		var curMS = btime.UTCStamp()
@@ -129,7 +129,7 @@ func getStatistics(c *fiber.Ctx) error {
 		var bestRate float64
 		var curDay int64
 		var dayProfitSum float64
-		var dayProfits []float64 // 每日利润
+		var dayProfits []float64 // Daily Profit 每日利润
 		var dayMSecs = int64(utils.TFToSecs("1d") * 1000)
 		for _, od := range orders {
 			if od.Status < orm.InOutStatusPartEnter || od.Status > orm.InOutStatusFullExit {

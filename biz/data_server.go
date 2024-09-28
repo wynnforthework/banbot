@@ -21,7 +21,7 @@ import (
 type FnFeaStream = func(exsList []*orm.ExSymbol, req *SubReq, rsp FeaFeeder_SubFeaturesServer) error
 
 var (
-	FeaGenerators = map[string]FnFeaStream{} // SubFeatures 的任务特征生成函数注册
+	FeaGenerators = map[string]FnFeaStream{} // Task feature generation function registration for SubFeatures. 任务特征生成函数注册
 )
 
 func RunDataServer(args *config.CmdArgs) *errs.Error {
@@ -69,7 +69,10 @@ type DataServer struct {
 }
 
 /*
-SubFeatures 订阅特征数据流
+SubFeatures
+Subscribe to feature data stream
+You need to register the task feature data stream generation function in FeaGenerators to initiate grpc request normally.
+订阅特征数据流
 需要自行注册任务特征数据流生成函数到 FeaGenerators 中，才能正常发起grpc请求
 */
 func (s *DataServer) SubFeatures(req *SubReq, rsp FeaFeeder_SubFeaturesServer) error {

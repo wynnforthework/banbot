@@ -41,7 +41,7 @@ func StartApi() *errs.Error {
 		ExposeHeaders:    "*",
 	}))
 
-	// 注册路由
+	// register routes 注册路由
 	regApiPub(app.Group(""))
 	regApiBiz(app.Group("/api", AuthMiddleware(cfg.JWTSecretKey)))
 
