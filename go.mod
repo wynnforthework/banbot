@@ -4,33 +4,29 @@ go 1.22
 
 toolchain go1.23.0
 
-replace github.com/banbox/banexg => ../banexg
-
-replace github.com/banbox/banta => ../banta
-
-replace github.com/d4l3k/go-bayesopt => D:\FILES\github\go-bayesopt
+replace github.com/d4l3k/go-bayesopt => github.com/anyongjin/go-bayesopt v1.0.0
 
 require (
-	github.com/banbox/banexg v0.1.2
-	github.com/banbox/banta v0.1.1
-	github.com/bytedance/sonic v1.12.1
+	github.com/banbox/banexg v0.2.1
+	github.com/banbox/banta v0.1.4
+	github.com/bytedance/sonic v1.12.3
 	github.com/c-bata/goptuna v0.9.0
 	github.com/d4l3k/go-bayesopt v1.0.0
-	github.com/dgraph-io/ristretto v0.1.1
-	github.com/jackc/pgx/v5 v5.6.0
+	github.com/dgraph-io/ristretto v1.0.0
+	github.com/jackc/pgx/v5 v5.7.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/clusters v0.0.0-20200529215643-2700303c1762
 	github.com/muesli/kmeans v0.3.1
 	github.com/olekukonko/tablewriter v0.0.5
 	// github.com/pkujhd/goloader v0.0.0-20240113094056-ff3a1e01ffcb
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/schollz/progressbar/v3 v3.14.6
+	github.com/schollz/progressbar/v3 v3.16.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/xuri/excelize/v2 v2.8.1
 	go.uber.org/zap v1.27.0
-	golang.org/x/text v0.17.0
+	golang.org/x/text v0.18.0
 	gonum.org/v1/gonum v0.15.1
-	google.golang.org/grpc v1.65.0
+	google.golang.org/grpc v1.67.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -62,7 +58,7 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.1 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
@@ -90,12 +86,12 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.9.0 // indirect
-	golang.org/x/crypto v0.26.0 // indirect
+	golang.org/x/crypto v0.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
 	golang.org/x/net v0.28.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.24.0 // indirect
-	golang.org/x/term v0.23.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/term v0.24.0 // indirect
 	golang.org/x/tools v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240822170219-fc7c04adadcd // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
