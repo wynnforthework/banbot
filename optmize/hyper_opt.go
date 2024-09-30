@@ -3,6 +3,7 @@ package optmize
 import (
 	"bytes"
 	"fmt"
+	"github.com/anyongjin/go-bayesopt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -18,7 +19,6 @@ import (
 	"github.com/c-bata/goptuna"
 	"github.com/c-bata/goptuna/cmaes"
 	"github.com/c-bata/goptuna/tpe"
-	"github.com/d4l3k/go-bayesopt"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"

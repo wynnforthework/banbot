@@ -4,14 +4,12 @@ go 1.22
 
 toolchain go1.23.0
 
-replace github.com/d4l3k/go-bayesopt => github.com/anyongjin/go-bayesopt v1.0.0
-
 require (
 	github.com/banbox/banexg v0.2.1
 	github.com/banbox/banta v0.1.4
 	github.com/bytedance/sonic v1.12.3
 	github.com/c-bata/goptuna v0.9.0
-	github.com/d4l3k/go-bayesopt v1.0.0
+	github.com/anyongjin/go-bayesopt v1.0.1
 	github.com/dgraph-io/ristretto v1.0.0
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/mitchellh/mapstructure v1.5.0
