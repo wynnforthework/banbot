@@ -10,7 +10,7 @@ require (
 	github.com/bytedance/sonic v1.12.3
 	github.com/c-bata/goptuna v0.9.0
 	github.com/anyongjin/go-bayesopt v1.0.1
-	github.com/dgraph-io/ristretto v1.0.0
+	github.com/dgraph-io/ristretto v0.2.0
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/muesli/clusters v0.0.0-20200529215643-2700303c1762
