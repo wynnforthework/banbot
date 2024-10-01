@@ -140,24 +140,42 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	tfSecs := utils.TFToSecs(timeFrame)
 	var totalNum int
 	chanDown := make(chan *core.DownRange, 10)
+	curStart, curEnd := int64(0), int64(0)
 	if oldStart == 0 {
 		// The data does not exist, and all intervals are downloaded
 		// 数据不存在，下载全部区间
+		curStart, curEnd = startMS, endMS
 		chanDown <- &core.DownRange{Start: startMS, End: endMS}
 		totalNum = int((endMS-startMS)/1000) / tfSecs
 	} else {
 		if endMS > oldEnd {
 			// The rear part exceeds the downloaded range, and the download is behind
 			// 后部超过已下载范围，下载后面
+			curStart, curEnd = oldEnd, endMS
 			chanDown <- &core.DownRange{Start: oldEnd, End: endMS}
 			totalNum += int((endMS-oldEnd)/1000) / tfSecs
 		}
 		if startMS < oldStart {
 			// The front part exceeds the downloaded range, and the front part is downloaded
 			// 前部超过已下载范围，下载前面
+			if curStart == 0 {
+				curStart, curEnd = startMS, oldStart
+			} else {
+				curStart = startMS
+			}
 			chanDown <- &core.DownRange{Start: startMS, End: oldStart, Reverse: true}
 			totalNum += int((oldStart-startMS)/1000) / tfSecs
 		}
+	}
+	close(chanDown)
+	insId, err := sess.AddInsJob(AddInsKlineParams{
+		Sid:       exs.ID,
+		Timeframe: timeFrame,
+		StartMs:   curStart,
+		StopMs:    curEnd,
+	})
+	if err != nil || insId == 0 {
+		return 0, err
 	}
 	if pBar == nil && totalNum > 10000 {
 		pBar = utils.NewPrgBar(core.StepTotal, exs.Symbol)
@@ -168,7 +186,6 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 		bar = pBar.NewJob(totalNum)
 		defer bar.Done()
 	}
-	close(chanDown)
 	chanKline := make(chan []*banexg.Kline, 1000)
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -249,6 +266,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	}()
 
 	wg.Wait()
+	_ = sess.DelInsKline(ctx, insId)
 	if outErr != nil {
 		return saveNum, outErr
 	}

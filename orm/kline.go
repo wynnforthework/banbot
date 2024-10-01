@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -532,14 +533,27 @@ Before calling this method, it is necessary to determine whether it already exis
 调用此方法前必须通过GetKlineRange自行判断数据库中是否已存在，避免重复插入
 */
 func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kline, aggBig bool) (int64, *errs.Error) {
-	num, err := q.InsertKLines(timeFrame, sid, arr)
-	if err != nil {
-		return num, err
+	if len(arr) == 0 {
+		return 0, nil
 	}
 	startMS := arr[0].Time
 	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
 	endMS := arr[len(arr)-1].Time + tfMSecs
+	insId, err := q.AddInsJob(AddInsKlineParams{
+		Sid:       sid,
+		Timeframe: timeFrame,
+		StartMs:   startMS,
+		StopMs:    endMS,
+	})
+	if err != nil || insId == 0 {
+		return 0, err
+	}
+	num, err := q.InsertKLines(timeFrame, sid, arr)
+	if err != nil {
+		return num, err
+	}
 	err = q.UpdateKRange(sid, timeFrame, startMS, endMS, arr, aggBig)
+	_ = q.DelInsKline(context.Background(), insId)
 	return num, err
 }
 
@@ -1411,6 +1425,60 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 		}
 	}
 	return nil
+}
+
+/*
+UpdatePendingIns
+Update unfinished insertion tasks and call them when the robot starts,
+更新未完成的插入任务，在机器人启动时调用，
+*/
+func (q *Queries) UpdatePendingIns() *errs.Error {
+	ctx := context.Background()
+	items, err_ := q.GetAllInsKlines(ctx)
+	if err_ != nil {
+		return NewDbErr(core.ErrDbReadFail, err_)
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	log.Info("Updating pending insert jobs", zap.Int("num", len(items)))
+	for _, i := range items {
+		err := q.UpdateKRange(i.Sid, i.Timeframe, i.StartMs, i.StopMs, nil, true)
+		if err != nil {
+			return err
+		}
+		err_ = q.DelInsKline(ctx, i.ID)
+		if err_ != nil {
+			return NewDbErr(core.ErrDbExecFail, err_)
+		}
+	}
+	return nil
+}
+
+func (q *Queries) AddInsJob(add AddInsKlineParams) (int32, *errs.Error) {
+	ctx := context.Background()
+	ins, err_ := q.GetInsKline(ctx, add.Sid)
+	if err_ != nil && !errors.Is(err_, pgx.ErrNoRows) {
+		return 0, NewDbErr(core.ErrDbReadFail, err_)
+	}
+	if ins != nil && ins.ID > 0 {
+		log.Warn("insert candles for symbol locked, skip", zap.Int32("sid", add.Sid), zap.String("tf", add.Timeframe))
+		return 0, nil
+	}
+	tx, sess, err := q.NewTx(ctx)
+	if err != nil {
+		return 0, err
+	}
+	newId, err_ := sess.AddInsKline(ctx, add)
+	if err_ != nil {
+		_ = tx.Close(ctx, false)
+		return 0, NewDbErr(core.ErrDbExecFail, err_)
+	}
+	err = tx.Close(ctx, true)
+	if err != nil {
+		return 0, err
+	}
+	return newId, nil
 }
 
 func GetKlineAggs() []*KlineAgg {

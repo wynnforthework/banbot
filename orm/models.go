@@ -85,6 +85,14 @@ type IOrder struct {
 	Info        string  `json:"info"`
 }
 
+type InsKline struct {
+	ID        int32  `json:"id"`
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	StartMs   int64  `json:"start_ms"`
+	StopMs    int64  `json:"stop_ms"`
+}
+
 type KHole struct {
 	ID        int64  `json:"id"`
 	Sid       int32  `json:"sid"`

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/optmize"
 	"github.com/banbox/banexg/errs"
@@ -14,14 +15,13 @@ import (
 	"strings"
 )
 
-const VERSION = "0.1.1"
-
 type FuncEntry = func(args *config.CmdArgs) *errs.Error
 type FuncGetEntry = func(name string) (FuncEntry, []string)
 
 func RunCmd() {
 	if len(os.Args) < 2 {
-		printAndExit()
+		printMainHelp()
+		return
 	}
 	args := os.Args[1:]
 	runSubCmd(args, func(name string) (FuncEntry, []string) {
@@ -47,23 +47,23 @@ func RunCmd() {
 			runToolCmds(args[1:])
 		}
 		return entry, options
-	}, printAndExit)
+	}, printMainHelp)
 }
 
-func printAndExit() {
+func printMainHelp() {
 	tpl := `
 args: %s
 banbot %v
 please run with a subcommand:
-	trade:      live trade
-	backtest:   backtest with strategies and data
-	spider:     start the spider
-	optimize:   run hyper parameters optimization
-	kline:      run kline commands
-	tick:		run tick commands
-	tool: 		run tools
+    trade:      live trade
+    backtest:   backtest with strategies and data
+    spider:     start the spider
+    optimize:   run hyper parameters optimization
+    kline:      run kline commands
+    tick:       run tick commands
+    tool:       run tools
 `
-	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), VERSION))
+	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), core.Version))
 }
 
 func runKlineCmds(args []string) {
@@ -98,12 +98,13 @@ func runKlineCmds(args []string) {
 	}, func() {
 		tpl := `
 banbot kline:
-	down: 	download kline data from exchange
-	load: 	load kline data from zip/csv files
-	export:	export kline to csv files from db
-	purge: 	purge/delete kline data with args
-	correct: sync klines between timeframes
-	adj_factor: recalculate adjust factors
+	down: 		download kline data from exchange
+	load: 		load kline data from zip/csv files
+	export:		export kline to csv files from db
+	purge: 		purge/delete kline data with args
+	correct: 	sync klines between timeframes
+	adj_calc:   recalculate adjust factors
+	adj_export:	export adjust factors to csv
 please choose a valid action
 `
 		log.Warn(tpl)
@@ -174,6 +175,8 @@ banbot tool:
 	load_cal: 		load calenders
 	cmp_orders: 	compare backTest orders with exchange orders
 	data_server: 	serve a grpc server as data feeder
+	calc_perfs: 	calculate sharpe/sortino ratio for input data
+	corr: 			calculate correlation matrix for symbols 
 	`)
 	})
 }
@@ -258,7 +261,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "opt_rounds":
 			cmd.IntVar(&args.OptRounds, "opt-rounds", 30, "rounds num for single optimize job")
 		case "sampler":
-			cmd.StringVar(&args.Sampler, "sampler", "tpe", "hyper optimize method, tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes")
+			cmd.StringVar(&args.Sampler, "sampler", "bayes", "hyper optimize method, tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes")
 		case "each_pairs":
 			cmd.BoolVar(&args.EachPairs, "each-pairs", false, "run for each pairs")
 		case "concur":

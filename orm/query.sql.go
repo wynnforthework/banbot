@@ -130,6 +130,30 @@ func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, er
 	return id, err
 }
 
+const addInsKline = `-- name: AddInsKline :one
+insert into ins_kline ("sid", "timeframe", "start_ms", "stop_ms")
+values ($1, $2, $3, $4) RETURNING id
+`
+
+type AddInsKlineParams struct {
+	Sid       int32  `json:"sid"`
+	Timeframe string `json:"timeframe"`
+	StartMs   int64  `json:"start_ms"`
+	StopMs    int64  `json:"stop_ms"`
+}
+
+func (q *Queries) AddInsKline(ctx context.Context, arg AddInsKlineParams) (int32, error) {
+	row := q.db.QueryRow(ctx, addInsKline,
+		arg.Sid,
+		arg.Timeframe,
+		arg.StartMs,
+		arg.StopMs,
+	)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
 type AddKHolesParams struct {
 	Sid       int32  `json:"sid"`
 	Timeframe string `json:"timeframe"`
@@ -223,6 +247,16 @@ func (q *Queries) DelAdjFactors(ctx context.Context, sid int32) error {
 	return err
 }
 
+const delInsKline = `-- name: DelInsKline :exec
+delete from ins_kline
+where id=$1
+`
+
+func (q *Queries) DelInsKline(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, delInsKline, id)
+	return err
+}
+
 const delKHoleRange = `-- name: DelKHoleRange :exec
 delete from khole
 where sid = $1 and timeframe=$2 and start >= $3 and stop <= $4
@@ -293,6 +327,36 @@ func (q *Queries) GetAdjFactors(ctx context.Context, sid int32) ([]*AdjFactor, e
 			&i.SubID,
 			&i.StartMs,
 			&i.Factor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getAllInsKlines = `-- name: GetAllInsKlines :many
+select id, sid, timeframe, start_ms, stop_ms from ins_kline
+`
+
+func (q *Queries) GetAllInsKlines(ctx context.Context) ([]*InsKline, error) {
+	rows, err := q.db.Query(ctx, getAllInsKlines)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*InsKline{}
+	for rows.Next() {
+		var i InsKline
+		if err := rows.Scan(
+			&i.ID,
+			&i.Sid,
+			&i.Timeframe,
+			&i.StartMs,
+			&i.StopMs,
 		); err != nil {
 			return nil, err
 		}
@@ -376,6 +440,24 @@ func (q *Queries) GetIOrder(ctx context.Context, id int64) (*IOrder, error) {
 		&i.ProfitRate,
 		&i.Profit,
 		&i.Info,
+	)
+	return &i, err
+}
+
+const getInsKline = `-- name: GetInsKline :one
+select id, sid, timeframe, start_ms, stop_ms from ins_kline
+where sid=$1
+`
+
+func (q *Queries) GetInsKline(ctx context.Context, sid int32) (*InsKline, error) {
+	row := q.db.QueryRow(ctx, getInsKline, sid)
+	var i InsKline
+	err := row.Scan(
+		&i.ID,
+		&i.Sid,
+		&i.Timeframe,
+		&i.StartMs,
+		&i.StopMs,
 	)
 	return &i, err
 }

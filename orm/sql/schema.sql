@@ -218,5 +218,17 @@ CREATE INDEX "idx_adj_factors_sid" ON "public"."adj_factors" USING btree ("sid")
 CREATE INDEX "idx_adj_factors_start" ON "public"."adj_factors" USING btree ("start_ms");
 
 
-
+-- ----------------------------
+-- Table structure for calendars
+-- ----------------------------
+DROP TABLE IF EXISTS "public"."ins_kline";
+CREATE TABLE "public"."ins_kline"
+(
+    "id"              SERIAL    NOT NULL PRIMARY KEY,
+    "sid"           int4        not null,
+    "timeframe"   varchar(5)    not null,
+    "start_ms"          int8 not null,
+    "stop_ms"          int8  not null
+);
+CREATE INDEX "idx_ins_kline_sid" ON "public"."ins_kline" USING btree ("sid");
 

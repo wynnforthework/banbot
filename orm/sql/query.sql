@@ -176,3 +176,20 @@ order by start_ms;
 -- name: DelAdjFactors :exec
 delete from adj_factors
 where sid=$1;
+
+
+
+-- name: GetInsKline :one
+select * from ins_kline
+where sid=$1;
+
+-- name: GetAllInsKlines :many
+select * from ins_kline;
+
+-- name: DelInsKline :exec
+delete from ins_kline
+where id=$1;
+
+-- name: AddInsKline :one
+insert into ins_kline ("sid", "timeframe", "start_ms", "stop_ms")
+values ($1, $2, $3, $4) RETURNING id;

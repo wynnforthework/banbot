@@ -55,7 +55,8 @@ func Setup() *errs.Error {
 		return errs.New(core.ErrDbConnFail, err)
 	}
 	pool = dbPool
-	row := pool.QueryRow(context.Background(), "show max_connections;")
+	ctx := context.Background()
+	row := pool.QueryRow(ctx, "show max_connections;")
 	var maxConnections string
 	err = row.Scan(&maxConnections)
 	if err != nil {
@@ -63,7 +64,12 @@ func Setup() *errs.Error {
 	}
 	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize),
 		zap.String("DB_MAX_CONN", maxConnections))
-	return nil
+	sess, conn, err2 := Conn(ctx)
+	if err2 != nil {
+		return err2
+	}
+	defer conn.Release()
+	return sess.UpdatePendingIns()
 }
 
 func Conn(ctx context.Context) (*Queries, *pgxpool.Conn, *errs.Error) {
