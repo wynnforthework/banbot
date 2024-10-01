@@ -28,10 +28,7 @@ banbot support exchanges powered by [banexg](https://github/banbox/banexg):
 | ![binance](https://user-images.githubusercontent.com/1294454/29604020-d5483cdc-87ee-11e7-94c7-d1a8d9169293.jpg) | binance | spot/usd-m/coin-m | *   | Y         |
 
 ### How to start
-install package:
-```shell
-go get github.com/banbox/banbot
-```
+Please go to [BanBot Website](https://bot.banbox.top/) for documents.
 
 ### Contributing
 Follow the [How to Contribute](/doc/contribute.md). Please do get hesitate to get touch via the [Discord](https://discord.com/invite/XXjA8ctqga) Chat to discuss development, new features, and the future roadmap.  
