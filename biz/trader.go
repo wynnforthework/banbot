@@ -89,7 +89,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	lock.Unlock()
 	odMgr := GetOdMgr(account)
 	var err *errs.Error
-	if !bar.IsWarmUp {
+	if !bar.IsWarmUp && len(allOrders) > 0 {
 		// The order status may be modified here
 		// 这里可能修改订单状态
 		err = odMgr.UpdateByBar(allOrders, bar)

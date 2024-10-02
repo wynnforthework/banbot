@@ -242,7 +242,7 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 }
 
 func optAndPrint(pol *config.RunPolicyConfig, args *config.CmdArgs, allPairs []string, file *os.File) *errs.Error {
-	file.WriteString(fmt.Sprintf("# run hyper optimize: %v\n", args.Sampler))
+	file.WriteString(fmt.Sprintf("# run hyper optimize: %v, rounds: %v\n", args.Sampler, args.OptRounds))
 	startDt := btime.ToDateStr(config.TimeRange.StartMS, "")
 	endDt := btime.ToDateStr(config.TimeRange.EndMS, "")
 	file.WriteString(fmt.Sprintf("# date range: %v - %v\n", startDt, endDt))
@@ -522,6 +522,10 @@ func runBayes(rounds int, params []*core.Param, loop FuncOptTask) *errs.Error {
 	})
 	if err_ != nil {
 		return errs.New(errs.CodeRunTime, err_)
+	}
+	err_ = opt.ExplorationErr()
+	if err_ != nil {
+		log.Warn("bayes ExplorationErr, early stop", zap.String("err", err_.Error()))
 	}
 	return nil
 }
