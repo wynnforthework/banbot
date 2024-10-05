@@ -5,13 +5,11 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/dgraph-io/ristretto"
-	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"math"
 	"os"
 	"runtime/pprof"
-	"strconv"
 	"strings"
 )
 
@@ -143,55 +141,6 @@ func DumpPerfs(outDir string) {
 		return
 	}
 	log.Info("dump strtg_perfs ok", zap.String("path", outName))
-}
-
-func LoadPerfs(inDir string) {
-	inPath := fmt.Sprintf("%s/strtg_perfs.yml", inDir)
-	_, err_ := os.Stat(inPath)
-	if err_ != nil {
-		return
-	}
-	data, err_ := os.ReadFile(inPath)
-	if err_ != nil {
-		log.Error("read strtg_perfs.yml fail", zap.Error(err_))
-		return
-	}
-	var unpak map[string]map[string]interface{}
-	err_ = yaml.Unmarshal(data, &unpak)
-	if err_ != nil {
-		log.Error("unmarshal strtg_perfs fail", zap.Error(err_))
-		return
-	}
-	for strtg, cfg := range unpak {
-		sta := &PerfSta{}
-		err_ = mapstructure.Decode(cfg, &sta)
-		if err_ != nil {
-			log.Error(fmt.Sprintf("decode %s fail", strtg), zap.Error(err_))
-			continue
-		}
-		StratPerfSta[strtg] = sta
-		perfVal, ok := cfg["perf"]
-		if ok && perfVal != nil {
-			var perf = map[string]string{}
-			err_ = mapstructure.Decode(perfVal, &perf)
-			if err_ != nil {
-				log.Error(fmt.Sprintf("decode %s.perf fail", strtg), zap.Error(err_))
-				continue
-			}
-			for pairTf, arrStr := range perf {
-				arr := strings.Split(arrStr, "|")
-				num, _ := strconv.Atoi(arr[0])
-				profit, _ := strconv.ParseFloat(arr[1], 64)
-				score, _ := strconv.ParseFloat(arr[2], 64)
-				JobPerfs[fmt.Sprintf("%s_%s", strtg, pairTf)] = &JobPerf{
-					Num:       num,
-					TotProfit: profit,
-					Score:     score,
-				}
-			}
-		}
-	}
-	log.Info("load strtg_perfs ok", zap.String("path", inPath))
 }
 
 /*

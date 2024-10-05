@@ -37,7 +37,7 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	if core.LiveMode {
 		logCores = append(logCores, rpc.NewExcNotify())
 	}
-	log.Setup(args.LogLevel, args.Logfile, logCores...)
+	args.SetLog(true, logCores...)
 	err = core.Setup()
 	if err != nil {
 		return err
@@ -57,7 +57,8 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func LoadRefreshPairs(dp data.IProvider) *errs.Error {
+func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
+	goods.ShowLog = showLog
 	pairs, err := goods.RefreshPairList()
 	if err != nil {
 		return err
@@ -71,12 +72,14 @@ func LoadRefreshPairs(dp data.IProvider) *errs.Error {
 	if err != nil {
 		return err
 	}
-	core.PrintStratGroups()
+	if showLog {
+		core.PrintStratGroups()
+	}
 	return dp.SubWarmPairs(warms, true)
 }
 
-func AutoRefreshPairs(dp data.IProvider) {
-	err := LoadRefreshPairs(dp)
+func AutoRefreshPairs(dp data.IProvider, showLog bool) {
+	err := LoadRefreshPairs(dp, showLog)
 	if err != nil {
 		log.Error("refresh pairs fail", zap.Error(err))
 	}

@@ -19,6 +19,7 @@ import (
 
 type LocalOrderMgr struct {
 	OrderMgr
+	showLog bool
 }
 
 var (
@@ -26,15 +27,16 @@ var (
 	tipAmtLock  sync.Mutex
 )
 
-func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
+func InitLocalOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool), showLog bool) {
 	for account := range config.Accounts {
 		mgr, ok := accOdMgrs[account]
 		if !ok {
 			mgr = &LocalOrderMgr{
-				OrderMgr{
+				OrderMgr: OrderMgr{
 					callBack: callBack,
 					Account:  account,
 				},
+				showLog: showLog,
 			}
 			accOdMgrs[account] = mgr
 		}
@@ -216,12 +218,16 @@ func (o *LocalOrderMgr) fillPendingEnter(od *orm.InOutOrder, price float64, fill
 		exOrder.Amount, err = exchange.PrecAmount(market, entAmount)
 		if err != nil || exOrder.Amount == 0 {
 			if err != nil {
-				log.Warn("prec enter amount fail", zap.String("symbol", od.Symbol),
-					zap.Float64("amt", entAmount), zap.Error(err))
+				if o.showLog {
+					log.Warn("prec enter amount fail", zap.String("symbol", od.Symbol),
+						zap.Float64("amt", entAmount), zap.Error(err))
+				}
 			} else {
 				tipAmtLock.Lock()
 				if _, ok := tipAmtZeros[od.Symbol]; !ok {
-					log.Info("prec enter amount zero", zap.String("symbol", od.Symbol))
+					if o.showLog {
+						log.Info("prec enter amount zero", zap.String("symbol", od.Symbol))
+					}
 					tipAmtZeros[od.Symbol] = true
 				}
 				tipAmtLock.Unlock()

@@ -15,7 +15,6 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
-	utils2 "github.com/banbox/banexg/utils"
 	"github.com/c-bata/goptuna"
 	"github.com/c-bata/goptuna/cmaes"
 	"github.com/c-bata/goptuna/tpe"
@@ -60,41 +59,42 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 		log.Warn("`run-period` cannot be less than 1 hour")
 		return nil
 	}
-	outDir := filepath.Join(config.GetDataDir(), "backtest", "bt_opt")
+	outDir := filepath.Join(config.GetDataDir(), "backtest", "bt_opt_"+btOptHash(args))
 	err_ := utils.EnsureDir(outDir, 0755)
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
+	log.Info("write bt over opt to", zap.String("dir", outDir))
 	args.OutPath = filepath.Join(outDir, "opt.log")
 	curMs := allStartMs + reviewMSecs
 	var allHisOds []*orm.InOutOrder
 	var lastWal map[string]float64
 	var lastRes *BTResult
+	initPols := config.RunPolicy
+	lastPols := config.RunPolicy
+	pbar := utils.NewPrgBar(int((allEndMs-curMs)/1000), "BtOpt")
+	defer pbar.Close()
 	for curMs < allEndMs {
+		pbar.Add(int(runMSecs / 1000))
 		dateRange.StartMS = curMs - reviewMSecs
 		dateRange.EndMS = curMs
-		fname := fmt.Sprintf("pol_%v_%v.yml", dateRange.StartMS/1000, curMs/1000)
-		cfgPath := filepath.Join(outDir, fname)
-		var polData []byte
-		if !utils.Exists(cfgPath) {
-			polStr, err := runOptimize(args, 11)
+		fname := fmt.Sprintf("opt_%v.log", dateRange.StartMS/1000)
+		args.OutPath = filepath.Join(outDir, fname)
+		var polStr string
+		polStr, err = pickFromExists(args.OutPath, args.Picker)
+		if err != nil {
+			return err
+		}
+		if polStr == "" {
+			config.RunPolicy = initPols
+			polStr, err = runOptimize(args, 11)
 			if err != nil {
 				return err
-			}
-			polData = []byte(polStr)
-			err_ = utils2.WriteFile(cfgPath, polData)
-			if err_ != nil {
-				log.Warn("write pol cache fail", zap.Error(err_))
-			}
-		} else {
-			polData, err_ = utils2.ReadFile(cfgPath)
-			if err_ != nil {
-				return errs.New(errs.CodeIOReadFail, err_)
 			}
 		}
 		biz.ResetVars()
 		var unpak = make(map[string]interface{})
-		err_ = yaml.Unmarshal(polData, &unpak)
+		err_ = yaml.Unmarshal([]byte(polStr), &unpak)
 		if err_ != nil {
 			return errs.New(errs.CodeRunTime, err_)
 		}
@@ -109,12 +109,13 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 			curMs += runMSecs
 			continue
 		}
-		config.RunPolicy = cfg.RunPolicy
+		applyOptPolicies(lastPols, cfg.RunPolicy, args.Alpha)
+		lastPols = config.RunPolicy
 		wallets := biz.GetWallets("")
 		core.BotRunning = true
 		dateRange.StartMS = curMs
 		dateRange.EndMS = curMs + runMSecs
-		bt := NewBackTest()
+		bt := NewBackTest(false)
 		if lastWal != nil {
 			wallets.SetWallets(lastWal)
 		}
@@ -129,6 +130,70 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 		curMs += runMSecs
 	}
 	return nil
+}
+
+func btOptHash(args *config.CmdArgs) string {
+	raws := []string{
+		args.Sampler,
+		strconv.FormatBool(args.EachPairs),
+	}
+	ymlData, err_ := config.DumpYaml()
+	if ymlData != nil {
+		raws = append(raws, string(ymlData))
+	} else {
+		log.Warn("dump config yaml fail", zap.Error(err_))
+	}
+	for _, p := range config.RunPolicy {
+		raws = append(raws, p.Key())
+	}
+	res := utils.MD5([]byte(strings.Join(raws, "")))
+	return res[:10]
+}
+
+func pickFromExists(path string, picker string) (string, *errs.Error) {
+	paths, err_ := utils.GetFilesWithPrefix(path)
+	if err_ != nil {
+		return "", errs.New(errs.CodeIOReadFail, err_)
+	}
+	if len(paths) == 0 {
+		return "", nil
+	}
+	return collectOptLog(paths, 11, picker)
+}
+
+/*
+applyOptPolicies
+Update strategy group parameters using EMA to avoid significant differences in parameters before and after rolling backtesting
+使用EMA更新策略组参数，避免滚动回测前后参数差异较大
+*/
+func applyOptPolicies(olds, pols []*config.RunPolicyConfig, alpha float64) {
+	if alpha >= 1 {
+		config.RunPolicy = pols
+		return
+	}
+	var data = make(map[string]*config.RunPolicyConfig)
+	for _, p := range olds {
+		data[p.Key()] = p
+	}
+	var res = make([]*config.RunPolicyConfig, 0, len(pols))
+	for _, p := range pols {
+		key := p.Key()
+		old, _ := data[key]
+		if old == nil {
+			log.Warn("no match old", zap.String("for", key))
+			res = append(res, p)
+		} else {
+			item := p.Clone()
+			for k, v := range item.Params {
+				oldV, ok := old.Params[k]
+				if ok {
+					item.Params[k] = v*alpha + oldV*(1-alpha)
+				}
+			}
+			res = append(res, item)
+		}
+	}
+	config.RunPolicy = res
 }
 
 func RunOptimize(args *config.CmdArgs) *errs.Error {
@@ -159,6 +224,7 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 	// 列举所有标的
 	allPairs := config.Pairs
 	if len(allPairs) == 0 {
+		goods.ShowLog = false
 		allPairs, err = goods.RefreshPairList()
 		if err != nil {
 			return "", err
@@ -193,7 +259,9 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 		for _, p := range args.Configs {
 			cmds = append(cmds, "-config", p)
 		}
-		logPath := strings.TrimSuffix(args.OutPath, filepath.Ext(args.OutPath))
+		if args.Picker != "" {
+			cmds = append(cmds, "-picker", args.Picker)
+		}
 		startStr := strconv.FormatInt(config.TimeRange.StartMS/1000, 10)
 		endStr := strconv.FormatInt(config.TimeRange.EndMS/1000, 10)
 		err = utils.ParallelRun(groups, args.Concur, func(i int, pol *config.RunPolicyConfig) *errs.Error {
@@ -210,7 +278,7 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 			cfgFile.WriteString(pol.ToYaml())
 			cfgFile.Close()
 			curCmds := append(cmds, "-config", cfgFile.Name())
-			outPath := logPath + iStr + ".log"
+			outPath := args.OutPath + "." + iStr
 			curCmds = append(curCmds, "-out", outPath)
 			logOuts = append(logOuts, outPath)
 			log.Warn("runing: " + strings.Join(curCmds, " "))
@@ -238,36 +306,41 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 			return "", err
 		}
 	}
-	return collectOptLog(logOuts, minScore)
+	return collectOptLog(logOuts, minScore, args.Picker)
 }
 
+/*
+optAndPrint optimize for raw policy group;
+write one or multiple optimize result to file.
+*/
 func optAndPrint(pol *config.RunPolicyConfig, args *config.CmdArgs, allPairs []string, file *os.File) *errs.Error {
 	file.WriteString(fmt.Sprintf("# run hyper optimize: %v, rounds: %v\n", args.Sampler, args.OptRounds))
 	startDt := btime.ToDateStr(config.TimeRange.StartMS, "")
 	endDt := btime.ToDateStr(config.TimeRange.EndMS, "")
 	file.WriteString(fmt.Sprintf("# date range: %v - %v\n", startDt, endDt))
-	res := make([]*GroupScore, 0, 5)
+	var res []*GroupScore
 	if args.EachPairs {
 		pairs := pol.Pairs
 		if len(pairs) == 0 {
 			pairs = allPairs
 		}
+		res = make([]*GroupScore, 0, len(pairs))
 		for _, p := range pairs {
 			pol.Pairs = []string{p}
-			item := optForGroup(pol, args.Sampler, args.OptRounds, file)
+			item := optForGroup(pol, args.Sampler, args.Picker, args.OptRounds, file)
 			if item != nil {
 				res = append(res, item)
 			}
 		}
+		sort.Slice(res, func(i, j int) bool {
+			return res[i].Score > res[j].Score
+		})
 	} else {
-		item := optForGroup(pol, args.Sampler, args.OptRounds, file)
+		item := optForGroup(pol, args.Sampler, args.Picker, args.OptRounds, file)
 		if item != nil {
 			res = append(res, item)
 		}
 	}
-	sort.Slice(res, func(i, j int) bool {
-		return res[i].Score > res[j].Score
-	})
 	for _, gp := range res {
 		if gp.Score <= 0 {
 			break
@@ -286,7 +359,7 @@ optForGroup
 Optimize the hyperparameters of a policy and automatically search for the best combination of long, short, and both.
 对某个策略超参数调优，自动搜索long/short/both的最佳组合。
 */
-func optForGroup(pol *config.RunPolicyConfig, method string, rounds int, flog *os.File) *GroupScore {
+func optForGroup(pol *config.RunPolicyConfig, method, picker string, rounds int, flog *os.File) *GroupScore {
 	groups := make([]*config.RunPolicyConfig, 0, 3)
 	var long, short, both *config.RunPolicyConfig
 	if pol.Dirt == "any" {
@@ -305,7 +378,7 @@ func optForGroup(pol *config.RunPolicyConfig, method string, rounds int, flog *o
 	var bestPols []*config.RunPolicyConfig
 	for _, p := range groups {
 		config.RunPolicy = []*config.RunPolicyConfig{p}
-		optForPol(p, method, rounds, flog)
+		optForPol(p, method, picker, rounds, flog)
 		if p.Score > bestScore {
 			bestOdNum = p.MaxOpen
 			bestScore = p.Score
@@ -342,10 +415,10 @@ func optForGroup(pol *config.RunPolicyConfig, method string, rounds int, flog *o
 		config.RunPolicy = []*config.RunPolicyConfig{long, short}
 		var unionScore float64
 		if long.Score > short.Score {
-			optForPol(short, method, rounds, flog)
+			optForPol(short, method, picker, rounds, flog)
 			unionScore = short.Score
 		} else {
-			optForPol(long, method, rounds, flog)
+			optForPol(long, method, picker, rounds, flog)
 			unionScore = long.Score
 		}
 		if unionScore > bestScore {
@@ -370,10 +443,8 @@ Before calling this method, you need to set 'config. RunPolicy`
 对策略任务执行优化，支持bayes/tpe/cames等
 调用此方法前需要设置 `config.RunPolicy`
 */
-func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.File) {
-	tfStr := strings.Join(pol.RunTimeframes, "|")
-	pairStr := strings.Join(pol.Pairs, "|")
-	title := fmt.Sprintf("%s/%s/%s", pol.ID(), tfStr, pairStr)
+func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, flog *os.File) {
+	title := pol.Key()
 	// 重置PairParams，避免影响传入参数
 	pol.PairParams = make(map[string]map[string]float64)
 	pol.Score = -998
@@ -384,9 +455,7 @@ func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.
 		return
 	}
 	flog.WriteString(fmt.Sprintf("\n============== %s =============\n", title))
-	var minLoss = float64(998)
-	var best map[string]float64
-	var bestBt *BTResult
+	var resList = make([]*OptInfo, 0, rounds)
 	runOptJob := func(data map[string]float64) (float64, *errs.Error) {
 		for k, v := range data {
 			pol.Params[k] = v
@@ -396,11 +465,11 @@ func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.
 			paramsToStr(data, loss), bt.OrderNum, bt.TotProfitPct, bt.MaxDrawDownPct, bt.SharpeRatio)
 		flog.WriteString(line)
 		log.Warn(line)
-		if loss < minLoss {
-			minLoss = loss
-			best = data
-			bestBt = bt.BTResult
-		}
+		resList = append(resList, &OptInfo{
+			Params:   data,
+			Score:    -loss,
+			BTResult: bt.BTResult,
+		})
 		return loss, nil
 	}
 	var err *errs.Error
@@ -409,22 +478,26 @@ func optForPol(pol *config.RunPolicyConfig, method string, rounds int, flog *os.
 	} else {
 		err = runGOptuna(method, rounds, params, runOptJob)
 	}
+	best := calcBestBy(resList, picker)
+	if best.BTResult == nil {
+		best.runGetBtResult(pol)
+	}
 	if err != nil {
 		log.Error("optimize fail", zap.String("job", title), zap.Error(err))
 	} else {
-		line := "[best] " + paramsToStr(best, minLoss)
+		line := "[best] " + paramsToStr(best.Params, -best.Score)
 		flog.WriteString(line + "\n")
 		log.Warn(line)
 	}
-	pol.Params = best
-	pol.Score = -minLoss
-	pol.MaxOpen = bestBt.OrderNum
+	pol.Params = best.Params
+	pol.Score = best.Score
+	pol.MaxOpen = best.OrderNum
 }
 
 func runBTOnce() (*BackTest, float64) {
 	core.BotRunning = true
 	biz.ResetVars()
-	bt := NewBackTest()
+	bt := NewBackTest(true)
 	bt.Run()
 	var loss float64
 	if bt.TotProfitPct <= 0 {
@@ -506,7 +579,7 @@ func runBayes(rounds int, params []*core.Param, loop FuncOptTask) *errs.Error {
 	options := []bayesopt.OptimizerOption{
 		bayesopt.WithParallel(1),
 		bayesopt.WithRounds(rounds),
-		bayesopt.WithRandomRounds(rounds / 3),
+		bayesopt.WithRandomRounds(rounds / 2),
 	}
 	opt := bayesopt.New(bysParams, options...)
 	_, _, err_ := opt.Optimize(func(m map[bayesopt.Param]float64) float64 {
@@ -525,7 +598,7 @@ func runBayes(rounds int, params []*core.Param, loop FuncOptTask) *errs.Error {
 	}
 	err_ = opt.ExplorationErr()
 	if err_ != nil {
-		log.Warn("bayes ExplorationErr, early stop", zap.String("err", err_.Error()))
+		log.Warn("bayes early stop", zap.String("err", err_.Error()))
 	}
 	return nil
 }
@@ -563,7 +636,7 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		}
 		return nil
 	})
-	res, err := collectOptLog(paths, 0)
+	res, err := collectOptLog(paths, 0, args.Picker)
 	if err != nil {
 		return err
 	}
@@ -571,12 +644,12 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
+func collectOptLog(paths []string, minScore float64, picker string) (string, *errs.Error) {
 	res := make([]*OptGroup, 0)
 	for _, path := range paths {
 		var name, pair, dirt, tfStr string
-		var best *OptInfo
 		inUnion := false
+		var items []*OptInfo
 		var long, short, both, union, longMain, shortMain *OptInfo
 		fdata, err_ := os.ReadFile(path)
 		if err_ != nil {
@@ -594,11 +667,14 @@ func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 			if union != nil && (twoSide == nil || union.Score > twoSide.Score) {
 				twoSide = union
 			}
+			sideMain := 0
 			if longMain != nil && (twoSide == nil || longMain.Score > twoSide.Score) {
 				twoSide = longMain
+				sideMain = 1
 			}
 			if shortMain != nil && (twoSide == nil || shortMain.Score > twoSide.Score) {
 				twoSide = shortMain
+				sideMain = 2
 			}
 			var pols []*OptInfo
 			var bestScore float64
@@ -609,7 +685,7 @@ func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 				useOne = false
 			} else {
 				scoreRate := twoSide.Score / oneSide.Score
-				odNumRate := float64(twoSide.OdNum) / float64(oneSide.OdNum)
+				odNumRate := float64(twoSide.OrderNum) / float64(oneSide.OrderNum)
 				if scoreRate > 1.25 || scoreRate > 1.1 && odNumRate < 1.5 {
 					useOne = false
 				}
@@ -617,12 +693,16 @@ func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 			if !useOne {
 				bestScore = twoSide.Score
 				if twoSide.Dirt == "long" {
-					long.Param = twoSide.Param
+					long.Params = twoSide.Params
 				} else if twoSide.Dirt == "short" {
-					short.Param = twoSide.Param
+					short.Params = twoSide.Params
 				}
 				if twoSide.Dirt == "" {
 					pols = []*OptInfo{twoSide}
+				} else if sideMain == 1 {
+					pols = []*OptInfo{long, longMain}
+				} else if sideMain == 2 {
+					pols = []*OptInfo{short, shortMain}
 				} else {
 					pols = []*OptInfo{long, short}
 				}
@@ -639,33 +719,69 @@ func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 			})
 			long, short, both, union, longMain, shortMain = nil, nil, nil, nil, nil, nil
 			name, pair, dirt, tfStr = "", "", "", ""
-			best, inUnion = nil, false
+			inUnion = false
+			items = nil
 		}
 		lines := strings.Split(string(fdata), "\n")[1:]
 		for _, line := range lines {
 			if line == "" || strings.HasPrefix(line, "[best]") {
+				// end section, calc best
+				best := calcBestBy(items, picker)
 				if best != nil {
+					needRun := best.BTResult == nil
 					if inUnion {
 						union = best
 						union.Dirt = "union"
 						inUnion = false
+						if needRun {
+							config.RunPolicy = []*config.RunPolicyConfig{
+								long.ToPol(name, dirt, tfStr, pair),
+								short.ToPol(name, dirt, tfStr, pair),
+							}
+						}
 					} else if dirt == "long" {
 						if long == nil {
 							long = best
+							if needRun {
+								config.RunPolicy = []*config.RunPolicyConfig{
+									long.ToPol(name, dirt, tfStr, pair),
+								}
+							}
 						} else {
 							shortMain = best
+							if needRun {
+								config.RunPolicy = []*config.RunPolicyConfig{
+									short.ToPol(name, dirt, tfStr, pair),
+									shortMain.ToPol(name, dirt, tfStr, pair),
+								}
+							}
 						}
 					} else if dirt == "short" {
 						if short == nil {
 							short = best
+							if needRun {
+								config.RunPolicy = []*config.RunPolicyConfig{
+									short.ToPol(name, dirt, tfStr, pair)}
+							}
 						} else {
 							longMain = best
+							if needRun {
+								config.RunPolicy = []*config.RunPolicyConfig{
+									long.ToPol(name, dirt, tfStr, pair),
+									longMain.ToPol(name, dirt, tfStr, pair)}
+							}
 						}
 					} else {
 						both = best
+						if needRun {
+							config.RunPolicy = []*config.RunPolicyConfig{both.ToPol(name, dirt, tfStr, pair)}
+						}
 					}
-					best = nil
+					if needRun {
+						best.runGetBtResult(config.RunPolicy[len(config.RunPolicy)-1])
+					}
 				}
+				items = nil
 				continue
 			}
 			if strings.HasPrefix(line, "  ") || strings.HasPrefix(line, "# ") {
@@ -674,7 +790,7 @@ func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 			}
 			if strings.HasPrefix(line, "==============") && strings.HasSuffix(line, "=============") {
 				n, d, t, p := parseSectionTitle(strings.Split(line, " ")[1])
-				if p != pair {
+				if p != pair || n != name || t != tfStr {
 					saveGroup()
 				}
 				name, dirt, tfStr, pair = n, d, t, p
@@ -683,10 +799,7 @@ func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 				inUnion = true
 			} else if strings.HasPrefix(line, "loss:") {
 				opt := parseOptLine(line)
-				if best == nil || opt.Score > best.Score {
-					best = opt
-					best.Dirt = dirt
-				}
+				items = append(items, opt)
 			}
 		}
 		saveGroup()
@@ -711,7 +824,8 @@ func collectOptLog(paths []string, minScore float64) (string, *errs.Error) {
 			if p.Dirt != "" {
 				b.WriteString(fmt.Sprintf("    dirt: %s\n", p.Dirt))
 			}
-			b.WriteString(fmt.Sprintf("    params: {%s}\n", p.Param))
+			paramStr, _ := utils.MapToStr(p.Params)
+			b.WriteString(fmt.Sprintf("    params: {%s}\n", paramStr))
 		}
 	}
 	return b.String(), nil
@@ -742,45 +856,33 @@ func parsePolID(id string) (string, string) {
 	return name, dirt
 }
 
-type OptGroup struct {
-	Items []*OptInfo
-	Score float64
-	Name  string
-	Pair  string
-	TFStr string
-}
-
-type OptInfo struct {
-	Dirt  string
-	Score float64
-	Param string
-	OdNum int
-}
-
 func parseOptLine(line string) *OptInfo {
-	raw := strings.Split(line, " ")
-	row := make([]string, 0, len(raw))
-	for _, text := range raw {
-		if text == "" {
-			continue
-		}
-		row = append(row, strings.TrimSpace(text))
+	if !strings.HasPrefix(line, "loss:") {
+		return nil
 	}
-	num := len(row)
-	cid := 0
-	res := &OptInfo{}
-	for cid+1 < num {
-		tag, str := row[cid], row[cid+1]
-		if tag == "loss:" {
-			loss, _ := strconv.ParseFloat(str, 64)
-			res.Score = -loss
-		} else if tag == "odNum:" {
-			odNum, _ := strconv.ParseInt(strings.ReplaceAll(str, ",", ""), 10, 64)
-			res.OdNum = int(odNum)
-			res.Param = strings.Join(row[2:cid], " ")
-			break
+	paraStart := strings.IndexRune(line, '\t')
+	paraEnd := strings.Index(line, "odNum:")
+	res := &OptInfo{Params: make(map[string]float64), BTResult: &BTResult{}}
+	loss, _ := strconv.ParseFloat(strings.TrimSpace(line[5:paraStart]), 64)
+	res.Score = -loss
+	paraArr := strings.Split(strings.TrimSpace(line[paraStart:paraEnd]), ",")
+	for _, str := range paraArr {
+		arr := strings.Split(strings.TrimSpace(str), ":")
+		res.Params[arr[0]], _ = strconv.ParseFloat(strings.TrimSpace(arr[1]), 64)
+	}
+	prefArr := strings.Split(strings.TrimSpace(line[paraEnd:]), ",")
+	for _, str := range prefArr {
+		arr := strings.Split(strings.TrimSpace(str), ":")
+		key, val := arr[0], strings.TrimSpace(arr[1])
+		if key == "odNum" {
+			res.OrderNum, _ = strconv.Atoi(val)
+		} else if key == "profit" {
+			res.TotProfitPct, _ = strconv.ParseFloat(val[:len(val)-1], 64)
+		} else if key == "drawDown" {
+			res.MaxDrawDownPct, _ = strconv.ParseFloat(val[:len(val)-1], 64)
+		} else if key == "sharpe" {
+			res.SharpeRatio, _ = strconv.ParseFloat(val, 64)
 		}
-		cid += 2
 	}
 	return res
 }

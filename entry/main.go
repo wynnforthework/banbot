@@ -37,7 +37,7 @@ func RunCmd() {
 		case "spider":
 			entry = RunSpider
 		case "optimize":
-			options = []string{"out", "opt_rounds", "sampler", "each_pairs", "concur"}
+			options = []string{"out", "opt_rounds", "sampler", "picker", "each_pairs", "concur"}
 			entry = optmize.RunOptimize
 		case "kline":
 			runKlineCmds(args[1:])
@@ -143,10 +143,11 @@ func runToolCmds(args []string) {
 		var entry FuncEntry
 		switch name {
 		case "collect_opt":
-			options = []string{"in"}
+			options = []string{"in", "picker"}
 			entry = optmize.CollectOptLog
 		case "bt_opt":
-			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur"}
+			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
+				"concur", "alpha"}
 			entry = optmize.RunBTOverOpt
 		case "load_cal":
 			options = []string{"in"}
@@ -262,6 +263,10 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.IntVar(&args.OptRounds, "opt-rounds", 30, "rounds num for single optimize job")
 		case "sampler":
 			cmd.StringVar(&args.Sampler, "sampler", "bayes", "hyper optimize method, tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes")
+		case "picker":
+			cmd.StringVar(&args.Picker, "picker", "score", "Method for selecting targets from multiple hyperparameter optimization results")
+		case "alpha":
+			cmd.Float64Var(&args.Alpha, "alpha", 1, "ma alpha for calculating ema in hyperOpt")
 		case "each_pairs":
 			cmd.BoolVar(&args.EachPairs, "each-pairs", false, "run for each pairs")
 		case "concur":

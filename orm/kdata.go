@@ -586,9 +586,12 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	barNum := int((endMS - startMS) / tfMSecs)
 	startText := btime.ToDateStr(startMS, "")
 	endText := btime.ToDateStr(endMS, "")
-	log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
-	var pBar = utils.NewPrgBar(len(exsList)*core.StepTotal, "")
-	defer pBar.Close()
+	var pBar *utils.PrgBar
+	if barNum*len(exsList) > 99000 {
+		log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
+		pBar = utils.NewPrgBar(len(exsList)*core.StepTotal, "BulkDown")
+		defer pBar.Close()
+	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err

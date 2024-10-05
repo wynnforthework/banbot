@@ -16,7 +16,7 @@ func initApp() *errs.Error {
 	if err != nil {
 		return err
 	}
-	log.Setup(config.Args.LogLevel, config.Args.Logfile)
+	config.Args.SetLog(true)
 	err = exg.Setup()
 	if err != nil {
 		return err

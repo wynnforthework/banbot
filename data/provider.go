@@ -29,6 +29,7 @@ type Provider[T IKlineFeeder] struct {
 	newFeeder func(pair string, tfs []string) (T, *errs.Error)
 	dirtyVers chan int
 	dirtyLast int
+	showLog   bool
 }
 
 func (p *Provider[IKlineFeeder]) UnSubPairs(pairs ...string) []string {
@@ -120,9 +121,12 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 	for _, job := range warmJobs {
 		jobNum += len(job.tfWarms)
 	}
-	log.Info(fmt.Sprintf("warmup for %d pairs, %v jobs", len(warmJobs), jobNum))
-	pBar := utils.NewPrgBar(jobNum*core.StepTotal, "warmup")
-	defer pBar.Close()
+	var pBar *utils.PrgBar
+	if p.showLog {
+		log.Info(fmt.Sprintf("warmup for %d pairs, %v jobs", len(warmJobs), jobNum))
+		pBar = utils.NewPrgBar(jobNum*core.StepTotal, "warmup")
+		defer pBar.Close()
+	}
 	startTime := btime.TimeMS()
 	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(_ int, job *WarmJob) *errs.Error {
 		hold := job.hold
@@ -139,7 +143,7 @@ type HistProvider struct {
 	Provider[IHistKlineFeeder]
 }
 
-func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) *HistProvider {
+func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd, showLog bool) *HistProvider {
 	return &HistProvider{
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
@@ -148,7 +152,7 @@ func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) *HistProvider {
 				if err != nil {
 					return nil, err
 				}
-				feeder, err := NewDBKlineFeeder(exs, callBack)
+				feeder, err := NewDBKlineFeeder(exs, callBack, showLog)
 				if err != nil {
 					return nil, err
 				}
@@ -157,6 +161,7 @@ func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd) *HistProvider {
 				return feeder, nil
 			},
 			dirtyVers: make(chan int, 5),
+			showLog:   showLog,
 		},
 	}
 }
@@ -172,8 +177,11 @@ func (p *HistProvider) downIfNeed() *errs.Error {
 		return err
 	}
 	defer conn.Release()
-	pBar := utils.NewPrgBar(len(p.holders)*core.StepTotal, "DownHist")
-	defer pBar.Close()
+	var pBar *utils.PrgBar
+	if p.showLog {
+		pBar = utils.NewPrgBar(len(p.holders)*core.StepTotal, "DownHist")
+		defer pBar.Close()
+	}
 	for _, h := range p.holders {
 		err = h.DownIfNeed(sess, exchange, pBar)
 		if err != nil {
@@ -230,7 +238,9 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	var pBar = utils.NewPrgBar(int(totalMS), "RunHist")
 	defer pBar.Close()
 	pBar.Last = config.TimeRange.StartMS
-	log.Info("run data loop for backtest..")
+	if p.showLog {
+		log.Info("run data loop for backtest..")
+	}
 	return RunHistFeeders(makeFeeders, p.dirtyVers, pBar)
 }
 
@@ -382,7 +392,7 @@ func NewLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) (*LiveProvider, *e
 				if err != nil {
 					return nil, err
 				}
-				feeder, err := NewKlineFeeder(exs, callBack)
+				feeder, err := NewKlineFeeder(exs, callBack, true)
 				if err != nil {
 					return nil, err
 				}

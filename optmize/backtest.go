@@ -30,6 +30,7 @@ type BackTest struct {
 	*BTResult
 	lastDumpMs int64 // The last time the backtest status was saved 上一次保存回测状态的时间
 	dp         *data.HistProvider
+	isOpt      bool // whether is hyper optimization
 }
 
 var (
@@ -37,16 +38,17 @@ var (
 	schedule    cron.Schedule
 )
 
-func NewBackTest() *BackTest {
+func NewBackTest(isOpt bool) *BackTest {
 	p := &BackTest{
 		BTResult: NewBTResult(),
+		isOpt:    isOpt,
 	}
-	core.LoadPerfs(config.GetDataDir())
+	config.LoadPerfs(config.GetDataDir())
 	biz.InitFakeWallets()
 	wallets := biz.GetWallets("")
 	p.TotalInvest = wallets.TotalLegal(nil, false)
-	p.dp = data.NewHistProvider(p.FeedKLine, p.OnEnvEnd)
-	biz.InitLocalOrderMgr(p.orderCB)
+	p.dp = data.NewHistProvider(p.FeedKLine, p.OnEnvEnd, !isOpt)
+	biz.InitLocalOrderMgr(p.orderCB, !isOpt)
 	return p
 }
 
@@ -61,7 +63,7 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = orm.InitTask()
+	err = orm.InitTask(!b.isOpt)
 	if err != nil {
 		return err
 	}
@@ -70,7 +72,7 @@ func (b *BackTest) Init() *errs.Error {
 		return err
 	}
 	// 交易对初始化
-	err = biz.LoadRefreshPairs(b.dp)
+	err = biz.LoadRefreshPairs(b.dp, !b.isOpt)
 	biz.InitOdSubs()
 	return err
 }
@@ -114,7 +116,7 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	if nextRefresh > 0 && bar.Time >= nextRefresh {
 		// 刷新交易对
 		nextRefresh = schedule.Next(time.UnixMilli(bar.Time)).UnixMilli()
-		biz.AutoRefreshPairs(b.dp)
+		biz.AutoRefreshPairs(b.dp, !b.isOpt)
 		log.Info("refreshed pairs at", zap.String("date", btime.ToDateStr(curTime, "")))
 		b.dp.SetDirty()
 	}
@@ -131,11 +133,15 @@ func (b *BackTest) Run() {
 		log.Error("init pair cron fail", zap.Error(err))
 		return
 	}
-	b.cronDumpBtStatus()
-	core.Cron.Start()
+	if !b.isOpt {
+		b.cronDumpBtStatus()
+		core.Cron.Start()
+	}
 	btStart := btime.UTCTime()
 	err = b.dp.LoopMain()
-	core.Cron.Stop()
+	if !b.isOpt {
+		core.Cron.Stop()
+	}
 	if err != nil {
 		log.Error("backtest loop fail", zap.Error(err))
 		return
@@ -148,8 +154,12 @@ func (b *BackTest) Run() {
 		return
 	}
 	b.logPlot(biz.GetWallets(""), btime.TimeMS(), -1, -1)
-	log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
-	b.printBtResult()
+	if !b.isOpt {
+		log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
+		b.printBtResult()
+	} else {
+		b.Collect()
+	}
 }
 
 func (b *BackTest) initTaskOut() *errs.Error {
@@ -160,7 +170,7 @@ func (b *BackTest) initTaskOut() *errs.Error {
 		return errs.New(core.ErrIOWriteFail, err_)
 	}
 	config.Args.Logfile = b.OutDir + "/out.log"
-	log.Setup(config.Args.LogLevel, config.Args.Logfile)
+	config.Args.SetLog(!b.isOpt)
 	// 检查是否profile
 	if config.Args.CPUProfile {
 		outPath := b.OutDir + "/cpu.profile"
@@ -221,9 +231,9 @@ func (b *BackTest) onLiquidation(symbol string) {
 		biz.InitFakeWallets(symbol)
 		newVal := wallets.TotalLegal(nil, false)
 		b.TotalInvest += newVal - oldVal
-		log.Error(fmt.Sprintf("wallet %s BOMB at %s, reset wallet and continue..", symbol, date))
+		log.Warn(fmt.Sprintf("wallet %s BOMB at %s, reset wallet and continue..", symbol, date))
 	} else {
-		log.Error(fmt.Sprintf("wallet %s BOMB at %s, exit", symbol, date))
+		log.Warn(fmt.Sprintf("wallet %s BOMB at %s, exit", symbol, date))
 		core.StopAll()
 		b.dp.Terminate()
 	}

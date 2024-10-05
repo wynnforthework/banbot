@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/mitchellh/mapstructure"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
@@ -39,6 +40,7 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 	}
 	Args = args
 	DataDir = args.DataDir
+	yamlData = nil
 	var paths []string
 	if !args.NoDefault {
 		dataDir := GetDataDir()
@@ -199,20 +201,16 @@ func apply(args *CmdArgs) *errs.Error {
 	} else {
 		Data.StrtgPerf.Validate()
 	}
+	StrtgPerf = Data.StrtgPerf
 	if len(args.Pairs) > 0 {
 		Data.Pairs = args.Pairs
 	}
 	if len(Data.Pairs) > 0 {
 		staticPairs = true
-		for _, p := range Data.Pairs {
-			fixPairs[p] = true
-		}
+		fixPairs = append(fixPairs, Data.Pairs...)
 	}
 	if staticPairs && len(fixPairs) > 0 {
-		Data.Pairs = make([]string, 0, len(fixPairs))
-		for p := range fixPairs {
-			Data.Pairs = append(Data.Pairs, p)
-		}
+		Data.Pairs, _ = utils2.UniqueItems(fixPairs)
 	}
 	Pairs, _ = utils2.UniqueItems(Data.Pairs)
 	if Data.PairMgr == nil {
@@ -230,11 +228,11 @@ func apply(args *CmdArgs) *errs.Error {
 	return nil
 }
 
-func initPolicies() (bool, map[string]bool) {
+func initPolicies() (bool, []string) {
 	if Data.RunPolicy == nil {
 		Data.RunPolicy = make([]*RunPolicyConfig, 0)
 	}
-	var fixPairs = make(map[string]bool)
+	var polPairs []string
 	staticPairs := true
 	for _, pol := range Data.RunPolicy {
 		if pol.Params == nil {
@@ -245,15 +243,13 @@ func initPolicies() (bool, map[string]bool) {
 		}
 		pol.defs = make(map[string]*core.Param)
 		if len(pol.Pairs) > 0 {
-			for _, p := range pol.Pairs {
-				fixPairs[p] = true
-			}
+			polPairs = append(polPairs, pol.Pairs...)
 		} else {
 			staticPairs = false
 		}
 	}
 	RunPolicy = Data.RunPolicy
-	return staticPairs, fixPairs
+	return staticPairs, polPairs
 }
 
 func GetExgConfig() *ExgItemConfig {
@@ -371,6 +367,9 @@ func GetStakeAmount(accName string) float64 {
 }
 
 func DumpYaml() ([]byte, error) {
+	if yamlData != nil {
+		return yamlData, nil
+	}
 	itemMap := make(map[string]interface{})
 	t := reflect.TypeOf(Data)
 	v := reflect.ValueOf(Data)
@@ -401,6 +400,12 @@ func (c *RunPolicyConfig) ID() string {
 	} else {
 		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
 	}
+}
+
+func (c *RunPolicyConfig) Key() string {
+	tfStr := strings.Join(c.RunTimeframes, "|")
+	pairStr := strings.Join(c.Pairs, "|")
+	return fmt.Sprintf("%s/%s/%s", c.ID(), tfStr, pairStr)
 }
 
 func (c *RunPolicyConfig) OdDirt() int {
@@ -467,8 +472,12 @@ func (c *RunPolicyConfig) ToYaml() string {
 	if c.Dirt != "" {
 		b.WriteString(fmt.Sprintf("    dirt: %s\n", c.Dirt))
 	}
-	b.WriteString(fmt.Sprintf("    run_timeframes: [ %s ]\n", strings.Join(c.RunTimeframes, ", ")))
-	b.WriteString(fmt.Sprintf("    pairs: [ %s ]\n", strings.Join(c.Pairs, ", ")))
+	if len(c.RunTimeframes) > 0 {
+		b.WriteString(fmt.Sprintf("    run_timeframes: [ %s ]\n", strings.Join(c.RunTimeframes, ", ")))
+	}
+	if len(c.Pairs) > 0 {
+		b.WriteString(fmt.Sprintf("    pairs: [ %s ]\n", strings.Join(c.Pairs, ", ")))
+	}
 	argText, _ := utils2.MapToStr(c.Params)
 	if len(c.Pairs) == 1 {
 		b.WriteString("    pair_params:\n")
@@ -480,7 +489,7 @@ func (c *RunPolicyConfig) ToYaml() string {
 }
 
 func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
-	return &RunPolicyConfig{
+	res := &RunPolicyConfig{
 		Name:          c.Name,
 		Filters:       c.Filters,
 		RunTimeframes: c.RunTimeframes,
@@ -489,10 +498,30 @@ func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
 		Dirt:          c.Dirt,
 		StrtgPerf:     c.StrtgPerf,
 		Pairs:         c.Pairs,
-		Params:        c.Params,
-		PairParams:    c.PairParams,
+		Params:        make(map[string]float64),
+		PairParams:    make(map[string]map[string]float64),
 		defs:          make(map[string]*core.Param),
 	}
+	if len(c.Params) > 0 {
+		for k, v := range c.Params {
+			res.Params[k] = v
+		}
+	}
+	if len(c.PairParams) > 0 {
+		for k, mp := range c.PairParams {
+			pairPms := make(map[string]float64)
+			for k2, v := range mp {
+				pairPms[k2] = v
+			}
+			res.PairParams[k] = pairPms
+		}
+	}
+	if len(c.defs) > 0 {
+		for k, v := range c.defs {
+			res.defs[k] = v
+		}
+	}
+	return res
 }
 
 func (c *RunPolicyConfig) PairDup(pair string) (*RunPolicyConfig, bool) {
@@ -505,4 +534,56 @@ func (c *RunPolicyConfig) PairDup(pair string) (*RunPolicyConfig, bool) {
 	res := c.Clone()
 	res.Params = params
 	return res, isDiff
+}
+
+func LoadPerfs(inDir string) {
+	if StrtgPerf == nil || !StrtgPerf.Enable {
+		return
+	}
+	inPath := fmt.Sprintf("%s/strtg_perfs.yml", inDir)
+	_, err_ := os.Stat(inPath)
+	if err_ != nil {
+		return
+	}
+	data, err_ := os.ReadFile(inPath)
+	if err_ != nil {
+		log.Error("read strtg_perfs.yml fail", zap.Error(err_))
+		return
+	}
+	var unpak map[string]map[string]interface{}
+	err_ = yaml.Unmarshal(data, &unpak)
+	if err_ != nil {
+		log.Error("unmarshal strtg_perfs fail", zap.Error(err_))
+		return
+	}
+	for strtg, cfg := range unpak {
+		sta := &core.PerfSta{}
+		err_ = mapstructure.Decode(cfg, &sta)
+		if err_ != nil {
+			log.Error(fmt.Sprintf("decode %s fail", strtg), zap.Error(err_))
+			continue
+		}
+		core.StratPerfSta[strtg] = sta
+		perfVal, ok := cfg["perf"]
+		if ok && perfVal != nil {
+			var perf = map[string]string{}
+			err_ = mapstructure.Decode(perfVal, &perf)
+			if err_ != nil {
+				log.Error(fmt.Sprintf("decode %s.perf fail", strtg), zap.Error(err_))
+				continue
+			}
+			for pairTf, arrStr := range perf {
+				arr := strings.Split(arrStr, "|")
+				num, _ := strconv.Atoi(arr[0])
+				profit, _ := strconv.ParseFloat(arr[1], 64)
+				score, _ := strconv.ParseFloat(arr[2], 64)
+				core.JobPerfs[fmt.Sprintf("%s_%s", strtg, pairTf)] = &core.JobPerf{
+					Num:       num,
+					TotProfit: profit,
+					Score:     score,
+				}
+			}
+		}
+	}
+	log.Info("load strtg_perfs ok", zap.String("path", inPath))
 }

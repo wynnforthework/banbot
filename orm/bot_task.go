@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func InitTask() *errs.Error {
+func InitTask(showLog bool) *errs.Error {
 	if len(accTasks) > 0 {
 		return nil
 	}
@@ -23,7 +23,9 @@ func InitTask() *errs.Error {
 		accTasks[config.DefAcc] = &BotTask{ID: -1, Mode: core.RunMode, CreateAt: btime.UTCStamp(),
 			StartAt: config.TimeRange.StartMS, StopAt: config.TimeRange.EndMS}
 		taskIdAccMap[-1] = config.DefAcc
-		log.Info("init task ok", zap.Int64("id", -1))
+		if showLog {
+			log.Info("init task ok", zap.Int64("id", -1))
+		}
 		return nil
 	}
 	idList := make([]string, 0, len(config.Accounts))
@@ -36,7 +38,9 @@ func InitTask() *errs.Error {
 		taskIdAccMap[task.ID] = account
 		idList = append(idList, fmt.Sprintf("%s:%v", account, task.ID))
 	}
-	log.Info("init task ok", zap.String("id", strings.Join(idList, ", ")))
+	if showLog {
+		log.Info("init task ok", zap.String("id", strings.Join(idList, ", ")))
+	}
 	return nil
 }
 

@@ -42,6 +42,9 @@ type BTResult struct {
 	TotalInvest     float64
 	OutDir          string
 	PairGrps        []*RowItem
+	TotProfit       float64
+	TotCost         float64
+	TotFee          float64
 	TotProfitPct    float64
 	SharpeRatio     float64
 	SortinoRatio    float64
@@ -82,7 +85,9 @@ func NewBTResult() *BTResult {
 }
 
 func (r *BTResult) printBtResult() {
-	core.DumpPerfs(r.OutDir)
+	if config.StrtgPerf != nil && config.StrtgPerf.Enable {
+		core.DumpPerfs(r.OutDir)
+	}
 
 	orders := orm.HistODs
 	var b strings.Builder
@@ -112,6 +117,7 @@ func (r *BTResult) printBtResult() {
 	} else {
 		b.WriteString("No Orders Found\n")
 	}
+	r.Collect()
 	b.WriteString(r.textMetrics(orders))
 	log.Info("BackTest Reports:\n" + b.String())
 
@@ -130,8 +136,37 @@ func (r *BTResult) dumpBtFiles() {
 	r.dumpGraph()
 }
 
-func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
+func (r *BTResult) Collect() {
+	orders := orm.HistODs
 	r.OrderNum = len(orders)
+	sumProfit := float64(0)
+	sumFee := float64(0)
+	sumCost := float64(0)
+	for _, od := range orders {
+		sumProfit += od.Profit
+		sumFee += od.Enter.Fee
+		if od.Exit != nil {
+			sumFee += od.Exit.Fee
+		}
+		sumCost += od.EnterCost() / od.Leverage
+	}
+	r.TotProfit = sumProfit
+	r.TotCost = sumCost
+	r.TotFee = sumFee
+	r.TotProfitPct = r.TotProfit * 100 / r.TotalInvest
+	if r.MinReal > r.MaxReal {
+		r.MinReal = r.MaxReal
+	}
+	// Calculate the maximum drawdown on the chart
+	// 计算图表上的最大回撤
+	r.ShowDrawDownPct = r.Plots.calcDrawDown() * 100
+	err := r.calcMeasures(30)
+	if err != nil {
+		log.Warn("calc sharpe/sortino fail", zap.Error(err))
+	}
+}
+
+func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
 	heads := []string{"Metric", "Value"}
@@ -149,26 +184,14 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	table.Append([]string{"Final Balance", strconv.FormatFloat(finBalance, 'f', 0, 64)})
 	finWithDraw := wallets.GetWithdrawLegal(nil)
 	table.Append([]string{"Final WithDraw", strconv.FormatFloat(finWithDraw, 'f', 0, 64)})
-	sumProfit := float64(0)
-	sumFee := float64(0)
-	sumCost := float64(0)
-	for _, od := range orders {
-		sumProfit += od.Profit
-		sumFee += od.Enter.Fee
-		if od.Exit != nil {
-			sumFee += od.Exit.Fee
-		}
-		sumCost += od.EnterCost() / od.Leverage
-	}
-	table.Append([]string{"Absolute Profit", strconv.FormatFloat(sumProfit, 'f', 0, 64)})
-	r.TotProfitPct = sumProfit * 100 / r.TotalInvest
+	table.Append([]string{"Absolute Profit", strconv.FormatFloat(r.TotProfit, 'f', 0, 64)})
 	totProfitPct := strconv.FormatFloat(r.TotProfitPct, 'f', 1, 64)
 	table.Append([]string{"Total Profit %", totProfitPct + "%"})
-	table.Append([]string{"Total Fee", strconv.FormatFloat(sumFee, 'f', 0, 64)})
+	table.Append([]string{"Total Fee", strconv.FormatFloat(r.TotFee, 'f', 0, 64)})
 	avfProfit := strconv.FormatFloat(r.TotProfitPct*10/float64(len(orders)), 'f', 1, 64)
 	table.Append([]string{"Avg Profit ‰", avfProfit + "‰"})
-	table.Append([]string{"Total Cost", strconv.FormatFloat(sumCost, 'f', 0, 64)})
-	avgCost := sumCost / float64(len(orders))
+	table.Append([]string{"Total Cost", strconv.FormatFloat(r.TotCost, 'f', 0, 64)})
+	avgCost := r.TotCost / float64(len(orders))
 	table.Append([]string{"Avg Cost", strconv.FormatFloat(avgCost, 'f', 1, 64)})
 	slices.SortFunc(orders, func(a, b *orm.InOutOrder) int {
 		return int((a.Profit - b.Profit) * 100)
@@ -182,26 +205,13 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 		table.Append([]string{"Worst Order", worstVal + "  " + worstPct + "%"})
 	}
 	table.Append([]string{"Max Assets", strconv.FormatFloat(r.MaxReal, 'f', 1, 64)})
-	if r.MinReal > r.MaxReal {
-		r.MinReal = r.MaxReal
-	}
 	table.Append([]string{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)})
-	// Calculate the maximum drawdown on the chart
-	// 计算图表上的最大回撤
-	r.ShowDrawDownPct = r.Plots.calcDrawDown() * 100
 	drawDownRate := strconv.FormatFloat(r.ShowDrawDownPct, 'f', 1, 64) + "%"
 	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 1, 64) + "%"
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
-	var err *errs.Error
-
-	err = r.calcMeasures(30)
-	if err != nil {
-		log.Warn("calc sharpe/sortino fail", zap.Error(err))
-	} else {
-		sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
-		sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
-		table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})
-	}
+	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
+	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
+	table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})
 	table.Render()
 	return b.String()
 }

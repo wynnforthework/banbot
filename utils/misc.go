@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/banbox/banexg/errs"
@@ -234,4 +236,12 @@ func ReadConfirm(tips []string, ok, fail string, exitAny bool) bool {
 			return false
 		}
 	}
+}
+
+func MD5(data []byte) string {
+	hash := md5.New()
+	hash.Write(data)
+	hashInBytes := hash.Sum(nil)
+
+	return hex.EncodeToString(hashInBytes)
 }

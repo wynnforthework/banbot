@@ -20,7 +20,7 @@ import (
 func CronRefreshPairs(dp data.IProvider) {
 	if config.PairMgr.Cron != "" {
 		_, err_ := core.Cron.AddFunc(config.PairMgr.Cron, func() {
-			biz.AutoRefreshPairs(dp)
+			biz.AutoRefreshPairs(dp, true)
 		})
 		if err_ != nil {
 			log.Error("add RefreshPairList fail", zap.Error(err_))

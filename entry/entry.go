@@ -45,7 +45,7 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 func runBackTest() string {
 	core.BotRunning = true
 	biz.ResetVars()
-	b := optmize.NewBackTest()
+	b := optmize.NewBackTest(false)
 	b.Run()
 	core.RunExitCalls()
 	return b.OutDir

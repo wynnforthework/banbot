@@ -2,7 +2,6 @@ package goods
 
 import (
 	"fmt"
-	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
@@ -16,8 +15,8 @@ import (
 var (
 	pairProducer IProducer
 	filters      = make([]IFilter, 0, 10)
-	lastRefresh  = int64(0)
 	needTickers  = false
+	ShowLog      = true
 )
 
 func Setup() *errs.Error {
@@ -87,7 +86,6 @@ func GetPairFilters(items []*config.CommonPairFilter, withInvalid bool) ([]IFilt
 }
 
 func RefreshPairList() ([]string, *errs.Error) {
-	lastRefresh = btime.TimeMS()
 	var pairs []string
 	var allowFilter = false
 	var err *errs.Error
@@ -118,7 +116,9 @@ func RefreshPairList() ([]string, *errs.Error) {
 				pairs = append(pairs, pair)
 			}
 		}
-		log.Info(fmt.Sprintf("gen symbols from %s, num: %d", pairProducer.GetName(), len(pairs)))
+		if ShowLog {
+			log.Info(fmt.Sprintf("gen symbols from %s, num: %d", pairProducer.GetName(), len(pairs)))
+		}
 	}
 	err = orm.EnsureCurSymbols(pairs)
 	if err != nil {
@@ -134,7 +134,7 @@ func RefreshPairList() ([]string, *errs.Error) {
 			if err != nil {
 				return nil, err
 			}
-			if oldNum > len(pairs) {
+			if oldNum > len(pairs) && ShowLog {
 				log.Info(fmt.Sprintf("left %d symbols after %s", len(pairs), flt.GetName()))
 			}
 		}

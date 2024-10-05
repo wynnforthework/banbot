@@ -94,7 +94,6 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 		// 这里可能修改订单状态
 		err = odMgr.UpdateByBar(allOrders, bar)
 		if err != nil {
-			log.Error("update orders by bar fail", zap.Error(err))
 			return err
 		}
 	}

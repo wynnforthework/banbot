@@ -296,9 +296,10 @@ type KlineFeeder struct {
 	PreFire  float64        // Ratio of triggering bar early 提前触发bar的比率
 	adjIdx   int            // adjs的索引
 	warmNums map[string]int // Preheating quantity in each cycle 各周期预热数量
+	showLog  bool
 }
 
-func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*KlineFeeder, *errs.Error) {
+func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline, showLog bool) (*KlineFeeder, *errs.Error) {
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return nil, err
@@ -316,6 +317,7 @@ func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*KlineFeeder, *err
 			adjs:     adjs,
 		},
 		PreFire: config.PreFire,
+		showLog: showLog,
 	}, nil
 }
 
@@ -339,12 +341,12 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 		if err != nil {
 			return 0, err
 		}
-		if len(bars) == 0 {
+		if len(bars) == 0 && f.showLog {
 			log.Info("skip warm as empty", zap.String("pair", f.Symbol), zap.String("tf", tf),
 				zap.Int("want", warmNum), zap.Int64("end", endMS))
 			continue
 		}
-		if warmNum != len(bars) {
+		if warmNum != len(bars) && f.showLog {
 			barEndMs := bars[len(bars)-1].Time + tfMSecs
 			barStartMs := bars[0].Time
 			lackNum := warmNum - len(bars)
@@ -566,7 +568,7 @@ type DBKlineFeeder struct {
 	offsetMS int64
 }
 
-func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*DBKlineFeeder, *errs.Error) {
+func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline, showLog bool) (*DBKlineFeeder, *errs.Error) {
 	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
 	if err != nil {
 		return nil, err
@@ -576,7 +578,7 @@ func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline) (*DBKlineFeeder, 
 	if err == nil {
 		tradeTimes = market.GetTradeTimes()
 	}
-	feeder, err := NewKlineFeeder(exs, callBack)
+	feeder, err := NewKlineFeeder(exs, callBack, showLog)
 	if err != nil {
 		return nil, err
 	}

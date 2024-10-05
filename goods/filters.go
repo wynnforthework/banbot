@@ -132,7 +132,9 @@ func filterByMinCost(symbols []SymbolVol) ([]string, map[string]float64) {
 	for _, item := range symbols {
 		mar, err := exchange.GetMarket(item.Symbol)
 		if err != nil {
-			log.Warn("no market found", zap.String("symbol", item.Symbol))
+			if ShowLog {
+				log.Warn("no market found", zap.String("symbol", item.Symbol))
+			}
 			skip[item.Symbol] = 0
 			continue
 		}
@@ -153,7 +155,9 @@ func filterByMinCost(symbols []SymbolVol) ([]string, map[string]float64) {
 		for key, amt := range skip {
 			b.WriteString(fmt.Sprintf("%s: %v  ", key, amt))
 		}
-		log.Warn("skip symbols as cost too big", zap.Int("num", len(skip)), zap.String("more", b.String()))
+		if ShowLog {
+			log.Warn("skip symbols as cost too big", zap.Int("num", len(skip)), zap.String("more", b.String()))
+		}
 	}
 	return res, skip
 }

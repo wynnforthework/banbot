@@ -43,14 +43,16 @@ type CmdArgs struct {
 	AdjType       string // adjustment type: 复权类型: pre,post,none
 	TimeZone      string
 	ExgReal       string
-	OptRounds     int    // Hyperparameter optimization single task execution round 超参数优化单任务执行轮次
-	Concur        int    // Hyperparameter optimization of multi-process concurrency 超参数优化多进程并发数量
-	Sampler       string // Hyperparameter optimization methods 超参数优化的方法: tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
-	EachPairs     bool   // Execute target by target 逐个标的执行
-	ReviewPeriod  string // During continuous parameter adjustment and backtesting, the period of parameter adjustment review 持续调参回测时，调参回顾的周期
-	RunPeriod     string // During continuous parameter adjustment and backtesting, the effective running period after parameter adjustment 持续调参回测时，调参后有效运行周期
-	InType        string // Input file data type 输入文件的数据类型
-	RunEveryTF    string // run once every n timeframe
+	OptRounds     int     // Hyperparameter optimization single task execution round 超参数优化单任务执行轮次
+	Concur        int     // Hyperparameter optimization of multi-process concurrency 超参数优化多进程并发数量
+	Sampler       string  // Hyperparameter optimization methods 超参数优化的方法: tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes
+	EachPairs     bool    // Execute target by target 逐个标的执行
+	ReviewPeriod  string  // During continuous parameter adjustment and backtesting, the period of parameter adjustment review 持续调参回测时，调参回顾的周期
+	RunPeriod     string  // During continuous parameter adjustment and backtesting, the effective running period after parameter adjustment 持续调参回测时，调参后有效运行周期
+	Picker        string  // Method for selecting targets from multiple hyperparameter optimization results 从多个超参数优化结果中挑选目标的方法
+	Alpha         float64 // the smoothing factor of calculate EMA 计算EMA的平滑因子
+	InType        string  // Input file data type 输入文件的数据类型
+	RunEveryTF    string  // run once every n timeframe
 	BatchSize     int
 	Separate      bool // Used for backtesting. When true, the strategy combination is tested separately. 用于回测，true时策略组合单独测试
 }

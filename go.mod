@@ -5,11 +5,11 @@ go 1.22
 toolchain go1.23.0
 
 require (
-	github.com/banbox/banexg v0.2.1
+	github.com/anyongjin/go-bayesopt v1.0.1
+	github.com/banbox/banexg v0.2.2
 	github.com/banbox/banta v0.1.5
 	github.com/bytedance/sonic v1.12.3
 	github.com/c-bata/goptuna v0.9.0
-	github.com/anyongjin/go-bayesopt v1.0.1
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/jackc/pgx/v5 v5.7.1
 	github.com/mitchellh/mapstructure v1.5.0
@@ -36,7 +36,7 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/shirou/gopsutil/v4 v4.24.7
-	golang.org/x/image v0.14.0
+	golang.org/x/image v0.20.0
 )
 
 require (

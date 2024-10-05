@@ -29,13 +29,13 @@ func NewCryptoTrader() *CryptoTrader {
 }
 
 func (t *CryptoTrader) Init() *errs.Error {
-	core.LoadPerfs(config.GetDataDir())
+	config.LoadPerfs(config.GetDataDir())
 	dp, err := data.NewLiveProvider(t.FeedKLine, t.OnEnvEnd)
 	if err != nil {
 		return err
 	}
 	t.dp = dp
-	err = orm.InitTask()
+	err = orm.InitTask(true)
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 		}
 		config.Args.Logfile = outDir + "/out.log"
 	}
-	log.Setup(config.Args.LogLevel, config.Args.Logfile)
+	config.Args.SetLog(true)
 	// Trading pair initialization
 	// 交易对初始化
 	log.Info("loading exchange markets ...")
@@ -73,14 +73,14 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = biz.LoadRefreshPairs(dp)
+	err = biz.LoadRefreshPairs(dp, true)
 	biz.InitOdSubs()
 	return err
 }
 
 func (t *CryptoTrader) initOdMgr() *errs.Error {
 	if !core.EnvReal {
-		biz.InitLocalOrderMgr(t.orderCB)
+		biz.InitLocalOrderMgr(t.orderCB, true)
 		return nil
 	}
 	biz.InitLiveOrderMgr(t.orderCB)

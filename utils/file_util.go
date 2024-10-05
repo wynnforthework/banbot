@@ -323,3 +323,25 @@ func GetOpenFont(name string) (*opentype.Font, error) {
 	fontFace, err := opentype.Parse(fontData)
 	return fontFace, err
 }
+
+func GetFilesWithPrefix(filePath string) ([]string, error) {
+	dir := filepath.Dir(filePath)
+	fileName := filepath.Base(filePath)
+	var files []string
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// 判断文件路径是否以指定的前缀开头
+		if strings.HasPrefix(filepath.Base(path), fileName) {
+			files = append(files, path)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return files, nil
+}
