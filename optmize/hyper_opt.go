@@ -8,7 +8,6 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
@@ -18,16 +17,14 @@ import (
 	"github.com/c-bata/goptuna"
 	"github.com/c-bata/goptuna/cmaes"
 	"github.com/c-bata/goptuna/tpe"
-	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 	"io/fs"
-	"math"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -42,79 +39,39 @@ Backtesting mode based on continuous parameter tuning. Approach the real situati
 基于持续调参的回测模式。接近实盘情况，避免使用未来信息调参回测。
 */
 func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeBackTest)
-	err := biz.SetupComs(args)
-	if err != nil {
+	t, err := newRollBtOpt(args)
+	if err != nil || t == nil {
 		return err
 	}
-	err = orm.InitExg(exg.Default)
-	if err != nil {
-		return err
-	}
-	dateRange := config.TimeRange
-	allStartMs, allEndMs := dateRange.StartMS, dateRange.EndMS
-	runMSecs := int64(utils.TFToSecs(args.RunPeriod)) * 1000
-	reviewMSecs := int64(utils.TFToSecs(args.ReviewPeriod)) * 1000
-	if runMSecs < core.SecsHour*1000 {
-		log.Warn("`run-period` cannot be less than 1 hour")
-		return nil
-	}
-	outDir := filepath.Join(config.GetDataDir(), "backtest", "bt_opt_"+btOptHash(args))
-	err_ := utils.EnsureDir(outDir, 0755)
-	if err_ != nil {
-		return errs.New(errs.CodeIOWriteFail, err_)
-	}
-	log.Info("write bt over opt to", zap.String("dir", outDir))
-	args.OutPath = filepath.Join(outDir, "opt.log")
-	curMs := allStartMs + reviewMSecs
 	var allHisOds []*orm.InOutOrder
 	var lastWal map[string]float64
 	var lastRes *BTResult
-	initPols := config.RunPolicy
 	lastPols := config.RunPolicy
-	pbar := utils.NewPrgBar(int((allEndMs-curMs)/1000), "BtOpt")
+	pbar := utils.NewPrgBar(int((t.allEndMs-t.curMs)/1000), "BtOpt")
 	defer pbar.Close()
-	for curMs < allEndMs {
-		pbar.Add(int(runMSecs / 1000))
-		dateRange.StartMS = curMs - reviewMSecs
-		dateRange.EndMS = curMs
-		fname := fmt.Sprintf("opt_%v.log", dateRange.StartMS/1000)
-		args.OutPath = filepath.Join(outDir, fname)
-		var polStr string
-		polStr, err = pickFromExists(args.OutPath, args.Picker)
+	for t.curMs < t.allEndMs {
+		pbar.Add(int(t.runMSecs / 1000))
+		polStr, err := t.next()
 		if err != nil {
 			return err
 		}
-		if polStr == "" {
-			config.RunPolicy = initPols
-			polStr, err = runOptimize(args, 11)
-			if err != nil {
-				return err
-			}
-		}
 		biz.ResetVars()
-		var unpak = make(map[string]interface{})
-		err_ = yaml.Unmarshal([]byte(polStr), &unpak)
-		if err_ != nil {
-			return errs.New(errs.CodeRunTime, err_)
+		polList, err := parseRunPolicies(polStr)
+		if err != nil {
+			return err
 		}
-		var cfg config.Config
-		err_ = mapstructure.Decode(unpak, &cfg)
-		if err_ != nil {
-			return errs.New(errs.CodeRunTime, err_)
-		}
-		if len(cfg.RunPolicy) == 0 {
-			log.Warn("no RunPolicy for ", zap.Int64("start", dateRange.StartMS/1000),
-				zap.Int64("end", curMs/1000))
-			curMs += runMSecs
+		if len(polList) == 0 {
+			log.Warn("no RunPolicy for ", zap.Int64("start", t.dateRange.StartMS/1000),
+				zap.Int64("end", t.curMs/1000))
+			t.curMs += t.runMSecs
 			continue
 		}
-		applyOptPolicies(lastPols, cfg.RunPolicy, args.Alpha)
+		applyOptPolicies(lastPols, polList, args.Alpha)
 		lastPols = config.RunPolicy
 		wallets := biz.GetWallets("")
 		core.BotRunning = true
-		dateRange.StartMS = curMs
-		dateRange.EndMS = curMs + runMSecs
+		t.dateRange.StartMS = t.curMs
+		t.dateRange.EndMS = t.curMs + t.runMSecs
 		bt := NewBackTest(false)
 		if lastWal != nil {
 			wallets.SetWallets(lastWal)
@@ -127,21 +84,104 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 		lastRes = bt.BTResult
 		allHisOds = orm.HistODs
 		lastWal = wallets.DumpAvas()
-		curMs += runMSecs
+		t.curMs += t.runMSecs
+	}
+	err = t.dumpConfig()
+	if err != nil {
+		return err
 	}
 	return nil
+}
+
+func RunRollBTPicker(args *config.CmdArgs) *errs.Error {
+	t, err := newRollBtOpt(args)
+	if err != nil || t == nil {
+		return err
+	}
+	pbar := utils.NewPrgBar(int((t.allEndMs-t.curMs)/1000), "RollPicker")
+	defer pbar.Close()
+	pickers := utils.KeysOfMap(MapCalcOptBest)
+	var rows, rows2 [][]string
+	head := []string{"date"}
+	head = append(head, pickers...)
+	rows = append(rows, head)
+	rows2 = append(rows2, head)
+	for t.curMs < t.allEndMs {
+		pbar.Add(int(t.runMSecs / 1000))
+		scores := make([]float64, 0, len(pickers))
+		row := []string{btime.ToDateStr(t.curMs, "2006-01-02")}
+		row2 := []string{row[0]}
+		items := make([]*ValItem, 0, len(pickers))
+		log.Info("test pickers for", zap.String("dt", row[0]))
+		for i, picker := range pickers {
+			t.args.Picker = picker
+			polStr, err := t.next()
+			if err != nil {
+				return err
+			}
+			biz.ResetVars()
+			polList, err := parseRunPolicies(polStr)
+			if err != nil {
+				return err
+			}
+			if len(polList) == 0 {
+				log.Warn("no RunPolicy for ", zap.Int64("start", t.dateRange.StartMS/1000),
+					zap.Int64("end", t.curMs/1000))
+				t.curMs += t.runMSecs
+				continue
+			}
+			config.RunPolicy = polList
+			core.BotRunning = true
+			t.dateRange.StartMS = t.curMs
+			t.dateRange.EndMS = t.curMs + t.runMSecs
+			bt := NewBackTest(true)
+			bt.Run()
+			score := bt.Score()
+			scores = append(scores, score)
+			row = append(row, strconv.FormatFloat(score, 'f', 1, 64))
+			items = append(items, &ValItem{Tag: picker, Score: score, Order: i})
+		}
+		slices.SortFunc(items, func(a, b *ValItem) int {
+			return int(b.Score - a.Score)
+		})
+		for i, it := range items {
+			it.Res = i
+		}
+		slices.SortFunc(items, func(a, b *ValItem) int {
+			return a.Order - b.Order
+		})
+		for _, it := range items {
+			row2 = append(row2, strconv.Itoa(it.Res))
+		}
+		log.Info("scores", zap.Strings("r", row))
+		rows = append(rows, row)
+		rows2 = append(rows2, row2)
+		t.curMs += t.runMSecs
+	}
+	err = t.dumpConfig()
+	if err != nil {
+		return err
+	}
+	csvPath := filepath.Join(t.outDir, "pickerScores.csv")
+	err = utils.WriteCsvFile(csvPath, rows, false)
+	if err != nil {
+		return err
+	}
+	csvPath = filepath.Join(t.outDir, "pickerRanks.csv")
+	return utils.WriteCsvFile(csvPath, rows2, false)
 }
 
 func btOptHash(args *config.CmdArgs) string {
 	raws := []string{
 		args.Sampler,
+		args.RunPeriod,
 		strconv.FormatBool(args.EachPairs),
 	}
-	ymlData, err_ := config.DumpYaml()
+	ymlData, err := config.DumpYaml()
 	if ymlData != nil {
 		raws = append(raws, string(ymlData))
 	} else {
-		log.Warn("dump config yaml fail", zap.Error(err_))
+		log.Warn("dump config yaml fail", zap.Error(err))
 	}
 	for _, p := range config.RunPolicy {
 		raws = append(raws, p.Key())
@@ -499,13 +539,7 @@ func runBTOnce() (*BackTest, float64) {
 	biz.ResetVars()
 	bt := NewBackTest(true)
 	bt.Run()
-	var loss float64
-	if bt.TotProfitPct <= 0 {
-		loss = -bt.TotProfitPct
-	} else {
-		// 盈利时返回无回撤收益率
-		loss = -bt.TotProfitPct * math.Pow(1-bt.MaxDrawDownPct/100, 1.5)
-	}
+	var loss = -bt.Score()
 	return bt, loss
 }
 

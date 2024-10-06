@@ -39,6 +39,10 @@ func RunCmd() {
 		case "optimize":
 			options = []string{"out", "opt_rounds", "sampler", "picker", "each_pairs", "concur"}
 			entry = optmize.RunOptimize
+		case "bt_opt":
+			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
+				"concur", "alpha"}
+			entry = optmize.RunBTOverOpt
 		case "kline":
 			runKlineCmds(args[1:])
 		case "tick":
@@ -59,6 +63,7 @@ please run with a subcommand:
     backtest:   backtest with strategies and data
     spider:     start the spider
     optimize:   run hyper parameters optimization
+	bt_opt: 	rolling backtest with hyperparameter optimization
     kline:      run kline commands
     tick:       run tick commands
     tool:       run tools
@@ -145,10 +150,9 @@ func runToolCmds(args []string) {
 		case "collect_opt":
 			options = []string{"in", "picker"}
 			entry = optmize.CollectOptLog
-		case "bt_opt":
-			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
-				"concur", "alpha"}
-			entry = optmize.RunBTOverOpt
+		case "test_pickers":
+			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur"}
+			entry = optmize.RunRollBTPicker
 		case "load_cal":
 			options = []string{"in"}
 			entry = biz.LoadCalendars
@@ -172,7 +176,7 @@ func runToolCmds(args []string) {
 		log.Warn(`
 banbot tool:
 	collect_opt: 	collect result of optimize, and print in order
-	bt_opt: 		backtest over optimize
+	test_pickers: 	test pickers in roll backtest
 	load_cal: 		load calenders
 	cmp_orders: 	compare backTest orders with exchange orders
 	data_server: 	serve a grpc server as data feeder

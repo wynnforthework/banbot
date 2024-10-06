@@ -366,7 +366,7 @@ func GetStakeAmount(accName string) float64 {
 	return amount
 }
 
-func DumpYaml() ([]byte, error) {
+func DumpYaml() ([]byte, *errs.Error) {
 	if yamlData != nil {
 		return yamlData, nil
 	}

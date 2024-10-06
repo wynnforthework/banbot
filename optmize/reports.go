@@ -768,3 +768,14 @@ func (r *BTResult) calcMeasures(num int) *errs.Error {
 	r.SortinoRatio = sortino
 	return nil
 }
+
+func (r *BTResult) Score() float64 {
+	var score float64
+	if r.TotProfitPct <= 0 {
+		score = r.TotProfitPct
+	} else {
+		// 盈利时返回无回撤收益率
+		score = r.TotProfitPct * math.Pow(1-r.MaxDrawDownPct/100, 1.5)
+	}
+	return score
+}
