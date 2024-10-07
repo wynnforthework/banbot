@@ -200,3 +200,24 @@ func parseRunPolicies(text string) ([]*config.RunPolicyConfig, *errs.Error) {
 	}
 	return cfg.RunPolicy, nil
 }
+
+func (r *BTResult) BriefLine() string {
+	if r == nil {
+		return ""
+	}
+	return fmt.Sprintf("odNum: %v, profit: %.1f%%, drawDown: %.1f%%, sharpe: %.2f",
+		r.OrderNum, r.TotProfitPct, r.MaxDrawDownPct, r.SharpeRatio)
+}
+
+func (o *OptInfo) ToLine() string {
+	var text string
+	if o.Params != nil && len(o.Params) > 0 {
+		var numLen int
+		text, numLen = utils.MapToStr(o.Params)
+		tabLack := (len(o.Params)*5 - numLen) / 4
+		if tabLack > 0 {
+			text += strings.Repeat("\t", tabLack)
+		}
+	}
+	return fmt.Sprintf("loss: %7.2f \t%s \t%s", -o.Score, text, o.BriefLine())
+}
