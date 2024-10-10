@@ -151,7 +151,7 @@ func runToolCmds(args []string) {
 			options = []string{"in", "picker"}
 			entry = optmize.CollectOptLog
 		case "test_pickers":
-			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur"}
+			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur", "picker"}
 			entry = optmize.RunRollBTPicker
 		case "load_cal":
 			options = []string{"in"}
@@ -268,7 +268,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "sampler":
 			cmd.StringVar(&args.Sampler, "sampler", "bayes", "hyper optimize method, tpe/bayes/random/cmaes/ipop-cmaes/bipop-cmaes")
 		case "picker":
-			cmd.StringVar(&args.Picker, "picker", "score", "Method for selecting targets from multiple hyperparameter optimization results")
+			cmd.StringVar(&args.Picker, "picker", "good3", "Method for selecting targets from multiple hyperparameter optimization results")
 		case "alpha":
 			cmd.Float64Var(&args.Alpha, "alpha", 1, "ma alpha for calculating ema in hyperOpt")
 		case "each_pairs":

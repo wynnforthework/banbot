@@ -565,7 +565,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 	heads := []string{"sid", "symbol", "timeframe", "direction", "leverage", "entAt", "entTag", "entPrice",
-		"entAmount", " entCost", "entFee", "exitAt", "exitTag", "exitPrice", "exitAmount", "exitGot",
+		"entAmount", "entCost", "entFee", "exitAt", "exitTag", "exitPrice", "exitAmount", "exitGot",
 		"exitFee", "max_draw_down", "profitRate", "profit"}
 	if err_ = writer.Write(heads); err_ != nil {
 		log.Error("write orders.csv fail", zap.Error(err_))

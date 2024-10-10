@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	ta "github.com/banbox/banta"
 	"github.com/fogleman/gg"
 	"go.uber.org/zap"
 	"golang.org/x/image/font"
@@ -202,4 +203,37 @@ func correlationToColor(value float64) color.Color {
 		r = 1 - value // 越接近1，红色越少
 	}
 	return color.RGBA{uint8(r * 255), uint8(g * 255), uint8(b * 255), 255}
+}
+
+func CalcEnvsCorr(envs []*ta.BarEnv, hisNum int) (*mat.SymDense, []float64, error) {
+	if len(envs) < 2 {
+		return nil, nil, nil
+	}
+	// the latest timestamp between envs possible inconsistency, so we find the timestamp which is most common
+	// 可能envs最新时间戳不一致，查找数量最多的时间戳
+	stamps := make(map[int64]int)
+	for _, e := range envs {
+		count, ok := stamps[e.TimeStart]
+		if !ok {
+			stamps[e.TimeStart] = 1
+		} else {
+			stamps[e.TimeStart] = count + 1
+		}
+	}
+	var stamp int64
+	var count int
+	for st, cnt := range stamps {
+		if cnt > count {
+			stamp = st
+			count = cnt
+		}
+	}
+	// Obtain prices and calculate relevant matrices
+	// 获取价格，计算相关矩阵
+	data := make([][]float64, 0, len(envs))
+	for _, e := range envs {
+		offset := max(0, int((e.TimeStart-stamp)/e.TFMSecs))
+		data = append(data, e.Close.Range(offset, offset+hisNum))
+	}
+	return CalcCorrMat(data, true)
 }

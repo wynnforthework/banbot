@@ -38,10 +38,13 @@ var (
 	schedule    cron.Schedule
 )
 
-func NewBackTest(isOpt bool) *BackTest {
+func NewBackTest(isOpt bool, outDir string) *BackTest {
 	p := &BackTest{
 		BTResult: NewBTResult(),
 		isOpt:    isOpt,
+	}
+	if outDir != "" {
+		p.OutDir = outDir
 	}
 	config.LoadPerfs(config.GetDataDir())
 	biz.InitFakeWallets()
@@ -163,8 +166,10 @@ func (b *BackTest) Run() {
 }
 
 func (b *BackTest) initTaskOut() *errs.Error {
-	taskId := orm.GetTaskID("")
-	b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), taskId)
+	if b.OutDir == "" {
+		taskId := orm.GetTaskID("")
+		b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), taskId)
+	}
 	err_ := os.MkdirAll(b.OutDir, 0755)
 	if err_ != nil {
 		return errs.New(core.ErrIOWriteFail, err_)

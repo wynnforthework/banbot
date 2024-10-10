@@ -13,8 +13,10 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
+	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -22,8 +24,23 @@ type FnCalcOptBest = func(items []*OptInfo) *OptInfo
 
 var (
 	MapCalcOptBest = map[string]FnCalcOptBest{
-		"score": getBestByScore,
+		"score":   getBestByScore,
+		"good3":   optGood3,
+		"good0t3": optGood0t3,
+		"goodAvg": optGoodMa,
+		"good1t4": optGood1t4,
+		"good4":   optGood4,
+		// below performance is poor
+		// 下面的效果不好
+		"good2":    optGood2,
+		"good5":    optGood5,
+		"good7":    optGood7,
+		"good2t5":  optGood2t5,
+		"good3t7":  optGood3t7,
+		"good0t7":  optGood0t7,
+		"good3t10": optGood3t10,
 	}
+	DefCalcOptBest = "good3"
 )
 
 type OptGroup struct {
@@ -59,30 +76,27 @@ type ValItem struct {
 	Res   int
 }
 
-func getBestByScore(items []*OptInfo) *OptInfo {
-	var best *OptInfo
-	for _, it := range items {
-		if best == nil || it.Score > best.Score {
-			best = it
-		}
-	}
-	return best
-}
-
 func calcBestBy(items []*OptInfo, name string) *OptInfo {
 	if len(items) == 0 {
 		return nil
 	}
 	method, _ := MapCalcOptBest[name]
+	defFn, _ := MapCalcOptBest[DefCalcOptBest]
+	if defFn == nil {
+		panic(fmt.Sprintf("`DefCalcOptBest` no associated function: %s", DefCalcOptBest))
+	}
 	if method == nil {
 		if name != "" {
 			log.Warn("picker for MapCalcOptBest not found, use default", zap.String("n", name))
 		}
-		method = getBestByScore
+		method = defFn
 	}
 	res := method(items)
 	if res == nil {
-		res = getBestByScore(items)
+		res = defFn(items)
+		if res == nil {
+			res = getBestByScore(items)
+		}
 	}
 	return res
 }
@@ -118,6 +132,7 @@ func (o *OptInfo) ToPol(name, dirt, tfStr, pairStr string) *config.RunPolicyConf
 }
 
 func newRollBtOpt(args *config.CmdArgs) (*rollBtOpt, *errs.Error) {
+	args.NoDb = true
 	core.SetRunMode(core.RunModeBackTest)
 	err := biz.SetupComs(args)
 	if err != nil {
@@ -166,10 +181,12 @@ func (t *rollBtOpt) next() (string, *errs.Error) {
 	}
 	if polStr == "" {
 		config.RunPolicy = t.initPols
-		polStr, err = runOptimize(t.args, 11)
+		polStr, err = runOptimize(t.args, 0)
 		if err != nil {
 			return "", err
 		}
+	} else {
+		log.Info("use hyperopt cache", zap.String("path", fname))
 	}
 	return polStr, nil
 }
@@ -220,4 +237,154 @@ func (o *OptInfo) ToLine() string {
 		}
 	}
 	return fmt.Sprintf("loss: %7.2f \t%s \t%s", -o.Score, text, o.BriefLine())
+}
+
+/*
+AvgGoodDesc
+For profitable groups, cut the specified range in descending order of scores and take the average of the parameters
+对盈利的组，按分数降序，截取指定范围，取参数平均值
+*/
+func AvgGoodDesc(items []*OptInfo, startRate float64, endRate float64) *OptInfo {
+	if startRate >= endRate {
+		panic("low should < upp in AvgGoodDesc")
+	}
+	list, bads := DescGroups(items)
+	if len(list) == 0 {
+		// When all are at a loss, use the loss group calculation
+		// 当全部处于亏损时，使用亏损的组计算
+		list = bads
+	}
+	lenFlt := float64(len(list))
+	start := int(math.Round(lenFlt * startRate))
+	stop := int(math.Round(lenFlt * endRate))
+	if start+1 >= stop {
+		return list[start]
+	}
+	var res map[string]float64
+	var count = 0
+	for _, it := range list[start:stop] {
+		if len(res) == 0 {
+			res = it.Params
+		} else {
+			for k, v := range res {
+				val, ok := it.Params[k]
+				if !ok {
+					val = v
+				}
+				res[k] = v + val
+			}
+		}
+		count += 1
+	}
+	if count == 0 {
+		return nil
+	}
+	countFlt := float64(count)
+	for k, v := range res {
+		res[k] = v / countFlt
+	}
+	return &OptInfo{
+		Params: res,
+	}
+}
+
+/*
+DescGroups
+Divide the parameter group into profit and loss groups, both in descending order of scores; Return: Profit group, loss group
+将参数组划分为盈利和亏损两组，都按分数降序；返回：盈利组，亏损组
+*/
+func DescGroups(items []*OptInfo) ([]*OptInfo, []*OptInfo) {
+	slices.SortFunc(items, func(a, b *OptInfo) int {
+		return int(b.Score - a.Score)
+	})
+	for i, it := range items {
+		if it.Score < 0 {
+			return items[:i], items[i:]
+		}
+	}
+	return items, nil
+}
+
+func getBestByScore(items []*OptInfo) *OptInfo {
+	var best *OptInfo
+	for _, it := range items {
+		if best == nil || it.Score > best.Score {
+			best = it
+		}
+	}
+	return best
+}
+
+func optGoodMa(items []*OptInfo) *OptInfo {
+	return AvgGoodDesc(items, 0, 1)
+}
+
+func optGood4(items []*OptInfo) *OptInfo {
+	return optGoodPos(items, 0.4)
+}
+
+func optGood3(items []*OptInfo) *OptInfo {
+	return optGoodPos(items, 0.3)
+}
+
+func optGood2(items []*OptInfo) *OptInfo {
+	return optGoodPos(items, 0.2)
+}
+
+func optGood5(items []*OptInfo) *OptInfo {
+	return optGoodPos(items, 0.5)
+}
+
+func optGood7(items []*OptInfo) *OptInfo {
+	return optGoodPos(items, 0.7)
+}
+
+func optGoodPos(items []*OptInfo, rate float64) *OptInfo {
+	list, bads := DescGroups(items)
+	if len(list) == 0 {
+		list = bads
+	}
+	idx := int(float64(len(list)) * rate)
+	return list[idx]
+}
+
+func optGood0t3(items []*OptInfo) *OptInfo {
+	return AvgGoodDesc(items, 0, 0.3)
+}
+
+func optGood1t4(items []*OptInfo) *OptInfo {
+	return AvgGoodDesc(items, 0.1, 0.4)
+}
+
+func optGood2t5(items []*OptInfo) *OptInfo {
+	return AvgGoodDesc(items, 0.2, 0.5)
+}
+
+func optGood3t7(items []*OptInfo) *OptInfo {
+	return AvgGoodDesc(items, 0.3, 0.7)
+}
+
+func optGood0t7(items []*OptInfo) *OptInfo {
+	return AvgGoodDesc(items, 0, 0.7)
+}
+
+func optGood3t10(items []*OptInfo) *OptInfo {
+	return AvgGoodDesc(items, 0.3, 1)
+}
+
+func getTestPickers(text string) ([]string, *errs.Error) {
+	all := utils.KeysOfMap(MapCalcOptBest)
+	if text == "" {
+		return all, nil
+	}
+	arr := strings.Split(text, ",")
+	if len(arr) <= 1 {
+		return arr, nil
+	}
+	for _, key := range arr {
+		if _, ok := MapCalcOptBest[key]; !ok {
+			return nil, errs.NewMsg(errs.CodeParamInvalid, "unknown picker: %v", key)
+		}
+	}
+	return arr, nil
 }

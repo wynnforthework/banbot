@@ -72,7 +72,8 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 		core.BotRunning = true
 		t.dateRange.StartMS = t.curMs
 		t.dateRange.EndMS = t.curMs + t.runMSecs
-		bt := NewBackTest(false)
+		outDir := filepath.Join(t.outDir, args.Picker)
+		bt := NewBackTest(false, outDir)
 		if lastWal != nil {
 			wallets.SetWallets(lastWal)
 		}
@@ -90,6 +91,7 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	log.Info("Rolling Optimization Backtesting finished", zap.String("at", t.outDir))
 	return nil
 }
 
@@ -100,7 +102,10 @@ func RunRollBTPicker(args *config.CmdArgs) *errs.Error {
 	}
 	pbar := utils.NewPrgBar(int((t.allEndMs-t.curMs)/1000), "RollPicker")
 	defer pbar.Close()
-	pickers := utils.KeysOfMap(MapCalcOptBest)
+	pickers, err := getTestPickers(args.Picker)
+	if err != nil {
+		return err
+	}
 	var rows, rows2 [][]string
 	head := []string{"date"}
 	head = append(head, pickers...)
@@ -134,7 +139,7 @@ func RunRollBTPicker(args *config.CmdArgs) *errs.Error {
 			core.BotRunning = true
 			t.dateRange.StartMS = t.curMs
 			t.dateRange.EndMS = t.curMs + t.runMSecs
-			bt := NewBackTest(true)
+			bt := NewBackTest(true, "")
 			bt.Run()
 			score := bt.Score()
 			scores = append(scores, score)
@@ -168,14 +173,21 @@ func RunRollBTPicker(args *config.CmdArgs) *errs.Error {
 		return err
 	}
 	csvPath = filepath.Join(t.outDir, "pickerRanks.csv")
-	return utils.WriteCsvFile(csvPath, rows2, false)
+	err = utils.WriteCsvFile(csvPath, rows2, false)
+	if err != nil {
+		return err
+	}
+	log.Info("Test Pickers finished", zap.String("at", t.outDir))
+	return nil
 }
 
 func btOptHash(args *config.CmdArgs) string {
 	raws := []string{
 		args.Sampler,
 		args.RunPeriod,
+		args.ReviewPeriod,
 		strconv.FormatBool(args.EachPairs),
+		strconv.Itoa(args.OptRounds),
 	}
 	ymlData, err := config.DumpYaml()
 	if ymlData != nil {
@@ -198,7 +210,7 @@ func pickFromExists(path string, picker string) (string, *errs.Error) {
 	if len(paths) == 0 {
 		return "", nil
 	}
-	return collectOptLog(paths, 11, picker)
+	return collectOptLog(paths, 0, picker)
 }
 
 /*
@@ -522,10 +534,6 @@ func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, f
 	}
 	if err != nil {
 		log.Error("optimize fail", zap.String("job", title), zap.Error(err))
-	} else {
-		line := "[best] " + best.ToLine()
-		flog.WriteString(line + "\n")
-		log.Warn(line)
 	}
 	pol.Params = best.Params
 	pol.Score = best.Score
@@ -535,7 +543,7 @@ func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, f
 func runBTOnce() (*BackTest, float64) {
 	core.BotRunning = true
 	biz.ResetVars()
-	bt := NewBackTest(true)
+	bt := NewBackTest(true, "")
 	bt.Run()
 	var loss = -bt.Score()
 	return bt, loss

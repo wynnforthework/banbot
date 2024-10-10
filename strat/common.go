@@ -480,3 +480,9 @@ func FireOdChange(acc string, od *orm.InOutOrder, evt int) {
 		cb(acc, od, evt)
 	}
 }
+
+func AddStratGroup(group string, items map[string]FuncMakeStrat) {
+	for k, v := range items {
+		StratMake[group+":"+k] = v
+	}
+}
