@@ -7,7 +7,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
-	"github.com/banbox/banbot/optmize"
+	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -38,11 +38,11 @@ func RunCmd() {
 			entry = RunSpider
 		case "optimize":
 			options = []string{"out", "opt_rounds", "sampler", "picker", "each_pairs", "concur"}
-			entry = optmize.RunOptimize
+			entry = opt.RunOptimize
 		case "bt_opt":
 			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
 				"concur", "alpha"}
-			entry = optmize.RunBTOverOpt
+			entry = opt.RunBTOverOpt
 		case "kline":
 			runKlineCmds(args[1:])
 		case "tick":
@@ -149,15 +149,15 @@ func runToolCmds(args []string) {
 		switch name {
 		case "collect_opt":
 			options = []string{"in", "picker"}
-			entry = optmize.CollectOptLog
+			entry = opt.CollectOptLog
 		case "test_pickers":
 			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur", "picker"}
-			entry = optmize.RunRollBTPicker
+			entry = opt.RunRollBTPicker
 		case "load_cal":
 			options = []string{"in"}
 			entry = biz.LoadCalendars
 		case "cmp_orders":
-			optmize.CompareExgBTOrders(args[1:])
+			opt.CompareExgBTOrders(args[1:])
 			os.Exit(0)
 		case "data_server":
 			options = []string{"mem_profile"}

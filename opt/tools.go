@@ -1,4 +1,4 @@
-package optmize
+package opt
 
 import (
 	"encoding/csv"

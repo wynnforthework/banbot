@@ -9,7 +9,7 @@ import (
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/live"
-	"github.com/banbox/banbot/optmize"
+	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
@@ -45,7 +45,7 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 func runBackTest() string {
 	core.BotRunning = true
 	biz.ResetVars()
-	b := optmize.NewBackTest(false, "")
+	b := opt.NewBackTest(false, "")
 	b.Run()
 	core.RunExitCalls()
 	return b.OutDir
