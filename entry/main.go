@@ -63,7 +63,7 @@ please run with a subcommand:
     backtest:   backtest with strategies and data
     spider:     start the spider
     optimize:   run hyper parameters optimization
-	bt_opt: 	rolling backtest with hyperparameter optimization
+    bt_opt:     rolling backtest with hyperparameter optimization
     kline:      run kline commands
     tick:       run tick commands
     tool:       run tools
@@ -103,13 +103,13 @@ func runKlineCmds(args []string) {
 	}, func() {
 		tpl := `
 banbot kline:
-	down: 		download kline data from exchange
-	load: 		load kline data from zip/csv files
-	export:		export kline to csv files from db
-	purge: 		purge/delete kline data with args
-	correct: 	sync klines between timeframes
-	adj_calc:   recalculate adjust factors
-	adj_export:	export adjust factors to csv
+    down:       download kline data from exchange
+    load:       load kline data from zip/csv files
+    export:     export kline to csv files from db
+    purge:      purge/delete kline data with args
+    correct:    sync klines between timeframes
+    adj_calc:   recalculate adjust factors
+    adj_export: export adjust factors to csv
 please choose a valid action
 `
 		log.Warn(tpl)
@@ -134,8 +134,8 @@ func runTickCmds(args []string) {
 	}, func() {
 		tpl := `
 banbot tick:
-	convert: 	convert tick data format
-	to_kline: 	build kline from ticks
+    convert:     convert tick data format
+    to_kline:    build kline from ticks
 please choose a valid action
 `
 		log.Warn(tpl)
@@ -175,14 +175,14 @@ func runToolCmds(args []string) {
 	}, func() {
 		log.Warn(`
 banbot tool:
-	collect_opt: 	collect result of optimize, and print in order
-	test_pickers: 	test pickers in roll backtest
-	load_cal: 		load calenders
-	cmp_orders: 	compare backTest orders with exchange orders
-	data_server: 	serve a grpc server as data feeder
-	calc_perfs: 	calculate sharpe/sortino ratio for input data
-	corr: 			calculate correlation matrix for symbols 
-	`)
+    collect_opt:     collect result of optimize, and print in order
+    test_pickers:    test pickers in roll backtest
+    load_cal:        load calenders
+    cmp_orders:      compare backTest orders with exchange orders
+    data_server:     serve a grpc server as data feeder
+    calc_perfs:      calculate sharpe/sortino ratio for input data
+    corr:            calculate correlation matrix for symbols 
+`)
 	})
 }
 
