@@ -6,7 +6,7 @@ toolchain go1.23.0
 
 require (
 	github.com/anyongjin/go-bayesopt v1.0.1
-	github.com/banbox/banexg v0.2.2
+	github.com/banbox/banexg v0.2.6
 	github.com/banbox/banta v0.1.5
 	github.com/bytedance/sonic v1.12.3
 	github.com/c-bata/goptuna v0.9.0
@@ -41,7 +41,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/bytedance/sonic/loader v0.2.0 // indirect
+	github.com/bytedance/sonic/loader v0.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
@@ -51,7 +51,6 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
-	github.com/golang/glog v1.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

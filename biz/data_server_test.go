@@ -4,9 +4,9 @@ import (
 	"context"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
-	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/log"
+	"github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -28,7 +28,7 @@ func TestDataServer(t *testing.T) {
 	}
 	client := NewFeaFeederClient(conn)
 	ctx := context.Background()
-	tfMSecs := int64(utils2.TFToSecs("1M") * 1000)
+	tfMSecs := int64(utils.TFToSecs("1M") * 1000)
 	now := time.Now()
 	endMS := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, btime.UTCLocale).UnixMilli()
 	pairs := []string{"AAVE/USDT:USDT", "ACH/USDT:USDT", "ADA/USDT:USDT", "AGIX/USDT:USDT", "ALGO/USDT:USDT", "ANKR/USDT:USDT", "APE/USDT:USDT", "API3/USDT:USDT", "APT/USDT:USDT", "AR/USDT:USDT", "ARB/USDT:USDT", "ARPA/USDT:USDT", "ASTR/USDT:USDT", "ATOM/USDT:USDT", "AUCTION/USDT:USDT", "AVAX/USDT:USDT", "AXL/USDT:USDT", "AXS/USDT:USDT", "BADGER/USDT:USDT", "BAKE/USDT:USDT", "BCH/USDT:USDT", "BEAMX/USDT:USDT", "BEL/USDT:USDT", "BICO/USDT:USDT", "BLUR/USDT:USDT", "BNB/USDT:USDT", "BNX/USDT:USDT", "BOND/USDT:USDT", "BSV/USDT:USDT", "BTC/USDT:USDT"}

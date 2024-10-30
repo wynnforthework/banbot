@@ -40,7 +40,7 @@ cat /var/lib/postgresql/data/postgresql.conf|grep timezone
 exit  # 退出容器
 docker cp timescaledb:/var/lib/postgresql/data/postgresql.conf ~/download/postgresql.conf
 vim ~/download/postgresql.conf
-# 找到timezone和log_timezong，将值修改为UTC
+# 找到timezone和log_timezone，将值修改为UTC
 # 将文件复制到容器
 docker cp ~/download/postgresql.conf timescaledb:/var/lib/postgresql/data/postgresql.conf
 

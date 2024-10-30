@@ -63,15 +63,15 @@ func init() {
 }
 
 func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, limit int, withUnFinish bool) ([]*banexg.Kline, *errs.Error) {
-	tfMSecs := int64(utils.TFToSecs(timeframe) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeframe) * 1000)
 	revRead := startMs == 0 && limit > 0
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, withUnFinish)
 	maxEndMs := endMs
-	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
+	finishEndMS := utils2.AlignTfMSecs(endMs, tfMSecs)
 	unFinishMS := int64(0)
 	if core.LiveMode && withUnFinish {
 		curMs := btime.TimeMS()
-		unFinishMS = utils.AlignTfMSecs(curMs, tfMSecs)
+		unFinishMS = utils2.AlignTfMSecs(curMs, tfMSecs)
 		if finishEndMS > unFinishMS {
 			finishEndMS = unFinishMS
 		}
@@ -104,7 +104,7 @@ order by time`, sid, startMs, finishEndMS)
 		utils.ReverseArr(klines)
 	}
 	if subTF != "" && len(klines) > 0 {
-		fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
+		fromTfMSecs := int64(utils2.TFToSecs(subTF) * 1000)
 		var lastFinish bool
 		offMS := GetAlignOff(sid, tfMSecs)
 		klines, lastFinish = utils.BuildOHLCV(klines, tfMSecs, 0, nil, fromTfMSecs, offMS)
@@ -132,12 +132,12 @@ func (q *Queries) QueryOHLCVBatch(sids []int32, timeframe string, startMs, endMs
 	if len(sids) == 0 {
 		return nil
 	}
-	tfMSecs := int64(utils.TFToSecs(timeframe) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeframe) * 1000)
 	startMs, endMs = parseDownArgs(tfMSecs, startMs, endMs, limit, false)
-	finishEndMS := utils.AlignTfMSecs(endMs, tfMSecs)
+	finishEndMS := utils2.AlignTfMSecs(endMs, tfMSecs)
 	if core.LiveMode {
 		curMs := btime.TimeMS()
-		unFinishMS := utils.AlignTfMSecs(curMs, tfMSecs)
+		unFinishMS := utils2.AlignTfMSecs(curMs, tfMSecs)
 		if finishEndMS > unFinishMS {
 			finishEndMS = unFinishMS
 		}
@@ -164,7 +164,7 @@ order by sid,time`, startMs, finishEndMS, sidText)
 	curSid := int32(0)
 	fromTfMSecs := int64(0)
 	if subTF != "" {
-		fromTfMSecs = int64(utils.TFToSecs(subTF) * 1000)
+		fromTfMSecs = int64(utils2.TFToSecs(subTF) * 1000)
 	}
 	noFired := make(map[int32]bool)
 	for _, sid := range sids {
@@ -257,7 +257,7 @@ func mapToKlines(rows pgx.Rows, err_ error) ([]*banexg.Kline, error) {
 }
 
 func getSubTf(timeFrame string) (string, string, int) {
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	for i := len(aggList) - 1; i >= 0; i-- {
 		agg := aggList[i]
 		if agg.MSecs >= tfMSecs {
@@ -289,7 +289,7 @@ func getUnFinish(sess *Queries, sid int32, timeFrame string, startMS, endMS int6
 		panic(fmt.Sprintf("`mode` of getUnFinish must be calc/query, current: %s", mode))
 	}
 	ctx := context.Background()
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	barEndMS := int64(0)
 	fromTF := timeFrame
 	var bigKlines = make([]*banexg.Kline, 0)
@@ -308,7 +308,7 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 		offMS := GetAlignOff(sid, tfMSecs)
 		bigKlines, _ = utils.BuildOHLCV(klines, tfMSecs, 0, nil, 0, offMS)
 		if len(klines) > 0 {
-			barEndMS = klines[len(klines)-1].Time + int64(utils.TFToSecs(fromTF)*1000)
+			barEndMS = klines[len(klines)-1].Time + int64(utils2.TFToSecs(fromTF)*1000)
 		}
 	}
 	// Querying data from unfinished cycles/sub cycles
@@ -377,8 +377,8 @@ Calculate the unfinished bars of large cycles from sub cycles
 从子周期计算大周期的未完成bar
 */
 func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr []*banexg.Kline) *KlineUn {
-	toTfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
-	fromTfMSecs := int64(utils.TFToSecs(subTF) * 1000)
+	toTfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
+	fromTfMSecs := int64(utils2.TFToSecs(subTF) * 1000)
 	offMS := GetAlignOff(sid, toTfMSecs)
 	merged, _ := utils.BuildOHLCV(arr, toTfMSecs, 0, nil, fromTfMSecs, offMS)
 	if len(merged) == 0 {
@@ -400,7 +400,7 @@ func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr 
 }
 
 func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, startMS, endMS int64, klines []*banexg.Kline) *errs.Error {
-	tfMSecs := int64(utils.TFToSecs(agg.TimeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(agg.TimeFrame) * 1000)
 	finished := endMS%tfMSecs == 0
 	whereSql := fmt.Sprintf("where sid=%v and timeframe='%v';", sid, agg.TimeFrame)
 	fromWhere := "from kline_un " + whereSql
@@ -424,8 +424,8 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		}
 		return nil
 	}
-	barStartMS := utils.AlignTfMSecs(startMS, tfMSecs)
-	barEndMS := utils.AlignTfMSecs(endMS, tfMSecs)
+	barStartMS := utils2.AlignTfMSecs(startMS, tfMSecs)
+	barEndMS := utils2.AlignTfMSecs(endMS, tfMSecs)
 	if barStartMS == barEndMS {
 		// When inserting the start and end timestamps of a sub cycle, corresponding to the current cycle and belonging to the same bar, fast updates are executed
 		// 当子周期插入开始结束时间戳，对应到当前周期，属于同一个bar时，才执行快速更新
@@ -537,7 +537,7 @@ func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kl
 		return 0, nil
 	}
 	startMS := arr[0].Time
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	endMS := arr[len(arr)-1].Time + tfMSecs
 	insId, err := q.AddInsJob(AddInsKlineParams{
 		Sid:       sid,
@@ -614,7 +614,7 @@ func (q *Queries) CalcKLineRange(sid int32, timeFrame string, start, end int64) 
 	}
 	if *realEnd > 0 {
 		// 修正为实际结束时间
-		*realEnd += int64(utils.TFToSecs(timeFrame) * 1000)
+		*realEnd += int64(utils2.TFToSecs(timeFrame) * 1000)
 	}
 	return *realStart, *realEnd, nil
 }
@@ -629,7 +629,7 @@ func (q *Queries) CalcKLineRanges(timeFrame string) (map[int32][2]int64, *errs.E
 	}
 	defer rows.Close()
 	res := make(map[int32][2]int64)
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	for rows.Next() {
 		var sid int32
 		var realStart, realEnd int64
@@ -681,7 +681,7 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 }
 
 func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	barTimes, err := q.getKLineTimes(sid, timeFrame, startMS, endMS)
 	if err != nil {
 		return err
@@ -706,7 +706,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 			}
 			prevTime = time
 		}
-		maxEnd := utils.AlignTfMSecs(btime.UTCStamp(), tfMSecs) - tfMSecs
+		maxEnd := utils2.AlignTfMSecs(btime.UTCStamp(), tfMSecs) - tfMSecs
 		if maxEnd-prevTime > tfMSecs*5 && endMS-prevTime > tfMSecs {
 			holes = append(holes, [2]int64{prevTime + tfMSecs, min(endMS, maxEnd)})
 		}
@@ -846,7 +846,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 }
 
 func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int64, klines []*banexg.Kline) *errs.Error {
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	aggTfs := map[string]bool{timeFrame: true}
 	aggJobs := make([]*KlineAgg, 0)
 	unFinishJobs := make([]*KlineAgg, 0)
@@ -857,14 +857,14 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 			//跳过过小维度；跳过无关的连续聚合
 			continue
 		}
-		startAlignMS := utils.AlignTfMSecs(startMS, item.MSecs)
-		endAlignMS := utils.AlignTfMSecs(endMS, item.MSecs)
+		startAlignMS := utils2.AlignTfMSecs(startMS, item.MSecs)
+		endAlignMS := utils2.AlignTfMSecs(endMS, item.MSecs)
 		if _, ok := aggTfs[item.AggFrom]; ok && startAlignMS < endAlignMS {
 			// startAlign < endAlign说明：插入的数据所属bar刚好完成
 			aggTfs[item.TimeFrame] = true
 			aggJobs = append(aggJobs, item)
 		}
-		unBarStartMs := utils.AlignTfMSecs(curMS, item.MSecs)
+		unBarStartMs := utils2.AlignTfMSecs(curMS, item.MSecs)
 		if endAlignMS >= unBarStartMs && endMS >= endAlignMS {
 			// Only attempt to update when the data involves bars that have not been completed in the current cycle; Only pass in relevant bars to improve efficiency
 			// 仅当数据涉及当前周期未完成bar时，才尝试更新；仅传入相关的bar，提高效率
@@ -877,7 +877,7 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 			// Take the first time after aligning the maximum cycle as the starting time
 			// 取最大周期的对齐后第一个时间作为开始时间
 			msecs := unFinishJobs[len(unFinishJobs)-1].MSecs
-			startAlign := utils.AlignTfMSecs(startMS, msecs)
+			startAlign := utils2.AlignTfMSecs(startMS, msecs)
 			klines, err = q.QueryOHLCV(sid, timeFrame, startAlign, endMS, 0, true)
 			if err != nil {
 				return err
@@ -903,8 +903,8 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 
 func (q *Queries) refreshAgg(item *KlineAgg, sid int32, orgStartMS, orgEndMS int64, aggFrom string) *errs.Error {
 	tfMSecs := item.MSecs
-	startMS := utils.AlignTfMSecs(orgStartMS, tfMSecs)
-	endMS := utils.AlignTfMSecs(orgEndMS, tfMSecs)
+	startMS := utils2.AlignTfMSecs(orgStartMS, tfMSecs)
+	endMS := utils2.AlignTfMSecs(orgEndMS, tfMSecs)
 	if startMS == endMS && endMS < orgStartMS {
 		// 没有出现新的完成的bar数据，无需更新
 		// 前2个相等，说明：插入的数据所属bar尚未完成。
@@ -953,7 +953,7 @@ insert into %s (sid, time, open, high, low, close, volume, info)
 }
 
 func NewKlineAgg(TimeFrame, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention string) *KlineAgg {
-	msecs := int64(utils.TFToSecs(TimeFrame) * 1000)
+	msecs := int64(utils2.TFToSecs(TimeFrame) * 1000)
 	return &KlineAgg{TimeFrame, msecs, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention}
 }
 
@@ -966,23 +966,23 @@ Only 1m and 1h allow downloading and writing to the super table. All other dimen
 	只有1m和1h允许下载并写入超表。其他维度都是由这两个维度聚合得到。
 */
 func GetDownTF(timeFrame string) (string, *errs.Error) {
-	secs := utils.TFToSecs(timeFrame)
-	if secs >= core.SecsDay {
-		if secs%core.SecsDay > 0 {
+	secs := utils2.TFToSecs(timeFrame)
+	if secs >= utils2.SecsDay {
+		if secs%utils2.SecsDay > 0 {
 			return "", errs.NewMsg(core.ErrInvalidTF, "invalid tf: %s", timeFrame)
 		}
 		return "1d", nil
-	} else if secs >= core.SecsHour {
-		if secs%core.SecsHour > 0 {
+	} else if secs >= utils2.SecsHour {
+		if secs%utils2.SecsHour > 0 {
 			return "", errs.NewMsg(core.ErrInvalidTF, "invalid tf: %s", timeFrame)
 		}
 		return "1h", nil
-	} else if secs >= core.SecsMin*15 {
-		if secs%(core.SecsMin*15) > 0 {
+	} else if secs >= utils2.SecsMin*15 {
+		if secs%(utils2.SecsMin*15) > 0 {
 			return "", errs.NewMsg(core.ErrInvalidTF, "invalid tf: %s", timeFrame)
 		}
 		return "15m", nil
-	} else if secs < core.SecsMin || secs%core.SecsMin > 0 {
+	} else if secs < utils2.SecsMin || secs%utils2.SecsMin > 0 {
 		return "", errs.NewMsg(core.ErrInvalidTF, "invalid tf: %s", timeFrame)
 	}
 	return "1m", nil
@@ -1140,7 +1140,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 	for i, h := range holes {
 		rows[i] = &KHoleExt{
 			KHole:   h,
-			TfMSecs: int64(utils.TFToSecs(h.Timeframe) * 1000),
+			TfMSecs: int64(utils2.TFToSecs(h.Timeframe) * 1000),
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -1264,7 +1264,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		for i, h := range newHoles {
 			items[i] = AddKHolesParams{
 				Sid:       int32(h[0]),
-				Timeframe: utils.SecsToTF(int(h[1] / 1000)),
+				Timeframe: utils2.SecsToTF(int(h[1] / 1000)),
 				Start:     h[2],
 				Stop:      h[3],
 			}
@@ -1307,7 +1307,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 	for _, info := range infos {
 		infoList = append(infoList, &KInfoExt{
 			KInfo:   *info,
-			TfMSecs: int64(utils.TFToSecs(info.Timeframe) * 1000),
+			TfMSecs: int64(utils2.TFToSecs(info.Timeframe) * 1000),
 		})
 	}
 	slices.SortFunc(infoList, func(a, b *KInfoExt) int {
@@ -1408,9 +1408,9 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 		if curRange, ok := tfRanges[agg.TimeFrame]; ok {
 			curStart, curEnd = curRange[0], curRange[1]
 		}
-		tfMSecs := int64(utils.TFToSecs(agg.TimeFrame) * 1000)
-		subAlignStart := utils.AlignTfMSecs(subStart, tfMSecs)
-		subAlignEnd := utils.AlignTfMSecs(subEnd, tfMSecs)
+		tfMSecs := int64(utils2.TFToSecs(agg.TimeFrame) * 1000)
+		subAlignStart := utils2.AlignTfMSecs(subStart, tfMSecs)
+		subAlignEnd := utils2.AlignTfMSecs(subEnd, tfMSecs)
 		if subAlignStart < curStart {
 			err = q.refreshAgg(agg, sid, subStart, min(subEnd, curStart), "")
 			if err != nil {

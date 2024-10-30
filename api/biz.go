@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/gofiber/fiber/v2"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -130,7 +131,7 @@ func getStatistics(c *fiber.Ctx) error {
 		var curDay int64
 		var dayProfitSum float64
 		var dayProfits []float64 // Daily Profit 每日利润
-		var dayMSecs = int64(utils.TFToSecs("1d") * 1000)
+		var dayMSecs = int64(utils2.TFToSecs("1d") * 1000)
 		for _, od := range orders {
 			if od.Status < orm.InOutStatusPartEnter || od.Status > orm.InOutStatusFullExit {
 				continue
@@ -160,7 +161,7 @@ func getStatistics(c *fiber.Ctx) error {
 				doneProfitSum += od.Profit
 				doneProfitRateSum += od.ProfitRate
 				doneTotalCost += od.EnterCost()
-				curDayMS := utils.AlignTfMSecs(od.EnterAt, dayMSecs)
+				curDayMS := utils2.AlignTfMSecs(od.EnterAt, dayMSecs)
 				if curDay == 0 || curDay == curDayMS {
 					dayProfitSum += od.Profit
 				} else {
@@ -558,21 +559,21 @@ func getPerformance(c *fiber.Ctx) error {
 				return od.Symbol
 			}
 		} else if data.GroupBy == "month" {
-			tfMSecs := int64(utils.TFToSecs("1M") * 1000)
+			tfMSecs := int64(utils2.TFToSecs("1M") * 1000)
 			odKey = func(od *orm.InOutOrder) string {
-				dateMS := utils.AlignTfMSecs(od.EnterAt, tfMSecs)
+				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
 				return btime.ToDateStr(dateMS, "2006-01")
 			}
 		} else if data.GroupBy == "week" {
-			tfMSecs := int64(utils.TFToSecs("1w") * 1000)
+			tfMSecs := int64(utils2.TFToSecs("1w") * 1000)
 			odKey = func(od *orm.InOutOrder) string {
-				dateMS := utils.AlignTfMSecs(od.EnterAt, tfMSecs)
+				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
 				return btime.ToDateStr(dateMS, "2006-01-02")
 			}
 		} else if data.GroupBy == "day" {
-			tfMSecs := int64(utils.TFToSecs("1d") * 1000)
+			tfMSecs := int64(utils2.TFToSecs("1d") * 1000)
 			odKey = func(od *orm.InOutOrder) string {
-				dateMS := utils.AlignTfMSecs(od.EnterAt, tfMSecs)
+				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
 				return btime.ToDateStr(dateMS, "2006-01-02")
 			}
 		} else {
@@ -591,7 +592,7 @@ func getPerformance(c *fiber.Ctx) error {
 
 func groupOrders(orders []*orm.InOutOrder, odKey func(od *orm.InOutOrder) string) []*GroupItem {
 	var itemMap = map[string]*GroupItem{}
-	hourMSecs := float64(utils.TFToSecs("1h") * 1000)
+	hourMSecs := float64(utils2.TFToSecs("1h") * 1000)
 	for _, od := range orders {
 		key := odKey(od)
 		gp, ok := itemMap[key]

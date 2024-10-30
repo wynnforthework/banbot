@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"crypto/rand"
 	"fmt"
 	"github.com/banbox/banbot/core"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
@@ -78,4 +80,18 @@ func UniqueItems[T comparable](arr []T) ([]T, []T) {
 		has[it] = true
 	}
 	return res, dups
+}
+
+const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+func RandomStr(length int) string {
+	b := make([]byte, length)
+	for i := range b {
+		randomIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		if err != nil {
+			panic(err)
+		}
+		b[i] = charset[randomIndex.Int64()]
+	}
+	return string(b)
 }

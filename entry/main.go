@@ -41,7 +41,7 @@ func RunCmd() {
 			entry = opt.RunOptimize
 		case "bt_opt":
 			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
-				"concur", "alpha"}
+				"concur", "alpha", "pair_picker"}
 			entry = opt.RunBTOverOpt
 		case "kline":
 			runKlineCmds(args[1:])
@@ -151,7 +151,8 @@ func runToolCmds(args []string) {
 			options = []string{"in", "picker"}
 			entry = opt.CollectOptLog
 		case "test_pickers":
-			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur", "picker"}
+			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur",
+				"picker", "pair_picker"}
 			entry = opt.RunRollBTPicker
 		case "load_cal":
 			options = []string{"in"}
@@ -271,6 +272,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.Picker, "picker", "good3", "Method for selecting targets from multiple hyperparameter optimization results")
 		case "alpha":
 			cmd.Float64Var(&args.Alpha, "alpha", 1, "ma alpha for calculating ema in hyperOpt")
+		case "pair_picker":
+			cmd.StringVar(&args.PairPicker, "pair-picker", "", "min sharpe val for pairs in bt_opt mode")
 		case "each_pairs":
 			cmd.BoolVar(&args.EachPairs, "each-pairs", false, "run for each pairs")
 		case "concur":

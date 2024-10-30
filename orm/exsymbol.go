@@ -336,7 +336,7 @@ func InitListDates() *errs.Error {
 				if err.Code != errs.CodeNoMarketForPair {
 					return err
 				}
-			} else {
+			} else if mar.Expiry > 0 {
 				exs.DelistMs = mar.Expiry
 			}
 		}

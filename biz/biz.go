@@ -16,6 +16,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -140,7 +141,7 @@ func AddBatchJob(account, tf string, job *strat.StratJob, isInfo bool) {
 	if !ok {
 		tasks = &strat.BatchMap{
 			Map:     make(map[string]*strat.BatchTask),
-			TFMSecs: int64(utils.TFToSecs(tf) * 1000),
+			TFMSecs: int64(utils2.TFToSecs(tf) * 1000),
 		}
 		strat.BatchTasks[key] = tasks
 	}

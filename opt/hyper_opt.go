@@ -49,9 +49,11 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 	lastPols := config.RunPolicy
 	pbar := utils.NewPrgBar(int((t.allEndMs-t.curMs)/1000), "BtOpt")
 	defer pbar.Close()
+	backPols := config.RunPolicy
 	for t.curMs < t.allEndMs {
 		pbar.Add(int(t.runMSecs / 1000))
-		polStr, err := t.next()
+		config.RunPolicy = backPols
+		polStr, err := t.next(args.PairPicker)
 		if err != nil {
 			return err
 		}
@@ -118,9 +120,11 @@ func RunRollBTPicker(args *config.CmdArgs) *errs.Error {
 		row2 := []string{row[0]}
 		items := make([]*ValItem, 0, len(pickers))
 		log.Info("test pickers for", zap.String("dt", row[0]))
+		backPols := config.RunPolicy
 		for i, picker := range pickers {
 			t.args.Picker = picker
-			polStr, err := t.next()
+			config.RunPolicy = backPols
+			polStr, err := t.next(args.PairPicker)
 			if err != nil {
 				return err
 			}
@@ -202,7 +206,7 @@ func btOptHash(args *config.CmdArgs) string {
 	return res[:10]
 }
 
-func pickFromExists(path string, picker string) (string, *errs.Error) {
+func pickFromExists(path string, picker, pairPicker string) (string, *errs.Error) {
 	paths, err_ := utils.GetFilesWithPrefix(path)
 	if err_ != nil {
 		return "", errs.New(errs.CodeIOReadFail, err_)
@@ -210,7 +214,7 @@ func pickFromExists(path string, picker string) (string, *errs.Error) {
 	if len(paths) == 0 {
 		return "", nil
 	}
-	return collectOptLog(paths, 0, picker)
+	return collectOptLog(paths, 0, picker, pairPicker)
 }
 
 /*
@@ -358,7 +362,7 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 			return "", err
 		}
 	}
-	return collectOptLog(logOuts, minScore, args.Picker)
+	return collectOptLog(logOuts, minScore, args.Picker, args.PairPicker)
 }
 
 /*
@@ -505,17 +509,25 @@ func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, f
 		log.Warn("no hyper params, skip optimize", zap.String("strtg", title))
 		return
 	}
+	detailDir := filepath.Join(filepath.Dir(flog.Name()), "detail")
+	err_ := utils.EnsureDir(detailDir, 0755)
+	if err_ != nil {
+		log.Warn("create detail dir fail", zap.String("path", detailDir), zap.Error(err_))
+		return
+	}
 	flog.WriteString(fmt.Sprintf("\n============== %s =============\n", title))
 	var resList = make([]*OptInfo, 0, rounds)
 	runOptJob := func(data map[string]float64) (float64, *errs.Error) {
+		jobId := utils.RandomStr(6)
 		for k, v := range data {
 			pol.Params[k] = v
 		}
 		bt, loss := runBTOnce()
-		o := &OptInfo{Score: -loss, Params: data, BTResult: bt.BTResult}
+		o := &OptInfo{Score: -loss, Params: data, BTResult: bt.BTResult, ID: jobId}
 		line := o.ToLine()
 		flog.WriteString(line + "\n")
 		log.Warn(line)
+		bt.dumpDetail(filepath.Join(detailDir, jobId+".json"))
 		resList = append(resList, o)
 		return loss, nil
 	}
@@ -527,7 +539,9 @@ func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, f
 	}
 	best := calcBestBy(resList, picker)
 	if best.BTResult == nil {
+		best.ID = utils.RandomStr(6)
 		best.runGetBtResult(pol)
+		best.dumpDetail(filepath.Join(detailDir, best.ID+".json"))
 		line := fmt.Sprintf("[%s] %s", picker, best.ToLine())
 		flog.WriteString(line + "\n")
 		log.Warn(line)
@@ -667,7 +681,7 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		}
 		return nil
 	})
-	res, err := collectOptLog(paths, 0, args.Picker)
+	res, err := collectOptLog(paths, 0, args.Picker, args.PairPicker)
 	if err != nil {
 		return err
 	}
@@ -675,8 +689,9 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
-func collectOptLog(paths []string, minScore float64, picker string) (string, *errs.Error) {
+func collectOptLog(paths []string, minScore float64, picker, pairSel string) (string, *errs.Error) {
 	res := make([]*OptGroup, 0)
+	detailDir := ""
 	for _, path := range paths {
 		var name, pair, dirt, tfStr string
 		inUnion := false
@@ -686,6 +701,10 @@ func collectOptLog(paths []string, minScore float64, picker string) (string, *er
 		fdata, err_ := os.ReadFile(path)
 		if err_ != nil {
 			return "", errs.New(errs.CodeIOReadFail, err_)
+		}
+		if detailDir == "" {
+			detailDir = filepath.Join(filepath.Dir(path), "detail")
+			_ = utils.EnsureDir(detailDir, 0755)
 		}
 		saveGroup := func() {
 			if name == "" {
@@ -777,7 +796,7 @@ func collectOptLog(paths []string, minScore float64, picker string) (string, *er
 					best = calcBestBy(items, picker)
 				}
 				if best != nil {
-					needRun := best.BTResult == nil
+					needRun := best.BTResult == nil || best.ID == ""
 					if inUnion {
 						union = best
 						union.Dirt = "union"
@@ -826,8 +845,24 @@ func collectOptLog(paths []string, minScore float64, picker string) (string, *er
 							config.RunPolicy = []*config.RunPolicyConfig{both.ToPol(name, dirt, tfStr, pair)}
 						}
 					}
+					var dumpPath string
+					if best.ID != "" {
+						dumpPath = filepath.Join(detailDir, best.ID+".json")
+						btRes, err := parseBtResult(dumpPath)
+						if err != nil {
+							log.Warn("parse BtResult fail", zap.String("err", err.Short()))
+							needRun = true
+						} else {
+							best.BTResult = btRes
+						}
+					}
 					if needRun {
-						best.runGetBtResult(config.RunPolicy[len(config.RunPolicy)-1])
+						if best.BTResult == nil || len(best.PairGrps) == 0 {
+							best.ID = utils.RandomStr(6)
+							dumpPath = filepath.Join(detailDir, best.ID+".json")
+							best.runGetBtResult(config.RunPolicy[len(config.RunPolicy)-1])
+							best.dumpDetail(dumpPath)
+						}
 						l := fmt.Sprintf("[%s] %s", picker, best.ToLine())
 						idx := len(outs) - 1
 						outs = append(outs[:idx], []string{l, outs[idx]}...)
@@ -875,8 +910,17 @@ func collectOptLog(paths []string, minScore float64, picker string) (string, *er
 		for _, p := range gp.Items {
 			tfStr := strings.ReplaceAll(gp.TFStr, "|", ", ")
 			b.WriteString(fmt.Sprintf("  - name: %s\n    run_timeframes: [ %s ]\n", gp.Name, tfStr))
-			if gp.Pair != "" {
-				pairStr := strings.ReplaceAll(gp.Pair, "|", ", ")
+			var pairStr string
+			if pairSel != "" {
+				pairs := selectPairs(p.BTResult, pairSel)
+				if len(pairs) > 0 {
+					pairStr = strings.Join(pairs, ", ")
+				}
+			}
+			if pairStr == "" && gp.Pair != "" {
+				pairStr = strings.ReplaceAll(gp.Pair, "|", ", ")
+			}
+			if pairStr != "" {
 				b.WriteString(fmt.Sprintf("    pairs: [%s]\n", pairStr))
 			}
 			if p.Dirt != "" {
@@ -945,6 +989,8 @@ func parseOptLine(line string) *OptInfo {
 				res.MaxDrawDownPct, _ = strconv.ParseFloat(val[:len(val)-1], 64)
 			} else if key == "sharpe" {
 				res.SharpeRatio, _ = strconv.ParseFloat(val, 64)
+			} else if key == "id" {
+				res.ID = val
 			}
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -42,7 +43,7 @@ func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
 	if _, ok := core.ForbidPairs[bar.Symbol]; ok {
 		return nil
 	}
-	tfSecs := utils.TFToSecs(bar.TimeFrame)
+	tfSecs := utils2.TFToSecs(bar.TimeFrame)
 	core.SetBarPrice(bar.Symbol, bar.Close)
 	// If it exceeds 1 minute and half of the period, the bar is considered delayed and orders cannot be placed.
 	// 超过1分钟且周期的一半，认为bar延迟，不可下单

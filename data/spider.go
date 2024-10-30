@@ -10,6 +10,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"strings"
 	"sync"
@@ -106,7 +107,7 @@ func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
 		return endMS, nil
 	}
 	exs := orm.GetSymbolByID(save.Sid)
-	tfMSecs := int64(utils.TFToSecs(save.TimeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(save.TimeFrame) * 1000)
 	tryCount := 0
 	log.Debug("start first fetch", zap.String("pair", exs.Symbol), zap.Int64("s", endMS), zap.Int64("e", fetchEndMS))
 	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
@@ -200,7 +201,7 @@ func consumeWriteQ(workNum int) {
 			}
 			// After the K-line is written to the database, a message will be sent to notify the robot to avoid repeated insertion of K-line
 			// 写入K线到数据库后，才发消息通知机器人，避免重复插入K线
-			tfSecs := utils.TFToSecs(job.TimeFrame)
+			tfSecs := utils2.TFToSecs(job.TimeFrame)
 			err = Spider.Broadcast(&utils.IOMsg{
 				Action: job.MsgAction,
 				Data: NotifyKLines{
@@ -477,7 +478,7 @@ func (m *Miner) watchKLines(pairs []string) {
 	log.Info("start watch kline", zap.String("exg", m.ExgName), zap.Int("num", len(m.KlinePairs)))
 	prefix := fmt.Sprintf("ohlcv_%s_%s_", m.ExgName, m.Market)
 	unPrefix := "u" + prefix
-	tfSecs := utils.TFToSecs(timeFrame)
+	tfSecs := utils2.TFToSecs(timeFrame)
 
 	// pair_tf to state map
 	subStateMap := map[string]*SubKLineState{}

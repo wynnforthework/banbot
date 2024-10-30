@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"gonum.org/v1/gonum/floats"
 	"math"
@@ -25,7 +26,7 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]m
 	}
 	wsModeTf := ""
 	for _, v := range allowTfs {
-		tfSecs := utils.TFToSecs(v)
+		tfSecs := utils2.TFToSecs(v)
 		if tfSecs < 60 {
 			wsModeTf = v
 			break

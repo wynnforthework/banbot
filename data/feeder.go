@@ -13,6 +13,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"math"
@@ -109,7 +110,7 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 			delete(oldTfs, tf)
 			continue
 		}
-		tfSecs := utils.TFToSecs(tf)
+		tfSecs := utils2.TFToSecs(tf)
 		sta := &PairTFCache{
 			TimeFrame:  tf,
 			TFSecs:     tfSecs,
@@ -151,7 +152,7 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 		if minDel != nil && minDel.TFSecs == minSecs {
 			newStates = append([]*PairTFCache{minDel}, newStates...)
 		} else {
-			minTf := utils.SecsToTF(minSecs)
+			minTf := utils2.SecsToTF(minSecs)
 			newStates = append([]*PairTFCache{{TFSecs: minSecs, TimeFrame: minTf}}, newStates...)
 		}
 	}
@@ -332,11 +333,11 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 	}
 	maxEndMs := int64(0)
 	for tf, warmNum := range tfNums {
-		tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+		tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 		if tfMSecs < int64(60000) || warmNum <= 0 {
 			continue
 		}
-		endMS := utils.AlignTfMSecs(curMS, tfMSecs)
+		endMS := utils2.AlignTfMSecs(curMS, tfMSecs)
 		bars, err := f.getTfKlines(tf, endMS, warmNum, pBar)
 		if err != nil {
 			return 0, err
@@ -381,7 +382,7 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 		return 0
 	}
 	f.isWarmUp = true
-	tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	lastMS := bars[len(bars)-1].Time + tfMSecs
 	envKey := strings.Join([]string{f.Symbol, tf}, "_")
 	if env, ok := strat.Envs[envKey]; ok {
@@ -450,7 +451,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 	} else if barTfMSecs == staMSecs {
 		ohlcvs, lastOk = bars, true
 	} else {
-		barTf := utils.SecsToTF(int(barTfMSecs / 1000))
+		barTf := utils2.SecsToTF(int(barTfMSecs / 1000))
 		msg := fmt.Sprintf("bar intv invalid, expect %v, cur: %v", state.TimeFrame, barTf)
 		return false, errs.NewMsg(core.ErrInvalidBars, msg)
 	}

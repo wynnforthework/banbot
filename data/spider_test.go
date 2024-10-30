@@ -7,7 +7,6 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	utils2 "github.com/banbox/banexg/utils"
@@ -77,7 +76,7 @@ delete from khole where sid=%v;`, sid, sid, sid, sid, sid, sid, sid, sid))
 	}
 	conn.Release()
 	core.SetRunMode(core.RunModeBackTest)
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	for i, bar := range arr {
 		btime.CurTimeMS = bar.Time + tfMSecs
 		sess, conn, err = orm.Conn(nil)

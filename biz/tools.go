@@ -16,6 +16,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"math"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error {
@@ -93,14 +95,14 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 		return klines[i].Time < klines[j].Time
 	})
 	startMS, endMS := klines[0].Time, klines[len(klines)-1].Time
-	timeFrame := utils.SecsToTF(int(tfMSecs / 1000))
+	timeFrame := utils2.SecsToTF(int(tfMSecs / 1000))
 	timeFrame, err = orm.GetDownTF(timeFrame)
 	if err != nil {
 		log.Warn("get down tf fail", zap.Int64("ms", tfMSecs), zap.String("id", exs.Symbol),
 			zap.String("path", inPath), zap.String("err", err.Short()))
 		return nil
 	}
-	tfMSecs = int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs = int64(utils2.TFToSecs(timeFrame) * 1000)
 	ctx := context.Background()
 	sess, conn, err := orm.Conn(ctx)
 	if err != nil {
@@ -121,7 +123,7 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 		hi := 0
 		var half *banexg.Kline
 		unExpNum := 0
-		dayMSecs := int64(utils.TFToSecs("1d") * 1000)
+		dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
 		for i, k := range klines {
 			for hi < holeNum && holes[hi][1] <= k.Time {
 				if unExpNum > 0 {
@@ -627,8 +629,8 @@ func CalcCorrelation(args *config.CmdArgs) *errs.Error {
 		exsList = append(exsList, exs)
 	}
 	tf := args.TimeFrames[0]
-	tfMSecs := int64(utils.TFToSecs(tf) * 1000)
-	gapTFMSecs := int64(utils.TFToSecs(args.RunEveryTF) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+	gapTFMSecs := int64(utils2.TFToSecs(args.RunEveryTF) * 1000)
 	if int(gapTFMSecs/tfMSecs) < args.BatchSize {
 		log.Error("run-every is too small for current batch-size and timeframe")
 		return nil
@@ -735,4 +737,125 @@ func CalcCorrelation(args *config.CmdArgs) *errs.Error {
 		return utils.WriteCsvFile(filepath.Join(args.OutPath, outName), csvRows, false)
 	}
 	return nil
+}
+
+type RunHistArgs struct {
+	ExsList     []*orm.ExSymbol
+	Start       int64
+	End         int64
+	ViewNextNum int // number of future bars to get
+	TfWarms     map[string]int
+	OnEnvEnd    func(bar *banexg.PairTFKline, adj *orm.AdjInfo)
+	VerCh       chan int // write -1 to exit;
+	OnBar       func(bar *orm.InfoKline, nexts []*orm.InfoKline)
+}
+
+type tfFuts struct {
+	TF    string
+	MSecs int64
+	Futs  []*orm.InfoKline
+}
+
+/*
+RunHistKline
+RePlay of K-lines within a specified time range for multiple symbols, supporting multiple timeFrames and returning n min-timeFrame bars.
+对多个品种回放指定时间范围的K线，支持多周期，支持返回未来n个最小周期bar。
+*/
+func RunHistKline(args *RunHistArgs) *errs.Error {
+	if args.VerCh == nil {
+		args.VerCh = make(chan int, 5)
+	}
+	if cap(args.VerCh) == 0 {
+		return errs.NewMsg(errs.CodeRunTime, "cap of VerCh should > 0")
+	}
+	var tfItems = make([]*tfFuts, 0, len(args.TfWarms))
+	for tf := range args.TfWarms {
+		tfItems = append(tfItems, &tfFuts{
+			TF:    tf,
+			MSecs: int64(utils2.TFToSecs(tf) * 1000),
+		})
+	}
+	slices.SortFunc(tfItems, func(a, b *tfFuts) int {
+		return int(a.MSecs - b.MSecs)
+	})
+	var tfIdxs = make(map[string]int)
+	for i, it := range tfItems {
+		tfIdxs[it.TF] = i
+	}
+	var futures = make(map[string][]*tfFuts)
+	var lock sync.Mutex
+	onItemBar := func(b *orm.InfoKline) {
+		if args.ViewNextNum <= 0 || b.IsWarmUp {
+			args.OnBar(b, nil)
+			return
+		}
+		lock.Lock()
+		lv := tfIdxs[b.TimeFrame]
+		tfArr := futures[b.Symbol]
+		lock.Unlock()
+		state := tfArr[lv]
+		state.Futs = append(state.Futs, b)
+		if lv == 0 && len(state.Futs) > args.ViewNextNum {
+			old := state.Futs[0]
+			state.Futs = state.Futs[1:]
+			barEndMs := old.Time + state.MSecs
+			for i := len(tfIdxs) - 1; i > 0; i-- {
+				big := tfArr[i]
+				if len(big.Futs) > 0 && big.Futs[0].Time+big.MSecs <= barEndMs {
+					oldBig := big.Futs[0]
+					big.Futs = big.Futs[1:]
+					args.OnBar(oldBig, big.Futs)
+				}
+			}
+			args.OnBar(old, state.Futs)
+		}
+	}
+	var holds = make([]data.IHistKlineFeeder, 0, len(args.ExsList))
+	for i, exs := range args.ExsList {
+		tfList := make([]*tfFuts, 0, len(tfItems))
+		for _, it := range tfItems {
+			tfList = append(tfList, &tfFuts{
+				TF:    it.TF,
+				MSecs: it.MSecs,
+				Futs:  make([]*orm.InfoKline, 0, args.ViewNextNum),
+			})
+		}
+		futures[exs.Symbol] = tfList
+		feeder, err := data.NewDBKlineFeeder(exs, onItemBar, true)
+		if err != nil {
+			return err
+		}
+		holds = append(holds, feeder)
+		feeder.TimeRange.EndMS = args.End
+		feeder.OnEnvEnd = func(bar *banexg.PairTFKline, adj *orm.AdjInfo) {
+			if args.OnEnvEnd != nil {
+				args.OnEnvEnd(bar, adj)
+			}
+		}
+		feeder.SubTfs(utils.KeysOfMap(args.TfWarms), true)
+		exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+		if err != nil {
+			return err
+		}
+		err = feeder.DownIfNeed(nil, exchange, nil)
+		if err != nil {
+			log.Error("down kline fail", zap.String("code", exs.Symbol), zap.Error(err))
+		}
+		_, err = feeder.WarmTfs(args.Start, args.TfWarms, nil)
+		if err != nil {
+			return err
+		}
+		feeder.SetSeek(args.Start)
+		if i%10 == 0 {
+			log.Info("warm done", zap.Int("total", len(args.ExsList)), zap.Int("cur", i+1))
+		}
+	}
+	makeFeeders := func() []data.IHistKlineFeeder {
+		return holds
+	}
+	err := data.RunHistFeeders(makeFeeders, args.VerCh, nil)
+	if args.OnEnvEnd != nil {
+		args.OnEnvEnd(nil, nil)
+	}
+	return err
 }

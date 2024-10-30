@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"io/fs"
@@ -310,7 +311,7 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeRunTime, err_)
 	}
-	dayMSecs := int64(utils.TFToSecs("1d") * 1000)
+	dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
 	nightMSecs := int64(3600 * 10 * 1000)  // utc时间，10小时后，即北京18:00后
 	nightZeroMs := int64(3600 * 16 * 1000) // utc时间，16小时前，即北京24:00前
 	tickBar := func(inPath string, row []string) (string, int64, [5]float64) {
@@ -645,7 +646,7 @@ func build1mSymbolTick(inPath string, fid int, file *zip.File, dones map[string]
 	minGapMSecs := int64(300000) // 间隔超过5分钟，且成交量下降，是切换盘口
 	// 对排序后的tick合并为K线
 	for _, t := range ticks {
-		curMinMS := utils.AlignTfMSecs(t.timeMS, 60000)
+		curMinMS := utils2.AlignTfMSecs(t.timeMS, 60000)
 		price, volume := t.price, t.volume
 		keyValid := strings.HasPrefix(oldKey, t.symbol)
 		if bar1m == nil || oldMinMS == 0 || curMinMS > oldMinMS || !keyValid {

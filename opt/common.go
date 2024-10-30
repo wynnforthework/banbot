@@ -10,6 +10,7 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -53,6 +54,7 @@ type OptGroup struct {
 
 type OptInfo struct {
 	Dirt   string
+	ID     string
 	Score  float64
 	Params map[string]float64
 	*BTResult
@@ -102,14 +104,12 @@ func calcBestBy(items []*OptInfo, name string) *OptInfo {
 }
 
 func (o *OptInfo) runGetBtResult(pol *config.RunPolicyConfig) {
-	if o.BTResult == nil {
-		for k, v := range o.Params {
-			pol.Params[k] = v
-		}
-		bt, loss := runBTOnce()
-		o.Score = -loss
-		o.BTResult = bt.BTResult
+	for k, v := range o.Params {
+		pol.Params[k] = v
 	}
+	bt, loss := runBTOnce()
+	o.Score = -loss
+	o.BTResult = bt.BTResult
 }
 
 func (o *OptInfo) ToPol(name, dirt, tfStr, pairStr string) *config.RunPolicyConfig {
@@ -144,9 +144,9 @@ func newRollBtOpt(args *config.CmdArgs) (*rollBtOpt, *errs.Error) {
 	}
 	dateRange := config.TimeRange
 	allStartMs, allEndMs := dateRange.StartMS, dateRange.EndMS
-	runMSecs := int64(utils.TFToSecs(args.RunPeriod)) * 1000
-	reviewMSecs := int64(utils.TFToSecs(args.ReviewPeriod)) * 1000
-	if runMSecs < core.SecsHour*1000 {
+	runMSecs := int64(utils2.TFToSecs(args.RunPeriod)) * 1000
+	reviewMSecs := int64(utils2.TFToSecs(args.ReviewPeriod)) * 1000
+	if runMSecs < utils2.SecsHour*1000 {
 		return nil, errs.NewMsg(errs.CodeParamInvalid, "`run-period` cannot be less than 1 hour")
 	}
 	outDir := filepath.Join(config.GetDataDir(), "backtest", "bt_opt_"+btOptHash(args))
@@ -170,12 +170,12 @@ func newRollBtOpt(args *config.CmdArgs) (*rollBtOpt, *errs.Error) {
 	}, nil
 }
 
-func (t *rollBtOpt) next() (string, *errs.Error) {
+func (t *rollBtOpt) next(pairPicker string) (string, *errs.Error) {
 	t.dateRange.StartMS = t.curMs - t.reviewMSecs
 	t.dateRange.EndMS = t.curMs
 	fname := fmt.Sprintf("opt_%v.log", t.dateRange.StartMS/1000)
 	t.args.OutPath = filepath.Join(t.outDir, fname)
-	polStr, err := pickFromExists(t.args.OutPath, t.args.Picker)
+	polStr, err := pickFromExists(t.args.OutPath, t.args.Picker, pairPicker)
 	if err != nil {
 		return "", err
 	}
@@ -236,7 +236,7 @@ func (o *OptInfo) ToLine() string {
 			text += strings.Repeat("\t", tabLack)
 		}
 	}
-	return fmt.Sprintf("loss: %7.2f \t%s \t%s", -o.Score, text, o.BriefLine())
+	return fmt.Sprintf("loss: %7.2f \t%s \t%s, id: %v", -o.Score, text, o.BriefLine(), o.ID)
 }
 
 /*

@@ -27,7 +27,7 @@ If you need to download from the end to the beginning, you should make startMS>e
 如果需要从后往前下载，应该使startMS>endMS
 */
 func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeFrame string, startMS, endMS int64, out chan []*banexg.Kline) *errs.Error {
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	if startMS < 1000000000000 {
 		panic(fmt.Sprintf("startMS should be milli seconds, cur: %v", startMS))
 	}
@@ -137,7 +137,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 		}
 		defer conn.Release()
 	}
-	tfSecs := utils.TFToSecs(timeFrame)
+	tfSecs := utils2.TFToSecs(timeFrame)
 	var totalNum int
 	chanDown := make(chan *core.DownRange, 10)
 	curStart, curEnd := int64(0), int64(0)
@@ -287,7 +287,7 @@ AutoFetchOHLCV
 */
 func AutoFetchOHLCV(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
 	limit int, withUnFinish bool, pBar *utils.PrgBar) ([]*AdjInfo, []*banexg.Kline, *errs.Error) {
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, withUnFinish)
 	downTF, err := GetDownTF(timeFrame)
 	if err != nil {
@@ -577,7 +577,7 @@ Batch simultaneous download of K-line
 批量同时下载K线
 */
 func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, timeFrame string, startMS, endMS int64, limit int) *errs.Error {
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, false)
 	downTF, err := GetDownTF(timeFrame)
 	if err != nil {
@@ -631,7 +631,7 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	if err != nil {
 		return err
 	}
-	tfMSecs := int64(utils.TFToSecs(timeFrame) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	exInfo := exchange.Info()
 	if exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType) {
 		retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, limit)
@@ -700,7 +700,7 @@ func MapExSymbols(exchange banexg.BanExchange, symbols []string) (map[int32]*ExS
 
 func parseDownArgs(tfMSecs int64, startMS, endMS int64, limit int, withUnFinish bool) (int64, int64) {
 	if startMS > 0 && startMS != core.MSMinStamp {
-		fixStartMS := utils.AlignTfMSecs(startMS, tfMSecs)
+		fixStartMS := utils2.AlignTfMSecs(startMS, tfMSecs)
 		if startMS > fixStartMS {
 			startMS = fixStartMS + tfMSecs
 		}
@@ -711,7 +711,7 @@ func parseDownArgs(tfMSecs int64, startMS, endMS int64, limit int, withUnFinish 
 	if endMS == 0 {
 		endMS = btime.TimeMS()
 	}
-	alignEndMS := utils.AlignTfMSecs(endMS, tfMSecs)
+	alignEndMS := utils2.AlignTfMSecs(endMS, tfMSecs)
 	if withUnFinish && endMS%tfMSecs > 0 {
 		alignEndMS += tfMSecs
 	}
@@ -820,8 +820,8 @@ func (q *Queries) GetExSHoles(exchange banexg.BanExchange, exs *ExSymbol, start,
 	var dtList [][2]int64
 	if full {
 		// 不使用交易日过滤
-		dayMSecs := int64(utils.TFToSecs("1d") * 1000)
-		curTime := utils.AlignTfMSecs(start, dayMSecs)
+		dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
+		curTime := utils2.AlignTfMSecs(start, dayMSecs)
 		for curTime < stop {
 			curEnd := curTime + dayMSecs
 			dtList = append(dtList, [2]int64{curTime, curEnd})

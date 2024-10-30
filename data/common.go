@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	utils2 "github.com/banbox/banexg/utils"
 )
 
 /*
@@ -29,9 +30,9 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 		j.NextMS = endMS
 		return nil, nil
 	}
-	fetchTF := utils.SecsToTF(subTfSecs)
+	fetchTF := utils2.SecsToTF(subTfSecs)
 	tfMSecs := int64(j.TFSecs * 1000)
-	bigStartMS := utils.AlignTfMSecs(j.NextMS, tfMSecs)
+	bigStartMS := utils2.AlignTfMSecs(j.NextMS, tfMSecs)
 	_, preBars, err := orm.AutoFetchOHLCV(exchange, exs, fetchTF, bigStartMS, startMS, 0, false, nil)
 	if err != nil {
 		return nil, err

@@ -7,10 +7,10 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
-	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/banbox/banexg/utils"
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
 	"strings"
@@ -118,7 +118,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*orm.InOutOrder, bar *orm.Inf
 			odType = exOrder.OrderType
 		}
 		price := exOrder.Price
-		odTFSecs := utils2.TFToSecs(od.Timeframe)
+		odTFSecs := utils.TFToSecs(od.Timeframe)
 		fillMS := btime.TimeMS() - int64((float64(odTFSecs)-config.BTNetCost)*1000)
 		fillBarRate := 0.0
 		if bar == nil {
@@ -324,7 +324,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 		return nil
 	}
 	od.DirtyInfo = true
-	tfSecs := float64(utils2.TFToSecs(od.Timeframe))
+	tfSecs := float64(utils.TFToSecs(od.Timeframe))
 	// 计算平仓成交价格，0市价，-1不平仓，>0指定价格
 	// Calculate the transaction price for closing the position, 0 market price, -1 for not closing the position, >0 specified price
 	getExcPrice := func(trigPrice, limit float64) float64 {

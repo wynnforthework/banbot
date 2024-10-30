@@ -43,16 +43,6 @@ var (
 )
 
 const (
-	SecsMin  = 60
-	SecsHour = SecsMin * 60
-	SecsDay  = SecsHour * 24
-	SecsWeek = SecsDay * 7
-	SecsMon  = SecsDay * 30
-	SecsQtr  = SecsMon * 3
-	SecsYear = SecsDay * 365
-)
-
-const (
 	MSMinStamp = 157766400000 // 1975-01-01T00:00:00.000Z
 )
 

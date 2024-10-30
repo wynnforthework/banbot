@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
 	"math"
@@ -1596,8 +1597,8 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 		buyPrice, sellPrice = 0, 0
 		log.Error("get odBook fail", zap.String("pair", pair), zap.Error(err))
 	} else {
-		buyPrice = book.LimitPrice(banexg.OdSideBuy, depth)
-		sellPrice = book.LimitPrice(banexg.OdSideSell, depth)
+		buyPrice, _, _ = book.AvgPrice(banexg.OdSideBuy, depth)
+		sellPrice, _, _ = book.AvgPrice(banexg.OdSideSell, depth)
 	}
 	// The longest price cache is 3 seconds, and the shortest is 1/10 of the incoming price.
 	// 价格缓存最长3s，最短传入的1/10
@@ -1646,7 +1647,7 @@ func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 		return sumVol / float64(len(bars)), lastMinVol, nil
 	}
 	avg, last, err := calc()
-	expireMS := utils.AlignTfMSecs(curMs+60000, 60000)
+	expireMS := utils2.AlignTfMSecs(curMs+60000, 60000)
 	lockPairVolMap.Lock()
 	pairVolMap[cacheKey] = &PairValItem{AvgVol: avg, LastVol: last, ExpireMS: expireMS}
 	lockPairVolMap.Unlock()

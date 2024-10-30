@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/bytedance/sonic"
 	"go.uber.org/zap"
 	"strings"
@@ -100,7 +101,7 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 		if _, ok := w.jobs[jobKey]; ok {
 			continue
 		}
-		tfSecs := utils.TFToSecs(j.TimeFrame)
+		tfSecs := utils2.TFToSecs(j.TimeFrame)
 		minTfSecs = min(minTfSecs, tfSecs)
 		for _, p := range prefixs {
 			tags = append(tags, p+"_"+j.Symbol)

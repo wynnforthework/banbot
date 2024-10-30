@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
 	"go.uber.org/zap"
 	"strings"
@@ -117,7 +118,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			items[polID] = curStgy
 			holdNum += 1
 			if _, ok = core.TFSecs[tf]; !ok {
-				core.TFSecs[tf] = utils.TFToSecs(tf)
+				core.TFSecs[tf] = utils2.TFToSecs(tf)
 			}
 			newPairMap[exs.Symbol] = tf
 			envKey := strings.Join([]string{exs.Symbol, tf}, "_")
@@ -211,7 +212,7 @@ func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 	envKey := strings.Join([]string{exs.Symbol, tf}, "_")
 	env, ok := Envs[envKey]
 	if !ok {
-		tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+		tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 		env = &ta.BarEnv{
 			Exchange:   core.ExgName,
 			MarketType: core.Market,

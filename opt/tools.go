@@ -9,9 +9,9 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"github.com/xuri/excelize/v2"
 	"go.uber.org/zap"
 	"io"
@@ -93,9 +93,9 @@ func CompareExgBTOrders(args []string) {
 		return
 	}
 	for _, iod := range btOrders {
-		tfMSecs := int64(utils.TFToSecs(iod.Timeframe) * 1000)
+		tfMSecs := int64(utils2.TFToSecs(iod.Timeframe) * 1000)
 		tfMSecsFlt := float64(tfMSecs)
-		entFixMS := utils.AlignTfMSecs(iod.EnterAt, tfMSecs)
+		entFixMS := utils2.AlignTfMSecs(iod.EnterAt, tfMSecs)
 		exgOds, _ := pairExgOds[iod.Symbol]
 		dirt := "long"
 		if iod.Short {
@@ -260,7 +260,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 		} else {
 			symbol := row[pairIdx]
 			timeFrame := row[tfIdx]
-			maxTfSecs = max(maxTfSecs, utils.TFToSecs(timeFrame))
+			maxTfSecs = max(maxTfSecs, utils2.TFToSecs(timeFrame))
 			isShort := row[dirtIdx] == "short"
 			leverage, _ := strconv.ParseFloat(row[lvgIdx], 64)
 			enterMS := btime.ParseTimeMS(row[entIdx])
@@ -471,7 +471,7 @@ func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*b
 				continue
 			}
 			createMS := btime.ParseTimeMS(textA)
-			alignMS := utils.AlignTfMSecs(createMS, 60000)
+			alignMS := utils2.AlignTfMSecs(createMS, 60000)
 			clientID, _ := row["C"]
 			if alignMS < start || alignMS >= stop && strings.HasPrefix(clientID, botName) {
 				// 允许截止时间之后的非机器人订单，用于平仓

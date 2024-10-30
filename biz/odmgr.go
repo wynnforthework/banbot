@@ -7,7 +7,6 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
-	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -246,7 +245,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 			req.StopBars = config.StopEnterBars
 		}
 		if req.StopBars > 0 {
-			stopAfter := btime.TimeMS() + int64(req.StopBars*utils2.TFToSecs(od.Timeframe))*1000
+			stopAfter := btime.TimeMS() + int64(req.StopBars*utils.TFToSecs(od.Timeframe))*1000
 			od.SetInfo(orm.OdInfoStopAfter, stopAfter)
 		}
 	}

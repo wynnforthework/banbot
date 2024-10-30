@@ -51,6 +51,7 @@ type CmdArgs struct {
 	RunPeriod     string  // During continuous parameter adjustment and backtesting, the effective running period after parameter adjustment 持续调参回测时，调参后有效运行周期
 	Picker        string  // Method for selecting targets from multiple hyperparameter optimization results 从多个超参数优化结果中挑选目标的方法
 	Alpha         float64 // the smoothing factor of calculate EMA 计算EMA的平滑因子
+	PairPicker    string  // pairs picker for hyper opt
 	InType        string  // Input file data type 输入文件的数据类型
 	RunEveryTF    string  // run once every n timeframe
 	BatchSize     int

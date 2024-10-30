@@ -15,6 +15,8 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
+	"github.com/bytedance/sonic"
 	"github.com/olekukonko/tablewriter"
 	"go.uber.org/zap"
 	"math"
@@ -26,55 +28,63 @@ import (
 )
 
 type BTResult struct {
-	MaxOpenOrders   int
-	MinReal         float64
-	MaxReal         float64 // Maximum Assets 最大资产
-	MaxDrawDownPct  float64 // Maximum drawdown percentage 最大回撤百分比
-	ShowDrawDownPct float64 // Displays the maximum drawdown percentage 显示最大回撤百分比
-	BarNum          int
-	TimeNum         int
-	OrderNum        int
-	lastTime        int64 // 上次bar的时间戳
-	Plots           *PlotData
-	StartMS         int64
-	EndMS           int64
-	PlotEvery       int
-	TotalInvest     float64
-	OutDir          string
-	PairGrps        []*RowItem
-	TotProfit       float64
-	TotCost         float64
-	TotFee          float64
-	TotProfitPct    float64
-	SharpeRatio     float64
-	SortinoRatio    float64
+	MaxOpenOrders   int        `json:"maxOpenOrders"`
+	MinReal         float64    `json:"minReal"`
+	MaxReal         float64    `json:"maxReal"`         // Maximum Assets 最大资产
+	MaxDrawDownPct  float64    `json:"maxDrawDownPct"`  // Maximum drawdown percentage 最大回撤百分比
+	ShowDrawDownPct float64    `json:"showDrawDownPct"` // Displays the maximum drawdown percentage 显示最大回撤百分比
+	BarNum          int        `json:"barNum"`
+	TimeNum         int        `json:"timeNum"`
+	OrderNum        int        `json:"orderNum"`
+	lastTime        int64      // 上次bar的时间戳
+	Plots           *PlotData  `json:"plots"`
+	StartMS         int64      `json:"startMS"`
+	EndMS           int64      `json:"endMS"`
+	PlotEvery       int        `json:"plotEvery"`
+	TotalInvest     float64    `json:"totalInvest"`
+	OutDir          string     `json:"outDir"`
+	PairGrps        []*RowItem `json:"pairGrps"`
+	DateGrps        []*RowItem `json:"dateGrps"`
+	EnterGrps       []*RowItem `json:"enterGrps"`
+	ExitGrps        []*RowItem `json:"exitGrps"`
+	ProfitGrps      []*RowItem `json:"profitGrps"`
+	TotProfit       float64    `json:"totProfit"`
+	TotCost         float64    `json:"totCost"`
+	TotFee          float64    `json:"totFee"`
+	TotProfitPct    float64    `json:"totProfitPct"`
+	SharpeRatio     float64    `json:"sharpeRatio"`
+	SortinoRatio    float64    `json:"sortinoRatio"`
 }
 
 type PlotData struct {
-	Labels        []string
-	OdNum         []int
-	Real          []float64
-	Available     []float64
-	UnrealizedPOL []float64
-	WithDraw      []float64
+	Labels        []string  `json:"labels"`
+	OdNum         []int     `json:"odNum"`
+	Real          []float64 `json:"real"`
+	Available     []float64 `json:"available"`
+	UnrealizedPOL []float64 `json:"unrealizedPOL"`
+	WithDraw      []float64 `json:"withDraw"`
 	tmpOdNum      int
 }
 
 type RowPart struct {
-	WinCount     int
-	ProfitSum    float64
-	ProfitPctSum float64
-	CostSum      float64
-	Durations    []int
-	Orders       []*orm.InOutOrder
-	Sharpe       float64 // 夏普比率
-	Sortino      float64
+	WinCount     int               `json:"winCount"`
+	ProfitSum    float64           `json:"profitSum"`
+	ProfitPctSum float64           `json:"profitPctSum"`
+	CostSum      float64           `json:"costSum"`
+	Durations    []int             `json:"durations"`
+	Orders       []*orm.InOutOrder `json:"-"`
+	Sharpe       float64           `json:"sharpe"` // 夏普比率
+	Sortino      float64           `json:"sortino"`
 }
 
 type RowItem struct {
-	Title string
+	Title string `json:"title"`
 	RowPart
 }
+
+var (
+	PairPickers = make(map[string]func(r *BTResult) []string)
+)
 
 func NewBTResult() *BTResult {
 	res := &BTResult{
@@ -95,7 +105,7 @@ func (r *BTResult) printBtResult() {
 	if len(orders) > 0 {
 		items := []struct {
 			Title  string
-			Handle func(*BTResult, []*orm.InOutOrder) string
+			Handle func(*BTResult) string
 		}{
 			{Title: " Pair Profits ", Handle: textGroupPairs},
 			{Title: " Date Profits ", Handle: textGroupDays},
@@ -103,8 +113,13 @@ func (r *BTResult) printBtResult() {
 			{Title: " Enter Tag ", Handle: textGroupEntTags},
 			{Title: " Exit Tag ", Handle: textGroupExitTags},
 		}
+		r.groupByPairs(orders)
+		r.groupByDates(orders)
+		r.groupByProfits(orders)
+		r.groupByEnters(orders)
+		r.groupByExits(orders)
 		for _, item := range items {
-			tblText = item.Handle(r, orders)
+			tblText = item.Handle(r)
 			if tblText != "" {
 				width := strings.Index(tblText, "\n")
 				head := utils.PadCenter(item.Title, width, "=")
@@ -134,6 +149,8 @@ func (r *BTResult) dumpBtFiles() {
 	r.dumpStratOutputs()
 
 	r.dumpGraph()
+
+	r.dumpDetail("")
 }
 
 func (r *BTResult) Collect() {
@@ -160,6 +177,11 @@ func (r *BTResult) Collect() {
 	// Calculate the maximum drawdown on the chart
 	// 计算图表上的最大回撤
 	r.ShowDrawDownPct = r.Plots.calcDrawDown() * 100
+	r.groupByPairs(orders)
+	r.groupByDates(orders)
+	r.groupByProfits(orders)
+	r.groupByEnters(orders)
+	r.groupByExits(orders)
 	err := r.calcMeasures(30)
 	if err != nil {
 		log.Warn("calc sharpe/sortino fail", zap.Error(err))
@@ -216,7 +238,7 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	return b.String()
 }
 
-func textGroupPairs(r *BTResult, orders []*orm.InOutOrder) string {
+func (r *BTResult) groupByPairs(orders []*orm.InOutOrder) {
 	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
 		return od.Symbol
 	})
@@ -224,33 +246,44 @@ func textGroupPairs(r *BTResult, orders []*orm.InOutOrder) string {
 		return groups[i].Sharpe > groups[j].Sharpe
 	})
 	r.PairGrps = groups
-	return printGroups(groups, "Pair", true, nil, nil)
 }
 
-func textGroupEntTags(r *BTResult, orders []*orm.InOutOrder) string {
+func textGroupPairs(r *BTResult) string {
+	return printGroups(r.PairGrps, "Pair", true, nil, nil)
+}
+
+func (r *BTResult) groupByEnters(orders []*orm.InOutOrder) {
 	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
 		return od.EnterTag
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
 	})
-	return printGroups(groups, "Enter Tag", true, nil, nil)
+	r.EnterGrps = groups
 }
 
-func textGroupExitTags(r *BTResult, orders []*orm.InOutOrder) string {
+func textGroupEntTags(r *BTResult) string {
+	return printGroups(r.EnterGrps, "Enter Tag", true, nil, nil)
+}
+
+func (r *BTResult) groupByExits(orders []*orm.InOutOrder) {
 	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
 		return od.ExitTag
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
 	})
-	return printGroups(groups, "Exit Tag", true, nil, nil)
+	r.ExitGrps = groups
 }
 
-func textGroupProfitRanges(r *BTResult, orders []*orm.InOutOrder) string {
+func textGroupExitTags(r *BTResult) string {
+	return printGroups(r.ExitGrps, "Exit Tag", true, nil, nil)
+}
+
+func (r *BTResult) groupByProfits(orders []*orm.InOutOrder) {
 	odNum := len(orders)
 	if odNum == 0 {
-		return ""
+		return
 	}
 	rates := make([]float64, 0, len(orders))
 	for _, od := range orders {
@@ -275,10 +308,14 @@ func textGroupProfitRanges(r *BTResult, orders []*orm.InOutOrder) string {
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Orders[0].ProfitRate < groups[j].Orders[0].ProfitRate
 	})
-	return printGroups(groups, "Profit Range", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
+	r.ProfitGrps = groups
 }
 
-func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
+func textGroupProfitRanges(r *BTResult) string {
+	return printGroups(r.ProfitGrps, "Profit Range", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
+}
+
+func (r *BTResult) groupByDates(orders []*orm.InOutOrder) {
 	units := []string{"1Y", "1Q", "1M", "1w", "1d", "6h", "1h"}
 	startMS, endMS := orders[0].EnterAt, orders[len(orders)-1].EnterAt
 	var bestTF string
@@ -287,7 +324,7 @@ func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
 	// Find the optimal granularity for grouping
 	// 查找分组的最佳粒度
 	for _, tf := range units {
-		tfSecs := utils.TFToSecs(tf)
+		tfSecs := utils2.TFToSecs(tf)
 		grpNum := float64(endMS-startMS) / 1000 / float64(tfSecs)
 		numPerGp := float64(len(orders)) / grpNum
 		score1 := utils.NearScore(grpNum, 18, 2)
@@ -301,19 +338,19 @@ func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
 	}
 	if bestTF == "" {
 		bestTF = "1d"
-		bestTFSecs = utils.TFToSecs(bestTF)
+		bestTFSecs = utils2.TFToSecs(bestTF)
 	}
 	tfUnit := bestTF[1]
 	groups := groupItems(orders, false, func(od *orm.InOutOrder, i int) string {
 		if tfUnit == 'Y' {
 			return btime.ToDateStr(od.EnterAt, "2006")
 		} else if tfUnit == 'Q' {
-			enterMS := utils.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
+			enterMS := utils2.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
 			return btime.ToDateStr(enterMS, "2006-01")
 		} else if tfUnit == 'M' {
 			return btime.ToDateStr(od.EnterAt, "2006-01")
 		} else if tfUnit == 'd' || tfUnit == 'w' {
-			enterMS := utils.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
+			enterMS := utils2.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
 			return btime.ToDateStr(enterMS, "2006-01-02")
 		} else {
 			return btime.ToDateStr(od.EnterAt, "2006-01-02 15")
@@ -322,7 +359,11 @@ func textGroupDays(r *BTResult, orders []*orm.InOutOrder) string {
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
 	})
-	return printGroups(groups, "Date", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
+	r.DateGrps = groups
+}
+
+func textGroupDays(r *BTResult) string {
+	return printGroups(r.DateGrps, "Date", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
 func makeEnterExits(orders []*orm.InOutOrder) []string {
@@ -778,4 +819,44 @@ func (r *BTResult) Score() float64 {
 		score = r.TotProfitPct * math.Pow(1-r.MaxDrawDownPct/100, 1.5)
 	}
 	return score
+}
+
+func (r *BTResult) dumpDetail(outPath string) {
+	if outPath == "" {
+		taskId := orm.GetTaskID("")
+		outPath = fmt.Sprintf("%s/detail_%v.json", r.OutDir, taskId)
+	}
+	var w = bytes.NewBuffer(nil)
+	var enc = sonic.Config{EncodeNullForInfOrNan: true}.Froze().NewEncoder(w)
+	err_ := enc.Encode(r)
+	if err_ != nil {
+		log.Error("marshal backtest detail fail", zap.Error(err_))
+		return
+	}
+	err_ = os.WriteFile(outPath, w.Bytes(), 0644)
+	if err_ != nil {
+		log.Error("write backtest detail fail", zap.Error(err_))
+	}
+}
+
+func selectPairs(r *BTResult, name string) []string {
+	fn, ok := PairPickers[name]
+	if !ok {
+		log.Warn("PairPickers not found", zap.String("name", name))
+		return nil
+	}
+	return fn(r)
+}
+
+func parseBtResult(path string) (*BTResult, *errs.Error) {
+	data, err_ := os.ReadFile(path)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeIOReadFail, err_)
+	}
+	var res = BTResult{}
+	err_ = utils2.Unmarshal(data, &res)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeUnmarshalFail, err_)
+	}
+	return &res, nil
 }

@@ -243,7 +243,7 @@ func (i *InOutOrder) CanClose() bool {
 	if i.Timeframe == "ws" {
 		return true
 	}
-	tfMSecs := int64(utils.TFToSecs(i.Timeframe) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(i.Timeframe) * 1000)
 	return float64(btime.TimeMS()-i.EnterAt) > float64(tfMSecs)*0.9
 }
 

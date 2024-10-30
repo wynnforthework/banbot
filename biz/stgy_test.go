@@ -7,9 +7,9 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
-	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
 	"strings"
 	"testing"
@@ -48,7 +48,7 @@ func TestStagyRun(t *testing.T) {
 	}
 	barNum := 300
 	tf := "1h"
-	tfMSecs := int64(utils.TFToSecs(tf) * 1000)
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	pairs := []string{"ETC/USDT:USDT", "AVAX/USDT:USDT", "DOT/USDT:USDT", "LTC/USDT:USDT", "ETH/USDT:USDT",
 		"ARPA/USDT:USDT", "SOL/USDT:USDT", "1000XEC/USDT:USDT", "DOGE/USDT:USDT", "MANA/USDT:USDT",
 		"SAND/USDT:USDT", "BLUR/USDT:USDT", "1000LUNC/USDT:USDT", "BCH/USDT:USDT", "ID/USDT:USDT",
@@ -92,7 +92,7 @@ func TestStagyRun(t *testing.T) {
 		}
 		jobs[job.Strat.Name] = job
 	}
-	curTime := utils.AlignTfMSecs(btime.TimeMS(), tfMSecs) - tfMSecs*int64(barNum)
+	curTime := utils2.AlignTfMSecs(btime.TimeMS(), tfMSecs) - tfMSecs*int64(barNum)
 	norBar := banexg.Kline{Time: curTime, Open: 0.1, High: 0.1, Low: 0.1, Close: 0.1, Volume: 0.1}
 	for i := 0; i < barNum; i++ {
 		curTime += tfMSecs
