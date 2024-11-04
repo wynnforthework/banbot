@@ -148,7 +148,7 @@ func AddBatchJob(account, tf string, job *strat.StratJob, isInfo bool) {
 	// Delay 3s to wait for execution
 	// 推迟3s等待执行
 	tasks.ExecMS = btime.TimeMS() + core.DelayBatchMS
-	var batchType = strat.BatchTypeEnter
+	var batchType = strat.BatchTypeInOut
 	if isInfo {
 		batchType = strat.BatchTypeInfo
 	}
@@ -186,7 +186,7 @@ func TryFireBatches(currMS int64) int {
 		var stgy *strat.TradeStrat
 		for pair, task := range tasks.Map {
 			stgy = task.Job.Strat
-			if task.Type == strat.BatchTypeEnter {
+			if task.Type == strat.BatchTypeInOut {
 				enterJobs = append(enterJobs, task.Job)
 			} else if task.Type == strat.BatchTypeInfo {
 				infoJobs[pair] = task.Job

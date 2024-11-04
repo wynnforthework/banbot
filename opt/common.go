@@ -1,6 +1,8 @@
 package opt
 
 import (
+	"bytes"
+	_ "embed"
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
@@ -11,6 +13,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
+	"github.com/bytedance/sonic"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -387,4 +390,80 @@ func getTestPickers(text string) ([]string, *errs.Error) {
 		}
 	}
 	return arr, nil
+}
+
+//go:embed lines.html
+var graphData []byte
+
+func DumpLineGraph(path, title string, label []string, prec float64, tplData []byte, items []*ChartDs) *errs.Error {
+	g := LineGraph{
+		TplData:   tplData,
+		Title:     title,
+		Labels:    label,
+		Precision: prec,
+		Datasets:  items,
+	}
+	return g.DumpFile(path)
+}
+
+func (g *LineGraph) Dump() ([]byte, *errs.Error) {
+	if g.Precision > 0 {
+		for _, it := range g.Datasets {
+			col := make([]float64, 0, len(it.Data))
+			for _, v := range it.Data {
+				if math.IsNaN(v) {
+					col = append(col, v)
+					continue
+				}
+				val, err_ := utils2.PrecFloat64(v, g.Precision, true, utils2.PrecModeSignifDigits)
+				if err_ != nil {
+					return nil, errs.New(errs.CodeRunTime, err_)
+				}
+				col = append(col, val)
+			}
+			it.Data = col
+		}
+	}
+	if len(g.TplData) == 0 {
+		g.TplData = graphData
+	}
+	content := string(g.TplData)
+	var w = bytes.NewBuffer(nil)
+	var enc = sonic.Config{EncodeNullForInfOrNan: true}.Froze().NewEncoder(w)
+	err_ := enc.Encode(g)
+	if err_ != nil {
+		return nil, errs.New(errs.CodeMarshalFail, err_)
+	}
+	content = strings.Replace(content, "{'inject': 1}", w.String(), 1)
+	return []byte(content), nil
+}
+
+func (g *LineGraph) DumpFile(path string) *errs.Error {
+	data, err := g.Dump()
+	if err != nil {
+		return err
+	}
+	err_ := os.WriteFile(path, data, 0644)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	return nil
+}
+
+type LineGraph struct {
+	TplData   []byte
+	Precision float64
+	Title     string     `json:"title"`
+	Labels    []string   `json:"labels"`
+	Datasets  []*ChartDs `json:"datasets"`
+}
+
+type ChartDs struct {
+	Label           string    `json:"label"`
+	Data            []float64 `json:"data"`
+	Color           string    `json:"color,omitempty"`
+	BorderColor     string    `json:"borderColor,omitempty"`
+	BackgroundColor string    `json:"backgroundColor,omitempty"`
+	YAxisID         string    `json:"yAxisID,omitempty"`
+	Hidden          bool      `json:"hidden"`
 }

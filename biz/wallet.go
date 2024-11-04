@@ -29,8 +29,7 @@ type ItemWallet struct {
 	UnrealizedPOL float64            // The public unrealized profit and loss of this currency, used by the contract, can be deducted from the margin of other orders. Recalculated every bar. 此币的公共未实现盈亏，合约用到，可抵扣其他订单保证金占用。每个bar重新计算
 	UsedUPol      float64            // Used unrealized profit and loss (used as margin for other orders). 已占用的未实现盈亏（用作其他订单的保证金）
 	Withdraw      float64            // Cash withdrawal from balance will not be used for trading. 从余额提现的，不会用于交易
-	lockPend      *sync.Mutex
-	lockFroz      *sync.Mutex
+	lock          sync.Mutex
 }
 
 type BanWallets struct {
@@ -77,20 +76,18 @@ func GetWallets(account string) *BanWallets {
 }
 
 func (iw *ItemWallet) Total(withUpol bool) float64 {
+	iw.lock.Lock()
 	sumVal := iw.Available
-	iw.lockPend.Lock()
 	for _, v := range iw.Pendings {
 		sumVal += v
 	}
-	iw.lockPend.Unlock()
-	iw.lockFroz.Lock()
 	for _, v := range iw.Frozens {
 		sumVal += v
 	}
-	iw.lockFroz.Unlock()
 	if withUpol {
 		sumVal += iw.UnrealizedPOL
 	}
+	iw.lock.Unlock()
 	return sumVal
 }
 
@@ -111,9 +108,8 @@ Set margin occupancy. Take priority from unrealized pol used upol. When insuffic
 func (iw *ItemWallet) SetMargin(odKey string, amount float64) *errs.Error {
 	// Extract the old margin occupation value
 	// 提取旧保证金占用值
-	iw.lockFroz.Lock()
+	iw.lock.Lock()
 	oldAmt, exists := iw.Frozens[odKey]
-	iw.lockFroz.Unlock()
 	if !exists {
 		oldAmt = 0
 	}
@@ -128,11 +124,9 @@ func (iw *ItemWallet) SetMargin(odKey string, amount float64) *errs.Error {
 		if iw.UsedUPol <= iw.UnrealizedPOL {
 			// Not achieved enough profit and loss, no need to freeze
 			// 未实现盈亏足够，无需冻结
-			iw.lockFroz.Lock()
 			if _, exists := iw.Frozens[odKey]; exists {
 				delete(iw.Frozens, odKey)
 			}
-			iw.lockFroz.Unlock()
 			upolCost = amount
 			amount = 0
 		} else {
@@ -157,14 +151,14 @@ func (iw *ItemWallet) SetMargin(odKey string, amount float64) *errs.Error {
 			//Insufficient balance
 			//余额不足
 			iw.UsedUPol -= upolCost
+			iw.lock.Unlock()
 			errMsg := "available " + iw.Coin + " Insufficient, frozen require: " + fmt.Sprintf("%.5f", addVal) + ", " + odKey
 			return errs.NewMsg(core.ErrLowFunds, errMsg)
 		}
 		iw.Available -= addVal
 	}
-	iw.lockFroz.Lock()
 	iw.Frozens[odKey] = amount
-	iw.lockFroz.Unlock()
+	iw.lock.Unlock()
 
 	return nil
 }
@@ -179,9 +173,8 @@ Any shortage is taken from the other side, and excess is added to the other side
 	不足则从另一侧取用，超出则添加到另一侧。
 */
 func (iw *ItemWallet) SetFrozen(odKey string, amount float64, withAvailable bool) *errs.Error {
-	iw.lockFroz.Lock()
+	iw.lock.Lock()
 	oldAmt, exists := iw.Frozens[odKey]
-	iw.lockFroz.Unlock()
 	if !exists {
 		oldAmt = 0
 	}
@@ -189,37 +182,37 @@ func (iw *ItemWallet) SetFrozen(odKey string, amount float64, withAvailable bool
 	addVal := amount - oldAmt
 	if withAvailable {
 		if addVal > 0 && iw.Available < addVal {
+			iw.lock.Unlock()
 			errMsg := "available " + iw.Coin + " Insufficient, frozen require: " + fmt.Sprintf("%.5f", addVal) + ", " + odKey
 			return errs.NewMsg(core.ErrLowFunds, errMsg)
 		}
 		iw.Available -= addVal
 	} else {
-		iw.lockPend.Lock()
 		pendVal, exists := iw.Pendings[odKey]
 		if !exists {
 			pendVal = 0
 		}
 		if addVal > 0 && pendVal < addVal {
-			iw.lockPend.Unlock()
+			iw.lock.Unlock()
 			errMsg := "pending " + iw.Coin + " Insufficient, frozen require: " + fmt.Sprintf("%.5f", addVal) + ", " + odKey
 			return errs.NewMsg(core.ErrLowSrcAmount, errMsg)
 		}
 		iw.Pendings[odKey] = pendVal - addVal
-		iw.lockPend.Unlock()
 	}
-	iw.lockFroz.Lock()
 	iw.Frozens[odKey] = amount
-	iw.lockFroz.Unlock()
+	iw.lock.Unlock()
 
 	return nil
 }
 
 func (iw *ItemWallet) Reset() {
+	iw.lock.Lock()
 	iw.Available = 0
 	iw.UnrealizedPOL = 0
 	iw.UsedUPol = 0
 	iw.Frozens = make(map[string]float64)
 	iw.Pendings = make(map[string]float64)
+	iw.lock.Unlock()
 }
 
 func (w *BanWallets) SetWallets(data map[string]float64) {
@@ -230,14 +223,14 @@ func (w *BanWallets) SetWallets(data map[string]float64) {
 				Coin:     k,
 				Pendings: make(map[string]float64),
 				Frozens:  make(map[string]float64),
-				lockFroz: &sync.Mutex{},
-				lockPend: &sync.Mutex{},
 			}
 			w.Items[k] = item
 		} else {
 			item.Reset()
 		}
+		item.lock.Lock()
 		item.Available = v
+		item.lock.Unlock()
 	}
 }
 
@@ -256,8 +249,6 @@ func (w *BanWallets) Get(code string) *ItemWallet {
 			Coin:     code,
 			Pendings: make(map[string]float64),
 			Frozens:  make(map[string]float64),
-			lockFroz: &sync.Mutex{},
-			lockPend: &sync.Mutex{},
 		}
 		w.Items[code] = wallet
 	}
@@ -274,6 +265,7 @@ return: Actual amount deducted, errs.Error
 */
 func (w *BanWallets) CostAva(odKey string, symbol string, amount float64, negative bool, minRate float64) (float64, *errs.Error) {
 	wallet := w.Get(symbol)
+	wallet.lock.Lock()
 	srcAmount := wallet.Available
 	if minRate == 0 {
 		minRate = config.MinOpenRate
@@ -288,14 +280,14 @@ func (w *BanWallets) CostAva(odKey string, symbol string, amount float64, negati
 		//差额在近似允许范围内，扣除实际值
 		realCost = srcAmount
 	} else {
+		wallet.lock.Unlock()
 		return 0, errs.NewMsg(core.ErrLowFunds, "wallet %s balance %.5f < %.5f", symbol, srcAmount, amount)
 	}
 	log.Debug("CostAva wallet", zap.String("key", odKey), zap.String("coin", symbol),
 		zap.Float64("ava", wallet.Available), zap.Float64("cost", realCost))
 	wallet.Available -= realCost
-	wallet.lockPend.Lock()
 	wallet.Pendings[odKey] = realCost
-	wallet.lockPend.Unlock()
+	wallet.lock.Unlock()
 	return realCost, nil
 }
 
@@ -315,14 +307,13 @@ func (w *BanWallets) CostFrozen(odKey string, symbol string, amount float64) flo
 		return 0
 	}
 
-	wallet.lockFroz.Lock()
+	wallet.lock.Lock()
 	frozenAmt, ok := wallet.Frozens[odKey]
 	if ok {
 		delete(wallet.Frozens, odKey)
 	} else {
 		frozenAmt = 0
 	}
-	wallet.lockFroz.Unlock()
 
 	log.Debug("CostFrozen wallet", zap.String("key", odKey), zap.String("coin", symbol),
 		zap.Float64("ava", wallet.Available), zap.Float64("add", frozenAmt-amount))
@@ -336,12 +327,11 @@ func (w *BanWallets) CostFrozen(odKey string, symbol string, amount float64) flo
 		wallet.Available = 0
 	}
 
-	wallet.lockPend.Lock()
 	if wallet.Pendings == nil {
 		wallet.Pendings = make(map[string]float64)
 	}
 	wallet.Pendings[odKey] = realCost
-	wallet.lockPend.Unlock()
+	wallet.lock.Unlock()
 
 	return realCost
 }
@@ -359,29 +349,29 @@ func (w *BanWallets) ConfirmPending(odKey string, srcKey string, srcAmount float
 
 	tgt := w.Get(tgtKey)
 
-	src.lockPend.Lock()
+	src.lock.Lock()
 	pendingAmt, ok := src.Pendings[odKey]
 	if !ok {
-		src.lockPend.Unlock()
+		src.lock.Unlock()
 		return false
 	}
 
 	leftPending := pendingAmt - srcAmount
 	delete(src.Pendings, odKey)
-	src.lockPend.Unlock()
 
 	log.Debug("ConfirmPending wallet", zap.String("key", odKey), zap.String("from", srcKey),
 		zap.Float64("ava", src.Available), zap.Float64("leftPend", leftPending))
 	// The remaining pending amount is returned to available (positive or negative)
 	src.Available += leftPending // 剩余的 pending 金额归还到 available（正负都可能）
+	src.lock.Unlock()
 
+	tgt.lock.Lock()
 	if toFrozen {
-		tgt.lockFroz.Lock()
 		tgt.Frozens[odKey] = tgtAmount
-		tgt.lockFroz.Unlock()
 	} else {
 		tgt.Available += tgtAmount
 	}
+	tgt.lock.Unlock()
 	return true
 }
 
@@ -397,21 +387,17 @@ func (w *BanWallets) Cancel(odKey string, symbol string, addAmount float64, from
 	}
 
 	var srcMap map[string]float64
-	var lock *sync.Mutex
 	if fromPending {
 		srcMap = wallet.Pendings
-		lock = wallet.lockPend
 	} else {
 		srcMap = wallet.Frozens
-		lock = wallet.lockFroz
 	}
 
-	lock.Lock()
+	wallet.lock.Lock()
 	srcAmount, exists := srcMap[odKey]
 	if exists {
 		delete(srcMap, odKey)
 	}
-	lock.Unlock()
 	srcAmount += addAmount
 
 	tag := "frozen"
@@ -419,6 +405,7 @@ func (w *BanWallets) Cancel(odKey string, symbol string, addAmount float64, from
 		tag = "pending"
 	}
 	wallet.Available += srcAmount
+	wallet.lock.Unlock()
 	log.Debug("cancel to ava", zap.String("tag", tag), zap.Float64("srcAmt", srcAmount),
 		zap.String("od", odKey), zap.String("coin", symbol), zap.Float64("ava", wallet.Available))
 }
@@ -617,21 +604,19 @@ func (w *BanWallets) CutPart(srcKey string, tgtKey string, symbol string, rate f
 		return
 	}
 
-	item.lockPend.Lock()
+	item.lock.Lock()
 	if value, ok := item.Pendings[srcKey]; ok {
 		cutAmt := value * rate
 		item.Pendings[tgtKey] += cutAmt
 		item.Pendings[srcKey] -= cutAmt
 	}
-	item.lockPend.Unlock()
 
-	item.lockFroz.Lock()
 	if value, ok := item.Frozens[srcKey]; ok {
 		cutAmt := value * rate
 		item.Frozens[tgtKey] += cutAmt
 		item.Frozens[srcKey] -= cutAmt
 	}
-	item.lockFroz.Unlock()
+	item.lock.Unlock()
 }
 
 /*
@@ -650,8 +635,10 @@ Wallet balance = initial net transfer balance (including initial margin) + reali
 func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder, currency string) *errs.Error {
 	if len(odList) == 0 {
 		for _, item := range w.Items {
+			item.lock.Lock()
 			item.UnrealizedPOL = 0
 			item.UsedUPol = 0
+			item.lock.Unlock()
 		}
 		return nil
 	}
@@ -665,8 +652,10 @@ func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder, currency string) *errs.
 	for _, od := range odList {
 		totProfit += od.Profit
 	}
+	wallet.lock.Lock()
 	wallet.UnrealizedPOL = totProfit
 	wallet.UsedUPol = 0
+	wallet.lock.Unlock()
 	if totProfit < 0 {
 		marginRatio := math.Abs(totProfit) / wallet.Total(false)
 		if marginRatio > 0.99 {
@@ -812,9 +801,11 @@ func (w *BanWallets) WithdrawLegal(amount float64, symbols []string) {
 
 	for i, drawAmt := range drawAmts {
 		item := w.Items[coins[i]]
+		item.lock.Lock()
 		drawAmt = min(drawAmt, item.Available)
 		item.Withdraw += drawAmt
 		item.Available -= drawAmt
+		item.lock.Unlock()
 	}
 }
 
@@ -887,8 +878,10 @@ func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 		}
 		record, ok := wallets.Items[coin]
 		if ok {
+			record.lock.Lock()
 			record.Available = it.Free
 			record.UnrealizedPOL = it.UPol
+			record.lock.Unlock()
 		} else {
 			record = &ItemWallet{
 				Coin:          coin,
@@ -896,20 +889,16 @@ func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 				UnrealizedPOL: it.UPol,
 				Pendings:      make(map[string]float64),
 				Frozens:       make(map[string]float64),
-				lockFroz:      &sync.Mutex{},
-				lockPend:      &sync.Mutex{},
 			}
 			wallets.Items[coin] = record
 		}
+		record.lock.Lock()
 		if core.IsContract {
-			record.lockPend.Lock()
 			record.Pendings["*"] = it.Used
-			record.lockPend.Unlock()
 		} else {
-			record.lockFroz.Lock()
 			record.Frozens["*"] = it.Used
-			record.lockFroz.Unlock()
 		}
+		record.lock.Unlock()
 		coinPrice := core.GetPriceSafe(coin)
 		if coinPrice == -1 {
 			skips = append(skips, coin)

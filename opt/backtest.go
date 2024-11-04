@@ -308,6 +308,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 			plots.OdNum = append(plots.OdNum, slices.Max(b.Plots.OdNum[i:i+splStep]))
 			plots.Real = append(plots.Real, b.Plots.Real[i])
 			plots.Available = append(plots.Available, b.Plots.Available[i])
+			plots.Profit = append(plots.Profit, b.Plots.Profit[i])
 			plots.UnrealizedPOL = append(plots.UnrealizedPOL, b.Plots.UnrealizedPOL[i])
 			plots.WithDraw = append(plots.WithDraw, b.Plots.WithDraw[i])
 		}
@@ -328,10 +329,13 @@ func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, tot
 	profitLegal := wallets.UnrealizedPOLLegal(nil)
 	drawLegal := wallets.GetWithdrawLegal(nil)
 	curDate := btime.ToDateStr(timeMS, "")
+	b.donePftLegal += orm.LegalDoneProfits(b.histOdOff)
+	b.histOdOff = len(orm.HistODs)
 	b.Plots.Labels = append(b.Plots.Labels, curDate)
 	b.Plots.OdNum = append(b.Plots.OdNum, odNum)
 	b.Plots.Real = append(b.Plots.Real, totalLegal)
 	b.Plots.Available = append(b.Plots.Available, avaLegal)
+	b.Plots.Profit = append(b.Plots.Profit, b.donePftLegal)
 	b.Plots.UnrealizedPOL = append(b.Plots.UnrealizedPOL, profitLegal)
 	b.Plots.WithDraw = append(b.Plots.WithDraw, drawLegal)
 }

@@ -1,0 +1,111 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        html, body{
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<canvas id="banct"></canvas>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="text/javascript">
+    (function () {
+        const ctx = document.getElementById("banct");
+
+        // title, labels, datasets[]{label, data, color, borderColor, backgroundColor, yAxisID}
+        var chartData = {'inject': 1}
+        var chart;
+
+        var colors = ['rgb(54 162 235)', 'rgb(255 99 132)', 'rgb(75 192 192)', 'rgb(255 159 64)', 'rgb(153 102 255)',
+            'rgb(255 212 86)', 'rgb(147 147 148)', 'rgb(190 35 201)', 'rgb(33 176 9)', 'rgb(175 96 25)']
+
+        chartData['datasets'].forEach(function (item, i) {
+            var color = colors[i % colors.length];
+            if (!item.borderColor) {
+                item.borderColor = color;
+            }
+            if (!item.backgroundColor) {
+                item.backgroundColor = color;
+            }
+            if (!item.yAxisID) {
+                item.yAxisID = 'yAsset'
+            }
+        })
+
+        function initChart() {
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    stacked: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: chartData['title']
+                        }
+                    },
+                    elements: {
+                        point: {radius: 0}
+                    },
+                    layout: {
+                        padding: {
+                            top: 25,
+                            right: 35,
+                            bottom: 30
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                display: true,
+                                autoSkip: true,
+                                maxTicksLimit: 15,
+                                callback: function (val) {
+                                    let text = this.getLabelForValue(val);
+                                    let cut = text.length;
+                                    if (ctx.width < 2000) {
+                                        cut = 11;
+                                    } else if (ctx.width < 3000) {
+                                        cut = 16
+                                    } else {
+                                        return text;
+                                    }
+                                    return text.substring(0, cut);
+                                }
+                            }
+                        },
+                        yAsset: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                        },
+                        yProfit: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            //suggestedMax: profitTop,
+                            grid: {
+                                drawOnChartArea: false, // only want the grid lines for one axis to show up
+                            },
+                        },
+                    }
+                },
+            })
+        }
+
+        initChart();
+    })();
+</script>

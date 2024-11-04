@@ -37,6 +37,8 @@ type BTResult struct {
 	TimeNum         int        `json:"timeNum"`
 	OrderNum        int        `json:"orderNum"`
 	lastTime        int64      // 上次bar的时间戳
+	histOdOff       int        // 计算已完成订单利润的偏移
+	donePftLegal    float64    // 已完成订单利润
 	Plots           *PlotData  `json:"plots"`
 	StartMS         int64      `json:"startMS"`
 	EndMS           int64      `json:"endMS"`
@@ -61,6 +63,7 @@ type PlotData struct {
 	OdNum         []int     `json:"odNum"`
 	Real          []float64 `json:"real"`
 	Available     []float64 `json:"available"`
+	Profit        []float64 `json:"profit"`
 	UnrealizedPOL []float64 `json:"unrealizedPOL"`
 	WithDraw      []float64 `json:"withDraw"`
 	tmpOdNum      int
@@ -99,6 +102,7 @@ func (r *BTResult) printBtResult() {
 		core.DumpPerfs(r.OutDir)
 	}
 
+	r.Collect()
 	orders := orm.HistODs
 	var b strings.Builder
 	var tblText string
@@ -113,11 +117,6 @@ func (r *BTResult) printBtResult() {
 			{Title: " Enter Tag ", Handle: textGroupEntTags},
 			{Title: " Exit Tag ", Handle: textGroupExitTags},
 		}
-		r.groupByPairs(orders)
-		r.groupByDates(orders)
-		r.groupByProfits(orders)
-		r.groupByEnters(orders)
-		r.groupByExits(orders)
 		for _, item := range items {
 			tblText = item.Handle(r)
 			if tblText != "" {
@@ -132,7 +131,6 @@ func (r *BTResult) printBtResult() {
 	} else {
 		b.WriteString("No Orders Found\n")
 	}
-	r.Collect()
 	b.WriteString(r.textMetrics(orders))
 	log.Info("BackTest Reports:\n" + b.String())
 
@@ -714,54 +712,26 @@ func (r *BTResult) dumpStratOutputs() {
 	}
 }
 
-//go:embed btgraph.html
-var btGraphData []byte
-
 func (r *BTResult) dumpGraph() {
-	tplPath := fmt.Sprintf("%s/btgraph.html", config.GetDataDir())
-	fileData, err_ := os.ReadFile(tplPath)
-	if err_ != nil {
-		log.Warn("btgraph.html load fail, use default", zap.String("path", tplPath), zap.Error(err_))
-		fileData = btGraphData
-	}
-	content := string(fileData)
-	content = strings.Replace(content, "$title", "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders", 1)
-	items := map[string]interface{}{
-		"\"$labels\"":    r.Plots.Labels,
-		"\"$odNum\"":     r.Plots.OdNum,
-		"\"$real\"":      r.Plots.Real,
-		"\"$available\"": r.Plots.Available,
-		"\"$profit\"":    r.Plots.UnrealizedPOL,
-		"\"$withdraw\"":  r.Plots.WithDraw,
-	}
-	for k, v := range items {
-		var b strings.Builder
-		if labels, ok := v.([]string); ok {
-			for _, it := range labels {
-				b.WriteString("\"")
-				b.WriteString(it)
-				b.WriteString("\",")
-			}
-		} else if vals, ok := v.([]float64); ok {
-			for _, it := range vals {
-				b.WriteString(strconv.FormatFloat(it, 'f', 2, 64))
-				b.WriteString(",")
-			}
-		} else if vals, ok := v.([]int); ok {
-			for _, it := range vals {
-				b.WriteString(strconv.Itoa(it))
-				b.WriteString(",")
-			}
-		} else {
-			log.Error("unsupport plot type", zap.String("key", k), zap.String("type", fmt.Sprintf("%T", v)))
-		}
-		content = strings.Replace(content, k, b.String(), 1)
+	odNum := make([]float64, 0, len(r.Plots.OdNum))
+	for _, v := range r.Plots.OdNum {
+		odNum = append(odNum, float64(v))
 	}
 	taskId := orm.GetTaskID("")
 	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, taskId)
-	err_ = os.WriteFile(outPath, []byte(content), 0644)
-	if err_ != nil {
-		log.Error("save assets.html fail", zap.Error(err_))
+	title := "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders"
+	tplPath := fmt.Sprintf("%s/btgraph.html", config.GetDataDir())
+	tplData, _ := os.ReadFile(tplPath)
+	err := DumpLineGraph(outPath, title, r.Plots.Labels, 5, tplData, []*ChartDs{
+		{Label: "Real", Data: r.Plots.Real},
+		{Label: "Available", Data: r.Plots.Available},
+		{Label: "Profit", Data: r.Plots.Profit, YAxisID: "yProfit", Hidden: true},
+		{Label: "UnPOL", Data: r.Plots.UnrealizedPOL, YAxisID: "yProfit", Hidden: true},
+		{Label: "Withdraw", Data: r.Plots.WithDraw, YAxisID: "yProfit", Hidden: true},
+		{Label: "OrderNum", Data: odNum, YAxisID: "yProfit", Hidden: true},
+	})
+	if err != nil {
+		log.Error("save assets.html fail", zap.Error(err))
 	}
 }
 

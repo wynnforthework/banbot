@@ -52,7 +52,7 @@ const (
 )
 
 const (
-	BatchTypeEnter = iota
+	BatchTypeInOut = iota
 	BatchTypeInfo
 )
 

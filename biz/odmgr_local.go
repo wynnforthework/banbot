@@ -495,8 +495,10 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 	// 重置未实现盈亏
 	wallets := GetWallets(o.Account)
 	for _, item := range wallets.Items {
+		item.lock.Lock()
 		item.UnrealizedPOL = 0
 		item.UsedUPol = 0
+		item.lock.Unlock()
 	}
 	// Filter unfilled orders
 	// 过滤未入场订单

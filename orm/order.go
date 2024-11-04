@@ -1154,3 +1154,28 @@ func (t *ExitTrigger) Clone() *ExitTrigger {
 		Tag:   t.Tag,
 	}
 }
+
+/*
+LegalDoneProfits
+Calculate the fiat value of realized profits
+计算已实现利润的法币价值
+*/
+func LegalDoneProfits(off int) float64 {
+	var total = float64(0)
+	var skips []string
+	for i := off; i < len(HistODs); i++ {
+		od := HistODs[i]
+		_, quote, _, _ := core.SplitSymbol(od.Symbol)
+		price := core.GetPriceSafe(quote)
+		if price == -1 {
+			skips = append(skips, quote)
+			continue
+		}
+		total += price * od.Profit
+	}
+	if len(skips) > 0 {
+		log.Info("skip items in LegalDoneProfits", zap.Int("num", len(skips)),
+			zap.String("items", strings.Join(skips, ",")))
+	}
+	return total
+}
