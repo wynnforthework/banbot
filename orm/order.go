@@ -386,6 +386,7 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 		DirtyMain:  true,
 		DirtyEnter: true,
 		DirtyInfo:  true,
+		idKey:      i.idKey,
 	}
 	for key, val := range i.Info {
 		part.Info[key] = val
@@ -393,6 +394,7 @@ func (i *InOutOrder) CutPart(enterAmt, exitAmt float64) *InOutOrder {
 	// The enter.at of the original order needs to be+1 to prevent conflicts with sub orders that have been split.
 	// 原来订单的enter_at需要+1，防止和拆分的子订单冲突。
 	i.EnterAt += 1
+	i.idKey = ""
 	i.QuoteCost -= part.QuoteCost
 	i.DirtyMain = true
 	i.DirtyEnter = true
@@ -466,6 +468,10 @@ func (i *InOutOrder) saveToMem() {
 	} else {
 		if _, ok := openOds[i.ID]; ok {
 			delete(openOds, i.ID)
+		}
+		if _, ok := doneODs[i.ID]; !ok {
+			doneODs[i.ID] = true
+			// 切分的订单不会出现在openOds中
 			HistODs = append(HistODs, i)
 		}
 	}

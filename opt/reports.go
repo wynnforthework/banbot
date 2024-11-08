@@ -201,18 +201,18 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	table.Append([]string{"Total Investment", strconv.FormatFloat(r.TotalInvest, 'f', 0, 64)})
 	wallets := biz.GetWallets("")
 	finBalance := wallets.AvaLegal(nil)
-	table.Append([]string{"Final Balance", strconv.FormatFloat(finBalance, 'f', 0, 64)})
+	table.Append([]string{"Final Balance", strconv.FormatFloat(finBalance, 'f', 2, 64)})
 	finWithDraw := wallets.GetWithdrawLegal(nil)
-	table.Append([]string{"Final WithDraw", strconv.FormatFloat(finWithDraw, 'f', 0, 64)})
-	table.Append([]string{"Absolute Profit", strconv.FormatFloat(r.TotProfit, 'f', 0, 64)})
+	table.Append([]string{"Final WithDraw", strconv.FormatFloat(finWithDraw, 'f', 2, 64)})
+	table.Append([]string{"Absolute Profit", strconv.FormatFloat(r.TotProfit, 'f', 2, 64)})
 	totProfitPct := strconv.FormatFloat(r.TotProfitPct, 'f', 1, 64)
 	table.Append([]string{"Total Profit %", totProfitPct + "%"})
-	table.Append([]string{"Total Fee", strconv.FormatFloat(r.TotFee, 'f', 0, 64)})
-	avfProfit := strconv.FormatFloat(r.TotProfitPct*10/float64(len(orders)), 'f', 1, 64)
-	table.Append([]string{"Avg Profit ‰", avfProfit + "‰"})
-	table.Append([]string{"Total Cost", strconv.FormatFloat(r.TotCost, 'f', 0, 64)})
+	table.Append([]string{"Total Fee", strconv.FormatFloat(r.TotFee, 'f', 2, 64)})
+	avfProfit := strconv.FormatFloat(r.TotProfitPct*100/float64(len(orders)), 'f', 2, 64)
+	table.Append([]string{"Avg Profit %%", avfProfit + "%%"})
+	table.Append([]string{"Total Cost", strconv.FormatFloat(r.TotCost, 'f', 2, 64)})
 	avgCost := r.TotCost / float64(len(orders))
-	table.Append([]string{"Avg Cost", strconv.FormatFloat(avgCost, 'f', 1, 64)})
+	table.Append([]string{"Avg Cost", strconv.FormatFloat(avgCost, 'f', 2, 64)})
 	slices.SortFunc(orders, func(a, b *orm.InOutOrder) int {
 		return int((a.Profit - b.Profit) * 100)
 	})
@@ -226,8 +226,8 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	}
 	table.Append([]string{"Max Assets", strconv.FormatFloat(r.MaxReal, 'f', 1, 64)})
 	table.Append([]string{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)})
-	drawDownRate := strconv.FormatFloat(r.ShowDrawDownPct, 'f', 1, 64) + "%"
-	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 1, 64) + "%"
+	drawDownRate := strconv.FormatFloat(r.ShowDrawDownPct, 'f', 2, 64) + "%"
+	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 2, 64) + "%"
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
 	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
 	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
@@ -720,7 +720,7 @@ func (r *BTResult) dumpGraph() {
 	taskId := orm.GetTaskID("")
 	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, taskId)
 	title := "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders"
-	tplPath := fmt.Sprintf("%s/btgraph.html", config.GetDataDir())
+	tplPath := fmt.Sprintf("%s/lines.html", config.GetDataDir())
 	tplData, _ := os.ReadFile(tplPath)
 	err := DumpLineGraph(outPath, title, r.Plots.Labels, 5, tplData, []*ChartDs{
 		{Label: "Real", Data: r.Plots.Real},
