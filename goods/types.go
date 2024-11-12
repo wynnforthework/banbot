@@ -89,12 +89,10 @@ type AgeFilter struct {
 
 type OffsetFilter struct {
 	BaseFilter
-	// 偏移限定数量选择。一般用在最后
-	Reverse bool `yaml:"reverse" mapstructure:"reverse,omitempty"`
-	// 偏移限定数量选择。一般用在最后
-	Offset int `yaml:"offset" mapstructure:"offset,omitempty"`
-	// 从第10个开始取
-	Limit int `yaml:"limit" mapstructure:"limit,omitempty"`
+	Reverse bool    `yaml:"reverse" mapstructure:"reverse,omitempty"`
+	Offset  int     `yaml:"offset" mapstructure:"offset,omitempty"`
+	Limit   int     `yaml:"limit" mapstructure:"limit,omitempty"`
+	Rate    float64 `yaml:"rate" mapstructure:"rate,omitempty"`
 }
 
 type ShuffleFilter struct {

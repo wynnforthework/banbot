@@ -1087,10 +1087,6 @@ Check the data consistency of each kline table. If there is more low dimensional
 */
 func SyncKlineTFs() *errs.Error {
 	log.Info("run kline data sync ...")
-	err := LoadAllExSymbols()
-	if err != nil {
-		return err
-	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err
@@ -1495,10 +1491,6 @@ func CalcAdjFactors(args *config.CmdArgs) *errs.Error {
 		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
 	}
 	exInfo := exg.Default.Info()
-	err := LoadAllExSymbols()
-	if err != nil {
-		return err
-	}
 	if exInfo.ID == "china" {
 		return calcChinaAdjFactors(args)
 	} else {

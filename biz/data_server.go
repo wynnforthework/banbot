@@ -39,10 +39,6 @@ func RunDataServer(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = orm.LoadAllExSymbols()
-	if err != nil {
-		return err
-	}
 	err = orm.InitExg(exg.Default)
 	if err != nil {
 		return err

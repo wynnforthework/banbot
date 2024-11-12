@@ -25,7 +25,7 @@ func TestGcdInts(t *testing.T) {
 }
 
 func TestCopyDir(t *testing.T) {
-	name := "h01"
+	name := "demo"
 	stagyDir := "E:\\trade\\go\\banstrat"
 	outDir := "E:\\trade\\go\\bandata\\backtest\\task_-1"
 	srcDir := fmt.Sprintf("%s/%s", stagyDir, name)

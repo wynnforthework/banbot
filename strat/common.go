@@ -133,7 +133,7 @@ func (q *ExitReq) Clone() *ExitReq {
 		ExitRate:   q.ExitRate,
 		Amount:     q.Amount,
 		OrderID:    q.OrderID,
-		UnOpenOnly: q.UnOpenOnly,
+		UnFillOnly: q.UnFillOnly,
 		Force:      q.Force,
 	}
 	return res

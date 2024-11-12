@@ -182,7 +182,7 @@ func TryFireBatches(currMS int64) int {
 			continue
 		}
 		var enterJobs []*strat.StratJob
-		var infoJobs map[string]*strat.StratJob
+		var infoJobs = make(map[string]*strat.StratJob)
 		var stgy *strat.TradeStrat
 		for pair, task := range tasks.Map {
 			stgy = task.Job.Strat

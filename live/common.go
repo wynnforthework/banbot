@@ -40,6 +40,9 @@ func CronLoadMarkets() {
 
 func CronFatalLossCheck() {
 	checkIntvs := utils.KeysOfMap(config.FatalStop)
+	if len(checkIntvs) == 0 {
+		return
+	}
 	minIntv := slices.Min(checkIntvs)
 	if minIntv < 1 {
 		log.Error("fatal_stop invalid, min is 1, skip", zap.Int("current", minIntv))

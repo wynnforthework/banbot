@@ -361,6 +361,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 			exitTag = sl.Tag
 		} else {
 			exitTag = core.ExitTagStopLoss
+			od.UpdateProfits(fillPrice)
 			if od.ProfitRate >= 0 {
 				exitTag = core.ExitTagSLTake
 			}

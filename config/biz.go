@@ -222,6 +222,9 @@ func apply(args *CmdArgs) *errs.Error {
 	initExgAccs()
 	Database = Data.Database
 	SpiderAddr = Data.SpiderAddr
+	if SpiderAddr == "" {
+		SpiderAddr = "127.0.0.1:6789"
+	}
 	APIServer = Data.APIServer
 	RPCChannels = Data.RPCChannels
 	Webhook = Data.Webhook

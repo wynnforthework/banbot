@@ -1168,21 +1168,12 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 	if od.Status == orm.InOutStatusFullExit {
 		// May be triggered by stop loss or take profit, delete and set to completed
 		// 可能由止盈止损触发，删除置为已完成
-		if sl != nil && sl.OrderId != "" {
-			if isStopLoss {
-				sl.OrderId = ""
-				od.DirtyInfo = true
-			} else {
-				log.Info("finish order", zap.String("stopLoss", sl.OrderId), zap.String("trade.Od", trade.Order))
-			}
-		}
-		if tp != nil && tp.OrderId != "" {
-			if isTakeProfit {
-				tp.OrderId = ""
-				od.DirtyInfo = true
-			} else {
-				log.Info("finish order", zap.String("takeProfit", tp.OrderId), zap.String("trade.Od", trade.Order))
-			}
+		if isStopLoss {
+			sl.OrderId = ""
+			od.DirtyInfo = true
+		} else if isTakeProfit {
+			tp.OrderId = ""
+			od.DirtyInfo = true
 		}
 		err := o.finishOrder(od, nil)
 		if err != nil {
@@ -2016,17 +2007,28 @@ func cancelTriggerOds(od *orm.InOutOrder) {
 	args := map[string]interface{}{
 		banexg.ParamAccount: orm.GetTaskAcc(od.TaskID),
 	}
+	var logFields []zap.Field
 	if sl != nil && sl.OrderId != "" {
 		_, err := exg.Default.CancelOrder(sl.OrderId, od.Symbol, args)
 		if err != nil {
-			log.Error("cancel stopLoss fail", zap.String("key", odKey), zap.Error(err))
+			log.Warn("cancel stopLoss fail", zap.String("key", odKey), zap.String("err", err.Short()))
+		} else {
+			logFields = append(logFields, zap.String("sl", sl.OrderId))
 		}
+		sl.OrderId = ""
 	}
 	if tp != nil && tp.OrderId != "" {
 		_, err := exg.Default.CancelOrder(tp.OrderId, od.Symbol, args)
 		if err != nil {
-			log.Error("cancel takeProfit fail", zap.String("key", odKey), zap.Error(err))
+			log.Warn("cancel takeProfit fail", zap.String("key", odKey), zap.String("err", err.Short()))
+		} else {
+			logFields = append(logFields, zap.String("tp", tp.OrderId))
 		}
+		tp.OrderId = ""
+	}
+	if len(logFields) > 0 {
+		logFields = append(logFields, zap.String("key", odKey))
+		log.Info("cancel order triggers", logFields...)
 	}
 }
 

@@ -175,6 +175,9 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 		StopMs:    curEnd,
 	})
 	if err != nil || insId == 0 {
+		if pBar != nil {
+			pBar.Add(core.StepTotal)
+		}
 		return 0, err
 	}
 	if pBar == nil && totalNum > 10000 {

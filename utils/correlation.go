@@ -21,7 +21,7 @@ import (
 /*
 CalcCorrMat calculate Correlation Matrix for given data
 */
-func CalcCorrMat(dataArr [][]float64, useChgRate bool) (*mat.SymDense, []float64, error) {
+func CalcCorrMat(arrLen int, dataArr [][]float64, useChgRate bool) (*mat.SymDense, []float64, error) {
 	if len(dataArr) <= 1 {
 		return nil, nil, errors.New("at least two data series are required to calculate correlation")
 	}
@@ -43,21 +43,23 @@ func CalcCorrMat(dataArr [][]float64, useChgRate bool) (*mat.SymDense, []float64
 	}
 	// calculate CorrelationMatrix
 	numAssets := len(dataArr)
-	numReturns := len(dataArr[0])
 	for i, col := range dataArr {
-		if len(col) != numReturns {
-			msg := "col %v length inconsistent with col 0, %v - %v"
-			return nil, nil, errs.NewMsg(errs.CodeParamInvalid, msg, i, len(col), numReturns)
+		curLen := len(col)
+		if curLen > arrLen {
+			msg := "col %v length %v should <= arrLen %v"
+			return nil, nil, errs.NewMsg(errs.CodeParamInvalid, msg, i, curLen, arrLen)
+		} else if curLen < arrLen {
+			dataArr[i] = append(make([]float64, arrLen-curLen), col...)
 		}
 	}
-	matrixData := make([]float64, 0, numAssets*numReturns)
-	for i := 0; i < numReturns; i++ {
+	matrixData := make([]float64, 0, numAssets*arrLen)
+	for i := 0; i < arrLen; i++ {
 		for j := 0; j < numAssets; j++ {
 			matrixData = append(matrixData, dataArr[j][i])
 		}
 	}
 	// Construct a return matrix, where each column is the return sequence of an asset
-	returnsMat := mat.NewDense(numReturns, numAssets, matrixData)
+	returnsMat := mat.NewDense(arrLen, numAssets, matrixData)
 	corrMat := mat.NewSymDense(numAssets, nil)
 	stat.CorrelationMatrix(corrMat, returnsMat, nil)
 	avgs := make([]float64, 0, numAssets)
@@ -235,5 +237,5 @@ func CalcEnvsCorr(envs []*ta.BarEnv, hisNum int) (*mat.SymDense, []float64, erro
 		offset := max(0, int((e.TimeStart-stamp)/e.TFMSecs))
 		data = append(data, e.Close.Range(offset, offset+hisNum))
 	}
-	return CalcCorrMat(data, true)
+	return CalcCorrMat(hisNum, data, true)
 }

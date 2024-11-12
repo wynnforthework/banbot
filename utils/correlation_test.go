@@ -16,7 +16,7 @@ func TestGenCorrImg(t *testing.T) {
 	}
 	title := "pearson correlation"
 	names := []string{"btc", "eth", "fol", "etc", "eos"}
-	corrMat, _, err := CalcCorrMat(dataArr, false)
+	corrMat, _, err := CalcCorrMat(len(dataArr[0]), dataArr, false)
 	if err != nil {
 		panic(err)
 	}

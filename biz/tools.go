@@ -320,10 +320,6 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	if len(args.Pairs) == 0 {
 		// No target is provided, export all current market
 		// 未提供标的，导出当前市场所有
-		err = orm.LoadAllExSymbols()
-		if err != nil {
-			return err
-		}
 		exsList := orm.GetAllExSymbols()
 		for _, exs := range exsList {
 			if exs.Exchange != core.ExgName || exs.Market != core.Market {
@@ -698,7 +694,7 @@ func CalcCorrelation(args *config.CmdArgs) *errs.Error {
 			continue
 		}
 		// Calculate the Pearson correlation matrix
-		corrMat, avgs, err_ := utils.CalcCorrMat(dataArr, true)
+		corrMat, avgs, err_ := utils.CalcCorrMat(klineNum, dataArr, true)
 		if err_ != nil {
 			return errs.New(errs.CodeRunTime, err_)
 		}

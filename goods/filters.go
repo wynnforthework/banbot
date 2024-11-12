@@ -37,6 +37,9 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 	backNum := max(f.Max, f.Min) + 1
 	return filterByOHLCV(symbols, "1d", backNum, 0, func(s string, klines []*banexg.Kline) bool {
 		knum := len(klines)
+		if knum == 0 {
+			return true
+		}
 		return knum >= f.Max && (f.Max == 0 || knum <= f.Max)
 	})
 }
@@ -198,7 +201,7 @@ func (f *PriceFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker
 	} else {
 		return filterByOHLCV(symbols, "1h", 1, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
 			if len(klines) == 0 {
-				return false
+				return true
 			}
 			return f.validatePrice(s, klines[len(klines)-1].Close)
 		})
@@ -258,7 +261,7 @@ func (f *RateOfChangeFilter) Filter(symbols []string, tickers map[string]*banexg
 
 func (f *RateOfChangeFilter) validate(pair string, arr []*banexg.Kline) bool {
 	if len(arr) == 0 {
-		return false
+		return true
 	}
 	hhigh := arr[0].High
 	llow := arr[0].Low
@@ -341,7 +344,7 @@ func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.
 	if f.TopN > 0 && nameNum <= f.TopN {
 		return names, nil
 	}
-	_, avgs, err_ := utils.CalcCorrMat(dataArr, true)
+	_, avgs, err_ := utils.CalcCorrMat(f.BackNum, dataArr, true)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeRunTime, err_)
 	}
@@ -363,6 +366,9 @@ func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.
 
 func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	return filterByOHLCV(symbols, "1d", f.BackDays, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
+		if len(klines) == 0 {
+			return true
+		}
 		var data = make([]float64, 0, len(klines))
 		for i, v := range klines[1:] {
 			data = append(data, v.Close/klines[i].Close)
@@ -387,6 +393,10 @@ func (f *OffsetFilter) Filter(symbols []string, tickers map[string]*banexg.Ticke
 	}
 	if f.Offset < len(res) {
 		res = res[f.Offset:]
+	}
+	if f.Rate > 0 && f.Rate < 1 {
+		num := int(math.Round(float64(len(res)) * f.Rate))
+		res = res[:num]
 	}
 	if f.Limit > 0 && f.Limit < len(res) {
 		res = res[:f.Limit]

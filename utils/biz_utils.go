@@ -18,7 +18,10 @@ type PrgBar struct {
 }
 
 func NewPrgBar(totalNum int, title string) *PrgBar {
-	pBar := progressbar.Default(int64(totalNum), title)
+	var pBar *progressbar.ProgressBar
+	if totalNum > 0 {
+		pBar = progressbar.Default(int64(totalNum), title)
+	}
 	return &PrgBar{
 		bar:      pBar,
 		m:        &sync.Mutex{},
@@ -50,7 +53,7 @@ func (p *PrgBar) NewJob(num int) *PrgBarJob {
 }
 
 func (p *PrgBar) Close() {
-	if p.bar == nil {
+	if p.bar == nil || p.TotalNum == 0 {
 		return
 	}
 	if p.DoneNum < p.TotalNum {

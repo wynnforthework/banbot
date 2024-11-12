@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -663,19 +664,19 @@ func (i *InOutOrder) Lock() *sync.Mutex {
 		lock = &sync.Mutex{}
 		lockOds[odKey] = lock
 	}
-	var got = false
+	var got = int32(0)
 	if core.LiveMode {
 		// Real time mode with added deadlock detection
 		// 实时模式，增加死锁检测
 		time.AfterFunc(time.Second*5, func() {
-			if got {
+			if atomic.LoadInt32(&got) == 1 {
 				return
 			}
 			log.Error("order DeadLock found", zap.String("key", odKey))
 		})
 	}
 	lock.Lock()
-	got = true
+	atomic.StoreInt32(&got, 1)
 	return lock
 }
 

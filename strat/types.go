@@ -147,7 +147,7 @@ type ExitReq struct {
 	ExitRate   float64 // Exit rate, default is 100%, which means all orders are exited 退出比率，默认100%即所有订单全部退出
 	Amount     float64 // The number of targets to be exited. ExitRate is invalid when specified 要退出的标的数量。指定时ExitRate无效
 	OrderID    int64   // Only exit specified orders 只退出指定订单
-	UnOpenOnly bool    // When True, only exit orders that have not yet entered the venue True时只退出尚未入场的订单
+	UnFillOnly bool    // When True, exit orders which hasn't been filled only. True时只退出尚未入场的部分
 	FilledOnly bool    // Only exit orders that have already entered when True True时只退出已入场的订单
 	Force      bool    // Whether to force exit 是否强制退出
 }

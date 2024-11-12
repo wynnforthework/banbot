@@ -64,6 +64,10 @@ func Setup() *errs.Error {
 	}
 	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize),
 		zap.String("DB_MAX_CONN", maxConnections))
+	err2 := LoadAllExSymbols()
+	if err2 != nil {
+		return err2
+	}
 	sess, conn, err2 := Conn(ctx)
 	if err2 != nil {
 		return err2

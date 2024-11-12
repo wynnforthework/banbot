@@ -320,7 +320,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 				// Order Exited 订单已退出
 				continue
 			}
-			if req.UnOpenOnly && od.Enter.Filled > 0 {
+			if req.UnFillOnly && od.Enter.Filled >= od.Enter.Amount {
 				continue
 			}
 			if req.FilledOnly && od.Enter.Filled < core.AmtDust {

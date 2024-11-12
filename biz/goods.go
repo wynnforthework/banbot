@@ -52,7 +52,10 @@ func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]m
 		score := float64(1)
 		if len(arr) > 0 && pipChg > 0 {
 			arr = orm.ApplyAdj(adjs, arr, core.AdjFront, 0, 0)
-			score = calcKlineScore(arr, pipChg, 3)
+			calcScore := calcKlineScore(arr, pipChg, 3)
+			if !math.IsNaN(calcScore) {
+				score = calcScore
+			}
 		}
 		tfScores[timeFrame] = score
 	}

@@ -12,7 +12,7 @@
 docker pull timescale/timescaledb:latest-pg16
 
 # 启动容器：
-docker run -d --name timescaledb -p 5432:5432 -v /opt/pgdata:/home/postgres/pgdata/data -e POSTGRES_PASSWORD=Uf6CVdsZ3Dc timescale/timescaledb:latest-pg16
+docker run -d --name timescaledb -p 5432:5432 -v /opt/pgdata:/var/lib/postgresql/data -e POSTGRES_PASSWORD=Uf6CVdsZ3Dc timescale/timescaledb:latest-pg16
 
 # 进入数据库：
 docker exec -it timescaledb psql -U postgres -h localhost [-d bantd]

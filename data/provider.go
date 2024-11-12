@@ -86,7 +86,8 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 			if oldMinTf != curMinTf {
 				newHolds = append(newHolds, hold)
 			} else {
-				oldSince[fmt.Sprintf("%s|%s", pair, curMinTf)] = hold.getStates()[0].NextMS
+				since, _ := oldSince[pair]
+				oldSince[pair] = max(since, hold.getStates()[0].NextMS)
 			}
 			if len(newTfs) > 0 {
 				warmJobs = append(warmJobs, &WarmJob{
@@ -202,10 +203,14 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 	}
 	maxSince := int64(0)
 	holders := make(map[string]IHistKlineFeeder)
+	defSince := btime.TimeMS()
 	for pair, since := range sinceMap {
 		hold, ok := p.holders[pair]
 		if !ok {
 			continue
+		}
+		if since == 0 {
+			since = defSince
 		}
 		holders[pair] = hold
 		if hold.getNextMS() == 0 || hold.getStates()[0].NextMS != since {
@@ -241,7 +246,14 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	if p.showLog {
 		log.Info("run data loop for backtest..")
 	}
-	return RunHistFeeders(makeFeeders, p.dirtyVers, pBar)
+	coreStop := core.StopAll
+	core.StopAll = func() {
+		p.Terminate()
+		coreStop()
+	}
+	err := RunHistFeeders(makeFeeders, p.dirtyVers, pBar)
+	core.StopAll = coreStop
+	return err
 }
 
 func (p *HistProvider) Terminate() {
@@ -262,11 +274,13 @@ func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pB
 	var lastBarMs int64
 	var oldVer int
 	var holds []IHistKlineFeeder
+	var firstInit = true
 	step := func(ver int) bool {
-		if ver > oldVer || len(holds) == 0 {
+		if ver > oldVer || firstInit {
 			holds = makeFeeders()
 			holds = SortFeeders(holds, nil, false)
 			oldVer = max(oldVer, ver)
+			firstInit = false
 		} else {
 			holds = SortFeeders(holds, hold, true)
 		}
