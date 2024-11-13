@@ -72,6 +72,15 @@ func (s *TradeStrat) pickTimeFrame(symbol string, tfScores map[string]float64) s
 /*
 *****************************  StagyJob的成员方法   ****************************************
  */
+func (s *StratJob) CanOpen(short bool) bool {
+	disable := false
+	if short {
+		disable = s.MaxOpenShort < 0 || s.MaxOpenShort > 0 && len(s.ShortOrders) >= s.MaxOpenShort
+	} else {
+		disable = s.MaxOpenLong < 0 || s.MaxOpenLong > 0 && len(s.LongOrders) >= s.MaxOpenLong
+	}
+	return !disable
+}
 
 func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Tag == "" {
@@ -86,8 +95,7 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Short {
 		dirType = core.OdDirtShort
 	}
-	if req.Short && s.MaxOpenShort > 0 && len(s.ShortOrders) >= s.MaxOpenShort ||
-		!req.Short && s.MaxOpenLong > 0 && len(s.LongOrders) >= s.MaxOpenLong {
+	if !s.CanOpen(req.Short) {
 		if isLiveMode {
 			log.Warn("open order disabled",
 				zap.String("strategy", s.Strat.Name),

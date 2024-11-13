@@ -477,7 +477,7 @@ func (o *OrderMgr) exitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.E
 	if odType == "" {
 		odType = config.OrderType
 	}
-	if req.ExitRate < 0.99 {
+	if req.ExitRate < 0.99 && req.ExitRate > 0 {
 		// The portion to be exited is less than 99%, so a small order is split out for exit.
 		// 要退出的部分不足99%，分割出一个小订单，用于退出。
 		part := o.CutOrder(od, req.ExitRate, 0)

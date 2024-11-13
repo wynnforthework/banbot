@@ -68,10 +68,28 @@ func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
 	if err != nil {
 		return err
 	}
-	var warms map[string]map[string]int
-	warms, err = strat.LoadStratJobs(pairs, pairTfScores)
+	warms, accOds, err := strat.LoadStratJobs(pairs, pairTfScores)
 	if err != nil {
 		return err
+	}
+	if len(accOds) > 0 {
+		// exit unfill orders
+		sess, conn, err := orm.Conn(nil)
+		if err != nil {
+			return err
+		}
+		for acc, odList := range accOds {
+			odMgr := GetOdMgr(acc)
+			for _, od := range odList {
+				req := &strat.ExitReq{Tag: core.ExitTagPairDel, OrderID: od.ID, ExitRate: 1}
+				_, err = odMgr.ExitOrder(sess, od, req)
+				if err != nil {
+					conn.Release()
+					return err
+				}
+			}
+		}
+		conn.Release()
 	}
 	if showLog {
 		core.PrintStratGroups()
@@ -88,7 +106,7 @@ func AutoRefreshPairs(dp data.IProvider, showLog bool) {
 
 func InitOdSubs() {
 	var subStgys = map[string]*strat.TradeStrat{}
-	for _, items := range strat.PairStags {
+	for _, items := range strat.PairStrats {
 		for stgName, stagy := range items {
 			if stagy.OnOrderChange != nil {
 				subStgys[stgName] = stagy
@@ -245,7 +263,7 @@ func ResetVars() {
 	strat.Envs = make(map[string]*ta.BarEnv)
 	strat.AccJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StratJob)
-	strat.PairStags = make(map[string]map[string]*strat.TradeStrat)
+	strat.PairStrats = make(map[string]map[string]*strat.TradeStrat)
 	strat.BatchTasks = make(map[string]*strat.BatchMap)
 	strat.LastBatchMS = 0
 }

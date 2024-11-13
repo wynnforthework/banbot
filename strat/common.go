@@ -40,7 +40,7 @@ func New(pol *config.RunPolicyConfig) *TradeStrat {
 }
 
 func Get(pair, strtgID string) *TradeStrat {
-	data, _ := PairStags[pair]
+	data, _ := PairStrats[pair]
 	if len(data) == 0 {
 		return nil
 	}
@@ -149,8 +149,8 @@ func (s *StratJob) InitBar(curOrders []*orm.InOutOrder) {
 		s.ShortOrders = nil
 		enteredNum := 0
 		for _, od := range curOrders {
-			if od.Strategy == s.Strat.Name {
-				if od.Status >= orm.InOutStatusFullEnter {
+			if od.Symbol == s.Symbol.Symbol && od.Timeframe == s.TimeFrame && od.Strategy == s.Strat.Name {
+				if od.Status >= orm.InOutStatusPartEnter && od.Status <= orm.InOutStatusPartExit {
 					enteredNum += 1
 				}
 				if od.Short {
@@ -484,5 +484,17 @@ func FireOdChange(acc string, od *orm.InOutOrder, evt int) {
 func AddStratGroup(group string, items map[string]FuncMakeStrat) {
 	for k, v := range items {
 		StratMake[group+":"+k] = v
+	}
+}
+
+func (w Warms) Update(pair, tf string, num int) {
+	if warms, ok := w[pair]; ok {
+		if oldNum, ok := warms[tf]; ok {
+			warms[tf] = max(oldNum, num)
+		} else {
+			warms[tf] = num
+		}
+	} else {
+		w[pair] = map[string]int{tf: num}
 	}
 }

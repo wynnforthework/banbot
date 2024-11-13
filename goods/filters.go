@@ -12,9 +12,11 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"gonum.org/v1/gonum/floats"
 	"math"
 	"math/rand"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -74,6 +76,10 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 		}
 	}
 	resPairs, _ := filterByMinCost(symbolVols)
+	if f.LimitRate > 0 && f.LimitRate < 1 {
+		num := int(math.Round(f.LimitRate * float64(len(resPairs))))
+		resPairs = resPairs[:num]
+	}
 	if f.Limit > 0 && f.Limit < len(resPairs) {
 		resPairs = resPairs[:f.Limit]
 	}
@@ -88,9 +94,9 @@ type SymbolVol struct {
 
 func getSymbolVols(symbols []string, tf string, num int) ([]SymbolVol, *errs.Error) {
 	var symbolVols = make([]SymbolVol, 0)
-	startMS := int64(0)
+	endMS := int64(0)
 	if !core.LiveMode {
-		startMS = btime.TimeMS()
+		endMS = btime.TimeMS()
 	}
 	callBack := func(symbol string, _ string, klines []*banexg.Kline, adjs []*orm.AdjInfo) {
 		if len(klines) == 0 {
@@ -110,12 +116,12 @@ func getSymbolVols(symbols []string, tf string, num int) ([]SymbolVol, *errs.Err
 		}
 	}
 	exchange := exg.Default
-	err := orm.FastBulkOHLCV(exchange, symbols, tf, startMS, 0, num, callBack)
+	err := orm.FastBulkOHLCV(exchange, symbols, tf, 0, endMS, num, callBack)
 	if err != nil {
 		return nil, err
 	}
 	if len(symbolVols) == 0 {
-		msg := fmt.Sprintf("No data found for %d pairs at %v", len(symbols), startMS)
+		msg := fmt.Sprintf("No data found for %d pairs at %v", len(symbols), endMS)
 		return nil, errs.NewMsg(core.ErrRunTime, msg)
 	}
 	return symbolVols, nil
@@ -322,7 +328,7 @@ func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.
 			continue
 		}
 		_, klines, err := orm.GetOHLCV(exs, f.Timeframe, 0, 0, f.BackNum, false)
-		if err != nil || len(klines) < f.BackNum {
+		if err != nil || len(klines)*2 < f.BackNum {
 			skips = append(skips, pair)
 			continue
 		}
@@ -331,7 +337,10 @@ func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.
 		for _, b := range klines {
 			prices = append(prices, b.Close)
 		}
-		dataArr = append(dataArr, prices[:f.BackNum])
+		if len(prices) > f.BackNum {
+			prices = prices[:f.BackNum]
+		}
+		dataArr = append(dataArr, prices)
 	}
 	nameNum := len(names)
 	if nameNum <= 3 {
@@ -339,29 +348,85 @@ func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.
 		return symbols, nil
 	}
 	if len(skips) > 0 {
-		log.Warn("skip for klines lack", zap.Strings("codes", skips))
+		log.Warn("skip for klines too less", zap.Strings("codes", skips))
 	}
-	if f.TopN > 0 && nameNum <= f.TopN {
-		return names, nil
-	}
-	_, avgs, err_ := utils.CalcCorrMat(f.BackNum, dataArr, true)
+	mat, avgs, err_ := utils.CalcCorrMat(f.BackNum, dataArr, true)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeRunTime, err_)
 	}
-	result := make([]string, 0, nameNum)
+	if f.Sort != "asc" && f.Sort != "desc" {
+		// Use default sorting 使用默认排序
+		result := make([]string, 0, nameNum)
+		for i, avg := range avgs {
+			if f.Min != 0 && avg < f.Min {
+				continue
+			}
+			if f.Max != 0 && avg > f.Max {
+				continue
+			}
+			result = append(result, names[i])
+			if f.TopN > 0 && len(result) >= f.TopN {
+				break
+			}
+		}
+		return result, nil
+	}
+	// 按要求基于平均相似度排序
+	arr := make([]*IdVal, 0, len(avgs))
+	lefts := make(map[int]bool)
 	for i, avg := range avgs {
-		if f.Min != 0 && avg < f.Min {
+		arr = append(arr, &IdVal{Id: i, Val: avg})
+		lefts[i] = true
+	}
+	sort.Slice(arr, func(i, j int) bool {
+		return arr[i].Val < arr[j].Val
+	})
+	isAsc := f.Sort == "asc"
+	var it *IdVal
+	if isAsc {
+		it = arr[0]
+	} else {
+		it = arr[len(arr)-1]
+	}
+	sels := make([]*IdVal, 0, len(avgs))
+	sels = append(sels, it)
+	delete(lefts, it.Id)
+	for len(lefts) > 0 {
+		// 针对每个剩余标的，计算与所有sels的平均相似度
+		it = nil
+		for id := range lefts {
+			vals := make([]float64, 0, len(sels))
+			for _, v := range sels {
+				vals = append(vals, mat.At(id, v.Id))
+			}
+			avg := floats.Sum(vals) / float64(len(vals))
+			if it == nil || isAsc && avg < it.Val || !isAsc && avg > it.Val {
+				it = &IdVal{Id: id, Val: avg}
+			}
+		}
+		sels = append(sels, &IdVal{Id: it.Id, Val: avgs[it.Id]})
+		delete(lefts, it.Id)
+	}
+	// 按规则过滤
+	result := make([]string, 0, nameNum)
+	for _, item := range sels {
+		if f.Min != 0 && item.Val < f.Min {
 			continue
 		}
-		if f.Max != 0 && avg > f.Max {
+		if f.Max != 0 && item.Val > f.Max {
 			continue
 		}
-		result = append(result, names[i])
+		result = append(result, names[item.Id])
 		if f.TopN > 0 && len(result) >= f.TopN {
 			break
 		}
 	}
 	return result, nil
+}
+
+type IdVal struct {
+	Id  int
+	Val float64
 }
 
 func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
@@ -400,9 +465,6 @@ func (f *OffsetFilter) Filter(symbols []string, tickers map[string]*banexg.Ticke
 	}
 	if f.Limit > 0 && f.Limit < len(res) {
 		res = res[:f.Limit]
-	}
-	if len(res) < len(symbols) {
-		log.Info("OffsetFilter res", zap.Int("len", len(res)))
 	}
 	return res, nil
 }

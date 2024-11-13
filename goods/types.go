@@ -26,7 +26,8 @@ type BaseFilter struct {
 // VolumePairFilter Used to represent a configuration that sorts all trading pairs in reverse order by volume value 用于表示按成交量价值倒序排序所有交易对的配置
 type VolumePairFilter struct {
 	BaseFilter
-	Limit         int     `yaml:"limit" mapstructure:"limit,omitempty"`                   // The number of returned results is limited to the first 100 返回结果的数量限制，取前100个
+	Limit         int     `yaml:"limit" mapstructure:"limit,omitempty"` // The number of returned results is limited to the first 100 返回结果的数量限制，取前100个
+	LimitRate     float64 `yaml:"limit_rate" mapstructure:"limit_rate"`
 	MinValue      float64 `yaml:"min_value" mapstructure:"min_value,omitempty"`           // Minimum volume value 最低成交量价值
 	RefreshSecs   int     `yaml:"refresh_secs" mapstructure:"refresh_secs,omitempty"`     // Cache time, in seconds 缓存时间，以秒为单位
 	BackTimeframe string  `yaml:"back_timeframe" mapstructure:"back_timeframe,omitempty"` // The time period for calculating the volume, which is set to days by default 计算成交量的时间周期，默认为天
@@ -70,6 +71,7 @@ type CorrelationFilter struct {
 	Timeframe string  `yaml:"timeframe" mapstructure:"timeframe,omitempty"`
 	BackNum   int     `yaml:"back_num" mapstructure:"back_num,omitempty"`
 	TopN      int     `yaml:"top_n" mapstructure:"top_n"`
+	Sort      string  `yaml:"sort" mapstructure:"sort"`
 }
 
 // VolatilityFilter StdDev(ln(close / prev_close)) * sqrt(num)

@@ -112,6 +112,13 @@ order by time`, sid, startMs, finishEndMS)
 			klines = klines[:len(klines)-1]
 		}
 	}
+	if len(klines) > limit {
+		if revRead {
+			klines = klines[len(klines)-limit:]
+		} else {
+			klines = klines[:limit]
+		}
+	}
 	if len(klines) == 0 && maxEndMs-endMs > tfMSecs {
 		return q.QueryOHLCV(sid, timeframe, endMs, maxEndMs, limit, withUnFinish)
 	} else if withUnFinish && len(klines) > 0 && klines[len(klines)-1].Time+tfMSecs == unFinishMS {

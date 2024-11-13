@@ -683,7 +683,7 @@ func (r *BTResult) dumpStrategy() {
 
 func (r *BTResult) dumpStratOutputs() {
 	groups := make(map[string][]string)
-	for _, items := range strat.PairStags {
+	for _, items := range strat.PairStrats {
 		for _, stgy := range items {
 			if len(stgy.Outputs) == 0 {
 				continue

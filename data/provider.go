@@ -269,13 +269,20 @@ pBar: optional, used to display a progress bar
 */
 func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pBar *utils.PrgBar) *errs.Error {
 	var hold IHistKlineFeeder
-	var wg sync.WaitGroup
-	var retErr *errs.Error
 	var lastBarMs int64
 	var oldVer int
 	var holds []IHistKlineFeeder
 	var firstInit = true
-	step := func(ver int) bool {
+	for {
+		var ver = 0
+		select {
+		case ver = <-versions:
+			if ver < 0 {
+				return nil
+			}
+		default:
+			ver = 0
+		}
 		if ver > oldVer || firstInit {
 			holds = makeFeeders()
 			holds = SortFeeders(holds, nil, false)
@@ -287,18 +294,11 @@ func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pB
 		hold = holds[0]
 		bar := hold.GetBar()
 		if bar == nil {
-			return false
+			break
 		}
 		hold.CallNext()
 		holds = holds[1:]
 		if bar.Time > lastBarMs {
-			// Wait for concurrent batches to complete
-			// 等待并发批量完成
-			wg.Wait()
-			if retErr != nil {
-				log.Error("data loop main fail", zap.Error(retErr))
-				return false
-			}
 			// 更新进度条
 			if pBar != nil {
 				if pBar.Last == 0 {
@@ -311,47 +311,15 @@ func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pB
 					}
 				}
 			}
-			// The first bar of the new time, run synchronously
-			// 新时间的第一个bar，同步运行
-			err := hold.RunBar(bar)
-			if err != nil {
-				log.Error("data loop main fail", zap.Error(err))
-				return false
-			}
 			lastBarMs = bar.Time
-		} else {
-			wg.Add(1)
-			// Different targets at the same time, executed concurrently
-			// 同一个时间的不同标的，并发执行
-			go func(hold IHistKlineFeeder, bar *banexg.Kline) {
-				defer wg.Done()
-				if retErr != nil {
-					return
-				}
-				err := hold.RunBar(bar)
-				if err != nil {
-					retErr = err
-				}
-			}(hold, bar)
 		}
-		return true
-	}
-	for {
-		var ver = 0
-		select {
-		case ver = <-versions:
-			if ver < 0 {
-				return retErr
-			}
-		default:
-			ver = 0
-		}
-		if !step(ver) {
-			break
+		// 这里不要使用多个goroutine加速，反而更慢，且导致多次回测结果略微差异
+		err := hold.RunBar(bar)
+		if err != nil {
+			return err
 		}
 	}
-	wg.Wait()
-	return retErr
+	return nil
 }
 
 func SortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) []IHistKlineFeeder {

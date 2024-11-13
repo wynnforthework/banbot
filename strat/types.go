@@ -12,6 +12,8 @@ type CalcDDExitRate func(s *StratJob, od *orm.InOutOrder, maxChg float64) float6
 type PickTimeFrameFunc func(symbol string, tfScores []*core.TfScore) string
 type FnOdChange func(acc string, od *orm.InOutOrder, evt int)
 
+type Warms map[string]map[string]int
+
 type TradeStrat struct {
 	Name          string
 	Version       int
@@ -23,8 +25,8 @@ type TradeStrat struct {
 	BatchInfo     bool    // whether to perform batch processing after OninfoBar 是否对OnInfoBar后执行批量处理
 	StakeRate     float64 // Relative basic amount billing rate 相对基础金额开单倍率
 	StopEnterBars int
-	EachMaxLong   int      // max number of long open orders for one pair
-	EachMaxShort  int      // max number of short open orders for one pair
+	EachMaxLong   int      // max number of long open orders for one pair, -1 for disable
+	EachMaxShort  int      // max number of short open orders for one pair, -1 for disable
 	AllowTFs      []string // Allow running time period, use global configuration when not provided 允许运行的时间周期，不提供时使用全局配置
 	Outputs       []string // The content of the text file output by the strategy, where each string is one line 策略输出的文本文件内容，每个字符串是一行
 	Policy        *config.RunPolicyConfig
@@ -90,10 +92,10 @@ type StratJob struct {
 	Account       string            // The account to which the current task belongs 当前任务所属账号
 	TPMaxs        map[int64]float64 // Price at maximum profit of the order 订单最大盈利时价格
 	OrderNum      int               // All unfinished order quantities 所有未完成订单数量
-	EnteredNum    int               // The number of fully entered orders 已完全入场的订单数量
+	EnteredNum    int               // The number of fully/part entered orders 已完全/部分入场的订单数量
 	CheckMS       int64             // Last timestamp of signal processing, 13 milliseconds 上次处理信号的时间戳，13位毫秒
-	MaxOpenLong   int               // Maximum open quantity 最大开多数量
-	MaxOpenShort  int               // Maximum number of open spaces 最大开空数量
+	MaxOpenLong   int               // Max open number for long position, 0 for any, -1 for disabled 最大开多数量，0不限制，-1禁止开多
+	MaxOpenShort  int               // Max open number for short position, 0 for any, -1 for disabled 最大开空数量，0不限制，-1禁止开空
 	CloseLong     bool              // whether to allow close long position 是否允许平多
 	CloseShort    bool              // whether to allow close short position 是否允许平空
 	ExgStopLoss   bool              // whether to allow stop losses in exchange side 是否允许交易所止损

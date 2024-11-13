@@ -14,7 +14,7 @@ var (
 	Envs        = make(map[string]*ta.BarEnv)                      // pair_tf: BarEnv
 	AccJobs     = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratName]StratJob
 	AccInfoJobs = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratName]StratJob 额外订阅
-	PairStags   = make(map[string]map[string]*TradeStrat)          // pair:[stratName]TradeStrat 所有的订阅策略
+	PairStrats  = make(map[string]map[string]*TradeStrat)          // pair:[stratName]TradeStrat 所有的订阅策略
 
 	BatchTasks  = map[string]*BatchMap{} // tf_account_strat: pair: task 每个bar周期更新（只适用于单交易所单市场）
 	LastBatchMS = int64(0)               // timeMS The timestamp of the last batch execution is only used for backtesting 上次批量执行的时间戳，仅用于回测

@@ -325,30 +325,6 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 	}
 	od.DirtyInfo = true
 	tfSecs := float64(utils.TFToSecs(od.Timeframe))
-	// 计算平仓成交价格，0市价，-1不平仓，>0指定价格
-	// Calculate the transaction price for closing the position, 0 market price, -1 for not closing the position, >0 specified price
-	getExcPrice := func(trigPrice, limit float64) float64 {
-		if limit > 0 {
-			if od.Short && limit < bar.Low || !od.Short && limit > bar.High {
-				// 空单，平仓限价低于bar最低，不触发
-				// 多单，平仓限价高于bar最高，不触发
-				return -1
-			}
-			if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
-				// Short order, the closing limit price is lower than the trigger price, it may be a limit order
-				// 空单，平仓限价低于触发价，可能是限价单
-				// For long orders, the closing limit price is higher than the trigger price, which may be a limit order.
-				// 多单，平仓限价高于触发价，可能是限价单
-				trigRate := simMarketRate(bar, trigPrice, od.Short, true, afterRate)
-				rate := simMarketRate(bar, limit, od.Short, true, afterRate)
-				if (rate-trigRate)*tfSecs > 30 {
-					// 触发后，限价单超过30s成交，认为限价单
-					return limit
-				}
-			}
-		}
-		return 0
-	}
 	var fillPrice, trigPrice, amtRate float64
 	var exitTag string
 	if sl != nil && sl.Hit {
@@ -356,7 +332,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 		// 触发止损，计算执行价格
 		trigPrice = sl.Price
 		amtRate = sl.Rate
-		fillPrice = getExcPrice(sl.Price, sl.Limit)
+		fillPrice = getExcPrice(od, bar, sl.Price, sl.Limit, afterRate, tfSecs)
 		if sl.Tag != "" {
 			exitTag = sl.Tag
 		} else {
@@ -371,7 +347,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *orm.InOutOrder, bar *banexg.Kline, a
 		// 触发止盈，计算执行价格
 		trigPrice = tp.Price
 		amtRate = tp.Rate
-		fillPrice = getExcPrice(tp.Price, tp.Limit)
+		fillPrice = getExcPrice(od, bar, sl.Price, sl.Limit, afterRate, tfSecs)
 		if tp.Tag != "" {
 			exitTag = tp.Tag
 		} else {
@@ -716,4 +692,31 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minR
 			}
 		}
 	}
+}
+
+/*
+计算平仓成交价格，0市价，-1不平仓，>0指定价格
+Calculate the transaction price for closing the position, 0 market price, -1 for not closing the position, >0 specified price
+*/
+func getExcPrice(od *orm.InOutOrder, bar *banexg.Kline, trigPrice, limit, afterRate, tfSecs float64) float64 {
+	if limit > 0 {
+		if od.Short && limit < bar.Low || !od.Short && limit > bar.High {
+			// 空单，平仓限价低于bar最低，不触发
+			// 多单，平仓限价高于bar最高，不触发
+			return -1
+		}
+		if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
+			// Short order, the closing limit price is lower than the trigger price, it may be a limit order
+			// 空单，平仓限价低于触发价，可能是限价单
+			// For long orders, the closing limit price is higher than the trigger price, which may be a limit order.
+			// 多单，平仓限价高于触发价，可能是限价单
+			trigRate := simMarketRate(bar, trigPrice, od.Short, true, afterRate)
+			rate := simMarketRate(bar, limit, od.Short, true, afterRate)
+			if (rate-trigRate)*tfSecs > 30 {
+				// 触发后，限价单超过30s成交，认为限价单
+				return limit
+			}
+		}
+	}
+	return 0
 }
