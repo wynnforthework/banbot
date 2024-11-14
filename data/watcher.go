@@ -9,7 +9,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/bytedance/sonic"
 	"go.uber.org/zap"
 	"strings"
 )
@@ -61,7 +60,7 @@ func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
 		for _, msg := range res.initMsgs {
 			err := res.WriteMsg(msg)
 			if err != nil {
-				msgText, _ := sonic.MarshalString(msg)
+				msgText, _ := utils2.MarshalString(msg)
 				log.Error("re init conn fail", zap.String("msg", msgText))
 				return
 			}

@@ -2,7 +2,7 @@ package utils
 
 import (
 	"github.com/banbox/banexg/log"
-	"github.com/bytedance/sonic"
+	"github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"testing"
 	"time"
@@ -33,7 +33,7 @@ func TestBanClient(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	text, _ := sonic.MarshalString(val)
+	text, _ := utils.MarshalString(val)
 	log.Info("get val of vv1", zap.String("val", text))
 	lockVal, err := GetNetLock("lk1", 5)
 	if err != nil {
@@ -44,7 +44,7 @@ func TestBanClient(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	text, _ = sonic.MarshalString(val)
+	text, _ = utils.MarshalString(val)
 	log.Info("lock real val", zap.String("val", text))
 	time.Sleep(time.Second * 3)
 	err = DelNetLock("lk1", lockVal)
@@ -55,6 +55,6 @@ func TestBanClient(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	text, _ = sonic.MarshalString(val)
+	text, _ = utils.MarshalString(val)
 	log.Info("lock val after del", zap.String("val", text))
 }

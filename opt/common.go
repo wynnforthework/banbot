@@ -1,7 +1,6 @@
 package opt
 
 import (
-	"bytes"
 	_ "embed"
 	"fmt"
 	"github.com/banbox/banbot/biz"
@@ -13,7 +12,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/bytedance/sonic"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -407,34 +405,33 @@ func DumpLineGraph(path, title string, label []string, prec float64, tplData []b
 }
 
 func (g *LineGraph) Dump() ([]byte, *errs.Error) {
-	if g.Precision > 0 {
-		for _, it := range g.Datasets {
-			col := make([]float64, 0, len(it.Data))
-			for _, v := range it.Data {
-				if math.IsNaN(v) {
-					col = append(col, v)
-					continue
-				}
-				val, err_ := utils2.PrecFloat64(v, g.Precision, true, utils2.PrecModeSignifDigits)
+	var err_ error
+	for _, it := range g.Datasets {
+		col := make([]float64, 0, len(it.Data))
+		for _, v := range it.Data {
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				col = append(col, 0)
+				continue
+			}
+			if g.Precision > 0 {
+				v, err_ = utils2.PrecFloat64(v, g.Precision, true, utils2.PrecModeSignifDigits)
 				if err_ != nil {
 					return nil, errs.New(errs.CodeRunTime, err_)
 				}
-				col = append(col, val)
 			}
-			it.Data = col
+			col = append(col, v)
 		}
+		it.Data = col
 	}
 	if len(g.TplData) == 0 {
 		g.TplData = graphData
 	}
 	content := string(g.TplData)
-	var w = bytes.NewBuffer(nil)
-	var enc = sonic.Config{EncodeNullForInfOrNan: true}.Froze().NewEncoder(w)
-	err_ := enc.Encode(g)
+	data, err_ := utils2.Marshal(g)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeMarshalFail, err_)
 	}
-	content = strings.Replace(content, "{'inject': 1}", w.String(), 1)
+	content = strings.Replace(content, "{'inject': 1}", string(data), 1)
 	return []byte(content), nil
 }
 

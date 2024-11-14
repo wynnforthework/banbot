@@ -5,7 +5,6 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
-	"github.com/bytedance/sonic"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -158,7 +157,7 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 					"content": content,
 				},
 			}
-			bodyText, err_ := sonic.MarshalString(body)
+			bodyText, err_ := utils.MarshalString(body)
 			if err_ != nil {
 				log.Error("wework marshal req fail", zap.String("content", content), zap.Error(err_))
 				continue

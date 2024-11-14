@@ -6,8 +6,6 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
-	"github.com/banbox/banexg/utils"
-	"github.com/bytedance/sonic"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -28,8 +26,6 @@ func StartApi() *errs.Error {
 	}
 	app := fiber.New(fiber.Config{
 		AppName:      "banbot",
-		JSONEncoder:  sonic.Marshal,
-		JSONDecoder:  utils.Unmarshal,
 		ErrorHandler: ErrHandler,
 	})
 

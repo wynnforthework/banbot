@@ -259,7 +259,7 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 					if realStart == 0 || batch[0].Time < realStart {
 						realStart = batch[0].Time
 					}
-					curEnd := batch[len(batch)-1].Time
+					curEnd = batch[len(batch)-1].Time
 					if curEnd > realEnd {
 						realEnd = curEnd
 					}
@@ -269,15 +269,22 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	}()
 
 	wg.Wait()
-	_ = sess.DelInsKline(ctx, insId)
-	if outErr != nil {
-		return saveNum, outErr
+	err_ := sess.DelInsKline(context.Background(), insId)
+	if err_ != nil {
+		log.Warn("DelInsKline fail", zap.Int32("id", insId), zap.Error(err_))
 	}
-	if saveNum == 0 {
-		return 0, nil
+	if saveNum > 0 {
+		err = sess.UpdateKRange(exs.ID, timeFrame, realStart, realEnd, nil, true)
+		if err != nil {
+			if outErr == nil {
+				outErr = err
+			} else {
+				log.Warn("UpdateKRange fail", zap.Int32("exs", exs.ID), zap.String("tf", timeFrame),
+					zap.String("err", err.Short()))
+			}
+		}
 	}
-	err = sess.UpdateKRange(exs.ID, timeFrame, realStart, realEnd, nil, true)
-	return saveNum, err
+	return saveNum, outErr
 }
 
 /*

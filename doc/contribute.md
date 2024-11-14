@@ -81,5 +81,8 @@ git push origin --tags
 3. 在当前项目（和依赖当前项目的入口项目）添加依赖：`go get 模块名@version`
 4. 在当前项目（和依赖当前项目的入口项目）的`go.mod`中添加`replace`指令，改为本地绝对或相对路径
 
+### json
+It is not recommended to replace `encoding/json` with [sonic](https://github.com/bytedance/sonic/issues/574). The binary file will increase by 15M (on Windows)
+
 # TODO
 1. 将策略注入改为接口，以便允许从结构体继承。

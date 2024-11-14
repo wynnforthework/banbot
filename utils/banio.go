@@ -11,7 +11,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
-	"github.com/bytedance/sonic"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"io"
@@ -68,7 +67,7 @@ func (c *BanConn) HasTag(tag string) bool {
 }
 
 func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
-	raw, err_ := sonic.Marshal(*msg)
+	raw, err_ := utils.Marshal(*msg)
 	if err_ != nil {
 		return errs.New(core.ErrMarshalFail, err_)
 	}
@@ -252,7 +251,7 @@ func (c *BanConn) initListens() {
 func DecodeMsgData(input interface{}, out interface{}, name string) bool {
 	err_ := mapstructure.Decode(input, out)
 	if err_ != nil {
-		msgText, _ := sonic.MarshalString(input)
+		msgText, _ := utils.MarshalString(input)
 		log.Error(name+" receive invalid", zap.String("msg", msgText))
 		return false
 	}
@@ -434,7 +433,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	if len(curConns) == 0 {
 		return nil
 	}
-	raw, err_ := sonic.Marshal(*msg)
+	raw, err_ := utils.Marshal(*msg)
 	if err_ != nil {
 		return errs.New(core.ErrMarshalFail, err_)
 	}

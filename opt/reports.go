@@ -16,7 +16,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/bytedance/sonic"
 	"github.com/olekukonko/tablewriter"
 	"go.uber.org/zap"
 	"math"
@@ -437,8 +436,12 @@ func groupItems(orders []*orm.InOutOrder, measure bool, getTag func(od *orm.InOu
 			if err != nil {
 				log.Warn("calc measure fail", zap.Error(err))
 			} else {
-				gp.Sharpe = sharpe
-				gp.Sortino = sortino
+				if !math.IsNaN(sharpe) {
+					gp.Sharpe = sharpe
+				}
+				if !math.IsNaN(sortino) {
+					gp.Sortino = sortino
+				}
 			}
 		}
 	}
@@ -775,8 +778,12 @@ func (r *BTResult) calcMeasures(num int) *errs.Error {
 	if err != nil {
 		return err
 	}
-	r.SharpeRatio = sharpe
-	r.SortinoRatio = sortino
+	if !math.IsNaN(sharpe) {
+		r.SharpeRatio = sharpe
+	}
+	if !math.IsNaN(sortino) {
+		r.SortinoRatio = sortino
+	}
 	return nil
 }
 
@@ -796,14 +803,12 @@ func (r *BTResult) dumpDetail(outPath string) {
 		taskId := orm.GetTaskID("")
 		outPath = fmt.Sprintf("%s/detail_%v.json", r.OutDir, taskId)
 	}
-	var w = bytes.NewBuffer(nil)
-	var enc = sonic.Config{EncodeNullForInfOrNan: true}.Froze().NewEncoder(w)
-	err_ := enc.Encode(r)
+	data, err_ := utils2.Marshal(r)
 	if err_ != nil {
 		log.Error("marshal backtest detail fail", zap.Error(err_))
 		return
 	}
-	err_ = os.WriteFile(outPath, w.Bytes(), 0644)
+	err_ = os.WriteFile(outPath, data, 0644)
 	if err_ != nil {
 		log.Error("write backtest detail fail", zap.Error(err_))
 	}

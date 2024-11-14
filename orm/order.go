@@ -12,7 +12,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/bytedance/sonic"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"math"
@@ -552,7 +551,7 @@ func (i *InOutOrder) GetInfoText() (string, *errs.Error) {
 	}
 	i.DirtyInfo = false
 	if i.Info != nil && len(i.Info) > 0 {
-		infoText, err_ := sonic.MarshalString(i.Info)
+		infoText, err_ := utils2.MarshalString(i.Info)
 		if err_ != nil {
 			return "", errs.New(errs.CodeUnmarshalFail, err_)
 		}
