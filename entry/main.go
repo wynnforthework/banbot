@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/opt"
+	"github.com/banbox/banbot/web"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -19,11 +20,11 @@ type FuncEntry = func(args *config.CmdArgs) *errs.Error
 type FuncGetEntry = func(name string) (FuncEntry, []string)
 
 func RunCmd() {
-	if len(os.Args) < 2 {
-		printMainHelp()
+	args := os.Args[1:]
+	if len(args) == 0 {
+		runWeb(args)
 		return
 	}
-	args := os.Args[1:]
 	runSubCmd(args, func(name string) (FuncEntry, []string) {
 		var options []string
 		var entry FuncEntry
@@ -49,9 +50,29 @@ func RunCmd() {
 			runTickCmds(args[1:])
 		case "tool":
 			runToolCmds(args[1:])
+		case "web":
+			runWeb(args[1:])
 		}
 		return entry, options
-	}, printMainHelp)
+	}, func(e error) {
+		if e == nil {
+			if strings.HasPrefix(args[0], "-") {
+				runWeb(args)
+			} else {
+				log.Warn("unknown subcommand: " + args[0])
+				printMainHelp()
+			}
+		} else {
+			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
+		}
+	})
+}
+
+func runWeb(args []string) {
+	err_ := web.Run(args)
+	if err_ != nil {
+		panic(err_)
+	}
 }
 
 func printMainHelp() {
@@ -67,6 +88,7 @@ please run with a subcommand:
     kline:      run kline commands
     tick:       run tick commands
     tool:       run tools
+    web:        run web dashboard
 `
 	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), core.Version))
 }
@@ -100,7 +122,12 @@ func runKlineCmds(args []string) {
 			return nil, nil
 		}
 		return entry, options
-	}, func() {
+	}, func(e error) {
+		if e != nil {
+			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
+			return
+		}
+		log.Warn("unknown subcommand: " + args[0])
 		tpl := `
 banbot kline:
     down:       download kline data from exchange
@@ -131,7 +158,12 @@ func runTickCmds(args []string) {
 			return nil, nil
 		}
 		return entry, options
-	}, func() {
+	}, func(e error) {
+		if e != nil {
+			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
+			return
+		}
+		log.Warn("unknown subcommand: " + args[0])
 		tpl := `
 banbot tick:
     convert:     convert tick data format
@@ -173,7 +205,12 @@ func runToolCmds(args []string) {
 			return nil, nil
 		}
 		return entry, options
-	}, func() {
+	}, func(e error) {
+		if e != nil {
+			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
+			return
+		}
+		log.Warn("unknown subcommand: " + args[0])
 		log.Warn(`
 banbot tool:
     collect_opt:     collect result of optimize, and print in order
@@ -187,12 +224,11 @@ banbot tool:
 	})
 }
 
-func runSubCmd(sysArgs []string, getEnt FuncGetEntry, printExit func()) {
+func runSubCmd(sysArgs []string, getEnt FuncGetEntry, fallback func(e error)) {
 	name, subArgs := sysArgs[0], sysArgs[1:]
 	entry, options := getEnt(name)
 	if entry == nil {
-		log.Warn("unknown subcommand: " + name)
-		printExit()
+		fallback(nil)
 		return
 	}
 	var args config.CmdArgs
@@ -200,8 +236,7 @@ func runSubCmd(sysArgs []string, getEnt FuncGetEntry, printExit func()) {
 	bindSubFlags(&args, sub, options...)
 	err_ := sub.Parse(subArgs)
 	if err_ != nil {
-		log.Error("fail", zap.Error(err_))
-		printExit()
+		fallback(err_)
 		return
 	}
 	args.Init()

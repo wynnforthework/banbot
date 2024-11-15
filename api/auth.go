@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"github.com/banbox/banbot/config"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"strings"
 	"time"
 )
