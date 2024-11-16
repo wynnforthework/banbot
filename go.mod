@@ -6,7 +6,7 @@ toolchain go1.23.0
 
 require (
 	github.com/anyongjin/go-bayesopt v1.0.1
-	github.com/banbox/banexg v0.2.9
+	github.com/banbox/banexg v0.2.10
 	github.com/banbox/banta v0.1.7
 	github.com/c-bata/goptuna v0.9.0
 	github.com/dgraph-io/ristretto v0.2.0

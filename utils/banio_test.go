@@ -1,14 +1,15 @@
 package utils
 
 import (
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/log"
-	"github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"testing"
 	"time"
 )
 
 func TestBanServer(t *testing.T) {
+	core.SetRunMode(core.RunModeLive)
 	server := NewBanServer("127.0.0.1:6789", "spider")
 	err := server.RunForever()
 	if err != nil {
@@ -17,6 +18,7 @@ func TestBanServer(t *testing.T) {
 }
 
 func TestBanClient(t *testing.T) {
+	core.SetRunMode(core.RunModeLive)
 	client, err := NewClientIO("127.0.0.1:6789")
 	if err != nil {
 		panic(err)
@@ -33,8 +35,7 @@ func TestBanClient(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	text, _ := utils.MarshalString(val)
-	log.Info("get val of vv1", zap.String("val", text))
+	log.Info("get val of vv1", zap.String("val", val))
 	lockVal, err := GetNetLock("lk1", 5)
 	if err != nil {
 		panic(err)
@@ -44,8 +45,7 @@ func TestBanClient(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	text, _ = utils.MarshalString(val)
-	log.Info("lock real val", zap.String("val", text))
+	log.Info("lock real val", zap.String("val", val))
 	time.Sleep(time.Second * 3)
 	err = DelNetLock("lk1", lockVal)
 	if err != nil {
@@ -55,6 +55,5 @@ func TestBanClient(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	text, _ = utils.MarshalString(val)
-	log.Info("lock val after del", zap.String("val", text))
+	log.Info("lock val after del", zap.String("val", val))
 }

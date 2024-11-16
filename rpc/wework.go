@@ -107,7 +107,7 @@ func (w *WeCred) getToken() string {
 		return ""
 	}
 	var res WeWorkATRes
-	err_ := utils.UnmarshalString(rsp.Content, &res)
+	err_ := utils.UnmarshalString(rsp.Content, &res, utils.JsonNumDefault)
 	if err_ != nil {
 		log.Error("wework parse rsp fail", zap.String("name", name), zap.Error(rsp.Error),
 			zap.String("body", rsp.Content))
@@ -169,7 +169,7 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 				continue
 			}
 			var res WeWorkSendRes
-			err_ = utils.UnmarshalString(rsp.Content, &res)
+			err_ = utils.UnmarshalString(rsp.Content, &res, utils.JsonNumDefault)
 			if err_ != nil {
 				log.Error("wework decode rsp fail", zap.String("body", rsp.Content), zap.Error(err_))
 				continue

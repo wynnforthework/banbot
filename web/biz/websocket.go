@@ -40,7 +40,7 @@ func (c *WsClient) HandleForever() {
 			continue
 		}
 		var msg = map[string]interface{}{}
-		err = utils.Unmarshal(data, &msg)
+		err = utils.Unmarshal(data, &msg, utils.JsonNumAuto)
 		if err != nil {
 			log.Info("unexpedted ws msg", zap.String("str", string(data)))
 			continue

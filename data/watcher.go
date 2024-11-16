@@ -148,7 +148,7 @@ func (w *KLineWatcher) UnWatchJobs(exgName, marketType, jobType string, pairs []
 	return w.WriteMsg(&utils.IOMsg{Action: "unsubscribe", Data: tags})
 }
 
-func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
+func (w *KLineWatcher) onSpiderBar(key string, data []byte) {
 	if w.OnKLineMsg == nil {
 		log.Debug("receive spider bar skipped", zap.String("key", key))
 		return
@@ -162,8 +162,9 @@ func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 		return
 	}
 	var bars NotifyKLines
-	if !utils.DecodeMsgData(data, &bars, "onSpiderBar") {
-		log.Debug("receive spider bar decode fail", zap.String("key", key))
+	err_ := utils2.Unmarshal(data, &bars, utils2.JsonNumDefault)
+	if err_ != nil {
+		log.Debug("onSpiderBar receive spider bar decode fail", zap.String("key", key))
 		return
 	}
 	if len(bars.Arr) == 0 {
@@ -214,14 +215,16 @@ func (w *KLineWatcher) onSpiderBar(key string, data interface{}) {
 	}
 }
 
-func (w *KLineWatcher) onPriceUpdate(key string, data interface{}) {
+func (w *KLineWatcher) onPriceUpdate(key string, data []byte) {
 	parts := strings.Split(key, "_")
 	exgName, market := parts[1], parts[2]
 	if exgName != core.ExgName || market != core.Market {
 		return
 	}
 	var msg map[string]float64
-	if !utils.DecodeMsgData(data, &msg, "onPriceUpdate") {
+	err := utils2.Unmarshal(data, &msg, utils2.JsonNumDefault)
+	if err != nil {
+		log.Warn("onPriceUpdate receive invalid msg", zap.String("raw", string(data)), zap.Error(err))
 		return
 	}
 	for pair, price := range msg {
@@ -229,20 +232,23 @@ func (w *KLineWatcher) onPriceUpdate(key string, data interface{}) {
 	}
 }
 
-func (w *KLineWatcher) onTrades(key string, data interface{}) {
+func (w *KLineWatcher) onTrades(key string, data []byte) {
 	if w.OnTrade == nil {
 		return
 	}
 	parts := strings.Split(key, "_")
 	exgName, market := parts[1], parts[2]
 	var trade banexg.Trade
-	if !utils.DecodeMsgData(data, &trade, "onTrades") {
+	err := utils2.Unmarshal(data, &trade, utils2.JsonNumDefault)
+	if err != nil {
+		log.Error("onTrades receive invalid data", zap.String("raw", string(data)),
+			zap.Error(err))
 		return
 	}
 	w.OnTrade(exgName, market, &trade)
 }
 
-func (w *KLineWatcher) onBook(key string, data interface{}) {
+func (w *KLineWatcher) onBook(key string, data []byte) {
 	parts := strings.Split(key, "_")
 	msgType, exgName, market, pair := parts[0], parts[1], parts[2], parts[3]
 	if exgName != core.ExgName || market != core.Market {
@@ -254,7 +260,10 @@ func (w *KLineWatcher) onBook(key string, data interface{}) {
 		return
 	}
 	var book banexg.OrderBook
-	if !utils.DecodeMsgData(data, &book, "onBook") {
+	err := utils2.Unmarshal(data, &book, utils2.JsonNumDefault)
+	if err != nil {
+		log.Error("onBook receive invalid data", zap.String("raw", string(data)),
+			zap.Error(err))
 		return
 	}
 	if book.Symbol == "" {

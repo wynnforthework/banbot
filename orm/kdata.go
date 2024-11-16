@@ -92,7 +92,7 @@ func DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, 
 	defer conn.Release()
 	oldStart, oldEnd := sess.GetKlineRange(exs.ID, timeFrame)
 	startMS = exs.GetValidStart(startMS)
-	return downOHLCV2DBRange(sess, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, pBar)
+	return downOHLCV2DBRange(sess, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, 2, pBar)
 }
 
 /*
@@ -102,9 +102,14 @@ Download K-line to database. This method should be called in a transaction, othe
 */
 func (q *Queries) DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
 	pBar *utils.PrgBar) (int, *errs.Error) {
+	return q.downOHLCV2DB(exchange, exs, timeFrame, startMS, endMS, 2, pBar)
+}
+
+func (q *Queries) downOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
+	retry int, pBar *utils.PrgBar) (int, *errs.Error) {
 	startMS = exs.GetValidStart(startMS)
 	oldStart, oldEnd := q.GetKlineRange(exs.ID, timeFrame)
-	return downOHLCV2DBRange(q, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, pBar)
+	return downOHLCV2DBRange(q, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, retry, pBar)
 }
 
 /*
@@ -115,7 +120,7 @@ stepCB is used to update the progress. The total value is fixed at 1000 to preve
 stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传入区间
 */
 func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
-	oldStart, oldEnd int64, pBar *utils.PrgBar) (int, *errs.Error) {
+	oldStart, oldEnd int64, retry int, pBar *utils.PrgBar) (int, *errs.Error) {
 	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs ||
 		exs.Combined || exs.DelistMs > 0 {
 		// If you are completely in the downloaded interval or the download interval is less than the time of availability, you don't need to download it
@@ -273,15 +278,26 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	if err_ != nil {
 		log.Warn("DelInsKline fail", zap.Int32("id", insId), zap.Error(err_))
 	}
-	if saveNum > 0 {
+	err = nil
+	if outErr != nil && outErr.Code == core.ErrDbUniqueViolation && retry > 0 {
+		err = sess.updateKLineRange(exs.ID, timeFrame, 0, 0)
+		if err == nil {
+			log.Info("retry downOHLCV2DB after ErrDbUniqueViolation", zap.Int32("sid", exs.ID),
+				zap.String("tf", timeFrame))
+			return sess.downOHLCV2DB(exchange, exs, timeFrame, startMS, endMS, retry-1, pBar)
+		} else {
+			log.Warn("updateKLineRange after ErrDbUniqueViolation fail", zap.Int32("sid", exs.ID),
+				zap.String("tf", timeFrame), zap.Error(err))
+		}
+	} else if saveNum > 0 {
 		err = sess.UpdateKRange(exs.ID, timeFrame, realStart, realEnd, nil, true)
-		if err != nil {
-			if outErr == nil {
-				outErr = err
-			} else {
-				log.Warn("UpdateKRange fail", zap.Int32("exs", exs.ID), zap.String("tf", timeFrame),
-					zap.String("err", err.Short()))
-			}
+	}
+	if err != nil {
+		if outErr == nil {
+			outErr = err
+		} else {
+			log.Warn("UpdateKRange fail", zap.Int32("exs", exs.ID), zap.String("tf", timeFrame),
+				zap.String("err", err.Short()))
 		}
 	}
 	return saveNum, outErr
@@ -620,7 +636,7 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 		if krange, ok := kRanges[exs.ID]; ok {
 			oldStart, oldEnd = krange[0], krange[1]
 		}
-		_, err = downOHLCV2DBRange(nil, exchange, exs, downTF, startMS, endMS, oldStart, oldEnd, pBar)
+		_, err = downOHLCV2DBRange(nil, exchange, exs, downTF, startMS, endMS, oldStart, oldEnd, 2, pBar)
 		return err
 	})
 }

@@ -436,10 +436,10 @@ func groupItems(orders []*orm.InOutOrder, measure bool, getTag func(od *orm.InOu
 			if err != nil {
 				log.Warn("calc measure fail", zap.Error(err))
 			} else {
-				if !math.IsNaN(sharpe) {
+				if !math.IsNaN(sharpe) && !math.IsInf(sharpe, 0) {
 					gp.Sharpe = sharpe
 				}
-				if !math.IsNaN(sortino) {
+				if !math.IsNaN(sortino) && !math.IsInf(sortino, 0) {
 					gp.Sortino = sortino
 				}
 			}
@@ -778,10 +778,10 @@ func (r *BTResult) calcMeasures(num int) *errs.Error {
 	if err != nil {
 		return err
 	}
-	if !math.IsNaN(sharpe) {
+	if !math.IsNaN(sharpe) && !math.IsInf(sharpe, 0) {
 		r.SharpeRatio = sharpe
 	}
-	if !math.IsNaN(sortino) {
+	if !math.IsNaN(sortino) && !math.IsInf(sortino, 0) {
 		r.SortinoRatio = sortino
 	}
 	return nil
@@ -829,7 +829,7 @@ func parseBtResult(path string) (*BTResult, *errs.Error) {
 		return nil, errs.New(errs.CodeIOReadFail, err_)
 	}
 	var res = BTResult{}
-	err_ = utils2.Unmarshal(data, &res)
+	err_ = utils2.Unmarshal(data, &res, utils2.JsonNumDefault)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeUnmarshalFail, err_)
 	}

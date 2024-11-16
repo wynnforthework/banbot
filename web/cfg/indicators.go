@@ -48,6 +48,19 @@ var (
 				return res
 			},
 		},
+		"VWMA": {
+			Title:      "VWMA",
+			IsMain:     true,
+			CalcParams: []float64{10, 30},
+			FigureTpl:  "vwma{period}",
+			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
+				res := make([]float64, len(params))
+				for i, p := range params {
+					res[i] = banta.VWMA(e.Close, e.Volume, int(p)).Get(0)
+				}
+				return res
+			},
+		},
 		"TR": {
 			Title: "TR 真实振幅",
 			Figures: []*Figure{

@@ -14,6 +14,7 @@ import (
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 	"path/filepath"
 	"slices"
@@ -527,6 +528,12 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 	cols := []string{"sid", "time", "open", "high", "low", "close", "volume", "info"}
 	num, err_ := q.db.CopyFrom(ctx, []string{tblName}, cols, &iterForAddKLines{rows: adds})
 	if err_ != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err_, &pgErr) {
+			if pgErr.Code == "23505" {
+				return 0, NewDbErr(core.ErrDbUniqueViolation, err_)
+			}
+		}
 		return 0, NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return num, nil
@@ -659,17 +666,22 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	ctx := context.Background()
 	realStart, realEnd, err := q.CalcKLineRange(sid, timeFrame, 0, 0)
 	if err != nil {
-		_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: sid, Timeframe: timeFrame, Start: startMS, Stop: endMS})
-		if err_ != nil {
-			return NewDbErr(core.ErrDbExecFail, err_)
+		if startMS > 0 && endMS > 0 {
+			_, err_ = q.AddKInfo(ctx, AddKInfoParams{Sid: sid, Timeframe: timeFrame, Start: startMS, Stop: endMS})
+			if err_ != nil {
+				return NewDbErr(core.ErrDbExecFail, err_)
+			}
+			log.Debug("add kinfo", zap.Int32("sid", sid), zap.String("tf", timeFrame),
+				zap.Int64("start", startMS), zap.Int64("end", endMS))
 		}
-		log.Debug("add kinfo", zap.Int32("sid", sid), zap.String("tf", timeFrame),
-			zap.Int64("start", startMS), zap.Int64("end", endMS))
 		return nil
 	}
 	if realStart == 0 || realEnd == 0 {
+		if startMS == 0 || endMS == 0 {
+			return nil
+		}
 		realStart, realEnd = startMS, endMS
-	} else {
+	} else if startMS > 0 && endMS > 0 {
 		realStart = min(realStart, startMS)
 		realEnd = max(realEnd, endMS)
 	}
@@ -1221,7 +1233,7 @@ func tryFillHoles(sess *Queries) *errs.Error {
 		}
 		// Download K-lines and also collect higher cycle K-lines
 		// 下载K线，同时也会归集更高周期K线
-		saveNum, err := downOHLCV2DBRange(sess, exchange, exs, row.Timeframe, start, stop, 0, 0, nil)
+		saveNum, err := downOHLCV2DBRange(sess, exchange, exs, row.Timeframe, start, stop, 0, 0, 2, nil)
 		if err != nil {
 			if err.Code == errs.CodeNoMarketForPair {
 				log.Info("skip down no market symbol", zap.Int32("sid", exs.ID),

@@ -8,6 +8,7 @@ const (
 	ErrDbConnFail
 	ErrDbReadFail
 	ErrDbExecFail
+	ErrDbUniqueViolation
 	ErrLiquidation
 	ErrLowFunds
 	ErrLowSrcAmount

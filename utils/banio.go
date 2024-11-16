@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/banbox/banbot/btime"
@@ -11,7 +12,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
-	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
 	"io"
 	"math/rand"
@@ -23,12 +23,12 @@ import (
 	"time"
 )
 
-type ConnCB = func(string, interface{})
+type ConnCB = func(string, []byte)
 
 type IBanConn interface {
 	WriteMsg(msg *IOMsg) *errs.Error
 	Write(data []byte, locked bool) *errs.Error
-	ReadMsg() (*IOMsg, *errs.Error)
+	ReadMsg() (*IOMsgRaw, *errs.Error)
 	Subscribe(tags ...string)
 	UnSubscribe(tags ...string)
 	GetRemote() string
@@ -51,8 +51,13 @@ type BanConn struct {
 }
 
 type IOMsg struct {
-	Action string
-	Data   interface{}
+	Action string      `json:"action"`
+	Data   interface{} `json:"data"`
+}
+
+type IOMsgRaw struct {
+	Action string          `json:"action"`
+	Data   json.RawMessage `json:"data"`
 }
 
 func (c *BanConn) GetRemote() string {
@@ -105,7 +110,7 @@ func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
 	return nil
 }
 
-func (c *BanConn) ReadMsg() (*IOMsg, *errs.Error) {
+func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 	compressed, err := c.Read()
 	if err != nil {
 		return nil, err
@@ -114,8 +119,8 @@ func (c *BanConn) ReadMsg() (*IOMsg, *errs.Error) {
 	if err != nil {
 		return nil, err
 	}
-	var msg IOMsg
-	err_ := utils.Unmarshal(data, &msg)
+	var msg IOMsgRaw
+	err_ := utils.Unmarshal(data, &msg, utils.JsonNumDefault)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeUnmarshalFail, err_)
 	}
@@ -234,28 +239,27 @@ func (c *BanConn) connect() {
 }
 
 func (c *BanConn) initListens() {
-	c.Listens["subscribe"] = func(s string, data interface{}) {
-		var tags = make([]string, 0)
-		if DecodeMsgData(data, &tags, "subscribe") {
-			c.Subscribe(tags...)
-		}
-	}
-	c.Listens["unsubscribe"] = func(s string, data interface{}) {
-		var tags = make([]string, 0)
-		if DecodeMsgData(data, &tags, "unsubscribe") {
-			c.UnSubscribe(tags...)
-		}
-	}
+	c.Listens["subscribe"] = makeArrStrHandle(func(arr []string) {
+		c.Subscribe(arr...)
+	})
+	c.Listens["unsubscribe"] = makeArrStrHandle(func(arr []string) {
+		c.UnSubscribe(arr...)
+	})
 }
 
-func DecodeMsgData(input interface{}, out interface{}, name string) bool {
-	err_ := mapstructure.Decode(input, out)
-	if err_ != nil {
-		msgText, _ := utils.MarshalString(input)
-		log.Error(name+" receive invalid", zap.String("msg", msgText))
-		return false
+func makeArrStrHandle(cb func(arr []string)) func(s string, data []byte) {
+	return func(s string, data []byte) {
+		var tags = make([]string, 0, 8)
+		err := utils.Unmarshal(data, &tags, utils.JsonNumDefault)
+		if err != nil {
+			log.Error("receive invalid data", zap.String("n", s), zap.String("raw", string(data)),
+				zap.Error(err))
+			return
+		}
+		if len(tags) > 0 {
+			cb(tags)
+		}
 	}
-	return true
 }
 
 func compress(data []byte) ([]byte, *errs.Error) {
@@ -336,8 +340,8 @@ type ServerIO struct {
 	Addr     string
 	Name     string
 	Conns    []IBanConn
-	Data     map[string]interface{} // Cache data available for remote access 缓存的数据，可供远程端访问
-	DataExp  map[string]int64       // Cache data expiration timestamp, 13 bits 缓存数据的过期时间戳，13位
+	Data     map[string]string // Cache data available for remote access 缓存的数据，可供远程端访问
+	DataExp  map[string]int64  // Cache data expiration timestamp, 13 bits 缓存数据的过期时间戳，13位
 	InitConn func(*BanConn)
 }
 
@@ -349,7 +353,7 @@ func NewBanServer(addr, name string) *ServerIO {
 	var server ServerIO
 	server.Addr = addr
 	server.Name = name
-	server.Data = map[string]interface{}{}
+	server.Data = map[string]string{}
 	banServer = &server
 	return &server
 }
@@ -381,17 +385,17 @@ func (s *ServerIO) RunForever() *errs.Error {
 
 type KeyValExpire struct {
 	Key        string
-	Val        interface{}
-	ExpireSecs int
+	Val        string
+	ExpireSecs int `json:"expireSecs"`
 }
 
 type IOKeyVal struct {
-	Key string
-	Val interface{}
+	Key string `json:"key"`
+	Val string `json:"val"`
 }
 
 func (s *ServerIO) SetVal(args *KeyValExpire) {
-	if args.Val == nil {
+	if args.Val == "" {
 		// 删除值
 		delete(s.Data, args.Key)
 		return
@@ -402,16 +406,16 @@ func (s *ServerIO) SetVal(args *KeyValExpire) {
 	}
 }
 
-func (s *ServerIO) GetVal(key string) interface{} {
+func (s *ServerIO) GetVal(key string) string {
 	val, ok := s.Data[key]
 	if !ok {
-		return nil
+		return ""
 	}
 	if exp, ok := s.DataExp[key]; ok {
 		if btime.TimeMS() >= exp {
 			delete(s.Data, key)
 			delete(s.DataExp, key)
-			return nil
+			return ""
 		}
 	}
 	return val
@@ -462,8 +466,13 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 		Ready:     true,
 		Remote:    conn.RemoteAddr().String(),
 	}
-	res.Listens["onGetVal"] = func(action string, data interface{}) {
-		key := fmt.Sprintf("%v", data)
+	res.Listens["onGetVal"] = func(action string, data []byte) {
+		var key string
+		err_ := utils.Unmarshal(data, &key, utils.JsonNumDefault)
+		if err_ != nil {
+			log.Error("unmarshal fail onGetVal", zap.String("raw", string(data)), zap.Error(err_))
+			return
+		}
 		val := s.GetVal(key)
 		err := res.WriteMsg(&IOMsg{Action: "onGetValRes", Data: &IOKeyVal{
 			Key: key,
@@ -473,11 +482,14 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 			log.Error("write val res fail", zap.Error(err))
 		}
 	}
-	res.Listens["onSetVal"] = func(action string, data interface{}) {
+	res.Listens["onSetVal"] = func(action string, data []byte) {
 		var args KeyValExpire
-		if DecodeMsgData(data, &args, "onSetVal") {
-			s.SetVal(&args)
+		err := utils.Unmarshal(data, &args, utils.JsonNumDefault)
+		if err != nil {
+			log.Error("unmarshal fail onSetVal", zap.String("raw", string(data)), zap.Error(err))
+			return
 		}
+		s.SetVal(&args)
 	}
 	res.initListens()
 	if s.InitConn != nil {
@@ -489,7 +501,7 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 type ClientIO struct {
 	BanConn
 	Addr  string
-	waits map[string]chan interface{}
+	waits map[string]chan string
 }
 
 func NewClientIO(addr string) (*ClientIO, *errs.Error) {
@@ -507,11 +519,14 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 			RefreshMS: btime.TimeMS(),
 			Ready:     true,
 		},
-		waits: map[string]chan interface{}{},
+		waits: map[string]chan string{},
 	}
-	res.Listens["onGetValRes"] = func(_ string, data interface{}) {
+	res.Listens["onGetValRes"] = func(_ string, data []byte) {
 		var val IOKeyVal
-		if DecodeMsgData(data, &val, "onGetValRes") {
+		err := utils.Unmarshal(data, &val, utils.JsonNumDefault)
+		if err != nil {
+			log.Error("onGetValRes unmarshal fail", zap.String("raw", string(data)), zap.Error(err))
+		} else {
 			out, ok := res.waits[val.Key]
 			if !ok {
 				return
@@ -541,20 +556,20 @@ const (
 	readTimeout = 120
 )
 
-func (c *ClientIO) GetVal(key string, timeout int) (interface{}, *errs.Error) {
+func (c *ClientIO) GetVal(key string, timeout int) (string, *errs.Error) {
 	err := c.WriteMsg(&IOMsg{
 		Action: "onGetVal",
 		Data:   key,
 	})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if timeout == 0 {
 		timeout = readTimeout
 	}
-	out := make(chan interface{})
+	out := make(chan string)
 	c.waits[key] = out
-	var res interface{}
+	var res string
 	select {
 	case res = <-out:
 	case <-time.After(time.Second * time.Duration(timeout)):
@@ -575,13 +590,13 @@ var (
 	banClient *ClientIO
 )
 
-func GetServerData(key string) (interface{}, *errs.Error) {
+func GetServerData(key string) (string, *errs.Error) {
 	if banServer != nil {
 		data := banServer.GetVal(key)
 		return data, nil
 	}
 	if banClient == nil {
-		return nil, errs.NewMsg(core.ErrRunTime, "banClient not load")
+		return "", errs.NewMsg(core.ErrRunTime, "banClient not load")
 	}
 	return banClient.GetVal(key, 0)
 }
@@ -604,8 +619,9 @@ func GetNetLock(key string, timeout int) (int32, *errs.Error) {
 		return 0, err
 	}
 	lockVal := rand.Int31()
-	if val == nil {
-		err = SetServerData(&KeyValExpire{Key: lockKey, Val: lockVal})
+	lockStr := fmt.Sprintf("%v", lockVal)
+	if val == "" {
+		err = SetServerData(&KeyValExpire{Key: lockKey, Val: lockStr})
 		return lockVal, err
 	}
 	if timeout == 0 {
@@ -618,8 +634,8 @@ func GetNetLock(key string, timeout int) (int32, *errs.Error) {
 		if err != nil {
 			return 0, err
 		}
-		if val == nil {
-			err = SetServerData(&KeyValExpire{Key: lockKey, Val: lockVal})
+		if val == "" {
+			err = SetServerData(&KeyValExpire{Key: lockKey, Val: lockStr})
 			return lockVal, err
 		}
 	}
@@ -632,11 +648,10 @@ func DelNetLock(key string, lockVal int32) *errs.Error {
 	if err != nil {
 		return err
 	}
-	var valInt = int32(0)
-	_ = mapstructure.Decode(val, &valInt)
-	if valInt == lockVal {
-		return SetServerData(&KeyValExpire{Key: lockKey, Val: nil})
+	lockStr := fmt.Sprintf("%v", lockVal)
+	if val == lockStr {
+		return SetServerData(&KeyValExpire{Key: lockKey, Val: ""})
 	}
-	log.Info("del lock fail", zap.Int32("val", valInt), zap.Int32("exp", lockVal))
+	log.Info("del lock fail", zap.String("val", val), zap.Int32("exp", lockVal))
 	return nil
 }

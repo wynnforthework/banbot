@@ -635,9 +635,12 @@ func (s *LiveSpider) getMiner(exgName, market string) *Miner {
 
 func makeInitConn(s *LiveSpider) func(*utils.BanConn) {
 	return func(c *utils.BanConn) {
-		handlePairs := func(data interface{}, name string) (*Miner, []string) {
+		handlePairs := func(data []byte, name string) (*Miner, []string) {
 			var arr = make([]string, 0, 8)
-			if !utils.DecodeMsgData(data, &arr, name) {
+			err := utils2.Unmarshal(data, &arr, utils2.JsonNumDefault)
+			if err != nil {
+				log.Warn("receive invalid pairs", zap.String("n", name),
+					zap.String("in", string(data)), zap.Error(err))
 				return nil, nil
 			}
 			if len(arr) < 4 {
@@ -647,14 +650,14 @@ func makeInitConn(s *LiveSpider) func(*utils.BanConn) {
 			miner := s.getMiner(arr[0], arr[1])
 			return miner, arr[2:]
 		}
-		c.Listens["watch_pairs"] = func(_ string, data interface{}) {
+		c.Listens["watch_pairs"] = func(_ string, data []byte) {
 			miner, arr := handlePairs(data, "watch_pairs")
 			err := miner.SubPairs(arr[0], arr[1:]...)
 			if err != nil {
 				log.Error("spider.sub_pairs fail", zap.Error(err))
 			}
 		}
-		c.Listens["unwatch_pairs"] = func(_ string, data interface{}) {
+		c.Listens["unwatch_pairs"] = func(_ string, data []byte) {
 			miner, arr := handlePairs(data, "unwatch_pairs")
 			err := miner.UnSubPairs(arr[0], arr[1:]...)
 			if err != nil {

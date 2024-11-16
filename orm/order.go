@@ -52,7 +52,7 @@ func (i *InOutOrder) loadInfo() {
 	if i.IOrder.Info == "" {
 		return
 	}
-	err_ := utils2.UnmarshalString(i.IOrder.Info, &i.Info)
+	err_ := utils2.UnmarshalString(i.IOrder.Info, &i.Info, utils2.JsonNumAuto)
 	if err_ != nil {
 		log.Error("unmarshal ioder info fail", zap.String("info", i.IOrder.Info), zap.Error(err_))
 	}
