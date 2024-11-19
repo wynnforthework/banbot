@@ -109,6 +109,48 @@ func EnsureDir(dir string, perm os.FileMode) error {
 	return nil
 }
 
+// FindSubPath searches for the first occurrence of a directory named tgtName
+// within the specified workDir and its subdirectories up to two levels deep.
+func FindSubPath(parDir, tgtName string, maxDepth int) (string, error) {
+	if maxDepth < 1 {
+		return "", fmt.Errorf("maxDepth must >= 1")
+	}
+	if _, err := os.Stat(parDir); os.IsNotExist(err) {
+		return "", fmt.Errorf("directory %s does not exist", parDir)
+	}
+	var tgtPath string
+	err := filepath.Walk(parDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relativePath, err := filepath.Rel(parDir, path)
+		if err != nil {
+			return err
+		}
+		// calculate depth of current path
+		depth := len(strings.Split(filepath.ToSlash(relativePath), "/"))
+		if depth > maxDepth {
+			return filepath.SkipDir
+		}
+
+		if info.Name() == tgtName {
+			tgtPath = path
+			return filepath.SkipDir
+		}
+		return nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+
+	if tgtPath == "" {
+		return "", fmt.Errorf("target directory %s not found within two levels of %s", tgtName, parDir)
+	}
+
+	return tgtPath, nil
+}
+
 func CopySymLink(source, dest string) error {
 	link, err := os.Readlink(source)
 	if err != nil {

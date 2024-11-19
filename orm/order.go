@@ -435,10 +435,6 @@ func (i *InOutOrder) Save(sess *Queries) *errs.Error {
 		return nil
 	}
 	if core.LiveMode {
-		err := i.saveToDb(sess)
-		if err != nil {
-			return err
-		}
 		openOds, lock := GetOpenODs(GetTaskAcc(i.TaskID))
 		lock.Lock()
 		if i.Status < InOutStatusFullExit {
@@ -450,6 +446,10 @@ func (i *InOutOrder) Save(sess *Queries) *errs.Error {
 		mLockOds.Lock()
 		delete(lockOds, i.Key())
 		mLockOds.Unlock()
+		err := i.saveToDb(sess)
+		if err != nil {
+			return err
+		}
 	} else {
 		i.saveToMem()
 	}
@@ -469,10 +469,12 @@ func (i *InOutOrder) saveToMem() {
 		if _, ok := openOds[i.ID]; ok {
 			delete(openOds, i.ID)
 		}
-		if _, ok := doneODs[i.ID]; !ok {
-			doneODs[i.ID] = true
-			// 切分的订单不会出现在openOds中
-			HistODs = append(HistODs, i)
+		if i.Enter != nil && i.Enter.Filled > core.AmtDust {
+			if _, ok := doneODs[i.ID]; !ok {
+				doneODs[i.ID] = true
+				// 切分的订单不会出现在openOds中
+				HistODs = append(HistODs, i)
+			}
 		}
 	}
 	lock.Unlock()

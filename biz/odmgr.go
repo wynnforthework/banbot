@@ -128,7 +128,9 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq
 	}
 	stopUntil, _ := core.NoEnterUntil[account]
 	if btime.TimeMS() < stopUntil {
-		log.Warn("any enter forbid", zap.String("pair", env.Symbol))
+		if core.LiveMode {
+			log.Warn("any enter forbid", zap.String("pair", env.Symbol))
+		}
 		return nil
 	}
 	if !core.LiveMode {

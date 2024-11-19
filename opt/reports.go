@@ -174,11 +174,13 @@ func (r *BTResult) Collect() {
 	// Calculate the maximum drawdown on the chart
 	// 计算图表上的最大回撤
 	r.ShowDrawDownPct = r.Plots.calcDrawDown() * 100
-	r.groupByPairs(orders)
-	r.groupByDates(orders)
-	r.groupByProfits(orders)
-	r.groupByEnters(orders)
-	r.groupByExits(orders)
+	if len(orders) > 0 {
+		r.groupByPairs(orders)
+		r.groupByDates(orders)
+		r.groupByProfits(orders)
+		r.groupByEnters(orders)
+		r.groupByExits(orders)
+	}
 	err := r.calcMeasures(30)
 	if err != nil {
 		log.Warn("calc sharpe/sortino fail", zap.Error(err))
@@ -673,13 +675,21 @@ func (r *BTResult) dumpConfig() {
 
 func (r *BTResult) dumpStrategy() {
 	stratDir := config.GetStratDir()
+	if stratDir == "" {
+		log.Info("env `BanStgyDir` not configured, skip backup strategy")
+		return
+	}
 	for name := range core.StgPairTfs {
 		dname := strings.Split(name, ":")[0]
-		srcDir := fmt.Sprintf("%s/%s", stratDir, dname)
-		tgtDir := fmt.Sprintf("%s/strat_%s", r.OutDir, dname)
-		err_ := utils.CopyDir(srcDir, tgtDir)
+		curDir, err_ := utils.FindSubPath(stratDir, dname, 3)
 		if err_ != nil {
-			log.Error("backup strat fail", zap.String("name", name), zap.Error(err_))
+			log.Warn("skip backup strat", zap.String("name", name), zap.Error(err_))
+			continue
+		}
+		tgtDir := fmt.Sprintf("%s/strat_%s", r.OutDir, dname)
+		err_ = utils.CopyDir(curDir, tgtDir)
+		if err_ != nil {
+			log.Warn("backup strat fail", zap.String("name", name), zap.Error(err_))
 		}
 	}
 }

@@ -1,6 +1,9 @@
 package biz
 
 import (
+	"strings"
+	"sync"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -13,8 +16,6 @@ import (
 	"github.com/banbox/banexg/utils"
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
-	"strings"
-	"sync"
 )
 
 type LocalOrderMgr struct {
@@ -60,13 +61,16 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKli
 			curOrders = append(curOrders, od)
 		}
 	}
+	if len(curOrders) == 0 && !core.CheckWallets {
+		return nil
+	}
 	_, err := o.fillPendingOrders(curOrders, bar)
 	if err != nil {
 		return err
 	}
 	// Update all orders to profit at the end of the bar
 	// 更新所有订单在bar结束时利润
-	err = o.OrderMgr.UpdateByBar(allOpens, bar)
+	err = o.OrderMgr.UpdateByBar(curOrders, bar)
 	if err != nil {
 		return err
 	}

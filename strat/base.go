@@ -138,9 +138,9 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	}
 	if curSLPrice == 0 {
 		if req.StopLossVal > 0 {
-			curSLPrice = enterPrice - req.StopLossVal*dirFlag
-		} else {
-			curSLPrice = req.StopLoss
+			curSLPrice = max(enterPrice-req.StopLossVal*dirFlag, core.AmtDust)
+		} else if req.StopLoss != 0 {
+			curSLPrice = max(req.StopLoss, core.AmtDust)
 		}
 	}
 	req.StopLossVal = 0
