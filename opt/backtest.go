@@ -83,7 +83,6 @@ func (b *BackTest) Init() *errs.Error {
 func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	b.BarNum += 1
 	curTime := btime.TimeMS()
-	core.CheckWallets = false
 	if !bar.IsWarmUp {
 		if curTime > strat.LastBatchMS {
 			// Enter the next timeframe and trigger the batch entry callback
@@ -110,6 +109,7 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 		return
 	}
 	if !bar.IsWarmUp && core.CheckWallets {
+		core.CheckWallets = false
 		b.logState(bar.Time, curTime)
 	}
 	if !core.BotRunning {
@@ -298,6 +298,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		plots := &PlotData{
 			Labels:        make([]string, 0, newNum),
 			OdNum:         make([]int, 0, newNum),
+			JobNum:        make([]int, 0, newNum),
 			Real:          make([]float64, 0, newNum),
 			Available:     make([]float64, 0, newNum),
 			UnrealizedPOL: make([]float64, 0, newNum),
@@ -306,6 +307,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		for i := 0; i < oldNum; i += splStep {
 			plots.Labels = append(plots.Labels, b.Plots.Labels[i])
 			plots.OdNum = append(plots.OdNum, slices.Max(b.Plots.OdNum[i:i+splStep]))
+			plots.JobNum = append(plots.JobNum, slices.Max(b.Plots.JobNum[i:i+splStep]))
 			plots.Real = append(plots.Real, b.Plots.Real[i])
 			plots.Available = append(plots.Available, b.Plots.Available[i])
 			plots.Profit = append(plots.Profit, b.Plots.Profit[i])
@@ -315,12 +317,22 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		b.Plots = plots
 		return
 	}
-	b.logPlot(wallets, timeMS, odNum, totalLegal)
+	// 这里应使用bar的开始时间，避免多个时间周期运行时，大部分CheckMS未更新
+	b.logPlot(wallets, startMS, odNum, totalLegal)
 }
 
 func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, totalLegal float64) {
 	if odNum < 0 {
 		odNum = orm.OpenNum("", orm.InOutStatusPartEnter)
+	}
+	jobNum := 0
+	jobMap := strat.GetJobs(wallets.Account)
+	for _, jobs := range jobMap {
+		for _, j := range jobs {
+			if j.CheckMS+j.Env.TFMSecs >= timeMS {
+				jobNum += 1
+			}
+		}
 	}
 	if totalLegal < 0 {
 		totalLegal = wallets.TotalLegal(nil, true)
@@ -333,6 +345,7 @@ func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, tot
 	b.histOdOff = len(orm.HistODs)
 	b.Plots.Labels = append(b.Plots.Labels, curDate)
 	b.Plots.OdNum = append(b.Plots.OdNum, odNum)
+	b.Plots.JobNum = append(b.Plots.JobNum, jobNum)
 	b.Plots.Real = append(b.Plots.Real, totalLegal)
 	b.Plots.Available = append(b.Plots.Available, avaLegal)
 	b.Plots.Profit = append(b.Plots.Profit, b.donePftLegal)

@@ -183,6 +183,9 @@ func (f *Feeder) onStateOhlcvs(state *PairTFCache, bars []*banexg.Kline, lastOk 
 		state.WaitBar = state.Latest
 	}
 	tfMSecs := int64(state.TFSecs * 1000)
+	for len(finishBars) > 0 && finishBars[0].Time < state.NextMS {
+		finishBars = finishBars[1:]
+	}
 	if len(finishBars) > 0 {
 		state.NextMS = finishBars[len(finishBars)-1].Time + tfMSecs
 		f.addTfKlines(state.TimeFrame, finishBars)
@@ -194,7 +197,8 @@ func (f *Feeder) onStateOhlcvs(state *PairTFCache, bars []*banexg.Kline, lastOk 
 
 func (f *Feeder) getTfKlines(tf string, endMS int64, limit int, pBar *utils.PrgBar) ([]*banexg.Kline, *errs.Error) {
 	bars, _ := f.tfBars[tf]
-	if len(bars) > 0 {
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+	if len(bars) > 0 && bars[len(bars)-1].Time+tfMSecs == endMS {
 		// 缓存有，直接返回
 		bars = orm.ApplyAdj(f.adjs, bars, core.AdjFront, endMS, limit)
 		if pBar != nil {
@@ -452,7 +456,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		ohlcvs, lastOk = bars, true
 	} else {
 		barTf := utils2.SecsToTF(int(barTfMSecs / 1000))
-		msg := fmt.Sprintf("bar intv invalid, expect %v, cur: %v", state.TimeFrame, barTf)
+		msg := fmt.Sprintf("bar intv invalid, %v expect %v, cur: %v", f.Symbol, state.TimeFrame, barTf)
 		return false, errs.NewMsg(core.ErrInvalidBars, msg)
 	}
 	if len(ohlcvs) == 0 {
@@ -528,12 +532,15 @@ type HistKLineFeeder struct {
 	TimeRange  *config.TimeTuple
 	rowIdx     int             // The index of the next Bar in the cache, -1 means it has ended 缓存中下一个Bar的索引，-1表示已结束
 	caches     []*banexg.Kline // Cached Bar, fire one by one, reload after reading 缓存的Bar，逐个fire，读取完重新加载
-	nextMS     int64           // The 13-digit millisecond timestamp of the next bar, math.MaxInt32 indicates the end 下一个bar的13位毫秒时间戳，math.MaxInt32表示结束
+	nextMS     int64           // The 13-digit millisecond end timestamp of the next bar, math.MaxInt32 indicates the end 下一个bar的结束13位毫秒时间戳，math.MaxInt32表示结束
 	minGapMs   int64           // Minimum number of milliseconds between caches caches中最小的间隔毫秒数
 	setNext    func()
 	TradeTimes [][2]int64 // Trading time 可交易时间
 }
 
+/*
+get the end timestamp of next bar
+*/
 func (f *HistKLineFeeder) getNextMS() int64 {
 	return f.nextMS
 }
@@ -557,6 +564,16 @@ func (f *HistKLineFeeder) RunBar(bar *banexg.Kline) *errs.Error {
 
 func (f *HistKLineFeeder) CallNext() {
 	f.setNext()
+}
+
+func (f *HistKLineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error) {
+	endMs, err := f.KlineFeeder.WarmTfs(curMS, tfNums, pBar)
+	if err == nil && f.minGapMs != int64(f.States[0].TFSecs*1000) {
+		f.rowIdx = 0
+		f.nextMS = 0
+		f.caches = nil
+	}
+	return endMs, err
 }
 
 /*
@@ -602,6 +619,7 @@ func (f *DBKlineFeeder) SetSeek(since int64) {
 	f.rowIdx = 0
 	f.nextMS = 0
 	f.offsetMS = since
+	f.caches = nil
 	f.setNext()
 }
 
@@ -655,8 +673,9 @@ func makeSetNext(f *DBKlineFeeder) func() {
 	return func() {
 		if f.rowIdx+1 < len(f.caches) {
 			f.rowIdx += 1
-			f.nextMS = f.caches[f.rowIdx].Time
-			if f.adj != nil && f.nextMS >= f.adj.StopMS {
+			nextStartMS := f.caches[f.rowIdx].Time
+			f.nextMS = nextStartMS + f.minGapMs
+			if f.adj != nil && nextStartMS >= f.adj.StopMS {
 				old := f.caches[f.rowIdx-1]
 				tf := f.States[0].TimeFrame
 				f.OnEnvEnd(&banexg.PairTFKline{
@@ -666,7 +685,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 				}, f.adj)
 				// Warm up again
 				// 重新复权预热
-				_, err := f.WarmTfs(f.nextMS, nil, nil)
+				_, err := f.WarmTfs(nextStartMS, nil, nil)
 				if err != nil {
 					log.Error("next warm tf fail", zap.Error(err))
 				}
@@ -687,7 +706,7 @@ func makeSetNext(f *DBKlineFeeder) func() {
 		}
 		defer conn.Release()
 		endMS := f.TimeRange.EndMS
-		if endMS > 0 && f.nextMS+tfMSecs >= endMS {
+		if endMS > 0 && f.nextMS >= endMS {
 			f.rowIdx = -1
 			f.nextMS = math.MaxInt64
 			return
@@ -704,15 +723,9 @@ func makeSetNext(f *DBKlineFeeder) func() {
 		}
 		f.caches = bars
 		f.rowIdx = 0
-		f.nextMS = bars[0].Time
+		f.nextMS = bars[0].Time + tfMSecs
 		f.offsetMS = bars[len(bars)-1].Time + tfMSecs
 		f.setAdjIdx()
-		f.minGapMs = math.MaxInt64
-		for i, b := range bars[1:] {
-			gap := b.Time - bars[i].Time
-			if gap < f.minGapMs {
-				f.minGapMs = gap
-			}
-		}
+		f.minGapMs = tfMSecs
 	}
 }

@@ -47,9 +47,11 @@ func Setup() *errs.Error {
 
 func GetPairFilters(items []*config.CommonPairFilter, withInvalid bool) ([]IFilter, *errs.Error) {
 	fts := make([]IFilter, 0, len(items))
+	// 未启用定期刷新，则允许成交量为空的品种
+	allowEmpty := config.PairMgr.Cron == ""
 	for _, cfg := range items {
 		var output IFilter
-		var base = BaseFilter{Name: cfg.Name}
+		var base = BaseFilter{Name: cfg.Name, AllowEmpty: allowEmpty}
 		switch cfg.Name {
 		case "AgeFilter":
 			output = &AgeFilter{BaseFilter: base}

@@ -76,7 +76,7 @@ func RunKlineCorrect(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	return orm.SyncKlineTFs()
+	return orm.SyncKlineTFs(args)
 }
 
 func RunKlineAdjFactors(args *config.CmdArgs) *errs.Error {

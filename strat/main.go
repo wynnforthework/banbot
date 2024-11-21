@@ -113,6 +113,8 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	// 对AccJobs中，当前禁止开单的job，如果无入场订单，则删除job
 	exitOds := make([]*orm.InOutOrder, 0, 8)
 	exitJobs := make(map[*StratJob]bool)
+	oldPairs := make(map[string]bool)
+	newPairs := make(map[string]bool)
 	for _, jobs := range AccJobs {
 		for envKey, envJobs := range jobs {
 			resJobs := make(map[string]*StratJob)
@@ -127,11 +129,13 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 					} else {
 						// 有未平仓订单，继续跟踪
 						resJobs[name] = job
+						oldPairs[job.Symbol.Symbol] = true
 					}
 					exitOds = append(exitOds, job.LongOrders...)
 					exitOds = append(exitOds, job.ShortOrders...)
 				} else {
 					resJobs[name] = job
+					newPairs[job.Symbol.Symbol] = true
 				}
 			}
 			if len(resJobs) > 0 {
@@ -157,6 +161,17 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 				delete(jobs, envKey)
 			}
 		}
+	}
+	dupPairs := make([]string, 0, 6)
+	for p := range oldPairs {
+		if _, ok := newPairs[p]; ok {
+			dupPairs = append(dupPairs, p)
+		}
+	}
+	if len(oldPairs) > 0 {
+		keys := utils2.KeysOfMap(oldPairs)
+		log.Info("disable open pairs", zap.Int("num", len(keys)), zap.Strings("arr", keys),
+			zap.Strings("dup", dupPairs))
 	}
 	// 从AccInfoJobs中移除已取消的项
 	lockInfoJobs.Lock()

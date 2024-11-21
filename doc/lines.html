@@ -37,6 +37,9 @@
             if (!item.yAxisID) {
                 item.yAxisID = 'yAsset'
             }
+            if (!item.borderWidth){
+                item.borderWidth = 1.5
+            }
         })
 
         function initChart() {
@@ -92,7 +95,7 @@
                             display: true,
                             position: 'left',
                         },
-                        yProfit: {
+                        yRight: {
                             type: 'linear',
                             display: true,
                             position: 'right',

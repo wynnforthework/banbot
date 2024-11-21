@@ -575,11 +575,11 @@ func (q *Queries) ListExchanges(ctx context.Context) ([]string, error) {
 
 const listKHoles = `-- name: ListKHoles :many
 select id, sid, timeframe, start, stop from khole
-order by sid, start
+WHERE sid = ANY($1::int[])
 `
 
-func (q *Queries) ListKHoles(ctx context.Context) ([]*KHole, error) {
-	rows, err := q.db.Query(ctx, listKHoles)
+func (q *Queries) ListKHoles(ctx context.Context, dollar_1 []int32) ([]*KHole, error) {
+	rows, err := q.db.Query(ctx, listKHoles, dollar_1)
 	if err != nil {
 		return nil, err
 	}

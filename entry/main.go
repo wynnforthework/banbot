@@ -111,6 +111,7 @@ func runKlineCmds(args []string) {
 			options = []string{"exg_real", "pairs", "timeframes"}
 			entry = biz.PurgeKlines
 		case "correct":
+			options = []string{"pairs"}
 			entry = RunKlineCorrect
 		case "adj_calc":
 			options = []string{"out"}

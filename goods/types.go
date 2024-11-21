@@ -21,6 +21,7 @@ type BaseFilter struct {
 	Name        string `yaml:"name" mapstructure:"name"`
 	Disable     bool   `yaml:"disable" mapstructure:"disable"`
 	NeedTickers bool
+	AllowEmpty  bool
 }
 
 // VolumePairFilter Used to represent a configuration that sorts all trading pairs in reverse order by volume value 用于表示按成交量价值倒序排序所有交易对的配置

@@ -1,6 +1,7 @@
 package orm
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -633,8 +635,22 @@ func (q *Queries) CalcKLineRange(sid int32, timeFrame string, start, end int64) 
 	return *realStart, *realEnd, nil
 }
 
-func (q *Queries) CalcKLineRanges(timeFrame string) (map[int32][2]int64, *errs.Error) {
+func (q *Queries) CalcKLineRanges(timeFrame string, sids map[int32]bool) (map[int32][2]int64, *errs.Error) {
 	tblName := "kline_" + timeFrame
+	if len(sids) > 0 {
+		var b strings.Builder
+		b.WriteString(" where sid in (")
+		first := true
+		for sid := range sids {
+			if !first {
+				b.WriteRune(',')
+			}
+			first = false
+			b.WriteString(fmt.Sprintf("%v", sid))
+		}
+		b.WriteRune(')')
+		tblName += b.String()
+	}
 	sql := fmt.Sprintf("select sid,min(time),max(time) from %s group by sid", tblName)
 	ctx := context.Background()
 	rows, err_ := q.db.Query(ctx, sql)
@@ -692,7 +708,15 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 		err_ = q.SetKInfo(ctx, SetKInfoParams{Sid: sid, Timeframe: timeFrame, Start: realStart, Stop: realEnd})
 	}
 	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
+		var pgErr *pgconn.PgError
+		if errors.As(err_, &pgErr) {
+			if pgErr.Code == "23505" {
+				err_ = q.SetKInfo(ctx, SetKInfoParams{Sid: sid, Timeframe: timeFrame, Start: realStart, Stop: realEnd})
+			}
+		}
+		if err_ != nil {
+			return NewDbErr(core.ErrDbExecFail, err_)
+		}
 	}
 	log.Debug("set kinfo", zap.Int32("sid", sid), zap.String("tf", timeFrame),
 		zap.Int64("start", startMS), zap.Int64("end", endMS))
@@ -1104,8 +1128,24 @@ SyncKlineTFs
 Check the data consistency of each kline table. If there is more low dimensional data than high dimensional data, aggregate and update to high dimensional data
 检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
 */
-func SyncKlineTFs() *errs.Error {
+func SyncKlineTFs(args *config.CmdArgs) *errs.Error {
 	log.Info("run kline data sync ...")
+	pairs := make(map[string]bool)
+	for _, p := range args.Pairs {
+		pairs[p] = true
+	}
+	if len(pairs) == 0 && !args.Force {
+		fmt.Println("KlineCorrect for all symbols would take a long time, input `y` to confirm (y/n):")
+		reader := bufio.NewReader(os.Stdin)
+		input, err_ := reader.ReadString('\n')
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		input = strings.TrimSpace(strings.ToLower(input))
+		if input != "y" {
+			return nil
+		}
+	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err
@@ -1114,7 +1154,14 @@ func SyncKlineTFs() *errs.Error {
 	// load all markets
 	exsList := GetAllExSymbols()
 	cache := map[string]map[string]bool{}
+	sidMap := make(map[int32]bool)
 	for _, exs := range exsList {
+		if len(pairs) > 0 {
+			if _, ok := pairs[exs.Symbol]; !ok {
+				continue
+			}
+			sidMap[exs.ID] = true
+		}
 		cc, _ := cache[exs.Exchange]
 		if cc == nil {
 			cc = make(map[string]bool)
@@ -1132,12 +1179,12 @@ func SyncKlineTFs() *errs.Error {
 			cc[exs.Market] = true
 		}
 	}
-	err = syncKlineInfos(sess)
+	err = syncKlineInfos(sess, sidMap)
 	if err != nil {
 		return err
 	}
 	log.Info("try filling KLine Holes ...")
-	return tryFillHoles(sess)
+	return tryFillHoles(sess, sidMap)
 }
 
 type KHoleExt struct {
@@ -1145,9 +1192,10 @@ type KHoleExt struct {
 	TfMSecs int64
 }
 
-func tryFillHoles(sess *Queries) *errs.Error {
+func tryFillHoles(sess *Queries, sids map[int32]bool) *errs.Error {
 	ctx := context.Background()
-	holes, err_ := sess.ListKHoles(ctx)
+	sidList := utils2.KeysOfMap(sids)
+	holes, err_ := sess.ListKHoles(ctx, sidList)
 	if err_ != nil {
 		return NewDbErr(core.ErrDbReadFail, err_)
 	}
@@ -1299,10 +1347,19 @@ type KInfoExt struct {
 	TfMSecs int64
 }
 
-func syncKlineInfos(sess *Queries) *errs.Error {
+func syncKlineInfos(sess *Queries, sids map[int32]bool) *errs.Error {
 	infos, err_ := sess.ListKInfos(context.Background())
 	if err_ != nil {
 		return NewDbErr(core.ErrDbExecFail, err_)
+	}
+	if len(sids) > 0 {
+		infoRes := make([]*KInfo, 0, len(sids)*6)
+		for _, info := range infos {
+			if _, ok := sids[info.Sid]; ok {
+				infoRes = append(infoRes, info)
+			}
+		}
+		infos = infoRes
 	}
 	// 显示进度条
 	pgTotal := len(infos) + len(aggList)*10
@@ -1311,7 +1368,7 @@ func syncKlineInfos(sess *Queries) *errs.Error {
 	// 加载计算的区间
 	calcs := make(map[string]map[int32][2]int64)
 	for _, agg := range aggList {
-		ranges, err := sess.CalcKLineRanges(agg.TimeFrame)
+		ranges, err := sess.CalcKLineRanges(agg.TimeFrame, sids)
 		if err != nil {
 			return err
 		}

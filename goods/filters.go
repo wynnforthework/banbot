@@ -40,7 +40,7 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 	return filterByOHLCV(symbols, "1d", backNum, 0, func(s string, klines []*banexg.Kline) bool {
 		knum := len(klines)
 		if knum == 0 {
-			return true
+			return f.AllowEmpty
 		}
 		return knum >= f.Max && (f.Max == 0 || knum <= f.Max)
 	})
@@ -66,6 +66,9 @@ func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.T
 	slices.SortFunc(symbolVols, func(a, b SymbolVol) int {
 		return int((b.Vol - a.Vol) / 1000)
 	})
+	if !f.AllowEmpty && f.MinValue == 0 {
+		f.MinValue = core.AmtDust
+	}
 	if f.MinValue > 0 {
 		for i, v := range symbolVols {
 			if v.Vol >= f.MinValue {
@@ -207,7 +210,7 @@ func (f *PriceFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker
 	} else {
 		return filterByOHLCV(symbols, "1h", 1, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
 			if len(klines) == 0 {
-				return true
+				return f.AllowEmpty
 			}
 			return f.validatePrice(s, klines[len(klines)-1].Close)
 		})
@@ -267,7 +270,7 @@ func (f *RateOfChangeFilter) Filter(symbols []string, tickers map[string]*banexg
 
 func (f *RateOfChangeFilter) validate(pair string, arr []*banexg.Kline) bool {
 	if len(arr) == 0 {
-		return true
+		return f.AllowEmpty
 	}
 	hhigh := arr[0].High
 	llow := arr[0].Low
@@ -432,7 +435,7 @@ type IdVal struct {
 func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	return filterByOHLCV(symbols, "1d", f.BackDays, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
 		if len(klines) == 0 {
-			return true
+			return f.AllowEmpty
 		}
 		var data = make([]float64, 0, len(klines))
 		for i, v := range klines[1:] {

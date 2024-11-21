@@ -60,6 +60,7 @@ type BTResult struct {
 type PlotData struct {
 	Labels        []string  `json:"labels"`
 	OdNum         []int     `json:"odNum"`
+	JobNum        []int     `json:"jobNum"`
 	Real          []float64 `json:"real"`
 	Available     []float64 `json:"available"`
 	Profit        []float64 `json:"profit"`
@@ -610,7 +611,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 	defer writer.Flush()
 	heads := []string{"sid", "symbol", "timeframe", "direction", "leverage", "entAt", "entTag", "entPrice",
 		"entAmount", "entCost", "entFee", "exitAt", "exitTag", "exitPrice", "exitAmount", "exitGot",
-		"exitFee", "max_draw_down", "profitRate", "profit"}
+		"exitFee", "maxDrawDown", "profitRate", "profit", "strategy"}
 	if err_ = writer.Write(heads); err_ != nil {
 		log.Error("write orders.csv fail", zap.Error(err_))
 		return
@@ -639,6 +640,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 		row[17] = strconv.FormatFloat(od.MaxDrawDown, 'f', 4, 64)
 		row[18] = strconv.FormatFloat(od.ProfitRate, 'f', 4, 64)
 		row[19] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
+		row[20] = od.Strategy
 		if err_ = writer.Write(row); err_ != nil {
 			log.Error("write orders.csv fail", zap.Error(err_))
 			return
@@ -730,6 +732,10 @@ func (r *BTResult) dumpGraph() {
 	for _, v := range r.Plots.OdNum {
 		odNum = append(odNum, float64(v))
 	}
+	jobNum := make([]float64, 0, len(r.Plots.JobNum))
+	for _, v := range r.Plots.JobNum {
+		jobNum = append(jobNum, float64(v))
+	}
 	taskId := orm.GetTaskID("")
 	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, taskId)
 	title := "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders"
@@ -738,10 +744,11 @@ func (r *BTResult) dumpGraph() {
 	err := DumpLineGraph(outPath, title, r.Plots.Labels, 5, tplData, []*ChartDs{
 		{Label: "Real", Data: r.Plots.Real},
 		{Label: "Available", Data: r.Plots.Available},
-		{Label: "Profit", Data: r.Plots.Profit, YAxisID: "yProfit", Hidden: true},
-		{Label: "UnPOL", Data: r.Plots.UnrealizedPOL, YAxisID: "yProfit", Hidden: true},
-		{Label: "Withdraw", Data: r.Plots.WithDraw, YAxisID: "yProfit", Hidden: true},
-		{Label: "OrderNum", Data: odNum, YAxisID: "yProfit", Hidden: true},
+		{Label: "Profit", Data: r.Plots.Profit, Hidden: true},
+		{Label: "UnPOL", Data: r.Plots.UnrealizedPOL, Hidden: true},
+		{Label: "Withdraw", Data: r.Plots.WithDraw, Hidden: true},
+		{Label: "OrderNum", Data: odNum, YAxisID: "yRight", Hidden: true},
+		{Label: "JobNum", Data: jobNum, YAxisID: "yRight", Hidden: true},
 	})
 	if err != nil {
 		log.Error("save assets.html fail", zap.Error(err))

@@ -194,7 +194,7 @@ func (p *HistProvider) downIfNeed() *errs.Error {
 }
 
 func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
-	_, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther)
+	newHolds, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther)
 	// Check whether the data needs to be downloaded during the backtest. If so, it will be downloaded automatically.
 	// 检查回测期间数据是否需要下载，如需要自动下载
 	err = p.downIfNeed()
@@ -219,6 +219,17 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 			hold.SetSeek(since)
 		}
 		maxSince = max(maxSince, since)
+	}
+	// handle symbols whose minimal timeframe changed but do not require warming up
+	// 处理最小周期变化，但无需预热的品种
+	for _, hold := range newHolds {
+		pair := hold.getSymbol()
+		if _, ok := holders[pair]; ok {
+			continue
+		}
+		holders[pair] = hold
+		sta := hold.getStates()[0]
+		hold.SetSeek(sta.NextMS)
 	}
 	// Delete items that are not warmed up
 	// 删除未预热的项
@@ -329,10 +340,7 @@ func SortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) [
 		bSymbol := hold.getSymbol()
 		index := sort.Search(len(holds), func(i int) bool {
 			va := holds[i].getNextMS()
-			if va == math.MaxInt64 || vb == math.MaxInt64 {
-				return va > vb
-			}
-			if va != vb {
+			if va != vb || va == math.MaxInt64 || vb == math.MaxInt64 {
 				return va > vb
 			}
 			return holds[i].getSymbol() > bSymbol
@@ -345,10 +353,7 @@ func SortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) [
 	sort.Slice(holds, func(i, j int) bool {
 		a, b := holds[i], holds[j]
 		va, vb := a.getNextMS(), b.getNextMS()
-		if va == math.MaxInt64 || vb == math.MaxInt64 {
-			return va < vb
-		}
-		if va != vb {
+		if va != vb || va == math.MaxInt64 || vb == math.MaxInt64 {
 			return va < vb
 		}
 		return a.getSymbol() < b.getSymbol()

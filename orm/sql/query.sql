@@ -62,7 +62,7 @@ values ($1, $2, $3, $4)
 
 -- name: ListKHoles :many
 select * from khole
-order by sid, start;
+WHERE sid = ANY($1::int[]);
 
 -- name: GetKHoles :many
 select * from khole
