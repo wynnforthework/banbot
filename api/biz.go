@@ -103,9 +103,10 @@ func getOpenNum(c *fiber.Ctx) error {
 		}
 		lock.Unlock()
 		return c.JSON(fiber.Map{
-			"open_num":   openNum,
-			"max_num":    config.MaxOpenOrders,
-			"total_cost": totalCost,
+			"open_num":       openNum,
+			"max_num":        config.MaxOpenOrders,
+			"max_simul_open": config.MaxSimulOpen,
+			"total_cost":     totalCost,
 		})
 	})
 }

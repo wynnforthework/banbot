@@ -32,6 +32,7 @@ var (
 	MinOpenRate      float64 // When the wallet balance is less than the single amount, orders are allowed to be issued when it reaches this ratio of the single amount. 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
 	BTNetCost        float64 // Order placement delay during backtesting, simulated slippage, unit seconds 回测时下单延迟，模拟滑点，单位秒
 	MaxOpenOrders    int
+	MaxSimulOpen     int
 	WalletAmounts    map[string]float64
 	DrawBalanceOver  float64
 	StakeCurrency    []string
@@ -89,6 +90,7 @@ type Config struct {
 	MinOpenRate     float64                           `yaml:"min_open_rate" mapstructure:"min_open_rate"`
 	BTNetCost       float64                           `yaml:"bt_net_cost" mapstructure:"bt_net_cost"`
 	MaxOpenOrders   int                               `yaml:"max_open_orders" mapstructure:"max_open_orders"`
+	MaxSimulOpen    int                               `yaml:"max_simul_open" mapstructure:"max_simul_open"`
 	WalletAmounts   map[string]float64                `yaml:"wallet_amounts" mapstructure:"wallet_amounts"`
 	DrawBalanceOver float64                           `yaml:"draw_balance_over" mapstructure:"draw_balance_over"`
 	StakeCurrency   []string                          `yaml:"stake_currency" mapstructure:"stake_currency"`
@@ -119,6 +121,7 @@ type RunPolicyConfig struct {
 	RunTimeframes []string                      `yaml:"run_timeframes" mapstructure:"run_timeframes"`
 	MaxPair       int                           `yaml:"max_pair" mapstructure:"max_pair"`
 	MaxOpen       int                           `yaml:"max_open" mapstructure:"max_open"`
+	MaxSimulOpen  int                           `yaml:"max_simul_open" mapstructure:"max_simul_open"`
 	Dirt          string                        `yaml:"dirt" mapstructure:"dirt"`
 	StrtgPerf     *StrtgPerfConfig              `yaml:"strtg_perf" mapstructure:"strtg_perf"`
 	Pairs         []string                      `yaml:"pairs" mapstructure:"pairs"`

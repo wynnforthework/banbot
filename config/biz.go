@@ -101,14 +101,14 @@ func apply(args *CmdArgs) *errs.Error {
 	Name = Data.Name
 	core.SetRunEnv(Data.Env)
 	Leverage = Data.Leverage
-	if Data.LimitVolSecs == 0 {
-		Data.LimitVolSecs = 10
-	}
 	LimitVolSecs = Data.LimitVolSecs
-	if Data.PutLimitSecs == 0 {
-		Data.PutLimitSecs = 120
+	if LimitVolSecs == 0 {
+		LimitVolSecs = 10
 	}
 	PutLimitSecs = Data.PutLimitSecs
+	if PutLimitSecs == 0 {
+		PutLimitSecs = 120
+	}
 	core.ExgName = Data.Exchange.Name
 	core.Market = Data.MarketType
 	if core.Market == banexg.MarketSpot || core.Market == banexg.MarketMargin {
@@ -117,21 +117,21 @@ func apply(args *CmdArgs) *errs.Error {
 		Data.ContractType = banexg.MarketSwap
 	}
 	core.ContractType = Data.ContractType
-	if Data.OdBookTtl == 0 {
-		Data.OdBookTtl = 500
-	}
 	OdBookTtl = Data.OdBookTtl
-	StopEnterBars = Data.StopEnterBars
-	if Data.ConcurNum == 0 {
-		Data.ConcurNum = 2
+	if OdBookTtl == 0 {
+		OdBookTtl = 500
 	}
+	StopEnterBars = Data.StopEnterBars
 	core.ConcurNum = Data.ConcurNum
+	if core.ConcurNum == 0 {
+		core.ConcurNum = 2
+	}
 	OrderType = Data.OrderType
 	PreFire = Data.PreFire
-	if Data.MarginAddRate == 0 {
-		Data.MarginAddRate = 0.66
-	}
 	MarginAddRate = Data.MarginAddRate
+	if MarginAddRate == 0 {
+		MarginAddRate = 0.66
+	}
 	ChargeOnBomb = Data.ChargeOnBomb
 	TakeOverStgy = Data.TakeOverStgy
 	if args.StakeAmount > 0 {
@@ -143,22 +143,20 @@ func apply(args *CmdArgs) *errs.Error {
 	}
 	StakePct = Data.StakePct
 	MaxStakeAmt = Data.MaxStakeAmt
-	if Data.OpenVolRate == 0 {
-		Data.OpenVolRate = 1
-	}
 	OpenVolRate = Data.OpenVolRate
-	if Data.MinOpenRate == 0 {
-		Data.MinOpenRate = 0.5
+	if OpenVolRate == 0 {
+		OpenVolRate = 1
 	}
 	MinOpenRate = Data.MinOpenRate
-	if Data.BTNetCost == 0 {
-		Data.BTNetCost = 15
+	if MinOpenRate == 0 {
+		MinOpenRate = 0.5
 	}
 	BTNetCost = Data.BTNetCost
-	if Data.MaxOpenOrders == 0 {
-		Data.MaxOpenOrders = 30
+	if BTNetCost == 0 {
+		BTNetCost = 15
 	}
 	MaxOpenOrders = Data.MaxOpenOrders
+	MaxSimulOpen = Data.MaxSimulOpen
 	WalletAmounts = Data.WalletAmounts
 	DrawBalanceOver = Data.DrawBalanceOver
 	StakeCurrency = Data.StakeCurrency
@@ -498,6 +496,7 @@ func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
 		RunTimeframes: c.RunTimeframes,
 		MaxPair:       c.MaxPair,
 		MaxOpen:       c.MaxOpen,
+		MaxSimulOpen:  c.MaxSimulOpen,
 		Dirt:          c.Dirt,
 		StrtgPerf:     c.StrtgPerf,
 		Pairs:         c.Pairs,

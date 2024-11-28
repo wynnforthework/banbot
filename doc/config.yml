@@ -17,6 +17,7 @@ max_stake_amt: 5000 # 单笔上限5k，仅stake_pct有值时有效
 charge_on_bomb: false # 回测爆仓时自动充值继续回测
 open_vol_rate: 1 # 未指定数量开单时，最大允许开单数量/平均蜡烛成交量的比值，默认1
 min_open_rate: 0.5 # 最小开单比率，余额不足单笔金额时，余额/单笔金额高于此比率允许开单，默认0.5即50%
+max_simul_open: 0 # 在一个bar上最大同时打开订单数量
 bt_net_cost: 15 # 回测时下单延迟，可用于模拟滑点，单位：秒，默认15
 wallet_amounts:  # 钱包余额，用于回测
   USDT: 10000
@@ -37,6 +38,7 @@ run_policy:  # 运行的策略，可以多个策略同时运行；也可以一�
       limit: 30  # 最多取30个
     max_pair: 999  # 此策略允许的最大标的数量
     max_open: 10  # 此策略最大开单数量
+    max_simul_open: 0 # 在一个bar上，最大同时打开订单数量
     dirt: any # any/long/short
     pairs: [BTC/USDT:USDT]
     params: {atr: 15}

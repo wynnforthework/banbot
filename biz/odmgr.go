@@ -45,10 +45,13 @@ type IOrderMgrLive interface {
 type FuncHandleIOrder = func(order *orm.InOutOrder) *errs.Error
 
 type OrderMgr struct {
-	callBack   func(order *orm.InOutOrder, isEnter bool)
-	afterEnter FuncHandleIOrder
-	afterExit  FuncHandleIOrder
-	Account    string
+	callBack    func(order *orm.InOutOrder, isEnter bool)
+	afterEnter  FuncHandleIOrder
+	afterExit   FuncHandleIOrder
+	Account     string
+	BarMS       int64
+	simulOpen   int // Simultaneously open number in the current bar
+	simulOpenSt map[string]int
 }
 
 func GetOdMgr(account string) IOrderMgr {
@@ -91,7 +94,7 @@ func CleanUpOdMgr() *errs.Error {
 	return err
 }
 
-func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq) []*strat.EnterReq {
+func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) []*strat.EnterReq {
 	if _, ok := core.ForbidPairs[env.Symbol]; ok {
 		return nil
 	}
@@ -100,51 +103,83 @@ func allowOrderEnter(account string, env *banta.BarEnv, enters []*strat.EnterReq
 		// 不涉及订单模式，禁止开单
 		return nil
 	}
-	openOds, lock := orm.GetOpenODs(account)
-	lock.Lock()
-	numOver := len(openOds) >= config.MaxOpenOrders
-	if !numOver && len(openOds) > 0 {
-		// Check whether the maximum number of orders opened by the strategy is exceeded
-		// 检查是否超出策略最大开单数量
-		stratOdNum := make(map[string]int)
-		for _, od := range openOds {
-			num, _ := stratOdNum[od.Strategy]
-			stratOdNum[od.Strategy] = num + 1
-		}
-		res := make([]*strat.EnterReq, 0, len(enters))
-		for _, req := range enters {
-			num, _ := stratOdNum[req.StgyName]
-			pol := strat.Get(env.Symbol, req.StgyName).Policy
-			if pol == nil || pol.MaxOpen == 0 || num < pol.MaxOpen {
-				stratOdNum[req.StgyName] = num + 1
-				res = append(res, req)
-			}
-		}
-		enters = res
-	}
-	lock.Unlock()
-	if numOver {
-		return nil
-	}
-	stopUntil, _ := core.NoEnterUntil[account]
+	pairZapField := zap.String("pair", env.Symbol)
+	stopUntil, _ := core.NoEnterUntil[o.Account]
 	if btime.TimeMS() < stopUntil {
 		if core.LiveMode {
-			log.Warn("any enter forbid", zap.String("pair", env.Symbol))
+			log.Warn("any enter forbid", pairZapField)
 		}
 		return nil
 	}
-	if !core.LiveMode {
-		// In non-real-time mode, no delay check is performed and the
-		// 非实时模式，不检查延迟，直接允许
-		return enters
+	if core.LiveMode {
+		// The real order is submitted to the exchange, and the inspection delay cannot exceed 80%
+		// 实盘订单提交到交易所，检查延迟不能超过80%
+		rate := float64(btime.TimeMS()-env.TimeStop) / float64(env.TimeStop-env.TimeStart)
+		if rate > 0.8 {
+			return nil
+		}
 	}
-	// The real order is submitted to the exchange, and the inspection delay cannot exceed 80%
-	// 实盘订单提交到交易所，检查延迟不能超过80%
-	rate := float64(btime.TimeMS()-env.TimeStop) / float64(env.TimeStop-env.TimeStart)
-	if rate <= 0.8 {
-		return enters
+	if o.BarMS < env.TimeStart {
+		o.BarMS = env.TimeStart
+		o.simulOpen = 0
+		o.simulOpenSt = make(map[string]int)
 	}
-	return nil
+	openOds, lock := orm.GetOpenODs(o.Account)
+	lock.Lock()
+	enters = checkOrderNum(enters, len(openOds), config.MaxOpenOrders, "max_open_orders")
+	if len(enters) > 0 && config.MaxSimulOpen > 0 {
+		enters = checkOrderNum(enters, o.simulOpen, config.MaxSimulOpen, "max_simul_open")
+	}
+	if len(enters) == 0 {
+		lock.Unlock()
+		return nil
+	}
+	// Check whether the maximum number of orders opened by the strategy is exceeded
+	// 检查是否超出策略最大开单数量
+	stratOdNum := make(map[string]int)
+	for _, od := range openOds {
+		num, _ := stratOdNum[od.Strategy]
+		stratOdNum[od.Strategy] = num + 1
+	}
+	res := make([]*strat.EnterReq, 0, len(enters))
+	for _, req := range enters {
+		num, _ := stratOdNum[req.StgyName]
+		simulNum, _ := o.simulOpenSt[req.StgyName]
+		pol := strat.Get(env.Symbol, req.StgyName).Policy
+		if pol != nil {
+			if pol.MaxOpen > 0 && num >= pol.MaxOpen {
+				continue
+			}
+			if pol.MaxSimulOpen > 0 && simulNum >= pol.MaxSimulOpen {
+				continue
+			}
+		}
+		stratOdNum[req.StgyName] = num + 1
+		o.simulOpenSt[req.StgyName] = simulNum + 1
+		o.simulOpen += 1
+		res = append(res, req)
+	}
+	lock.Unlock()
+	return res
+}
+
+func checkOrderNum(enters []*strat.EnterReq, oldNum, maxNum int, tag string) []*strat.EnterReq {
+	cutNum := oldNum + len(enters) - maxNum
+	if maxNum > 0 && cutNum > 0 {
+		if maxNum > oldNum {
+			enters = enters[:maxNum-oldNum]
+			if core.LiveMode {
+				log.Warn("cut enters by", zap.String("tag", tag),
+					zap.Int("left", len(enters)), zap.Int("cut", cutNum))
+			}
+		} else {
+			enters = nil
+			if core.LiveMode {
+				log.Warn("skip enters by", zap.String("tag", tag), zap.Int("cut", cutNum))
+			}
+		}
+	}
+	return enters
 }
 
 /*
@@ -162,7 +197,7 @@ func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []
 	exits []*strat.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
 	var entOrders, extOrders []*orm.InOutOrder
 	if len(enters) > 0 {
-		enters = allowOrderEnter(o.Account, env, enters)
+		enters = o.allowOrderEnter(env, enters)
 		for _, ent := range enters {
 			iorder, err := o.EnterOrder(sess, env, ent, false)
 			if err != nil {
@@ -189,7 +224,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 		return nil, errs.NewMsg(core.ErrRunTime, "short oder is invalid for spot")
 	}
 	if doCheck {
-		enters := allowOrderEnter(o.Account, env, []*strat.EnterReq{req})
+		enters := o.allowOrderEnter(env, []*strat.EnterReq{req})
 		if len(enters) == 0 {
 			return nil, nil
 		}

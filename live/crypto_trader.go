@@ -184,6 +184,7 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 		"timeframe":     od.Timeframe,
 		"profit":        od.Profit,
 		"profit_rate":   od.ProfitRate,
+		"max_pft_rate":  od.MaxPftRate,
 		"max_draw_down": od.MaxDrawDown,
 	})
 }

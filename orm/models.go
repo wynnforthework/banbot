@@ -79,6 +79,7 @@ type IOrder struct {
 	ExitAt      int64   `json:"exit_at"`
 	Strategy    string  `json:"strategy"`
 	StgVer      int32   `json:"stg_ver"`
+	MaxPftRate  float64 `json:"max_pft_rate"`
 	MaxDrawDown float64 `json:"max_draw_down"`
 	ProfitRate  float64 `json:"profit_rate"`
 	Profit      float64 `json:"profit"`

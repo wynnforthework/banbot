@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	iOrderFields  = "id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_draw_down, profit_rate, profit, info"
+	iOrderFields  = "id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_pft_rate, max_draw_down, profit_rate, profit, info"
 	exOrderFields = "id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_at, price, average, amount, filled, status, fee, fee_type, update_at"
 )
 
@@ -193,10 +193,17 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 		entQuoteVal /= i.Leverage
 	}
 	i.ProfitRate = i.Profit / entQuoteVal
-	if i.ProfitRate < 0 {
-		absVal := math.Abs(i.ProfitRate)
-		if absVal > i.MaxDrawDown {
-			i.MaxDrawDown = absVal
+	if i.ProfitRate > i.MaxPftRate {
+		i.MaxPftRate = i.ProfitRate
+	} else {
+		if i.MaxPftRate > 0 {
+			// When there is a profit in history, calculate the maximum drawdown based on the best profit
+			// 历史有盈利时，基于最佳盈利计算最大回撤
+			i.MaxDrawDown = (i.MaxPftRate - i.ProfitRate) / i.MaxPftRate
+		} else {
+			// Continuous loss in the order, use current profitRate as the maximum drawdown
+			// 订单持续亏损，以当前亏损作为最大回撤
+			i.MaxDrawDown = -i.ProfitRate
 		}
 	}
 	i.DirtyMain = true
@@ -699,6 +706,7 @@ func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 		ExitAt:      i.ExitAt,
 		Strategy:    i.Strategy,
 		StgVer:      i.StgVer,
+		MaxPftRate:  i.MaxPftRate,
 		MaxDrawDown: i.MaxDrawDown,
 		ProfitRate:  i.ProfitRate,
 		Profit:      i.Profit,
@@ -727,6 +735,7 @@ func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 		ExitAt:      i.ExitAt,
 		Strategy:    i.Strategy,
 		StgVer:      i.StgVer,
+		MaxPftRate:  i.MaxPftRate,
 		MaxDrawDown: i.MaxDrawDown,
 		ProfitRate:  i.ProfitRate,
 		Profit:      i.Profit,
@@ -876,6 +885,7 @@ func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.E
 			&iod.ExitAt,
 			&iod.Strategy,
 			&iod.StgVer,
+			&iod.MaxPftRate,
 			&iod.MaxDrawDown,
 			&iod.ProfitRate,
 			&iod.Profit,

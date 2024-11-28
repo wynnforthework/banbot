@@ -254,7 +254,7 @@ func textGroupPairs(r *BTResult) string {
 
 func (r *BTResult) groupByEnters(orders []*orm.InOutOrder) {
 	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
-		return od.EnterTag
+		return fmt.Sprintf("%s:%s", od.Strategy, od.EnterTag)
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
@@ -268,7 +268,7 @@ func textGroupEntTags(r *BTResult) string {
 
 func (r *BTResult) groupByExits(orders []*orm.InOutOrder) {
 	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
-		return od.ExitTag
+		return fmt.Sprintf("%s:%s", od.Strategy, od.ExitTag)
 	})
 	sort.Slice(groups, func(i, j int) bool {
 		return groups[i].Title < groups[j].Title
@@ -611,7 +611,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 	defer writer.Flush()
 	heads := []string{"sid", "symbol", "timeframe", "direction", "leverage", "entAt", "entTag", "entPrice",
 		"entAmount", "entCost", "entFee", "exitAt", "exitTag", "exitPrice", "exitAmount", "exitGot",
-		"exitFee", "maxDrawDown", "profitRate", "profit", "strategy"}
+		"exitFee", "maxPftRate", "maxDrawDown", "profitRate", "profit", "strategy"}
 	if err_ = writer.Write(heads); err_ != nil {
 		log.Error("write orders.csv fail", zap.Error(err_))
 		return
@@ -637,10 +637,11 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 		if od.Exit != nil {
 			row[13], row[14], row[15], row[16] = calcExOrder(od.Exit)
 		}
-		row[17] = strconv.FormatFloat(od.MaxDrawDown, 'f', 4, 64)
-		row[18] = strconv.FormatFloat(od.ProfitRate, 'f', 4, 64)
-		row[19] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
-		row[20] = od.Strategy
+		row[17] = strconv.FormatFloat(od.MaxPftRate, 'f', 4, 64)
+		row[18] = strconv.FormatFloat(od.MaxDrawDown, 'f', 4, 64)
+		row[19] = strconv.FormatFloat(od.ProfitRate, 'f', 4, 64)
+		row[20] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
+		row[21] = od.Strategy
 		if err_ = writer.Write(row); err_ != nil {
 			log.Error("write orders.csv fail", zap.Error(err_))
 			return
@@ -753,6 +754,15 @@ func (r *BTResult) dumpGraph() {
 	if err != nil {
 		log.Error("save assets.html fail", zap.Error(err))
 	}
+	// Draw cumulative profit curves for each entry tag separately
+	// 为入场标签分别绘制累计利润曲线
+	labels, dsList := genEnterTagCurves(orm.HistODs)
+	outPath = fmt.Sprintf("%s/enters_%v.html", r.OutDir, taskId)
+	title = "Strategy Enter Tag Profits"
+	err = DumpLineGraph(outPath, title, labels, 5, tplData, dsList)
+	if err != nil {
+		log.Error("save enters.html fail", zap.Error(err))
+	}
 }
 
 func (p *PlotData) calcDrawDown() float64 {
@@ -851,4 +861,62 @@ func parseBtResult(path string) (*BTResult, *errs.Error) {
 		return nil, errs.New(errs.CodeUnmarshalFail, err_)
 	}
 	return &res, nil
+}
+
+func genEnterTagCurves(odList []*orm.InOutOrder) ([]string, []*ChartDs) {
+	if len(odList) == 0 {
+		return nil, nil
+	}
+	startMs := odList[0].EnterAt
+	tagMap := make(map[string][]*TimeVal)
+	for _, od := range odList {
+		key := fmt.Sprintf("%v:%v", od.Strategy, od.EnterTag)
+		items, _ := tagMap[key]
+		curVal := float64(0)
+		if len(items) > 0 {
+			curVal = items[len(items)-1].Value
+		}
+		tagMap[key] = append(items, &TimeVal{Time: od.ExitAt, Value: curVal + od.Profit})
+	}
+	endMs := odList[len(odList)-1].ExitAt
+	gapMs := (endMs - startMs) / 600
+	var res []*ChartDs
+	for tag, items := range tagMap {
+		arr := make([]float64, 0, 605)
+		arr = append(arr, 0)
+		curMs := startMs
+		i := 0
+		curVal := float64(0)
+		next := items[i]
+		for curMs+gapMs < endMs {
+			curMs += gapMs
+			for curMs > next.Time {
+				curVal = next.Value
+				if i+1 < len(items) {
+					i += 1
+					next = items[i]
+				} else {
+					next = &TimeVal{Time: math.MaxInt64}
+				}
+			}
+			arr = append(arr, curVal)
+		}
+		res = append(res, &ChartDs{
+			Label: tag,
+			Data:  arr,
+		})
+	}
+	curMs := startMs
+	labels := make([]string, 0, len(res[0].Data))
+	labels = append(labels, btime.ToDateStr(curMs, ""))
+	for curMs+gapMs < endMs {
+		curMs += gapMs
+		labels = append(labels, btime.ToDateStr(curMs, ""))
+	}
+	return labels, res
+}
+
+type TimeVal struct {
+	Time  int64
+	Value float64
 }

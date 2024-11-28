@@ -11,8 +11,14 @@
             align-items: center;
             justify-content: center;
         }
+        #toggleLines{
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
     </style>
 </head>
+<button id="toggleLines">Toggle All</button>
 <canvas id="banct"></canvas>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script type="text/javascript">
@@ -110,5 +116,15 @@
         }
 
         initChart();
+
+        let allHidden = false; // 记录当前状态
+
+        document.getElementById('toggleLines').addEventListener('click', function () {
+            allHidden = !allHidden; // 切换状态
+            chart.data.datasets.forEach(dataset => {
+                dataset.hidden = allHidden; // 隐藏或显示所有数据集
+            });
+            chart.update();
+        });
     })();
 </script>
