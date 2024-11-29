@@ -46,6 +46,7 @@ type BanConn struct {
 	Ready       bool
 	lockConnect sync.Mutex
 	lockWrite   sync.Mutex
+	heartBeatMs int64               // Timestamp of the latest received ping/pong
 	DoConnect   func(conn *BanConn) // Reconnect function, no attempt to reconnect provided 重新连接函数，未提供不尝试重新连接
 	ReInitConn  func()              // Initialize callback function after successful reconnection 重新连接成功后初始化回调函数
 }
@@ -72,6 +73,9 @@ func (c *BanConn) HasTag(tag string) bool {
 }
 
 func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
+	if c.Conn == nil {
+		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
+	}
 	raw, err_ := utils.Marshal(*msg)
 	if err_ != nil {
 		return errs.New(core.ErrMarshalFail, err_)
@@ -84,6 +88,9 @@ func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
 }
 
 func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
+	if c.Conn == nil {
+		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
+	}
 	if !locked {
 		c.lockWrite.Lock()
 		defer c.lockWrite.Unlock()
@@ -105,7 +112,8 @@ func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
 	_, err_ = c.Conn.Write(data)
 	if err_ != nil {
 		c.Ready = false
-		return errs.New(core.ErrNetWriteFail, err_)
+		errCode, _ := getErrType(err_)
+		return errs.New(errCode, err_)
 	}
 	return nil
 }
@@ -180,9 +188,12 @@ func (c *BanConn) RunForever() *errs.Error {
 	}
 	defer func() {
 		c.Ready = false
-		err_ := c.Conn.Close()
-		if err_ != nil {
-			log.Error("close conn fail", zap.String("remote", c.Remote), zap.Error(err_))
+		if c.Conn != nil {
+			err_ := c.Conn.Close()
+			if err_ != nil {
+				log.Error("close conn fail", zap.String("remote", c.Remote), zap.Error(err_))
+			}
+			c.Conn = nil
 		}
 	}()
 	for {
@@ -238,6 +249,41 @@ func (c *BanConn) connect() {
 	}
 }
 
+func (c *BanConn) LoopPing(intvSecs int) {
+	id := 0
+	failNum := 0
+	addrField := zap.String("addr", c.Remote)
+	for {
+		time.Sleep(time.Duration(intvSecs) * time.Second)
+		timeouts := float64(btime.UTCStamp()-c.heartBeatMs) / 1000 / float64(intvSecs)
+		if id > 1 && timeouts > 2.2 {
+			log.Warn("stop ping loop as timeout", addrField)
+			break
+		}
+		id += 1
+		err := c.WriteMsg(&IOMsg{Action: "ping", Data: id})
+		if err != nil {
+			failNum += 1
+			if failNum >= 2 {
+				// 连续两次失败退出
+				log.Warn("stop ping loop as write ping fail", addrField, zap.Error(err))
+				break
+			} else {
+				log.Warn("write ping fail", addrField, zap.Error(err))
+			}
+		} else {
+			failNum = 0
+		}
+	}
+	if c.Conn != nil {
+		err_ := c.Conn.Close()
+		if err_ != nil {
+			log.Warn("close ban conn error", addrField, zap.Error(err_))
+		}
+		c.Conn = nil
+	}
+}
+
 func (c *BanConn) initListens() {
 	c.Listens["subscribe"] = makeArrStrHandle(func(arr []string) {
 		c.Subscribe(arr...)
@@ -245,6 +291,25 @@ func (c *BanConn) initListens() {
 	c.Listens["unsubscribe"] = makeArrStrHandle(func(arr []string) {
 		c.UnSubscribe(arr...)
 	})
+	c.Listens["ping"] = func(s string, i []byte) {
+		var val int64
+		err_ := utils.Unmarshal(i, &val, utils.JsonNumDefault)
+		if err_ != nil {
+			log.Warn("got bad ping", zap.ByteString("data", i))
+			return
+		}
+		err := c.WriteMsg(&IOMsg{Action: "pong", Data: val + 1})
+		if err != nil {
+			log.Warn("write pong fail", zap.Int64("v", val), zap.Error(err))
+		} else {
+			c.heartBeatMs = btime.UTCStamp()
+			log.Debug("receive ping", zap.String("from", c.Remote), zap.Int64("v", val))
+		}
+	}
+	c.Listens["pong"] = func(s string, i []byte) {
+		c.heartBeatMs = btime.UTCStamp()
+		log.Debug("receive pong", zap.String("from", c.Remote))
+	}
 }
 
 func makeArrStrHandle(cb func(arr []string)) func(s string, data []byte) {
@@ -308,7 +373,7 @@ func getErrType(err error) (int, string) {
 			return core.ErrNetTimeout, "op_timeout"
 		} else if opErr.Temporary() {
 			return core.ErrNetTemporary, "op_temporary"
-		} else if opErr.Op == "dial" || opErr.Op == "read" {
+		} else if opErr.Op == "dial" || opErr.Op == "read" || opErr.Op == "write" {
 			return core.ErrNetConnect, "op_conn_dial"
 		} else {
 			return core.ErrNetUnknown, "op_err"
@@ -534,6 +599,7 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 			out <- val.Val
 		}
 	}
+	res.initListens()
 	// This is only responsible for connection, no initialization required, leave it to connect for initialization
 	// 这里只负责连接，无需初始化，交给connect初始化
 	res.DoConnect = func(c *BanConn) {

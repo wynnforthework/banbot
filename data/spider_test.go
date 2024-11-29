@@ -52,7 +52,7 @@ func TestSaveKlines(t *testing.T) {
 		panic(err)
 	}
 	var arr []*banexg.Kline
-	err_ := utils2.ReadJsonFile("testdata/btc_1m.json", &arr)
+	err_ := utils2.ReadJsonFile("testdata/btc_1m.json", &arr, utils2.JsonNumDefault)
 	if err_ != nil {
 		panic(err_)
 	}

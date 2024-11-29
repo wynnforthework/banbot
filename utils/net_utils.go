@@ -33,8 +33,9 @@ func DoHttp(client *http.Client, req *http.Request) *banexg.HttpRes {
 	result.Content = string(rspData)
 	cutLen := min(len(result.Content), 3000)
 	bodyShort := zap.String("body", result.Content[:cutLen])
-	log.Debug("rsp", zap.Int("status", result.Status), zap.Object("method", banexg.HttpHeader(result.Headers)),
-		zap.Int("len", len(result.Content)), bodyShort)
+	log.Debug("rsp", zap.String("method", req.Method), zap.String("url", req.RequestURI),
+		zap.Int("status", result.Status), zap.Int("len", len(result.Content)),
+		zap.Object("head", banexg.HttpHeader(result.Headers)), bodyShort)
 	if result.Status >= 400 {
 		msg := fmt.Sprintf("%s  %v", req.URL, result.Content)
 		result.Error = errs.NewMsg(result.Status, msg)

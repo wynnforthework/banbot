@@ -66,6 +66,7 @@ func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
 			}
 		}
 	}
+	go res.LoopPing(10)
 	return res, nil
 }
 
