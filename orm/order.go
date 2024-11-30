@@ -676,11 +676,12 @@ func (i *InOutOrder) Lock() *sync.Mutex {
 	if core.LiveMode {
 		// Real time mode with added deadlock detection
 		// 实时模式，增加死锁检测
+		stack := errs.CallStack(3, 20)
 		time.AfterFunc(time.Second*5, func() {
 			if atomic.LoadInt32(&got) == 1 {
 				return
 			}
-			log.Error("order DeadLock found", zap.String("key", odKey))
+			log.Error("order DeadLock found", zap.String("key", odKey), zap.String("stack", stack))
 		})
 	}
 	lock.Lock()
