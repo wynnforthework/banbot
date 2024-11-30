@@ -52,6 +52,8 @@ func RunCmd() {
 			runToolCmds(args[1:])
 		case "web":
 			runWeb(args[1:])
+		default:
+			return nil, nil
 		}
 		return entry, options
 	}, func(e error) {
@@ -69,10 +71,11 @@ func RunCmd() {
 }
 
 func runWeb(args []string) {
-	err_ := web.Run(args)
+	err_ := web.RunDev(args)
 	if err_ != nil {
 		panic(err_)
 	}
+	os.Exit(0)
 }
 
 func printMainHelp() {

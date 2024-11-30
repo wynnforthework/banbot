@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/live"
 	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/orm"
@@ -20,7 +21,7 @@ import (
 
 func RunBackTest(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeBackTest)
-	err := biz.SetupComs(args)
+	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
 	}
@@ -53,7 +54,7 @@ func runBackTest() string {
 
 func RunTrade(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeLive)
-	err := biz.SetupComs(args)
+	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
 	}
@@ -67,6 +68,34 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 
 func RunDownData(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
+	err := biz.SetupComsExg(args)
+	if err != nil {
+		return err
+	}
+	pairs, err := goods.RefreshPairList()
+	if err != nil {
+		return err
+	}
+	if len(pairs) == 0 {
+		log.Warn("no pairs to download")
+		return nil
+	}
+	log.Info("start down kline for pairs", zap.Int("num", len(pairs)), zap.Strings("tfs", args.TimeFrames))
+	exsMap := make(map[int32]*orm.ExSymbol)
+	for _, pair := range pairs {
+		exs, err := orm.GetExSymbolCur(pair)
+		if err != nil {
+			return err
+		}
+		exsMap[exs.ID] = exs
+	}
+	startMs, endMs := config.TimeRange.StartMS, config.TimeRange.EndMS
+	for _, tf := range args.TimeFrames {
+		err = orm.BulkDownOHLCV(exg.Default, exsMap, tf, startMs, endMs, 0)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -106,7 +135,7 @@ func RunSpider(args *config.CmdArgs) *errs.Error {
 
 func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
-	err := biz.SetupComs(args)
+	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
 	}
@@ -114,10 +143,6 @@ func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
 		return errs.NewMsg(errs.CodeParamRequired, "--in is required")
 	}
 	names, err := data.FindPathNames(args.InPath, ".zip")
-	if err != nil {
-		return err
-	}
-	err = orm.InitExg(exg.Default)
 	if err != nil {
 		return err
 	}

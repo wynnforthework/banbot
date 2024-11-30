@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"gonum.org/v1/gonum/floats"
 	"math"
@@ -49,8 +50,14 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	var symbolVols = make([]SymbolVol, 0)
 	if !f.NeedTickers {
+		backTf, backNum := f.BackTimeframe, f.BackPeriod
+		tfSecs := utils2.TFToSecs(backTf)
+		if tfSecs > 3600 {
+			backTf = "1h"
+			backNum *= tfSecs / 3600
+		}
 		var err *errs.Error
-		symbolVols, err = getSymbolVols(symbols, f.BackTimeframe, f.BackPeriod)
+		symbolVols, err = getSymbolVols(symbols, backTf, backNum)
 		if err != nil {
 			return nil, err
 		}

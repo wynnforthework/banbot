@@ -1,7 +1,6 @@
-package api
+package dev
 
 import (
-	"github.com/banbox/banbot/web/biz"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 )
@@ -11,5 +10,5 @@ func regApiWebsocket(api fiber.Router) {
 }
 
 func wsOHLCV(c *websocket.Conn) {
-	biz.NewWsClient(c).HandleForever()
+	NewWsClient(c).HandleForever()
 }

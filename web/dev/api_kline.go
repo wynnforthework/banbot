@@ -1,9 +1,8 @@
-package api
+package dev
 
 import (
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/web/biz"
-	"github.com/banbox/banbot/web/cfg"
+	"github.com/banbox/banbot/web/base"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -37,14 +36,14 @@ func getHist(c *fiber.Ctx) error {
 		ToMS      int64  `query:"to" validate:"required"`
 	}
 	var data = new(HistArgs)
-	if err := VerifyArg(c, data, ArgQuery); err != nil {
+	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
 		return err
 	}
 	exs, err2 := orm.ParseShort(data.Exchange, data.Symbol)
 	if err2 != nil {
 		return err2
 	}
-	exchange, err2 := biz.GetExg(exs.Exchange, exs.Market, "", true)
+	exchange, err2 := GetExg(exs.Exchange, exs.Market, "", true)
 	if err2 != nil {
 		return err2
 	}
@@ -55,7 +54,7 @@ func getHist(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{
 		"adjs": adjs,
-		"data": biz.ArrKLines(klines),
+		"data": ArrKLines(klines),
 	})
 }
 
@@ -64,7 +63,7 @@ getTaInds 获取云端指标列表
 */
 func getTaInds(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
-		"data": cfg.IndsCache,
+		"data": IndsCache,
 	})
 }
 
@@ -78,10 +77,10 @@ func postCalcInd(c *fiber.Ctx) error {
 		Params []float64   `json:"params" validate:"required"`
 	}
 	var data = new(CalcArgs)
-	if err := VerifyArg(c, data, ArgBody); err != nil {
+	if err := base.VerifyArg(c, data, base.ArgBody); err != nil {
 		return err
 	}
-	res, err := cfg.CalcInd(data.Name, data.Kline, data.Params)
+	res, err := CalcInd(data.Name, data.Kline, data.Params)
 	if err != nil {
 		return err
 	}

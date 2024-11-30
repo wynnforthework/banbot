@@ -58,6 +58,14 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
+func SetupComsExg(args *config.CmdArgs) *errs.Error {
+	err := SetupComs(args)
+	if err != nil {
+		return err
+	}
+	return orm.InitExg(exg.Default)
+}
+
 func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
 	goods.ShowLog = showLog
 	pairs, err := goods.RefreshPairList()

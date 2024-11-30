@@ -94,7 +94,7 @@ func RefreshPairList() ([]string, *errs.Error) {
 	var tickersMap map[string]*banexg.Ticker
 	if len(config.Pairs) > 0 {
 		pairs = config.Pairs
-		pairVols, err := getSymbolVols(pairs, "1d", 1)
+		pairVols, err := getSymbolVols(pairs, "1h", 1)
 		if err != nil {
 			return nil, err
 		}

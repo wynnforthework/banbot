@@ -2,7 +2,6 @@ package live
 
 import (
 	"fmt"
-	"github.com/banbox/banbot/api"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -12,6 +11,7 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
 	"github.com/banbox/banbot/strat"
+	"github.com/banbox/banbot/web"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -51,10 +51,6 @@ func (t *CryptoTrader) Init() *errs.Error {
 	// Trading pair initialization
 	// 交易对初始化
 	log.Info("loading exchange markets ...")
-	err = orm.InitExg(exg.Default)
-	if err != nil {
-		return err
-	}
 	err = orm.InitListDates()
 	if err != nil {
 		return err
@@ -63,7 +59,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = api.StartApi()
+	err = web.StartApi()
 	if err != nil {
 		return err
 	}

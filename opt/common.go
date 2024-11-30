@@ -6,8 +6,6 @@ import (
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/exg"
-	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -135,11 +133,7 @@ func (o *OptInfo) ToPol(name, dirt, tfStr, pairStr string) *config.RunPolicyConf
 func newRollBtOpt(args *config.CmdArgs) (*rollBtOpt, *errs.Error) {
 	args.NoDb = true
 	core.SetRunMode(core.RunModeBackTest)
-	err := biz.SetupComs(args)
-	if err != nil {
-		return nil, err
-	}
-	err = orm.InitExg(exg.Default)
+	err := biz.SetupComsExg(args)
 	if err != nil {
 		return nil, err
 	}

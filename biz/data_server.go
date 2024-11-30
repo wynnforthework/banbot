@@ -35,11 +35,7 @@ func RunDataServer(args *config.CmdArgs) *errs.Error {
 		}()
 	}
 	core.SetRunMode(core.RunModeOther)
-	err := SetupComs(args)
-	if err != nil {
-		return err
-	}
-	err = orm.InitExg(exg.Default)
+	err := SetupComsExg(args)
 	if err != nil {
 		return err
 	}

@@ -7,7 +7,6 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
-	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banexg/errs"
@@ -58,11 +57,7 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 func (b *BackTest) Init() *errs.Error {
 	btime.CurTimeMS = config.TimeRange.StartMS
 	b.MinReal = math.MaxFloat64
-	err := orm.InitExg(exg.Default)
-	if err != nil {
-		return err
-	}
-	err = orm.InitListDates()
+	err := orm.InitListDates()
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-package api
+package live
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banbot/web/base"
 	"github.com/banbox/banexg"
 	utils2 "github.com/banbox/banexg/utils"
 	"github.com/gofiber/fiber/v2"
@@ -236,7 +237,7 @@ func getOrders(c *fiber.Ctx) error {
 		Source    string `query:"source"`
 	}
 	var data = new(OrderArgs)
-	if err := VerifyArg(c, data, ArgQuery); err != nil {
+	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
 		return err
 	}
 	type OdWrap struct {
@@ -330,7 +331,7 @@ func postClosePos(c *fiber.Ctx) error {
 		Price     float64 `json:"price"`
 	}
 	var data = new(CloseArgs)
-	if err := VerifyArg(c, data, ArgBody); err != nil {
+	if err := base.VerifyArg(c, data, base.ArgBody); err != nil {
 		return err
 	}
 	var reqs []*CloseArgs
@@ -389,7 +390,7 @@ func getIncomes(c *fiber.Ctx) error {
 		Limit     int    `query:"limit"`
 	}
 	var data = new(CloseArgs)
-	if err := VerifyArg(c, data, ArgQuery); err != nil {
+	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
 		return err
 	}
 	return wrapAccount(c, func(acc string) error {
@@ -406,7 +407,7 @@ func postDelayEntry(c *fiber.Ctx) error {
 		Secs int64 `json:"secs" validate:"required"`
 	}
 	var data = new(DelayArgs)
-	if err := VerifyArg(c, data, ArgBody); err != nil {
+	if err := base.VerifyArg(c, data, base.ArgBody); err != nil {
 		return err
 	}
 	return wrapAccount(c, func(acc string) error {
@@ -431,7 +432,7 @@ func postConfig(c *fiber.Ctx) error {
 		Data string `json:"data" validate:"required"`
 	}
 	var data = new(PostArgs)
-	if err_ := VerifyArg(c, data, ArgBody); err_ != nil {
+	if err_ := base.VerifyArg(c, data, base.ArgBody); err_ != nil {
 		return err_
 	}
 	tempFile, err_ := os.CreateTemp("", "ban_web-*.yml")
@@ -500,7 +501,7 @@ func getTaskPairs(c *fiber.Ctx) error {
 		Stop  int64 `query:"stop"`
 	}
 	var data = new(PairArgs)
-	if err_ := VerifyArg(c, data, ArgQuery); err_ != nil {
+	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
 		return err_
 	}
 	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
@@ -539,7 +540,7 @@ func getPerformance(c *fiber.Ctx) error {
 		Limit     int      `query:"limit"`
 	}
 	var data = new(PerfArgs)
-	if err_ := VerifyArg(c, data, ArgQuery); err_ != nil {
+	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
 		return err_
 	}
 	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
@@ -631,7 +632,7 @@ func getLog(c *fiber.Ctx) error {
 		Num int `query:"num"`
 	}
 	var data = new(LogArgs)
-	if err_ := VerifyArg(c, data, ArgQuery); err_ != nil {
+	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
 		return err_
 	}
 	if config.Args.Logfile == "" {

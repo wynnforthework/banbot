@@ -1,4 +1,4 @@
-package cfg
+package dev
 
 import (
 	utils2 "github.com/banbox/banexg/utils"

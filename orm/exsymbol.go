@@ -108,6 +108,9 @@ func EnsureExgSymbols(exchange banexg.BanExchange) *errs.Error {
 		// Mark the coins that are not returned by the exchange as delisted
 		var editList []*ExSymbol
 		for _, exs := range idSymbolMap {
+			if exs.Exchange != exInfo.ID || exs.Market != exInfo.MarketType || exs.DelistMs > 0 {
+				continue
+			}
 			if _, ok := exInfo.Markets[exs.Symbol]; !ok {
 				exs.DelistMs = btime.UTCStamp()
 				editList = append(editList, exs)

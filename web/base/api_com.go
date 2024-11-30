@@ -1,20 +1,16 @@
-package api
+package base
 
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
-	"strings"
 )
-
-func RegRoutes(app *fiber.App) {
-	regApiKline(app.Group("/kline"))
-	regApiWebsocket(app.Group("/ws"))
-}
 
 var val *validator.Validate
 

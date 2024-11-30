@@ -1,4 +1,4 @@
-package cfg
+package dev
 
 import "github.com/banbox/banbot/config"
 

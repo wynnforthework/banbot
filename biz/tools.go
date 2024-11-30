@@ -310,7 +310,7 @@ var adjMap = map[string]int{
 
 func ExportKlines(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
-	err := SetupComs(args)
+	err := SetupComsExg(args)
 	if err != nil {
 		return err
 	}
@@ -351,10 +351,6 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	}
 	start, stop := config.TimeRange.StartMS, config.TimeRange.EndMS
 	loc, err := args.ParseTimeZone()
-	if err != nil {
-		return err
-	}
-	err = orm.InitExg(exg.Default)
 	if err != nil {
 		return err
 	}
@@ -403,7 +399,7 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 
 func PurgeKlines(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
-	err := SetupComs(args)
+	err := SetupComsExg(args)
 	if err != nil {
 		return err
 	}
@@ -422,10 +418,6 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 		infoMap[i.Sid] = i
 	}
 	exchange := exg.Default
-	err = orm.InitExg(exchange)
-	if err != nil {
-		return err
-	}
 	// 搜索需要删除的标的
 	// Search for the target to be deleted
 	exsList := make([]*orm.ExSymbol, 0)
@@ -518,7 +510,7 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 
 func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
-	err := SetupComs(args)
+	err := SetupComsExg(args)
 	if err != nil {
 		return err
 	}
@@ -539,10 +531,6 @@ func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
 	loc, err := args.ParseTimeZone()
-	if err != nil {
-		return err
-	}
-	err = orm.InitExg(exg.Default)
 	if err != nil {
 		return err
 	}
@@ -590,11 +578,7 @@ CalcCorrelation calculate correlation for pairs; generate csv or images
 */
 func CalcCorrelation(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
-	err := SetupComs(args)
-	if err != nil {
-		return err
-	}
-	err = orm.InitExg(exg.Default)
+	err := SetupComsExg(args)
 	if err != nil {
 		return err
 	}
