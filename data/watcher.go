@@ -151,7 +151,7 @@ func (w *KLineWatcher) UnWatchJobs(exgName, marketType, jobType string, pairs []
 
 func (w *KLineWatcher) onSpiderBar(key string, data []byte) {
 	if w.OnKLineMsg == nil {
-		log.Debug("receive spider bar skipped", zap.String("key", key))
+		log.Debug("spider bar skipped", zap.String("key", key))
 		return
 	}
 	parts := strings.Split(key, "_")
@@ -159,17 +159,17 @@ func (w *KLineWatcher) onSpiderBar(key string, data []byte) {
 	job, ok := w.jobs[fmt.Sprintf("%s_%s", pair, msgType)]
 	if !ok {
 		// 未监听，忽略
-		log.Debug("receive spider bar ignored", zap.String("key", key))
+		log.Debug("spider bar ignored", zap.String("key", key))
 		return
 	}
 	var bars NotifyKLines
 	err_ := utils2.Unmarshal(data, &bars, utils2.JsonNumDefault)
 	if err_ != nil {
-		log.Debug("onSpiderBar receive spider bar decode fail", zap.String("key", key))
+		log.Debug("onSpiderBar spider bar decode fail", zap.String("key", key))
 		return
 	}
 	if len(bars.Arr) == 0 {
-		log.Debug("receive spider bar empty", zap.String("key", key))
+		log.Debug("spider bar empty", zap.String("key", key))
 		return
 	}
 	// 更新收到的时间戳
@@ -186,11 +186,11 @@ func (w *KLineWatcher) onSpiderBar(key string, data []byte) {
 	logFields := []zap.Field{zap.String("key", key), zap.Int("num", len(bars.Arr)),
 		zap.Int64("nextMS", nextBarMS)}
 	if msgType == "uohlcv" {
-		log.Debug("receive spider bar uohlcv", logFields...)
+		log.Debug("spider uohlcv", logFields...)
 		w.OnKLineMsg(msg)
 		return
 	}
-	log.Debug("receive spider bar ohlcv", logFields...)
+	log.Debug("spider ohlcv", logFields...)
 	olds, err := job.fillLacks(pair, bars.TFSecs, bars.Arr[0].Time, nextBarMS)
 	if err != nil {
 		log.Error("fillLacks fail", zap.String("pair", pair), zap.Error(err))

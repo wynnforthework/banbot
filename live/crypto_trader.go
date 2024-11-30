@@ -162,7 +162,8 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 			action = "Open Short"
 		}
 	}
-	if subOd.Status != orm.OdStatusClosed || subOd.Amount == 0 {
+	filled, price := subOd.Filled, subOd.Average
+	if subOd.Status != orm.OdStatusClosed || filled == 0 {
 		return
 	}
 	account := orm.GetTaskAcc(od.TaskID)
@@ -175,10 +176,10 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 		"side":          subOd.Side,
 		"short":         od.Short,
 		"leverage":      od.Leverage,
-		"amount":        subOd.Amount,
-		"price":         subOd.Price,
-		"value":         subOd.Amount * subOd.Price,
-		"cost":          subOd.Amount * subOd.Price / od.Leverage,
+		"amount":        filled,
+		"price":         price,
+		"value":         filled * price,
+		"cost":          filled * price / od.Leverage,
 		"strategy":      od.Strategy,
 		"pair":          od.Symbol,
 		"timeframe":     od.Timeframe,

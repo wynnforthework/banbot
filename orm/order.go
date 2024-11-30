@@ -438,9 +438,6 @@ func (i *InOutOrder) IsDirty() bool {
 }
 
 func (i *InOutOrder) Save(sess *Queries) *errs.Error {
-	if i.Status == InOutStatusDelete {
-		return nil
-	}
 	if core.LiveMode {
 		openOds, lock := GetOpenODs(GetTaskAcc(i.TaskID))
 		lock.Lock()
@@ -448,11 +445,11 @@ func (i *InOutOrder) Save(sess *Queries) *errs.Error {
 			openOds[i.ID] = i
 		} else {
 			delete(openOds, i.ID)
+			mLockOds.Lock()
+			delete(lockOds, i.Key())
+			mLockOds.Unlock()
 		}
 		lock.Unlock()
-		mLockOds.Lock()
-		delete(lockOds, i.Key())
-		mLockOds.Unlock()
 		err := i.saveToDb(sess)
 		if err != nil {
 			return err
@@ -465,6 +462,9 @@ func (i *InOutOrder) Save(sess *Queries) *errs.Error {
 
 func (i *InOutOrder) saveToMem() {
 	if i.ID == 0 {
+		if i.Status == InOutStatusDelete {
+			return
+		}
 		i.ID = FakeOdId
 		FakeOdId += 1
 	}
@@ -476,7 +476,7 @@ func (i *InOutOrder) saveToMem() {
 		if _, ok := openOds[i.ID]; ok {
 			delete(openOds, i.ID)
 		}
-		if i.Enter != nil && i.Enter.Filled > core.AmtDust {
+		if i.Status == InOutStatusFullExit && i.Enter != nil && i.Enter.Filled > core.AmtDust {
 			if _, ok := doneODs[i.ID]; !ok {
 				doneODs[i.ID] = true
 				// 切分的订单不会出现在openOds中

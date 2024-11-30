@@ -108,10 +108,12 @@ func (h *WebHook) SendMsg(msgType string, account string, payload map[string]str
 	if h.Disable {
 		return false
 	}
-	if _, ok := h.MsgTypes[msgType]; !ok {
-		return false
+	if len(h.MsgTypes) > 0 {
+		if _, ok := h.MsgTypes[msgType]; !ok {
+			return false
+		}
 	}
-	if account != "" {
+	if account != "" && len(h.Accounts) > 0 {
 		if _, ok := h.Accounts[account]; !ok {
 			return false
 		}

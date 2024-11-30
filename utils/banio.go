@@ -44,6 +44,7 @@ type BanConn struct {
 	Listens     map[string]ConnCB // Message processing function 消息处理函数
 	RefreshMS   int64             // Connection ready timestamp 连接就绪的时间戳
 	Ready       bool
+	IsReading   bool
 	lockConnect sync.Mutex
 	lockWrite   sync.Mutex
 	heartBeatMs int64               // Timestamp of the latest received ping/pong
@@ -188,6 +189,7 @@ func (c *BanConn) RunForever() *errs.Error {
 	}
 	defer func() {
 		c.Ready = false
+		c.IsReading = false
 		if c.Conn != nil {
 			err_ := c.Conn.Close()
 			if err_ != nil {
@@ -196,6 +198,7 @@ func (c *BanConn) RunForever() *errs.Error {
 			c.Conn = nil
 		}
 	}()
+	c.IsReading = true
 	for {
 		msg, err := c.ReadMsg()
 		if err != nil {
@@ -255,9 +258,12 @@ func (c *BanConn) LoopPing(intvSecs int) {
 	addrField := zap.String("addr", c.Remote)
 	for {
 		time.Sleep(time.Duration(intvSecs) * time.Second)
+		if !c.IsReading {
+			continue
+		}
 		timeouts := float64(btime.UTCStamp()-c.heartBeatMs) / 1000 / float64(intvSecs)
 		if id > 1 && timeouts > 2.2 {
-			log.Warn("stop ping loop as timeout", addrField)
+			log.Error("close conn as ping timeout", addrField, zap.Int64("last", c.heartBeatMs))
 			break
 		}
 		id += 1
@@ -266,7 +272,7 @@ func (c *BanConn) LoopPing(intvSecs int) {
 			failNum += 1
 			if failNum >= 2 {
 				// 连续两次失败退出
-				log.Warn("stop ping loop as write ping fail", addrField, zap.Error(err))
+				log.Error("close conn as ping fail", addrField, zap.String("err", err.Short()))
 				break
 			} else {
 				log.Warn("write ping fail", addrField, zap.Error(err))
