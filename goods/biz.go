@@ -2,6 +2,7 @@ package goods
 
 import (
 	"fmt"
+
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
@@ -108,15 +109,9 @@ func RefreshPairList() ([]string, *errs.Error) {
 				return nil, err
 			}
 		}
-		genPairs, err := pairProducer.GenSymbols(tickersMap)
+		pairs, err = pairProducer.GenSymbols(tickersMap)
 		if err != nil {
 			return nil, err
-		}
-		for _, pair := range genPairs {
-			_, quote, _, _ := core.SplitSymbol(pair)
-			if _, ok := config.StakeCurrencyMap[quote]; ok {
-				pairs = append(pairs, pair)
-			}
 		}
 		if ShowLog {
 			log.Info(fmt.Sprintf("gen symbols from %s, num: %d", pairProducer.GetName(), len(pairs)))

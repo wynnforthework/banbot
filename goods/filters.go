@@ -2,6 +2,12 @@ package goods
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
+	"slices"
+	"sort"
+	"strings"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -14,11 +20,6 @@ import (
 	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"gonum.org/v1/gonum/floats"
-	"math"
-	"math/rand"
-	"slices"
-	"sort"
-	"strings"
 )
 
 func (f *BaseFilter) IsNeedTickers() bool {
@@ -191,6 +192,14 @@ func (f *VolumePairFilter) GenSymbols(tickers map[string]*banexg.Ticker) ([]stri
 		markets := exg.Default.GetCurMarkets()
 		symbols = utils.KeysOfMap(markets)
 	}
+	pairs := make([]string, 0, len(symbols))
+	for _, pair := range symbols {
+		_, quote, _, _ := core.SplitSymbol(pair)
+		if _, ok := config.StakeCurrencyMap[quote]; ok {
+			pairs = append(pairs, pair)
+		}
+	}
+	symbols = pairs
 	if len(symbols) == 0 {
 		return nil, errs.NewMsg(errs.CodeRunTime, "no symbols generate from VolumePairFilter")
 	}

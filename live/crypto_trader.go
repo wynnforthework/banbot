@@ -2,6 +2,9 @@ package live
 
 import (
 	"fmt"
+	"os"
+	"time"
+
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -15,8 +18,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
-	"os"
-	"time"
 )
 
 type CryptoTrader struct {
@@ -50,7 +51,6 @@ func (t *CryptoTrader) Init() *errs.Error {
 	config.Args.SetLog(true)
 	// Trading pair initialization
 	// 交易对初始化
-	log.Info("loading exchange markets ...")
 	err = orm.InitListDates()
 	if err != nil {
 		return err
@@ -71,6 +71,8 @@ func (t *CryptoTrader) Init() *errs.Error {
 	}
 	err = biz.LoadRefreshPairs(dp, true)
 	biz.InitOdSubs()
+	// add exit callback
+	core.ExitCalls = append(core.ExitCalls, exitCleanUp)
 	return err
 }
 
@@ -109,17 +111,7 @@ func (t *CryptoTrader) Run() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = biz.CleanUpOdMgr()
-	strat.ExitStratJobs()
-	if err != nil {
-		return err
-	}
-	core.Cron.Stop()
-	err = exg.Default.Close()
-	if err != nil {
-		return err
-	}
-	rpc.CleanUp()
+	// clean CallBacks already to core.ExitCalls
 	return nil
 }
 
@@ -212,4 +204,30 @@ func (t *CryptoTrader) startJobs() {
 	// 每分钟第15s检查是否触发限价单提交
 	CronCheckTriggerOds()
 	core.Cron.Start()
+}
+
+func exitCleanUp() {
+	err := biz.CleanUpOdMgr()
+	if err != nil {
+		log.Error("clean odMgr fail", zap.Error(err))
+	}
+	strat.ExitStratJobs()
+	core.Cron.Stop()
+	err = exg.Default.Close()
+	if err != nil {
+		log.Error("close exg fail", zap.Error(err))
+	}
+	for account := range config.Accounts {
+		openOds, lock := orm.GetOpenODs(account)
+		lock.Lock()
+		openNum := len(openOds)
+		lock.Unlock()
+		msg := fmt.Sprintf("bot stop, %d orders opened", openNum)
+		rpc.SendMsg(map[string]interface{}{
+			"type":    rpc.MsgTypeStatus,
+			"account": account,
+			"status":  msg,
+		})
+	}
+	rpc.CleanUp()
 }

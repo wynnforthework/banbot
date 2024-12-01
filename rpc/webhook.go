@@ -3,6 +3,12 @@ package rpc
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/banbox/banbot/core"
 	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
@@ -10,18 +16,13 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/mitchellh/mapstructure"
 	"go.uber.org/zap"
-	"io"
-	"net/http"
-	"strings"
-	"sync"
-	"time"
 )
 
 type WebHook struct {
 	webHookItem
 	name       string
 	wg         sync.WaitGroup
-	doSendMsgs func([]map[string]string) int
+	doSendMsgs func([]map[string]string) []map[string]string
 	Config     map[string]interface{}
 	MsgTypes   map[string]bool
 	Accounts   map[string]bool
@@ -77,7 +78,7 @@ func NewWebHook(name string, item map[string]interface{}) *WebHook {
 		Config:      item,
 		MsgTypes:    make(map[string]bool),
 		Accounts:    make(map[string]bool),
-		Queue:       make(chan map[string]string),
+		Queue:       make(chan map[string]string, 100),
 	}
 	if len(cfg.MsgTypesRaw) > 0 {
 		for _, val := range cfg.MsgTypesRaw {
@@ -151,32 +152,39 @@ func (h *WebHook) ConsumeForever() {
 	name := h.GetName()
 	log.Debug("start consume rpc for", zap.String("name", name))
 	for {
-		first := <-h.Queue
+		first, ok := <-h.Queue
+		if !ok {
+			break
+		}
 		var cache = []map[string]string{first}
 	readCache:
-		select {
-		case item := <-h.Queue:
-			cache = append(cache, item)
-		default:
-			break readCache
+		for {
+			select {
+			case item, ok := <-h.Queue:
+				if !ok {
+					break readCache
+				}
+				cache = append(cache, item)
+			default:
+				break readCache
+			}
 		}
-		h.doSendRetry(cache)
+		if len(cache) > 0 {
+			h.doSendRetry(cache)
+		}
 	}
 }
 
 func (h *WebHook) doSendRetry(msgList []map[string]string) {
-	sentNum, attempts, totalNum := 0, 0, len(msgList)
-	for sentNum < totalNum && len(msgList) > 0 && attempts < h.RetryNum+1 {
+	attempts, totalNum := 0, len(msgList)
+	for len(msgList) > 0 && attempts < h.RetryNum+1 {
 		if attempts > 0 {
 			core.Sleep(time.Duration(h.RetryDelay) * time.Second)
 		}
 		attempts += 1
-		curSent := h.doSendMsgs(msgList)
-		sentNum += curSent
-		h.wg.Add(0 - curSent)
-		msgList = msgList[curSent:]
+		msgList = h.doSendMsgs(msgList)
 	}
-	h.wg.Add(sentNum - totalNum)
+	h.wg.Add(0 - totalNum)
 }
 
 func request(method, url, body string) *banexg.HttpRes {

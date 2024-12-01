@@ -5,6 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -17,13 +25,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
-	"os"
-	"path/filepath"
-	"slices"
-	"sort"
-	"strconv"
-	"strings"
-	"sync"
 )
 
 var (
@@ -1124,6 +1125,71 @@ func mapToItems[T any](rows pgx.Rows, err_ error, assign func() (T, []any)) ([]T
 }
 
 /*
+FixKInfoZeros
+修复kinfo表中start=0或stop=0的记录。通过查询实际K线数据范围来更新正确的start和stop值。
+*/
+func (q *Queries) FixKInfoZeros() *errs.Error {
+	// 查询所有stop=0或start=0的记录
+	sql := `SELECT sid, timeframe FROM kinfo WHERE stop = 0 or start = 0`
+	rows, err_ := q.db.Query(context.Background(), sql)
+	if err_ != nil {
+		return NewDbErr(core.ErrDbReadFail, err_)
+	}
+	defer rows.Close()
+
+	// 按TimeFrame分组记录sid
+	tfGroups := make(map[string]map[int32]bool)
+	for rows.Next() {
+		var sid int32
+		var timeframe string
+		if err_ := rows.Scan(&sid, &timeframe); err_ != nil {
+			return NewDbErr(core.ErrDbReadFail, err_)
+		}
+		if tfGroups[timeframe] == nil {
+			tfGroups[timeframe] = make(map[int32]bool)
+		}
+		tfGroups[timeframe][sid] = true
+	}
+	if err_ := rows.Err(); err_ != nil {
+		return NewDbErr(core.ErrDbReadFail, err_)
+	}
+	if len(tfGroups) == 0 {
+		return nil
+	}
+
+	// 记录处理结果
+	var totalFixed int
+
+	// 对每个TimeFrame分组进行处理
+	for tf, sids := range tfGroups {
+		log.Info("fixing kinfo zeros",
+			zap.String("timeframe", tf),
+			zap.Int("count", len(sids)))
+
+		// 计算实际的K线范围
+		ranges, err := q.CalcKLineRanges(tf, sids)
+		if err != nil {
+			return err
+		}
+
+		// 更新每个sid的范围
+		for sid, r := range ranges {
+			start, stop := r[0], r[1]
+			if stop > 0 && start > 0 {
+				err := q.updateKLineRange(sid, tf, start, stop)
+				if err != nil {
+					return err
+				}
+				totalFixed++
+			}
+		}
+	}
+
+	log.Info("fixed kinfo complete", zap.Int("total", totalFixed), zap.Int("timeframes", len(tfGroups)))
+	return nil
+}
+
+/*
 SyncKlineTFs
 Check the data consistency of each kline table. If there is more low dimensional data than high dimensional data, aggregate and update to high dimensional data
 检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
@@ -1151,6 +1217,10 @@ func SyncKlineTFs(args *config.CmdArgs) *errs.Error {
 		return err
 	}
 	defer conn.Release()
+	err = sess.FixKInfoZeros()
+	if err != nil {
+		return err
+	}
 	// load all markets
 	exsList := GetAllExSymbols()
 	cache := map[string]map[string]bool{}
@@ -1515,9 +1585,11 @@ func (q *Queries) UpdatePendingIns() *errs.Error {
 	}
 	log.Info("Updating pending insert jobs", zap.Int("num", len(items)))
 	for _, i := range items {
-		err := q.UpdateKRange(i.Sid, i.Timeframe, i.StartMs, i.StopMs, nil, true)
-		if err != nil {
-			return err
+		if i.StartMs > 0 && i.StopMs > 0 {
+			err := q.UpdateKRange(i.Sid, i.Timeframe, i.StartMs, i.StopMs, nil, true)
+			if err != nil {
+				return err
+			}
 		}
 		err_ = q.DelInsKline(ctx, i.ID)
 		if err_ != nil {

@@ -3,6 +3,11 @@ package entry
 import (
 	"flag"
 	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -12,14 +17,34 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
-	"os"
-	"strings"
 )
 
 type FuncEntry = func(args *config.CmdArgs) *errs.Error
 type FuncGetEntry = func(name string) (FuncEntry, []string)
 
 func RunCmd() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("banbot panic", zap.Any("error", r))
+			core.RunExitCalls()
+			os.Exit(1)
+		}
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// 在goroutine中等待信号
+	go func() {
+		<-sigChan
+		if core.Ctx != nil {
+			core.Ctx.Done()
+			core.StopAll()
+		}
+		core.RunExitCalls()
+		os.Exit(0)
+	}()
+
 	args := os.Args[1:]
 	if len(args) == 0 {
 		runWeb(args)

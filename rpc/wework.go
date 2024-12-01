@@ -2,11 +2,12 @@ package rpc
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
-	"sync"
 )
 
 /**
@@ -132,19 +133,18 @@ type WeWorkSendRes struct {
 	ResponseCode   string `json:"response_code"`
 }
 
-func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
-	return func(msgList []map[string]string) int {
+func makeDoSendMsg(h *WeWork) func([]map[string]string) []map[string]string {
+	return func(msgList []map[string]string) []map[string]string {
 		token := h.cred.getToken()
 		if token == "" {
-			return 0
+			return msgList
 		}
 		url := fmt.Sprintf("%s/cgi-bin/message/send?access_token=%s", urlBase, token)
-		sentNum := 0
+		fails := []map[string]string{}
 		for _, msg := range msgList {
 			content, _ := msg["content"]
 			if content == "" {
 				log.Error("wework get empty msg, skip")
-				sentNum += 1
 				continue
 			}
 			var body = map[string]interface{}{
@@ -166,6 +166,7 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 			if rsp.Status != 200 {
 				log.Error("wework send msg net fail", zap.String("content", content),
 					zap.String("rsp", rsp.Content), zap.Error(err_))
+				fails = append(fails, msg)
 				continue
 			}
 			var res WeWorkSendRes
@@ -177,10 +178,10 @@ func makeDoSendMsg(h *WeWork) func([]map[string]string) int {
 			if res.ErrCode > 0 {
 				log.Warn("wework send msg fail", zap.String("content", content),
 					zap.String("body", rsp.Content))
+				fails = append(fails, msg)
 				continue
 			}
-			sentNum += 1
 		}
-		return sentNum
+		return fails
 	}
 }
