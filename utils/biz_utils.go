@@ -82,12 +82,13 @@ func (j *PrgBarJob) Add(num int) {
 	addNum := curProgress - j.jobPrgNum
 	if addNum > 0 {
 		j.PrgBar.Add(addNum)
+		j.jobPrgNum = curProgress
 	}
-	j.jobPrgNum = curProgress
 }
 
 func (j *PrgBarJob) Done() {
 	if j.jobPrgNum < core.StepTotal {
+		j.jobDone = j.jobTotal
 		j.Add(core.StepTotal - j.jobPrgNum)
 		j.jobPrgNum = core.StepTotal
 	}
