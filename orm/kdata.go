@@ -668,7 +668,8 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	if handler == nil {
 		return nil
 	}
-	itemNum := (endMS - startMS) / tfMSecs
+	sugStartMS, sugEndMS := parseDownArgs(tfMSecs, startMS, endMS, limit, false)
+	itemNum := (sugEndMS - sugStartMS) / tfMSecs
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return err

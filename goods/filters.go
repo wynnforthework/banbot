@@ -38,14 +38,36 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 	if f.Min == 0 && f.Max == 0 {
 		return symbols, nil
 	}
-	backNum := max(f.Max, f.Min) + 1
-	return filterByOHLCV(symbols, "1d", backNum, 0, func(s string, klines []*banexg.Kline) bool {
-		knum := len(klines)
-		if knum == 0 {
-			return f.AllowEmpty
+	dayMs := int64(utils2.TFToSecs("1d") * 1000)
+	result := make([]string, 0, len(symbols))
+	exsMap := orm.GetExSymbols(core.ExgName, core.Market)
+	pairMap := make(map[string]*orm.ExSymbol)
+	for _, exs := range exsMap {
+		pairMap[exs.Symbol] = exs
+	}
+	curMS := btime.TimeMS()
+	minStartMS := curMS - dayMs*int64(f.Min)
+	for _, p := range symbols {
+		if exs, ok := pairMap[p]; ok {
+			if exs.ListMs > 0 {
+				days := int((curMS - exs.ListMs) / dayMs)
+				if f.Max > 0 && days > f.Max {
+					continue
+				} else if f.Min > 0 && days < f.Min {
+					if f.AllowEmpty {
+						core.BanPairsUntil[p] = minStartMS
+					} else {
+						continue
+					}
+				}
+				result = append(result, p)
+			}
+			// ListMs=0表示尚未开始交易
+		} else {
+			return nil, errs.NewMsg(errs.CodeNoMarketForPair, "unknown %v", p)
 		}
-		return knum >= f.Max && (f.Max == 0 || knum <= f.Max)
-	})
+	}
+	return result, nil
 }
 
 func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {

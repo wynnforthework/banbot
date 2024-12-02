@@ -40,9 +40,6 @@ func (t *Trader) OnEnvJobs(bar *orm.InfoKline) (*ta.BarEnv, *errs.Error) {
 }
 
 func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
-	if _, ok := core.ForbidPairs[bar.Symbol]; ok {
-		return nil
-	}
 	tfSecs := utils2.TFToSecs(bar.TimeFrame)
 	core.SetBarPrice(bar.Symbol, bar.Close)
 	// If it exceeds 1 minute and half of the period, the bar is considered delayed and orders cannot be placed.

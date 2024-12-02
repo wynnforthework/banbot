@@ -95,8 +95,13 @@ func CleanUpOdMgr() *errs.Error {
 }
 
 func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) []*strat.EnterReq {
-	if _, ok := core.ForbidPairs[env.Symbol]; ok {
-		return nil
+	curMS := btime.TimeMS()
+	if banUntil, ok := core.BanPairsUntil[env.Symbol]; ok {
+		if curMS < banUntil {
+			return nil
+		} else {
+			delete(core.BanPairsUntil, env.Symbol)
+		}
 	}
 	if core.RunMode == core.RunModeOther {
 		// Does not involve order mode, prohibit opening orders
@@ -105,7 +110,7 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 	}
 	pairZapField := zap.String("pair", env.Symbol)
 	stopUntil, _ := core.NoEnterUntil[o.Account]
-	if btime.TimeMS() < stopUntil {
+	if curMS < stopUntil {
 		if core.LiveMode {
 			log.Warn("any enter forbid", pairZapField)
 		}
@@ -114,7 +119,7 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 	if core.LiveMode {
 		// The real order is submitted to the exchange, and the inspection delay cannot exceed 80%
 		// 实盘订单提交到交易所，检查延迟不能超过80%
-		rate := float64(btime.TimeMS()-env.TimeStop) / float64(env.TimeStop-env.TimeStart)
+		rate := float64(curMS-env.TimeStop) / float64(env.TimeStop-env.TimeStart)
 		if rate > 0.8 {
 			return nil
 		}

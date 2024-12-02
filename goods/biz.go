@@ -155,5 +155,11 @@ func RefreshPairList() ([]string, *errs.Error) {
 		core.Pairs = append(core.Pairs, p)
 		core.PairsMap[p] = true
 	}
+
+	for pair := range core.BanPairsUntil {
+		if _, ok := core.PairsMap[pair]; !ok {
+			delete(core.BanPairsUntil, pair)
+		}
+	}
 	return pairs, nil
 }

@@ -319,12 +319,12 @@ func InitListDates() *errs.Error {
 	for _, exs := range exsList {
 		var oldListMS, oldDeListMS = exs.ListMs, exs.DelistMs
 		if exs.ListMs == 0 {
-			startMS := int64(core.MSMinStamp)
+			startMS := core.MSMinStamp
 			var klines []*banexg.Kline
 			if hasFetch {
-				klines, err = exchange.FetchOHLCV(exs.Symbol, "1m", startMS, 10, nil)
+				klines, err = exchange.FetchOHLCV(exs.Symbol, "1m", startMS, 1, nil)
 			} else {
-				klines, err = sess.QueryOHLCV(exs.ID, "5m", startMS, 0, 10, true)
+				klines, err = sess.QueryOHLCV(exs.ID, "1m", startMS, 0, 1, false)
 			}
 			if err != nil {
 				return err
