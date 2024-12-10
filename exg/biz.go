@@ -47,23 +47,20 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 		}
 	}
 	accs := map[string]map[string]interface{}{}
+	var defAcc string
 	for key, acc := range config.Accounts {
 		accs[key] = map[string]interface{}{
 			banexg.OptApiKey:    acc.APIKey,
 			banexg.OptApiSecret: acc.APISecret,
 		}
+		defAcc = key
 	}
-	var defAcc string
 	for key, acc := range config.BakAccounts {
 		accs[key] = map[string]interface{}{
 			banexg.OptApiKey:    acc.APIKey,
 			banexg.OptApiSecret: acc.APISecret,
 		}
-		if defAcc == "" {
-			// Non-trading accounts are designated as default accounts for public information acquisition, etc
-			// 非交易账户指定为默认账户，进行公开信息获取等
-			defAcc = key
-		}
+		defAcc = key
 	}
 	if len(accs) > 0 {
 		options[banexg.OptAccCreds] = accs

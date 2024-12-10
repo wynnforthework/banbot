@@ -2,7 +2,7 @@ package dev
 
 import (
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/banbox/banta"
+	ta "github.com/banbox/banta"
 	"github.com/gofiber/fiber/v2"
 	"math"
 	"sort"
@@ -25,7 +25,7 @@ type DrawInd struct {
 	Figures    []*Figure
 	FigureTpl  string // 客户端会使用此模板动态生成Figures
 	FigureType string // 默认空，客户端默认line
-	doCalc     func(e *banta.BarEnv, params []float64) []float64
+	doCalc     func(e *ta.BarEnv, params []float64) []float64
 }
 
 type AdvInd struct {
@@ -40,10 +40,10 @@ var (
 			IsMain:     true,
 			CalcParams: []float64{5, 10, 30},
 			FigureTpl:  "rma{period}",
-			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
-					res[i] = banta.RMA(e.Close, int(p)).Get(0)
+					res[i] = ta.RMA(e.Close, int(p)).Get(0)
 				}
 				return res
 			},
@@ -53,10 +53,10 @@ var (
 			IsMain:     true,
 			CalcParams: []float64{10, 30},
 			FigureTpl:  "vwma{period}",
-			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
-					res[i] = banta.VWMA(e.Close, e.Volume, int(p)).Get(0)
+					res[i] = ta.VWMA(e.Close, e.Volume, int(p)).Get(0)
 				}
 				return res
 			},
@@ -66,19 +66,19 @@ var (
 			Figures: []*Figure{
 				{"tr", "TR: ", "line", 0},
 			},
-			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
-				val := banta.TR(e.High, e.Low, e.Close).Get(0)
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
+				val := ta.TR(e.High, e.Low, e.Close).Get(0)
 				return []float64{val}
 			},
 		},
 		"ATR": {
 			Title:      "ATR 平均真实振幅",
-			CalcParams: []float64{14},
+			CalcParams: []float64{14, 30},
 			FigureTpl:  "atr{period}",
-			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
-					res[i] = banta.ATR(e.High, e.Low, e.Close, int(p)).Get(0)
+					res[i] = ta.ATR(e.High, e.Low, e.Close, int(p)).Get(0)
 				}
 				return res
 			},
@@ -87,10 +87,10 @@ var (
 			Title:      "StdDev 标准差",
 			CalcParams: []float64{7},
 			FigureTpl:  "sdev{period}",
-			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
-					res[i] = banta.StdDev(e.Close, int(p)).Get(0)
+					res[i] = ta.StdDev(e.Close, int(p)).Cols[0].Get(0)
 				}
 				return res
 			},
@@ -100,22 +100,21 @@ var (
 			Figures: []*Figure{
 				{"td", "TD: ", "line", 0},
 			},
-			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
-				val := banta.TD(e.Close).Get(0)
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
+				val := ta.TD(e.Close).Get(0)
 				return []float64{val}
 			},
 		},
 		"ADX": {
 			Title:      "ADX",
-			CalcParams: []float64{14},
-			Figures: []*Figure{
-				{"adx", "ADX: ", "line", 0},
-				{"dip", "DI+: ", "line", 0},
-				{"dim", "DI-: ", "line", 0},
-			},
-			doCalc: func(e *banta.BarEnv, params []float64) []float64 {
-				cols := banta.ADX(e.High, e.Low, e.Close, int(params[0])).Cols
-				return []float64{cols[0].Get(0), cols[1].Get(0), cols[2].Get(0)}
+			CalcParams: []float64{14, 30},
+			FigureTpl:  "adx{period}",
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
+				res := make([]float64, len(params))
+				for i, p := range params {
+					res[i] = ta.ADX(e.High, e.Low, e.Close, int(p)).Get(0)
+				}
+				return res
 			},
 		},
 	}
@@ -126,9 +125,9 @@ var (
 				IsMain: true,
 			},
 			Calc: func(kline [][]float64, params []float64) (interface{}, error) {
-				cg := &banta.CGraph{}
+				cg := &ta.CGraph{}
 				for i, k := range kline {
-					b := &banta.Kline{
+					b := &ta.Kline{
 						Time:   int64(k[0]),
 						Open:   k[1],
 						High:   k[2],
@@ -193,7 +192,7 @@ func (d *DrawInd) Calc(kline [][]float64, params []float64) []map[string]float64
 	tfMSecs := int64(kline[1][0] - kline[0][0])
 	timeFrame := utils2.SecsToTF(int(tfMSecs / 1000))
 
-	var env = &banta.BarEnv{
+	var env = &ta.BarEnv{
 		TimeFrame:  timeFrame,
 		TFMSecs:    tfMSecs,
 		Exchange:   "binance",

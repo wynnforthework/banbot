@@ -48,8 +48,11 @@ func CompareExgBTOrders(args []string) {
 	if err_ != nil {
 		panic(err_)
 	}
-	if exgPath == "" || btPath == "" {
-		panic("both of `exg-path`, `bt-path` are required")
+	if exgPath == "" {
+		panic("`exg-path` is required")
+	}
+	if btPath == "" {
+		panic("`bt-path` is required")
 	}
 	if botName == "" {
 		log.Error("bot-name is required")

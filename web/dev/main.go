@@ -3,13 +3,16 @@ package dev
 import (
 	"flag"
 	"fmt"
-	"github.com/banbox/banbot/web/base"
+	"github.com/banbox/banbot/web/ui"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"os"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/web/base"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/gofiber/fiber/v2"
@@ -53,10 +56,24 @@ func Run(args []string) error {
 		ErrorHandler: base.ErrHandler,
 	})
 
-	// 注册路由
-	regApiKline(app.Group("/kline"))
-	regApiWebsocket(app.Group("/ws"))
-	regApiDev(app.Group("/dev"))
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*",
+	}))
+
+	// 注册API路由
+	regApiKline(app.Group("/api/kline"))
+	regApiWebsocket(app.Group("/api/ws"))
+	regApiDev(app.Group("/api/dev"))
+
+	// 添加静态文件服务
+	distFS, err_ := ui.BuildDistFS()
+	if err_ != nil {
+		return err_
+	}
+	app.Use("/", filesystem.New(filesystem.Config{
+		Root:         distFS,
+		NotFoundFile: "404.html",
+	}))
 
 	// 启动k线监听和websocket推送
 	go RunReceiver()
