@@ -22,8 +22,6 @@ sveltekit支持编译静态资源，只需将svelte.config.js中的`adapter-auto
 本项目原生支持云端指标加载和显示，后端需提供`/kline/all_inds`和`/kline/calc_ind`接口，具体参数请参考`src/lib/indicators/cloudInds.ts`
 
 ## TODO
-* 覆盖物从localstorage中恢复
-* textBox多行文本边界计算不正确
 * 滚动条样式未全局生效
 
 # sv
