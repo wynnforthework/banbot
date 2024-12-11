@@ -1,6 +1,8 @@
 package dev
 
 import (
+	"errors"
+
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/web/base"
 	"github.com/gofiber/fiber/v2"
@@ -39,6 +41,9 @@ func getHist(c *fiber.Ctx) error {
 	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
 		return err
 	}
+	if data.ToMS <= data.FromMS {
+		return errors.New("`from` must less than `to`")
+	}
 	exs, err2 := orm.ParseShort(data.Exchange, data.Symbol)
 	if err2 != nil {
 		return err2
@@ -47,8 +52,8 @@ func getHist(c *fiber.Ctx) error {
 	if err2 != nil {
 		return err2
 	}
-	startMS, stopMS := data.FromMS, data.ToMS
-	adjs, klines, err2 := orm.AutoFetchOHLCV(exchange, exs, data.TimeFrame, startMS, stopMS, 0, true, nil)
+	startMS, stopMS, tf := data.FromMS, data.ToMS, data.TimeFrame
+	adjs, klines, err2 := orm.AutoFetchOHLCV(exchange, exs, tf, startMS, stopMS, 0, true, nil)
 	if err2 != nil {
 		return err2
 	}

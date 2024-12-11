@@ -10,7 +10,7 @@
   import indicators from './indicators';
   import MyDatafeed from './mydatafeed';
   import {onMount} from 'svelte';
-  import {adjustFromTo, makeFormatDate, setTimezone} from './dateutil';
+  import {adjustFromTo, makeFormatDate, setTimezone, getUTCStamp} from './dateutil';
   import type {SymbolInfo, Period, BarArr} from './types';
   import DrawBar from './drawBar.svelte';
   import {getApi} from './netio';
@@ -103,11 +103,10 @@
         }
         else{
           from = data.timestamp + $save.period.secs * 1000
-          to = adjustFromTo($save.period, from, batchNum)[0]
+          to = getUTCStamp()
         }
       }
       const strategy = $page.url.searchParams.get('strategy');
-      console.log('loadMore', {from, to, strategy})
       datafeed.getHistoryKLineData({
         symbol: $save.symbol, 
         period: $save.period, 
@@ -217,7 +216,7 @@
     const p = $save.period
     const curTime = new Date().getTime()
     const [from, to] = adjustFromTo(p, curTime, batchNum)
-    loadKlineRange(s, p, from, curTime, customLoad)
+    loadKlineRange(s, p, from, curTime, !customLoad)
   }
 
   // 监听周期变化
