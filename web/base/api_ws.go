@@ -1,11 +1,11 @@
-package dev
+package base
 
 import (
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 )
 
-func regApiWebsocket(api fiber.Router) {
+func RegApiWebsocket(api fiber.Router) {
 	api.Get("/ohlcv", websocket.New(wsOHLCV))
 }
 

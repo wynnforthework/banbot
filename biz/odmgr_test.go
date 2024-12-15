@@ -49,7 +49,7 @@ func TestCalcSecsForPrice(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	curPrice := book.Asks.Rows[0][0]*0.5 + book.Bids.Rows[0][0]*0.5
+	curPrice := book.Asks.Price[0]*0.5 + book.Bids.Price[0]*0.5
 	fmt.Printf("%s current price: %.4f \n", pair, curPrice)
 	dirt := float64(1)
 	if side == banexg.OdSideBuy {

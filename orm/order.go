@@ -175,10 +175,10 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 		return
 	}
 	enterFee, exitFee := float64(0), float64(0)
-	if i.Enter != nil {
+	if i.Enter != nil && !math.IsNaN(i.Enter.Fee) && !math.IsInf(i.Enter.Fee, 0) {
 		enterFee = i.Enter.Fee
 	}
-	if i.Exit != nil {
+	if i.Exit != nil && !math.IsNaN(i.Exit.Fee) && !math.IsInf(i.Exit.Fee, 0) {
 		exitFee = i.Exit.Fee
 	}
 	i.Profit = profitVal - enterFee - exitFee
@@ -689,6 +689,15 @@ func (i *InOutOrder) Lock() *sync.Mutex {
 	return lock
 }
 
+func (i *InOutOrder) NanInfTo(v float64) {
+	if i == nil {
+		return
+	}
+	i.IOrder.NanInfTo(v)
+	i.Enter.NanInfTo(v)
+	i.Exit.NanInfTo(v)
+}
+
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddIOrder(context.Background(), AddIOrderParams{
@@ -747,6 +756,16 @@ func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
+}
+
+func (i *IOrder) NanInfTo(v float64) {
+	if i == nil {
+		return
+	}
+	i.Profit = utils.NanInfTo(i.Profit, v)
+	i.ProfitRate = utils.NanInfTo(i.ProfitRate, v)
+	i.MaxPftRate = utils.NanInfTo(i.MaxPftRate, v)
+	i.MaxDrawDown = utils.NanInfTo(i.MaxDrawDown, v)
 }
 
 func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
@@ -841,6 +860,14 @@ func (i *ExOrder) CutPart(rate float64, fill bool) *ExOrder {
 		i.Status = OdStatusClosed
 	}
 	return part
+}
+
+func (i *ExOrder) NanInfTo(v float64) {
+	if i == nil {
+		return
+	}
+	i.Price = utils.NanInfTo(i.Price, v)
+	i.Fee = utils.NanInfTo(i.Fee, v)
 }
 
 func (q *Queries) DumpOrdersToDb() *errs.Error {

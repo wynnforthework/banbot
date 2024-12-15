@@ -3,6 +3,8 @@
 	import { i18n } from '$lib/i18n.js'
 	import { alerts } from '$lib/stores/alerts';
 	import Alert from '$lib/alert.svelte';
+	import Modal from '$lib/kline/modal.svelte';
+	import { modals } from '$lib/stores/modals';
 
 	let { children } = $props();
   import "tailwindcss/tailwind.css";
@@ -12,9 +14,13 @@
 	<!-- 添加alerts显示区域 -->
 	<div class="alerts-container">
 		{#each $alerts as alert (alert.id)}
-			<Alert type={alert.type} text={alert.text} id={alert.id} />
+			<Alert type={alert.type} text={alert.text}/>
 		{/each}
 	</div>
+	{#each $modals as modal (modal.id)}
+		<Modal title={modal.title} buttons={modal.buttons} show={true} center={true}
+			click={(tag) => modal.resolve(tag)}>{modal.text}</Modal>
+	{/each}
 	{@render children()}
 </ParaglideJS>
 

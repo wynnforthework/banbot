@@ -1,4 +1,7 @@
 yarn-error.log
+.svelte-kit
+.vscode
+dist.zip
 
 node_modules
 

@@ -67,6 +67,13 @@ func EqualIn(a, b, thres float64) bool {
 	return math.Abs(a-b) <= thres
 }
 
+func NanInfTo(v, to float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return to
+	}
+	return v
+}
+
 func ConvertFloat64(i interface{}) float64 {
 	switch v := i.(type) {
 	case int:

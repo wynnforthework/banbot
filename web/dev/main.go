@@ -61,8 +61,8 @@ func Run(args []string) error {
 	}))
 
 	// 注册API路由
-	regApiKline(app.Group("/api/kline"))
-	regApiWebsocket(app.Group("/api/ws"))
+	base.RegApiKline(app.Group("/api/kline"))
+	base.RegApiWebsocket(app.Group("/api/ws"))
 	regApiDev(app.Group("/api/dev"))
 
 	// 添加静态文件服务
@@ -76,7 +76,7 @@ func Run(args []string) error {
 	}))
 
 	// 启动k线监听和websocket推送
-	go RunReceiver()
+	go base.RunReceiver()
 
 	return app.Listen(fmt.Sprintf("%s:%v", ag.Host, ag.Port))
 }

@@ -1,0 +1,778 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import * as m from '$lib/paraglide/messages';
+  import { getAccApi, postAccApi } from '$lib/netio';
+  import { alerts } from '$lib/stores/alerts';
+  import {modals} from '$lib/stores/modals';
+  import Modal from '$lib/kline/modal.svelte';
+  import { getDateStr, toUTCStamp } from '$lib/dateutil';
+
+  let tabName = $state('bot'); // bot/exchange/position
+  let banodList = $state<any[]>([]);
+  let exgodList = $state<any[]>([]);
+  let exgposList = $state<any[]>([]);
+  let pageSize = $state(15);
+  let limitSize = $state(30);
+  let currentPage = $state(1);
+  let banodNum = $state(0);
+  let showOdDetail = $state(false);
+  let showExOdDetail = $state(false);
+  let showOpenOrder = $state(false);
+  let showCloseExg = $state(false);
+  let openingOd = $state(false);
+  let closingExgPos = $state(false);
+  let exFilter = $state('');
+  let selectedOrder = $state<any>(null);
+  let lastId = $state(0); // 添加lastId用于bot分页
+
+  let search = $state({
+    status: '',
+    symbols: '',
+    startMs: '',
+    stopMs: ''
+  });
+
+  let openOd = $state({
+    pair: '',
+    side: 'long',
+    orderType: 'market',
+    price: undefined,
+    stopLossPrice: undefined,
+    enterCost: undefined,
+    enterTag: undefined,
+    leverage: undefined,
+    strategy: undefined
+  });
+
+  let closeExgPos = $state({
+    symbol: '',
+    side: '',
+    initAmount: 0,
+    amount: 0,
+    percent: 100,
+    orderType: 'market',
+    price: undefined
+  });
+
+  function getQuoteCode(symbol: string) {
+    const arr = symbol.split('/');
+    if (arr.length !== 2) return '';
+    let quote = arr[1];
+    quote = quote.split('.')[0];
+    return quote.split(':')[0];
+  }
+
+  async function loadData(page: number) {
+    currentPage = page;
+    const data: Record<string, any> = {...search};
+    data.startMs = toUTCStamp(data.startMs);
+    data.stopMs = toUTCStamp(data.stopMs);
+    data.source = tabName;
+    
+    if (tabName === 'bot') {
+      data.limit = pageSize;
+      if (page > 1) {
+        data.afterId = lastId;
+      }
+    } else if (tabName === 'exchange') {
+      // exchange和position必须传symbols
+      if (!data.symbols) {
+        alerts.addAlert('error', m.symbol_required());
+        return;
+      }
+      data.limit = limitSize;
+    }
+
+    const rsp = await getAccApi('/orders', data);
+    let res = rsp.data ?? [];
+    exFilter = '';
+
+    if (tabName === 'bot') {
+      banodList = res;
+      if (res.length > 0) {
+        lastId = res[res.length - 1].id;
+      }
+    } else if (tabName === 'exchange') {
+      if (search.status) {
+        const oldNum = res.length;
+        res = res.filter((od: any) => od.filled);
+        exFilter = `已筛选：${res.length}/${oldNum}`;
+      }
+      exgodList = res;
+    } else {
+      exgposList = res;
+    }
+  }
+
+  async function closeOrder(orderId: string) {
+    if (!await modals.confirm(m.confirm_close_position())) return;
+    
+    const rsp = await postAccApi('/forceexit', {orderId});
+    if(rsp.code !== 200){
+      console.error('close order failed', rsp);
+      alerts.addAlert('error', rsp.msg ?? m.close_order_failed());
+      return;
+    }
+    
+    const closeNum = rsp.closeNum ?? 0;
+    const failNum = rsp.failNum ?? 0;
+    
+    let message = m.closed_positions({close: closeNum, fail: failNum});
+    if (rsp.errMsg) {
+      message += `\n${rsp.errMsg}`;
+    }
+    alerts.addAlert(failNum > 0 ? 'warning' : 'success', message);
+    await loadData(1);
+  }
+
+  function onPosAmountChg(percent: number) {
+    closeExgPos.amount = parseFloat((closeExgPos.initAmount * percent / 100).toFixed(5));
+  }
+
+  function showOrder(idx: number) {
+    if (tabName === 'bot') {
+      selectedOrder = banodList[idx];
+      showOdDetail = true;
+    } else if (tabName === 'exchange') {
+      selectedOrder = exgodList[idx];
+      showExOdDetail = true;
+    } else if (tabName === 'position') {
+      selectedOrder = exgposList[idx];
+      showExOdDetail = true;
+    }
+  }
+
+  function clickCloseExgPos(index: number) {
+    const item = exgposList[index];
+    closeExgPos = {
+      symbol: item.symbol,
+      amount: item.contracts,
+      side: item.side,
+      initAmount: item.contracts,
+      percent: 100,
+      orderType: 'market',
+      price: undefined
+    };
+    showCloseExg = true;
+  }
+
+  async function closeExgPosition(all: boolean = false) {
+    let data = {...closeExgPos};
+    if (all) {
+      if (!await modals.confirm(m.confirm_close_all_positions())) return;
+      data.symbol = 'all';
+    }
+
+    const rsp = await postAccApi('/close_pos', data);
+
+    const closeNum = rsp.close_num ?? 0;
+    const doneNum = rsp.done_num ?? 0;
+    let message = m.closed_orders({num: closeNum});
+    if (doneNum) {
+      message += m.filled_orders({num: doneNum});
+    }
+    showCloseExg = false;
+    alerts.addAlert('success', message);
+    await loadData(1);
+  }
+
+  async function doOpenOrder() {
+    openingOd = true;
+    const rsp = await postAccApi('/forceenter', openOd);
+    openingOd = false;
+    
+    if (rsp.code !== 200) {
+      alerts.addAlert('error', rsp.msg ?? m.open_order_failed());
+    } else {
+      alerts.addAlert('success', m.open_order_success());
+      showOpenOrder = false;
+    }
+  }
+
+  async function clickCalcProfits() {
+    const rsp = await postAccApi('/calc_profits', {});
+    
+    if (rsp.code !== 200) {
+      alerts.addAlert('error', m.update_failed({msg: rsp.msg ?? ''}));
+    } else {
+      alerts.addAlert('success', m.updated_orders({num: rsp.num}));
+      await loadData(currentPage);
+    }
+  }
+
+  onMount(() => {
+    loadData(1);
+  });
+</script>
+
+<!-- 主体内容 -->
+<div class="bg-base-100 rounded-lg shadow-lg p-6 min-h-[600px]">
+  <div class="flex flex-col gap-4">
+    <!-- Tab Menu -->
+    <div class="flex justify-between items-center">
+      <div class="tabs tabs-boxed">
+        <button 
+          class="tab {tabName === 'bot' ? 'tab-active' : ''}"
+          onclick={() => tabName = 'bot'}
+        >
+          {m.bot_orders()}
+        </button>
+        <button 
+          class="tab {tabName === 'exchange' ? 'tab-active' : ''}"
+          onclick={() => tabName = 'exchange'}
+        >
+          {m.exchange_orders()}
+        </button>
+        <button 
+          class="tab {tabName === 'position' ? 'tab-active' : ''}"
+          onclick={() => tabName = 'position'}
+        >
+          {m.exchange_positions()}
+        </button>
+      </div>
+
+      <div class="flex gap-2 items-center">
+        <!-- 添加每页大小控制 -->
+        <select 
+          class="select select-bordered max-w-28"
+          bind:value={pageSize}
+          onchange={() => loadData(1)}
+        >
+          <option value={10}>10 / {m.page()}</option>
+          <option value={15}>15 / {m.page()}</option>
+          <option value={20}>20 / {m.page()}</option>
+          <option value={30}>30 / {m.page()}</option>
+          <option value={50}>50 / {m.page()}</option>
+        </select>
+
+        <!-- 现有的操作按钮 -->
+        {#if tabName === 'bot'}
+          <button class="btn btn-primary" onclick={clickCalcProfits}>
+            {m.update_profits()}
+          </button>
+          <button class="btn btn-primary" onclick={() => showOpenOrder = true}>
+            {m.open_order()}
+          </button>
+          <button class="btn btn-error" onclick={() => closeOrder('all')}>
+            {m.close_all()}
+          </button>
+        {:else if tabName === 'position'}
+          <button class="btn btn-primary" onclick={() => loadData(1)}>
+            {m.refresh()}
+          </button>
+          <button class="btn btn-error" onclick={() => closeExgPosition(true)}>
+            {m.close_all()}
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Search Form -->
+    {#if tabName !== 'position'}
+      <div class="form-control">
+        <div class="flex flex-wrap gap-4">
+          {#if tabName === 'bot'}
+            <select class="select select-bordered" bind:value={search.status}>
+              <option value="">{m.all()}</option>
+              <option value="open">{m.open()}</option>
+              <option value="his">{m.closed()}</option>
+            </select>
+          {/if}
+
+          <input type="text" class="input input-bordered" placeholder={m.symbol()} bind:value={search.symbols} 
+            required={tabName !== 'bot'} />
+
+          <input type="text" class="input input-bordered" placeholder="20231012" bind:value={search.startMs} />
+
+          {#if tabName === 'bot'}
+            <input type="text" class="input input-bordered" placeholder="20231012" bind:value={search.stopMs} />
+          {:else}
+            <input type="number" class="input input-bordered" bind:value={limitSize} />
+          {/if}
+
+          <button 
+            class="btn btn-primary" 
+            onclick={() => {
+              if (tabName !== 'bot' && !search.symbols) {
+                alerts.addAlert('error', m.symbol_required());
+                return;
+              }
+              lastId = 0;
+              loadData(1);
+            }}
+          >
+            {m.search()}
+          </button>
+
+          {#if exFilter}
+            <span class="text-info">{exFilter}</span>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Data Tables -->
+    <div class="overflow-x-auto">
+      {#if tabName === 'bot'}
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>{m.pair()}</th>
+              <th>{m.timeframe()}/{m.side()}/{m.leverage()}</th>
+              <th>{m.enter_time()}</th>
+              <th>{m.enter_tag()}</th>
+              <th>{m.enter_price()}</th>
+              <th>{m.exit_time()}</th>
+              <th>{m.exit_tag()}</th>
+              <th>{m.profit_rate()}</th>
+              <th>{m.profit()}</th>
+              <th>{m.actions()}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each banodList as order, i}
+              <tr>
+                <td>{order.id}</td>
+                <td>{order.symbol}</td>
+                <td>{order.timeframe}/{order.short ? m.short() : m.long()}/{order.leverage}</td>
+                <td>{getDateStr(order.enter_at)}</td>
+                <td>{order.enter_tag}</td>
+                <td>{(order.enter_average ?? order.enter_price ?? order.init_price).toFixed(7)}</td>
+                <td>{getDateStr(order.exit_at)}</td>
+                <td>{order.exit_tag}</td>
+                <td>{(order.profit_rate * 100).toFixed(1)}%</td>
+                <td>{order.profit.toFixed(5)}</td>
+                <td>
+                  <div class="flex gap-2">
+                    <button class="btn btn-xs" onclick={() => showOrder(i)}>
+                      {m.view()}
+                    </button>
+                    {#if order.status !== 4}
+                      <button class="btn btn-xs btn-error" onclick={() => closeOrder(order.id.toString())}>
+                        {m.close_order()}
+                      </button>
+                    {/if}
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {:else if tabName === 'exchange'}
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th>{m.order_id()}</th>
+              <th>{m.client_id()}</th>
+              <th>{m.pair()}</th>
+              <th>{m.time()}</th>
+              <th>{m.side()}</th>
+              <th>{m.position_type()}</th>
+              <th>{m.price()}</th>
+              <th>{m.amount()}</th>
+              <th>{m.status()}</th>
+              <th>{m.actions()}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each exgodList as order, i}
+              <tr>
+                <td>{order.id}</td>
+                <td>{order.clientOrderId}</td>
+                <td>{order.symbol}</td>
+                <td>{getDateStr(order.timestamp)}</td>
+                <td>{order.side.toLowerCase() === 'buy' ? m.long() : m.short()}</td>
+                <td>{order.reduceOnly ? m.close_position() : m.open_position()}</td>
+                <td>{order.average || order.price || '-'}</td>
+                <td>{order.amount}</td>
+                <td>{order.status}</td>
+                <td>
+                  <button class="btn btn-xs" onclick={() => showOrder(i)}>
+                    {m.view()}
+                  </button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {:else}
+        <!-- Positions Table -->
+        <table class="table table-zebra">
+          <thead>
+            <tr>
+              <th>{m.pair()}</th>
+              <th>{m.time()}</th>
+              <th>{m.side()}</th>
+              <th>{m.entry_price()}</th>
+              <th>{m.mark_price()}</th>
+              <th>{m.notional()}</th>
+              <th>{m.leverage()}</th>
+              <th>{m.unrealized_pnl()}</th>
+              <th>{m.margin_mode()}</th>
+              <th>{m.actions()}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each exgposList as pos, i}
+              <tr>
+                <td>{pos.symbol}</td>
+                <td>{getDateStr(pos.timestamp)}</td>
+                <td>{pos.side === 'long' ? m.long() : m.short()}</td>
+                <td>{pos.entryPrice?.toFixed(4)}</td>
+                <td>{pos.markPrice?.toFixed(4)}</td>
+                <td>{pos.notional?.toFixed(4)}</td>
+                <td>{pos.leverage}x</td>
+                <td class={pos.unrealizedPnl >= 0 ? 'text-success' : 'text-error'}>
+                  {pos.unrealizedPnl?.toFixed(4)}
+                </td>
+                <td>{pos.marginMode}</td>
+                <td>
+                  <div class="flex gap-2">
+                    <button class="btn btn-xs" onclick={() => showOrder(i)}>
+                      {m.view()}
+                    </button>
+                    <button class="btn btn-xs btn-error" onclick={() => clickCloseExgPos(i)}>
+                      {m.close_position()}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+
+    <!-- 修改分页控制 -->
+    {#if banodNum > pageSize && tabName === 'bot'}
+      <div class="flex justify-end mt-4">
+        <div class="join">
+          {#each Array(Math.ceil(banodNum / pageSize)) as _, i}
+            <button 
+              class="join-item btn {currentPage === i + 1 ? 'btn-active' : ''}"
+              onclick={() => loadData(i + 1)}
+            >
+              {i + 1}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
+</div>
+
+<!-- Modals -->
+<Modal title={m.order_details()} bind:show={showOdDetail} width={800}>
+  {#if selectedOrder}
+    <div class="space-y-4">
+      <!-- 基本信息 -->
+      <div class="grid grid-cols-2 gap-4 p-4 border rounded-lg">
+        <div class="form-control">
+          <div class="flex items-center gap-4">
+            <label class="label w-24 whitespace-nowrap">ID</label>
+            <input type="text" class="input input-bordered flex-1" value={selectedOrder.id} readonly />
+          </div>
+        </div>
+        <div class="form-control">
+          <div class="flex items-center gap-4">
+            <label class="label w-24 whitespace-nowrap">{m.pair()}</label>
+            <input type="text" class="input input-bordered flex-1" value={selectedOrder.symbol} readonly />
+          </div>
+        </div>
+        <div class="form-control">
+          <div class="flex items-center gap-4">
+            <label class="label w-24 whitespace-nowrap">{m.timeframe()}</label>
+            <input type="text" class="input input-bordered flex-1" value={selectedOrder.timeframe} readonly />
+          </div>
+        </div>
+        <div class="form-control">
+          <div class="flex items-center gap-4">
+            <label class="label w-24 whitespace-nowrap">{m.side()}</label>
+            <input type="text" class="input input-bordered flex-1" value={selectedOrder.short ? m.short() : m.long()} readonly />
+          </div>
+        </div>
+        <div class="form-control">
+          <div class="flex items-center gap-4">
+            <label class="label w-24 whitespace-nowrap">{m.leverage()}</label>
+            <input type="text" class="input input-bordered flex-1" value={`${selectedOrder.leverage}x`} readonly />
+          </div>
+        </div>
+        <div class="form-control">
+          <div class="flex items-center gap-4">
+            <label class="label w-24 whitespace-nowrap">{m.strategy()}</label>
+            <input type="text" class="input input-bordered flex-1" value={`${selectedOrder.strategy}:${selectedOrder.stg_ver}`} readonly />
+          </div>
+        </div>
+      </div>
+
+      <!-- 入场订单信息 -->
+      <div class="border rounded-lg p-4">
+        <h3 class="text-lg font-bold mb-4">{m.enter_order()}</h3>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="form-control">
+            <div class="flex items-center gap-4">
+              <label class="label w-24 whitespace-nowrap">{m.enter_time()}</label>
+              <input type="text" class="input input-bordered flex-1" value={getDateStr(selectedOrder.enter_at)} readonly />
+            </div>
+          </div>
+          <div class="form-control">
+            <div class="flex items-center gap-4">
+              <label class="label w-24 whitespace-nowrap">{m.enter_tag()}</label>
+              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_tag} readonly />
+            </div>
+          </div>
+          <div class="form-control">
+            <div class="flex items-center gap-4">
+              <label class="label w-24 whitespace-nowrap">{m.init_price()}</label>
+              <input type="text" class="input input-bordered flex-1" value={selectedOrder.init_price?.toFixed(7)} readonly />
+            </div>
+          </div>
+          <div class="form-control">
+            <div class="flex items-center gap-4">
+              <label class="label w-24 whitespace-nowrap">{m.enter_price()}</label>
+              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_price?.toFixed(7)} readonly />
+            </div>
+          </div>
+          <div class="form-control">
+            <div class="flex items-center gap-4">
+              <label class="label w-24 whitespace-nowrap">{m.average_price()}</label>
+              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_average?.toFixed(7)} readonly />
+            </div>
+          </div>
+          <div class="form-control">
+            <div class="flex items-center gap-4">
+              <label class="label w-24 whitespace-nowrap">{m.amount()}</label>
+              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_amount?.toFixed(5)} readonly />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 出场订单信息 -->
+      {#if selectedOrder.exit_tag}
+        <div class="border rounded-lg p-4">
+          <h3 class="text-lg font-bold mb-4">{m.exit_order()}</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="form-control">
+              <div class="flex items-center gap-4">
+                <label class="label w-24 whitespace-nowrap">{m.exit_time()}</label>
+                <input type="text" class="input input-bordered flex-1" value={getDateStr(selectedOrder.exit_at)} readonly />
+              </div>
+            </div>
+            <div class="form-control">
+              <div class="flex items-center gap-4">
+                <label class="label w-24 whitespace-nowrap">{m.exit_tag()}</label>
+                <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_tag} readonly />
+              </div>
+            </div>
+            {#if selectedOrder.exit_filled}
+              <div class="form-control">
+                <div class="flex items-center gap-4">
+                  <label class="label w-24 whitespace-nowrap">{m.exit_price()}</label>
+                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_price?.toFixed(7)} readonly />
+                </div>
+              </div>
+              <div class="form-control">
+                <div class="flex items-center gap-4">
+                  <label class="label w-24 whitespace-nowrap">{m.average_price()}</label>
+                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_average?.toFixed(7)} readonly />
+                </div>
+              </div>
+              <div class="form-control">
+                <div class="flex items-center gap-4">
+                  <label class="label w-24 whitespace-nowrap">{m.amount()}</label>
+                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_amount?.toFixed(5)} readonly />
+                </div>
+              </div>
+              <div class="form-control">
+                <div class="flex items-center gap-4">
+                  <label class="label w-24 whitespace-nowrap">{m.filled_amount()}</label>
+                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_filled?.toFixed(5)} readonly />
+                </div>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      <!-- 额外信息 -->
+      {#if selectedOrder.info}
+        <div class="border rounded-lg p-4">
+          <h3 class="text-lg font-bold mb-4">{m.additional_info()}</h3>
+          <pre class="whitespace-pre-wrap bg-base-200 p-4 rounded-lg">{JSON.stringify(selectedOrder.info, null, 2)}</pre>
+        </div>
+      {/if}
+    </div>
+  {/if}
+</Modal>
+
+<Modal title={m.exchange_details()} bind:show={showExOdDetail} width={800}>
+  {#if selectedOrder}
+    <pre class="whitespace-pre-wrap">{JSON.stringify(selectedOrder, null, 2)}</pre>
+  {/if}
+</Modal>
+
+<!-- 在 showExOdDetail Modal 后添加 OpenOrder Modal -->
+<Modal title={m.open_order()} bind:show={showOpenOrder} width={800} buttons={[]}>
+  <div class="space-y-4 p-4">
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.pair()}</label>
+        <input type="text" class="input input-bordered flex-1" placeholder={m.enter_symbol_placeholder()} bind:value={openOd.pair} />
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.side()}</label>
+        <div class="flex gap-4 flex-1">
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.side} value="long" />
+            <span class="label-text ml-2">{m.long()}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.side} value="short" />
+            <span class="label-text ml-2">{m.short()}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.order_type()}</label>
+        <div class="flex gap-4 flex-1">
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.orderType} value="market" />
+            <span class="label-text ml-2">{m.market_order()}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.orderType} value="limit" />
+            <span class="label-text ml-2">{m.limit_order()}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    {#if openOd.orderType === 'limit'}
+      <div class="form-control">
+        <div class="flex items-center gap-4">
+          <label class="label w-24 whitespace-nowrap">{m.price()}</label>
+          <input type="number" class="input input-bordered flex-1" bind:value={openOd.price} step="0.00000001" />
+        </div>
+      </div>
+
+      <div class="form-control">
+        <div class="flex items-center gap-4">
+          <label class="label w-24 whitespace-nowrap">{m.stop_loss_price()}</label>
+          <input type="number" class="input input-bordered flex-1" bind:value={openOd.stopLossPrice} step="0.00000001" />
+        </div>
+      </div>
+    {/if}
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.enter_cost()}</label>
+        <div class="input-group">
+          <input type="number" class="input input-bordered flex-1" bind:value={openOd.enterCost} step="0.00000001" />
+          <span class="input-group-addon">{getQuoteCode(openOd.pair)}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.enter_tag()}</label>
+        <input type="text" class="input input-bordered flex-1" bind:value={openOd.enterTag} />
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.leverage()}</label>
+        <input type="number" class="input input-bordered flex-1" bind:value={openOd.leverage} min="1" max="200" step="1" />
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.strategy()}</label>
+        <input type="text" class="input input-bordered flex-1" placeholder={m.enter_strategy_placeholder()} bind:value={openOd.strategy} />
+      </div>
+    </div>
+
+    <div class="flex justify-end mt-4">
+      <button class="btn btn-primary" disabled={!openOd.pair || !openOd.enterCost} onclick={doOpenOrder}>
+        {#if openingOd}
+          <span class="loading loading-spinner"></span>
+        {/if}
+        {m.save()}
+      </button>
+    </div>
+  </div>
+</Modal>
+
+<Modal title={m.close_position()} bind:show={showCloseExg} width={800} buttons={[]}>
+  <div class="space-y-4 p-4">
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.pair()}</label>
+        <input type="text" class="input input-bordered flex-1" bind:value={closeExgPos.symbol} disabled />
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.close_amount()}</label>
+        <input type="number" class="input input-bordered flex-1" bind:value={closeExgPos.amount} step="0.00000001" />
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{closeExgPos.percent}%</label>
+        <input type="range" min="0" max="100" class="range" bind:value={closeExgPos.percent} 
+          onchange={() => onPosAmountChg(closeExgPos.percent)} />
+      </div>
+    </div>
+
+    <div class="form-control">
+      <div class="flex items-center gap-4">
+        <label class="label w-24 whitespace-nowrap">{m.order_type()}</label>
+        <div class="flex gap-4 flex-1">
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="market" />
+            <span class="label-text ml-2">{m.market_order()}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="limit" />
+            <span class="label-text ml-2">{m.limit_order()}</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    {#if closeExgPos.orderType === 'limit'}
+      <div class="form-control">
+        <div class="flex items-center gap-4">
+          <label class="label w-24 whitespace-nowrap">{m.price()}</label>
+          <input type="number" class="input input-bordered flex-1" bind:value={closeExgPos.price} step="0.00000001" />
+        </div>
+      </div>
+    {/if}
+
+    <div class="flex justify-end mt-4">
+      <button 
+        class="btn btn-primary" 
+        disabled={!closeExgPos.symbol || !closeExgPos.amount}
+        onclick={() => closeExgPosition(false)}
+      >
+        {#if closingExgPos}
+          <span class="loading loading-spinner"></span>
+        {/if}
+        {m.save()}
+      </button>
+    </div>
+  </div>
+</Modal>

@@ -2,6 +2,15 @@ package live
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"os"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -16,21 +25,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
-	"math"
-	"os"
-	"slices"
-	"strings"
-	"time"
 )
 
 func regApiBiz(api fiber.Router) {
 	api.Get("/version", getVersion)
 	api.Get("/balance", getBalance)
-	api.Get("/open_num", getOpenNum)
+	api.Get("/today_num", getTodayNum)
 	api.Get("/statistics", getStatistics)
 	api.Get("/incomes", getIncomes)
 	api.Get("/task_pairs", getTaskPairs)
 	api.Get("/orders", getOrders)
+	api.Post("/forceexit", postForceExit)
 	api.Post("/close_pos", postClosePos)
 	api.Post("/delay_entry", postDelayEntry)
 	api.Get("/config", getConfig)
@@ -93,21 +98,45 @@ func getBalance(c *fiber.Ctx) error {
 	})
 }
 
-func getOpenNum(c *fiber.Ctx) error {
-	return wrapAccount(c, func(acc string) error {
-		ods, lock := orm.GetOpenODs(acc)
+func getTodayNum(c *fiber.Ctx) error {
+	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
+		openOds, lock := orm.GetOpenODs(acc)
 		lock.Lock()
-		openNum := len(ods)
-		totalCost := float64(0)
-		for _, od := range ods {
-			totalCost += od.HoldCost()
+		dayOpenNum := len(openOds)
+		dayOpenPft := float64(0)
+		for _, od := range openOds {
+			dayOpenPft += od.Profit
 		}
 		lock.Unlock()
+
+		// 获取今日完成的订单
+		tfMSecs := int64(utils2.TFToSecs("1d") * 1000)
+		nowMS := btime.UTCStamp()
+		todayStartMS := utils2.AlignTfMSecs(nowMS, tfMSecs)
+		taskId := orm.GetTaskID(acc)
+		dayDoneNum := 0
+		dayDonePft := float64(0)
+		if taskId > 0 {
+			orders, err := sess.GetOrders(orm.GetOrdersArgs{
+				TaskID:      taskId,
+				Status:      2, // 已完成状态
+				CloseAfter:  todayStartMS,
+				CloseBefore: nowMS,
+			})
+			if err != nil {
+				return err
+			}
+			for _, od := range orders {
+				dayDonePft += od.Profit
+			}
+			dayDoneNum = len(orders)
+		}
 		return c.JSON(fiber.Map{
-			"open_num":       openNum,
-			"max_num":        config.MaxOpenOrders,
-			"max_simul_open": config.MaxSimulOpen,
-			"total_cost":     totalCost,
+			"running":    taskId > 0,
+			"dayDoneNum": dayDoneNum,
+			"dayDonePft": dayDonePft,
+			"dayOpenNum": dayOpenNum,
+			"dayOpenPft": dayOpenPft,
 		})
 	})
 }
@@ -191,50 +220,50 @@ func getStatistics(c *fiber.Ctx) error {
 		initBalance := wallets.TotalLegal(nil, true) - profitSum
 		ddPct, ddVal, _, _, _, _ := utils.CalcMaxDrawDown(dayProfits, initBalance)
 		return c.JSON(fiber.Map{
-			"done_profit_mean":     doneProfitMean,
-			"done_profit_pct_mean": doneProfitRateSum / float64(max(1, doneNum)) * 100,
-			"done_profit_sum":      doneProfitSum,
-			"done_profit_pct_sum":  doneProfitSum / max(1e-6, doneTotalCost) * 100,
-			"all_profit_mean":      profitMean,
-			"all_profit_pct_mean":  profitRateSum / float64(max(1, odNum)) * 100,
-			"all_profit_sum":       profitSum,
-			"all_profit_pct_sum":   profitSum / max(1e-6, totalCost) * 100,
-			"order_num":            odNum,
-			"done_order_num":       doneNum,
-			"first_od_ts":          firstEntMs / 1000,
-			"last_od_ts":           lastEntMs / 1000,
-			"avg_duration":         totalDuration / int64(max(1, odNum)),
-			"best_pair":            bestPair,
-			"best_profit_pct":      bestRate,
-			"win_num":              winNum,
-			"loss_num":             lossNum,
-			"profit_factor":        profitFactor,
-			"win_rate":             winRate,
-			"expectancy":           expProfit,
-			"expectancy_ratio":     expRatio,
-			"max_drawdown_pct":     ddPct * 100,
-			"max_drawdown_val":     ddVal,
-			"total_cost":           totalCost,
-			"bot_start_ms":         core.StartAt,
-			"run_tfs":              utils.KeysOfMap(core.TFSecs),
-			"exchange":             core.ExgName,
-			"market":               core.Market,
-			"pairs":                core.Pairs,
+			"doneProfitMean":    doneProfitMean,
+			"doneProfitPctMean": doneProfitRateSum / float64(max(1, doneNum)) * 100,
+			"doneProfitSum":     doneProfitSum,
+			"doneProfitPctSum":  doneProfitSum / max(1e-6, doneTotalCost) * 100,
+			"allProfitMean":     profitMean,
+			"allProfitPctMean":  profitRateSum / float64(max(1, odNum)) * 100,
+			"allProfitSum":      profitSum,
+			"allProfitPctSum":   profitSum / max(1e-6, totalCost) * 100,
+			"orderNum":          odNum,
+			"doneOrderNum":      doneNum,
+			"firstOdTs":         firstEntMs / 1000,
+			"lastOdTs":          lastEntMs / 1000,
+			"avgDuration":       totalDuration / int64(max(1, odNum)),
+			"bestPair":          bestPair,
+			"bestProfitPct":     bestRate,
+			"winNum":            winNum,
+			"lossNum":           lossNum,
+			"profitFactor":      profitFactor,
+			"winRate":           winRate,
+			"expectancy":        expProfit,
+			"expectancyRatio":   expRatio,
+			"maxDrawdownPct":    ddPct * 100,
+			"maxDrawdownVal":    ddVal,
+			"totalCost":         totalCost,
+			"botStartMs":        core.StartAt,
+			"runTfs":            utils.KeysOfMap(core.TFSecs),
+			"exchange":          core.ExgName,
+			"market":            core.Market,
+			"pairs":             core.Pairs,
 		})
 	})
 }
 
 func getOrders(c *fiber.Ctx) error {
 	type OrderArgs struct {
-		StartMs   int64  `query:"start_ms"`
-		StopMs    int64  `query:"stop_ms"`
+		StartMs   int64  `query:"startMs"`
+		StopMs    int64  `query:"stopMs"`
 		Limit     int    `query:"limit"`
-		AfterID   int    `query:"after_id"`
+		AfterID   int    `query:"afterId"`
 		Symbols   string `query:"symbols"`
 		Status    string `query:"status"`
 		Strategy  string `query:"strategy"`
-		TimeFrame string `query:"time_frame"`
-		Source    string `query:"source"`
+		TimeFrame string `query:"timeFrame"`
+		Source    string `query:"source" validate:"required"`
 	}
 	var data = new(OrderArgs)
 	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
@@ -242,11 +271,14 @@ func getOrders(c *fiber.Ctx) error {
 	}
 	type OdWrap struct {
 		*orm.InOutOrder
-		CurPrice float64 `json:"cur_price"`
+		CurPrice float64 `json:"curPrice"`
 	}
 	getBotOrders := func(acc string, sess *orm.Queries) error {
 		taskId := orm.GetTaskID(acc)
-		symbols := strings.Split(data.Symbols, ",")
+		var symbols []string
+		if data.Symbols != "" {
+			symbols = strings.Split(data.Symbols, ",")
+		}
 		var status = 0
 		if data.Status == "open" {
 			status = 1
@@ -278,11 +310,15 @@ func getOrders(c *fiber.Ctx) error {
 					od.UpdateProfits(price)
 				}
 			}
+			od.NanInfTo(0)
 			odList = append(odList, &OdWrap{
 				InOutOrder: od,
 				CurPrice:   price,
 			})
 		}
+		sort.Slice(odList, func(i, j int) bool {
+			return odList[i].EnterAt > odList[j].EnterAt
+		})
 		return c.JSON(fiber.Map{
 			"data": odList,
 		})
@@ -292,6 +328,9 @@ func getOrders(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
+		sort.Slice(orders, func(i, j int) bool {
+			return orders[i].Timestamp > orders[j].Timestamp
+		})
 		return c.JSON(fiber.Map{
 			"data": orders,
 		})
@@ -322,12 +361,73 @@ func getOrders(c *fiber.Ctx) error {
 	})
 }
 
+func postForceExit(c *fiber.Ctx) error {
+	type ForceExitArgs struct {
+		OrderID string `json:"orderId" validate:"required"`
+	}
+	var data = new(ForceExitArgs)
+	if err := base.VerifyArg(c, data, base.ArgBody); err != nil {
+		return err
+	}
+
+	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
+		openOds, lock := orm.GetOpenODs(acc)
+		lock.Lock()
+
+		var targetOrders []*orm.InOutOrder
+		if data.OrderID == "all" {
+			targetOrders = utils2.ValsOfMap(openOds)
+		} else {
+			orderID, err := strconv.ParseInt(data.OrderID, 10, 64)
+			if err != nil {
+				lock.Unlock()
+				return fiber.NewError(fiber.StatusBadRequest, "invalid order id")
+			}
+			for _, od := range openOds {
+				if od.ID == orderID {
+					targetOrders = append(targetOrders, od)
+					break
+				}
+			}
+			if len(targetOrders) == 0 {
+				lock.Unlock()
+				return fiber.NewError(fiber.StatusNotFound, "order not found")
+			}
+		}
+		lock.Unlock()
+
+		odMgr := biz.GetLiveOdMgr(acc)
+		closeNum, failNum := 0, 0
+		var errMsg strings.Builder
+		for _, od := range targetOrders {
+			_, err2 := odMgr.ExitOrder(sess, od, &strat.ExitReq{
+				Tag:      core.ExitTagUserExit,
+				StgyName: od.Strategy,
+				OrderID:  od.ID,
+				Force:    true,
+			})
+			if err2 != nil {
+				failNum += 1
+				errMsg.WriteString(fmt.Sprintf("Order %v: %v\n", od.ID, err2.Short()))
+			} else {
+				closeNum += 1
+			}
+		}
+
+		return c.JSON(fiber.Map{
+			"closeNum": closeNum,
+			"failNum":  failNum,
+			"errMsg":   errMsg.String(),
+		})
+	})
+}
+
 func postClosePos(c *fiber.Ctx) error {
 	type CloseArgs struct {
 		Symbol    string  `json:"symbol" validate:"required"`
 		Side      string  `json:"side"`
 		Amount    float64 `json:"amount"`
-		OrderType string  `json:"order_type"`
+		OrderType string  `json:"orderType"`
 		Price     float64 `json:"price"`
 	}
 	var data = new(CloseArgs)
@@ -377,8 +477,8 @@ func postClosePos(c *fiber.Ctx) error {
 		}
 	}
 	return c.JSON(fiber.Map{
-		"close_num": closeNum,
-		"done_num":  doneNum,
+		"closeNum": closeNum,
+		"doneNum":  doneNum,
 	})
 }
 
@@ -386,7 +486,7 @@ func getIncomes(c *fiber.Ctx) error {
 	type CloseArgs struct {
 		InType    string `query:"intype" validate:"required"`
 		Symbol    string `query:"symbol"`
-		StartTime int64  `query:"start_time"`
+		StartTime int64  `query:"startTime"`
 		Limit     int    `query:"limit"`
 	}
 	var data = new(CloseArgs)
@@ -414,7 +514,7 @@ func postDelayEntry(c *fiber.Ctx) error {
 		untilMS := btime.UTCStamp() + data.Secs*1000
 		core.NoEnterUntil[acc] = untilMS
 		return c.JSON(fiber.Map{
-			"allow_trade_at": untilMS,
+			"allowTradeAt": untilMS,
 		})
 	})
 }
@@ -461,7 +561,7 @@ func getStratJobs(c *fiber.Ctx) error {
 		Strategy string  `json:"strategy"`
 		TF       string  `json:"tf"`
 		Price    float64 `json:"price"`
-		OdNum    int     `json:"od_num"`
+		OdNum    int     `json:"odNum"`
 	}
 	return wrapAccount(c, func(acc string) error {
 		jobs := strat.GetJobs(acc)
@@ -490,7 +590,8 @@ func getStratJobs(c *fiber.Ctx) error {
 			}
 		}
 		return c.JSON(fiber.Map{
-			"jobs": items,
+			"jobs":   items,
+			"strats": strat.Versions,
 		})
 	})
 }
@@ -524,19 +625,20 @@ func getTaskPairs(c *fiber.Ctx) error {
 
 type GroupItem struct {
 	Key       string  `json:"key"`
-	HoldHours float64 `json:"hold_hours"`
-	TotalCost float64 `json:"total_cost"`
-	ProfitSum float64 `json:"profit_sum"`
-	ProfitPct float64 `json:"profit_pct"`
-	CloseNum  int     `json:"close_num"`
+	HoldHours float64 `json:"holdHours"`
+	TotalCost float64 `json:"totalCost"`
+	ProfitSum float64 `json:"profitSum"`
+	ProfitPct float64 `json:"profitPct"`
+	CloseNum  int     `json:"closeNum"`
+	WinNum    int     `json:"winNum"`
 }
 
 func getPerformance(c *fiber.Ctx) error {
 	type PerfArgs struct {
-		GroupBy   string   `query:"group_by"`
+		GroupBy   string   `query:"groupBy"`
 		Pairs     []string `query:"pairs"`
-		StartSecs int64    `query:"start_secs"`
-		StopSecs  int64    `query:"stop_secs"`
+		StartSecs int64    `query:"startSecs"`
+		StopSecs  int64    `query:"stopSecs"`
 		Limit     int      `query:"limit"`
 	}
 	var data = new(PerfArgs)
@@ -607,6 +709,9 @@ func groupOrders(orders []*orm.InOutOrder, odKey func(od *orm.InOutOrder) string
 		gp.ProfitSum += od.Profit
 		gp.TotalCost += od.EnterCost()
 		gp.HoldHours += holdHours
+		if od.Profit > 0 {
+			gp.WinNum += 1
+		}
 	}
 	for _, gp := range itemMap {
 		if gp.TotalCost > 0 {
@@ -660,10 +765,10 @@ func getBotInfo(c *fiber.Ctx) error {
 	return wrapAccount(c, func(acc string) error {
 		stopUntil, _ := core.NoEnterUntil[acc]
 		return c.JSON(fiber.Map{
-			"cpu_pct":        percent[0],
-			"ram_pct":        v.UsedPercent,
-			"last_process":   core.LastBarMs,
-			"allow_trade_at": stopUntil,
+			"cpuPct":       percent[0],
+			"ramPct":       v.UsedPercent,
+			"lastProcess":  core.LastBarMs,
+			"allowTradeAt": stopUntil,
 		})
 	})
 }

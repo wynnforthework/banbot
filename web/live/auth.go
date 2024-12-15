@@ -1,12 +1,14 @@
 package live
 
 import (
-	"encoding/base64"
-	"github.com/banbox/banbot/config"
-	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/banbox/banbot/orm"
 	"strings"
 	"time"
+
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/web/base"
+	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func regApiPub(api fiber.Router) {
@@ -21,20 +23,18 @@ func getPing(c *fiber.Ctx) error {
 }
 
 func postLogin(c *fiber.Ctx) error {
-	var authArr = strings.Split(c.Get("Authorization"), " ")
-	var authHeader = authArr[len(authArr)-1]
-	decoded, err := base64.StdEncoding.DecodeString(authHeader)
-	if err != nil {
+	type LoginRequest struct {
+		Username string `json:"username" validate:"required"`
+		Password string `json:"password" validate:"required"`
+	}
+	var req = new(LoginRequest)
+	if err := base.VerifyArg(c, req, base.ArgBody); err != nil {
 		return err
 	}
-	arr := strings.Split(string(decoded), ":")
-	if len(arr) != 2 {
-		return fiber.NewError(fiber.StatusBadRequest, "invalid Authorization header")
-	}
-	var userName, passWord = arr[0], arr[1]
+
 	users := config.APIServer.Users
 	for _, u := range users {
-		if u.Username != userName || u.Password != passWord {
+		if u.Username != req.Username || u.Password != req.Password {
 			continue
 		}
 		expHours := u.ExpireHours
@@ -45,13 +45,21 @@ func postLogin(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
+		// 只返回正在运行的交易账户
+		var accRoles = make(map[string]string)
+		for acc, role := range u.AccRoles {
+			task := orm.GetTask(acc)
+			if task != nil {
+				accRoles[acc] = role
+			}
+		}
 		return c.JSON(fiber.Map{
 			"name":     config.Name,
 			"token":    token,
 			"accounts": u.AccRoles,
 		})
 	}
-	return fiber.NewError(fiber.StatusUnauthorized, "auth fail")
+	return fiber.NewError(fiber.StatusUnauthorized, "invalid username or password")
 }
 
 type AuthClaims struct {
@@ -74,7 +82,7 @@ func createAuthToken(user string, secret string, expHours float64) (string, erro
 
 func AuthMiddleware(secret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		tokenStr := c.Get("Authorization")
+		tokenStr := c.Get("X-Authorization")
 		if tokenStr == "" {
 			return fiber.NewError(fiber.StatusUnauthorized, "missing token")
 		}

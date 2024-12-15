@@ -1,14 +1,13 @@
-package dev
+package base
 
 import (
 	"errors"
 
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/web/base"
 	"github.com/gofiber/fiber/v2"
 )
 
-func regApiKline(api fiber.Router) {
+func RegApiKline(api fiber.Router) {
 	api.Get("/symbols", getSymbols)
 	api.Get("/hist", getHist)
 	api.Get("/all_inds", getTaInds)
@@ -38,7 +37,7 @@ func getHist(c *fiber.Ctx) error {
 		ToMS      int64  `query:"to" validate:"required"`
 	}
 	var data = new(HistArgs)
-	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
+	if err := VerifyArg(c, data, ArgQuery); err != nil {
 		return err
 	}
 	if data.ToMS <= data.FromMS {
@@ -82,7 +81,7 @@ func postCalcInd(c *fiber.Ctx) error {
 		Params []float64   `json:"params" validate:"required"`
 	}
 	var data = new(CalcArgs)
-	if err := base.VerifyArg(c, data, base.ArgBody); err != nil {
+	if err := VerifyArg(c, data, ArgBody); err != nil {
 		return err
 	}
 	res, err := CalcInd(data.Name, data.Kline, data.Params)

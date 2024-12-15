@@ -1,5 +1,7 @@
 import type {Datafeed, SymbolInfo, BarArr, DatafeedWatchCallback, KData, GetKlineArgs} from './types';
 import {getApi} from "../netio";
+import {site} from "$lib/config";
+import {get} from "svelte/store";
 
 export default class MyDatafeed implements Datafeed {
 
@@ -51,8 +53,14 @@ export default class MyDatafeed implements Datafeed {
 
   subscribe(symbol: SymbolInfo, callback: DatafeedWatchCallback): void {
     if (this._prevSymbol && this._prevSymbol.ticker === symbol.ticker) return
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    let ws_url = `${protocol}://${location.host}/api`
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    let host = get(site).apiHost;
+    if(!host){
+      host = location.host;
+    }else{
+      host = host.replace(/^https?:\/\//, '');
+    }
+    let ws_url = `${protocol}://${host}/api`
     this._prevSymbol = symbol
     this._ws?.close()
     this._ws = new WebSocket(`${ws_url}/ws/ohlcv`)
