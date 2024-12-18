@@ -12,16 +12,16 @@
   import {onMount} from 'svelte';
   import {adjustFromTo, makeFormatDate, setTimezone, getUTCStamp} from '../dateutil';
   import type {SymbolInfo, Period, BarArr} from './types';
-  import DrawBar from './drawBar.svelte';
+  import DrawBar from './DrawBar.svelte';
   import {getApi} from '../netio';
   import {makeCloudInds} from './indicators/cloudInds';
   import {browser} from '$app/environment';
   import {getThemeStyles,GetNumberDotOffset, build_ohlcvs} from './coms';
   import {tf_to_secs, toUTCStamp, getDateStr} from '../dateutil';
   import { createAlertStore } from '../stores/alerts';
-	import Alert from '../alert.svelte';
+	import Alert from '../Alert.svelte';
   import { derived, writable } from 'svelte/store';
-  import MenuBar from './menuBar.svelte';
+  import MenuBar from './MenuBar.svelte';
   import type {Writable} from 'svelte/store';
 	import _ from 'lodash';
   setTimezone('UTC')

@@ -6,8 +6,4 @@ class SiteConfig {
   apiReadyCbs: (() => void)[] = []
 }
 
-export const site = writable({
-  apiHost: '',
-  apiReady: false,
-  apiReadyCbs: [] as (() => void)[]
-})
+export const site = writable(new SiteConfig())

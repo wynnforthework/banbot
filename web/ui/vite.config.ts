@@ -15,5 +15,8 @@ export default defineConfig({
       '@': '/src',
 			'klinecharts': 'klinecharts/dist/index.esm.js'
 		}
+	},
+	optimizeDeps: {
+		exclude: ["codemirror", "@codemirror/lang-go"],
 	}
 });

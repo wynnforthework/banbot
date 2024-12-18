@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getContext } from 'svelte';
   import type { Chart, Nullable } from 'klinecharts';
-  import KlineIcon from './icon.svelte';
+  import KlineIcon from './Icon.svelte';
   import { browser } from '$app/environment';
   import type {Writable} from 'svelte/store';
   import {ChartSave, ChartCtx} from './chart';
@@ -10,13 +10,13 @@
   import { derived } from 'svelte/store';
   import * as m from '$lib/paraglide/messages.js';
   import Papa from 'papaparse';
-  import ModalSymbol from './modalSymbol.svelte';
-  import ModalPeriod from './modalPeriod.svelte';
-  import ModalIndSearch from './modalIndSearch.svelte';
-  import ModalIndCfg from './modalIndCfg.svelte';
-  import ModalSetting from './modalSetting.svelte';
-  import ModalScreenShot from './modalScreenShot.svelte';
-  import ModalTimezone from './modalTimezone.svelte';
+  import ModalSymbol from './ModalSymbol.svelte';
+  import ModalPeriod from './ModalPeriod.svelte';
+  import ModalIndSearch from './ModalIndSearch.svelte';
+  import ModalIndCfg from './ModalIndCfg.svelte';
+  import ModalSetting from './ModalSetting.svelte';
+  import ModalScreenShot from './ModalScreenShot.svelte';
+  import ModalTimezone from './ModalTimezone.svelte';
   // Props
   let {customLoad = false} = $props();
 

@@ -2,8 +2,8 @@
 	import { ParaglideJS } from '@inlang/paraglide-sveltekit'
 	import { i18n } from '$lib/i18n.js'
 	import { alerts } from '$lib/stores/alerts';
-	import Alert from '$lib/alert.svelte';
-	import Modal from '$lib/kline/modal.svelte';
+	import Alert from '$lib/Alert.svelte';
+	import Modal from '$lib/kline/Modal.svelte';
 	import { modals } from '$lib/stores/modals';
 
 	let { children } = $props();

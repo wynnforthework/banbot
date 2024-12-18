@@ -1,15 +1,18 @@
 package utils
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
-	"github.com/banbox/banbot/core"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"math/big"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
+
+	"github.com/banbox/banbot/core"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func SnakeToCamel(input string) string {
@@ -94,4 +97,49 @@ func RandomStr(length int) string {
 		b[i] = charset[randomIndex.Int64()]
 	}
 	return string(b)
+}
+
+// IsTextContent 检查字节数组是否可能是文本内容
+// 返回 true 表示可能是文本内容，false 表示可能是二进制内容
+func IsTextContent(data []byte) bool {
+	if len(data) == 0 {
+		return true
+	}
+
+	if utf8.Valid(data) {
+		return true
+	}
+
+	// 检查常见的文本字符
+	textChars := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}|;:,.<>?/\n\r\t ")
+
+	// 统计文本字符的比例
+	textCharCount := 0
+	for _, b := range data {
+		if bytes.Contains(textChars, []byte{b}) {
+			textCharCount++
+		}
+	}
+
+	// 如果文本字符占比超过 70%，认为是文本内容
+	textRatio := float64(textCharCount) / float64(len(data))
+	if textRatio > 0.7 {
+		return true
+	}
+
+	// 检查是否包含过多的控制字符或 null 字符
+	controlCharCount := 0
+	for _, b := range data {
+		if b < 32 && !bytes.Contains([]byte{'\n', '\r', '\t'}, []byte{b}) {
+			controlCharCount++
+		}
+	}
+
+	// 如果控制字符占比超过 10%，认为是二进制内容
+	controlRatio := float64(controlCharCount) / float64(len(data))
+	if controlRatio > 0.1 {
+		return false
+	}
+
+	return true
 }

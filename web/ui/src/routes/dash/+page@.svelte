@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import * as m from '$lib/paraglide/messages.js'
   import type { BotTicket, BotAccount } from '$lib/dash/types';
-  import AddBot from '$lib/dash/addBot.svelte';
+  import AddBot from '$lib/dash/AddBot.svelte';
   import { alerts } from '$lib/stores/alerts';
   import { modals } from '$lib/stores/modals';
   import { ctx, save, loadBotAccounts, loadAccounts } from '$lib/dash/store';
@@ -52,7 +52,7 @@
         <div class="flex justify-center items-center gap-3 text-md text-base-content/70">
           <span>{m.dash_help()}</span>
           <a class="link link-primary hover:link-accent transition-colors duration-200" 
-             href="https://www.banbox.top/">{m.document()}</a>
+             href="https://www.banbox.top/">{m.our_doc()}</a>
         </div>
       </div>
     </div>

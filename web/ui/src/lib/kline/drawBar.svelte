@@ -6,7 +6,7 @@ import type { Chart } from 'klinecharts'
 import {ChartSave} from './chart';
 import type {Writable} from 'svelte/store';
 import {persisted} from 'svelte-persisted-store';
-import KlineIcon from './icon.svelte';
+import KlineIcon from './Icon.svelte';
 import type {Nullable} from 'klinecharts';
 import * as m from '$lib/paraglide/messages.js'
 import {derived} from 'svelte/store';

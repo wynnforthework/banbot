@@ -159,6 +159,93 @@ func CopySymLink(source, dest string) error {
 	return os.Symlink(link, dest)
 }
 
+func MovePath(src, tgt string) error {
+	srcAbs, err := filepath.Abs(src)
+	if err != nil {
+		return err
+	}
+	tgtAbs, err := filepath.Abs(tgt)
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stat(srcAbs)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("Source Not Exist: %v" + src)
+	}
+
+	tgtDir := filepath.Dir(tgtAbs)
+	if err = os.MkdirAll(tgtDir, 0755); err != nil {
+		return err
+	}
+
+	// try rename/move directly
+	err = os.Rename(srcAbs, tgtAbs)
+
+	// copy and delete if move fail
+	if err != nil {
+		if err = copyPath(srcAbs, tgtAbs); err != nil {
+			return err
+		}
+
+		if err = os.RemoveAll(srcAbs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// copyPath 递归复制文件或文件夹
+func copyPath(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	// 如果是文件夹，递归复制
+	if srcInfo.IsDir() {
+		if err = os.MkdirAll(dst, srcInfo.Mode()); err != nil {
+			return err
+		}
+
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+
+		for _, entry := range entries {
+			srcPath := filepath.Join(src, entry.Name())
+			dstPath := filepath.Join(dst, entry.Name())
+
+			if entry.IsDir() {
+				if err := copyPath(srcPath, dstPath); err != nil {
+					return err
+				}
+			} else {
+				if err := copyFile(srcPath, dstPath); err != nil {
+					return err
+				}
+			}
+		}
+	} else {
+		// 如果是文件，直接复制
+		if err := copyFile(src, dst); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	srcContent, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(dst, srcContent, 0644)
+}
+
 func WriteCsvFile(path string, rows [][]string, compress bool) *errs.Error {
 	var fileWriter io.Writer
 	var err_ error

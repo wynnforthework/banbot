@@ -1,13 +1,13 @@
 <script lang="ts">
   import { page } from '$app/stores';
-  import Icon from '$lib/icon.svelte';
+  import Icon from '$lib/Icon.svelte';
   import {ctx, save, acc, loadAccounts} from '$lib/dash/store';
   import type { BotAccount, BotTicket } from '$lib/dash/types';
   import * as m from '$lib/paraglide/messages.js';
 	import { alerts } from '$lib/stores/alerts';
   import { loadBotAccounts } from '$lib/dash/store';
-	import AddBot from '@/lib/dash/addBot.svelte';
-  import Modal from '$lib/kline/modal.svelte';
+	import AddBot from '$lib/dash/AddBot.svelte';
+  import Modal from '$lib/kline/Modal.svelte';
   import {site} from '$lib/config'
 	
 	let { children } = $props();

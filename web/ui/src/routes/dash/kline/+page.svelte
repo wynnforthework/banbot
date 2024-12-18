@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import Chart from '$lib/kline/chart.svelte';
+  import Chart from '$lib/kline/Chart.svelte';
   import { getAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import type { OverlayCreate } from 'klinecharts';
@@ -48,10 +48,10 @@
   const kcSave = persisted(saveRaw.key, saveRaw);
   const TRADE_GROUP = 'ban_trades';
   let tradeList = $state<BanOrder[]>([]);
-  let pair = $page.url.searchParams.get('pair');
   let kc: Chart;
 
   onMount(() => {
+    let pair = $page.url.searchParams.get('pair');
     const initDone = derived(kcCtx, ($c) => $c.initDone)
     initDone.subscribe(() => {
       if(pair){

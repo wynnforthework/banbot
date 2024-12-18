@@ -4,7 +4,7 @@
   import { getAccApi, postAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import {modals} from '$lib/stores/modals';
-  import Modal from '$lib/kline/modal.svelte';
+  import Modal from '$lib/kline/Modal.svelte';
   import { getDateStr, toUTCStamp } from '$lib/dateutil';
 
   let tabName = $state('bot'); // bot/exchange/position

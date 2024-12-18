@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
   import { getAccApi } from '$lib/netio';
-  import Modal from '$lib/kline/modal.svelte';
+  import Modal from '$lib/kline/Modal.svelte';
 
   interface StgyVer {
     name: string;

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from "./modal.svelte"
+  import Modal from "./Modal.svelte"
   
   let { show = $bindable(), url = $bindable() } = $props();
 

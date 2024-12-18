@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from "./modal.svelte"
+  import Modal from "./Modal.svelte"
   import { getContext } from "svelte";
   import * as m from '$lib/paraglide/messages.js'
 	import { ChartSave, ChartCtx } from "./chart";

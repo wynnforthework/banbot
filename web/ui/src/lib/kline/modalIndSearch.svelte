@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Modal from "./modal.svelte"
+  import Modal from "./Modal.svelte"
   import { getContext } from "svelte";
   import * as m from '$lib/paraglide/messages.js'
   import { ChartSave, ChartCtx } from "./chart";
@@ -8,7 +8,7 @@
   import { derived } from "svelte/store";
   import {ActionType} from 'klinecharts';
   import { IndFieldsMap } from './coms';
-  import KlineIcon from './icon.svelte';
+  import KlineIcon from './Icon.svelte';
   let { show = $bindable() } = $props();
   
   const ctx = getContext('ctx') as Writable<ChartCtx>;
