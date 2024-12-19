@@ -348,5 +348,8 @@
     "bad_strat_ptn": "Must start with a letter, and can only contain letters, numbers, and underscores",
     "folder": "Folder",
     "folder_not_exist": "Folder {folder} does not exist, please create it first",
-    "create_strat_ok": "Strategy created successfully"
+    "create_strat_ok": "Strategy created successfully",
+    "already_building": "Already building, please wait",
+    "build": "Compile Code",
+    "load_more": "Load More"
 }

@@ -2,10 +2,11 @@ package core
 
 import (
 	"context"
-	"github.com/banbox/banexg"
-	"github.com/robfig/cron/v3"
 	"io"
 	"sync"
+
+	"github.com/banbox/banexg"
+	"github.com/robfig/cron/v3"
 )
 
 var (
@@ -40,6 +41,7 @@ var (
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
 	Version   = "0.1.7"
+	LogFile   string
 )
 
 const (

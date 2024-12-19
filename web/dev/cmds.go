@@ -8,5 +8,6 @@ type CmdArgs struct {
 	Configs  config.ArrString
 	DataDir  string
 	LogLevel string
+	LogFile  string
 	TimeZone string
 }

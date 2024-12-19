@@ -1,13 +1,15 @@
 package config
 
 import (
+	"time"
+
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"time"
 )
 
 func (a *CmdArgs) Init() {
@@ -31,6 +33,7 @@ func (a *CmdArgs) ParseTimeZone() (*time.Location, *errs.Error) {
 
 func (a *CmdArgs) SetLog(showLog bool, handlers ...zapcore.Core) {
 	log.Setup(a.LogLevel, a.Logfile, handlers...)
+	core.LogFile = a.Logfile
 	if showLog && a.Logfile != "" {
 		log.Info("Log To", zap.String("path", a.Logfile))
 	}

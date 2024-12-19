@@ -1,7 +1,6 @@
 import {$fetch, type SearchParameters, FetchError} from "ofetch";
 import _ from "lodash";
-import type { BotAccount } from "./dash/types";
-import {site} from './config';
+import {site} from './stores/site';
 import {get} from 'svelte/store';
 import { acc } from "./dash/store";
 

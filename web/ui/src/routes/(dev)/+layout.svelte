@@ -2,8 +2,13 @@
   import * as m from '$lib/paraglide/messages.js'
   import Icon from '@/lib/Icon.svelte';
   let { children } = $props();
-  import {site} from '@/lib/config';
+  import {site} from '@/lib/stores/site';
   import {dev} from '$app/environment';
+  import {initWsConn} from '@/lib/dev/websocket';
+  import {browser} from '$app/environment';
+  import {alerts} from '@/lib/stores/alerts';
+  import { postApi, getApi } from '@/lib/netio';
+  
   site.update((s) => {
     if(dev){
       s.apiHost = 'http://localhost:8000';
@@ -11,6 +16,49 @@
     s.apiReady = true;
     return s;
   });
+  
+  if(browser){
+    initWsConn();
+  }
+  
+  let showLogs = $state(false);
+  let logs = $state('');
+  let lastStart: number | null = null;
+  
+  async function fetchLogs(end?: number) {
+    const params = end ? { end } : {};
+    const res = await getApi('/dev/logs', params);
+    if (res.code === 200) {
+      if (end) {
+        logs = logs + res.data;
+      } else {
+        logs = res.data;
+      }
+      lastStart = res.start;
+    } else {
+      console.error('get logs failed', res);
+      alerts.addAlert('error', res.msg || 'get logs failed');
+    }
+  }
+
+  function toggleLogs() {
+    showLogs = !showLogs;
+    if (showLogs && !logs) {
+      fetchLogs();
+    }
+  }
+  
+  async function clickRefresh() {
+    if ($site.building) {
+      alerts.addAlert('warning', m.already_building());
+      return;
+    }
+    const res = await postApi('/dev/build', {});
+    if (res.code !== 200) {
+      console.error('build failed', res);
+      alerts.addAlert('error', res.msg || 'build failed');
+    }
+  }
 </script>
 
 <div class="flex flex-col min-h-screen">
@@ -44,10 +92,51 @@
       </ul>
     </div>
     
-    <div class="navbar-end"></div>
+    <div class="navbar-end">
+      <div class="tooltip tooltip-bottom" data-tip={m.build()}>
+        <button class="btn btn-ghost btn-circle" 
+                class:animate-spin={$site.building}
+                onclick={clickRefresh}>
+          <Icon name="refresh"/>
+        </button>
+      </div>
+      <div class="tooltip tooltip-bottom" data-tip={m.logs()}>
+        <button class="btn btn-ghost btn-circle" onclick={toggleLogs}>
+          <Icon name="document-text"/>
+        </button>
+      </div>
+    </div>
   </div>
 
-  <main class="flex-1 flex flex-col">
-    {@render children()}
-  </main>
+  <!-- 添加日志抽屉 -->
+  <div class="drawer drawer-end">
+    <input id="logs-drawer" type="checkbox" class="drawer-toggle" bind:checked={showLogs} />
+    
+    <div class="drawer-content">
+      <!-- 主页面内容 -->
+      <main class="flex-1 flex flex-col">
+        {@render children()}
+      </main>
+    </div>
+    
+    <div class="drawer-side">
+      <label for="logs-drawer" aria-label="close logs" class="drawer-overlay"></label>
+      <div class="bg-base-200 w-3/5 min-h-full p-4 flex flex-col">
+        <!-- 日志抽屉顶部按钮 -->
+        <div class="flex justify-end gap-2 mb-4">
+          <button class="btn btn-ghost btn-sm" 
+                  onclick={() => lastStart && fetchLogs(lastStart)}>
+            <Icon name="arrow-down"/>{m.load_more()}
+          </button>
+          <button class="btn btn-ghost btn-sm" 
+                  onclick={() => fetchLogs()}>
+            <Icon name="refresh"/>{m.refresh()}
+          </button>
+        </div>
+        
+        <!-- 日志内容 -->
+        <pre class="flex-1 overflow-auto whitespace-pre-wrap">{logs}</pre>
+      </div>
+    </div>
+  </div>
 </div>

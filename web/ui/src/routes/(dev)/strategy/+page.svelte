@@ -8,9 +8,10 @@
   import { type Writable } from 'svelte/store';
   import { alerts } from '$lib/stores/alerts';
   import { modals } from '$lib/stores/modals';
-  import CodeMirror from '$lib/CodeMirror.svelte';
+  import CodeMirror from '@/lib/dev/CodeMirror.svelte';
   import { type Extension } from '@codemirror/state';
   import {oneDark} from '@codemirror/theme-one-dark';
+  import { site } from '@/lib/stores/site';
 
   // 定义文件节点类型
   interface FileNode {
@@ -106,7 +107,7 @@
       
       if (node.children) {
         // 处理文件夹
-        const matchingChildren = node.children.filter(childId => processNode(childId));
+        const matchingChildren = node.children.filter((id: any) => processNode(id));
         if (matchingChildren.length > 0) {
           filtered[nodeId].children = matchingChildren;
           filtered[nodeId].collapsed = false; // 展开包含匹配项的文件夹
@@ -299,7 +300,6 @@
     if (!treeActive.endsWith('/')) {
       await openFile(treeActive);
     }
-    console.log('节点点击:', treeActive, event);
   }
 
   async function openFile(path: string) {
@@ -410,6 +410,8 @@
       if (rsp.code !== 200) {
         console.error('save file failed', rsp);
         alerts.addAlert('error', rsp.msg || 'save file failed');
+      }else if(tab.path.endsWith('.go')){
+        $site.dirtyBin = true;
       }
     }
   }

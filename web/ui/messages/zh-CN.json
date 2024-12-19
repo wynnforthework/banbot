@@ -348,5 +348,8 @@
   "bad_strat_ptn": "必须以字母开头，只能包含字母、数字和下划线",
   "folder": "目录",
   "folder_not_exist": "目录 {folder} 不存在，请先创建",
-  "create_strat_ok": "策略创建成功"
+  "create_strat_ok": "策略创建成功",
+  "already_building": "已开始构建，请等待",
+  "build": "编译代码",
+  "load_more": "加载更多"
 }

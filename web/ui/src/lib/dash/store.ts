@@ -3,7 +3,7 @@ import { persisted } from 'svelte-persisted-store';
 import type { BotTicket, BotAccount } from './types';
 import { DashCtx, DashSave } from './context';
 import { getAccApi } from '$lib/netio';
-import {site} from '$lib/config';
+import {site} from '@/lib/stores/site';
 
 // 创建全局状态stores
 export const ctx = writable<DashCtx>(new DashCtx());

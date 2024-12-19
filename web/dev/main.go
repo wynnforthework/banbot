@@ -3,10 +3,13 @@ package dev
 import (
 	"flag"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/banbox/banbot/web/ui"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
-	"os"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
@@ -28,6 +31,7 @@ func Run(args []string) error {
 	f.StringVar(&ag.TimeZone, "tz", "utc", "timezone, default: utc")
 	f.StringVar(&ag.DataDir, "datadir", "", "Path to data dir.")
 	f.Var(&ag.Configs, "config", "config path to use, Multiple -config options may be used")
+	f.StringVar(&ag.LogFile, "logfile", "", "log file path, default: system temp dir")
 	if args == nil {
 		args = os.Args[1:]
 	}
@@ -35,6 +39,17 @@ func Run(args []string) error {
 	if err_ != nil {
 		return err_
 	}
+
+	// 检查并设置日志文件输出
+	if ag.LogFile == "" {
+		logDir := filepath.Join(os.TempDir(), "banbot")
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return fmt.Errorf("failed to create log directory: %v", err)
+		}
+		logFileName := time.Now().Format("20060102150405") + ".log"
+		ag.LogFile = filepath.Join(logDir, logFileName)
+	}
+
 	// 初始化基础数据
 	core.SetRunMode(core.RunModeLive)
 	banArg := &config.CmdArgs{
@@ -42,6 +57,7 @@ func Run(args []string) error {
 		LogLevel: ag.LogLevel,
 		TimeZone: ag.TimeZone,
 		Configs:  ag.Configs,
+		Logfile:  ag.LogFile,
 	}
 	var err2 *errs.Error
 	if err2 = biz.SetupComs(banArg); err2 != nil {
