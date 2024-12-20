@@ -2,7 +2,10 @@ package orm
 
 import (
 	"context"
+	"database/sql"
+	_ "embed"
 	"errors"
+	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
@@ -11,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
+	_ "modernc.org/sqlite"
 	"net"
 	"runtime"
 	"strings"
@@ -18,9 +22,27 @@ import (
 )
 
 var (
-	pool         *pgxpool.Pool
-	accTasks     = make(map[string]*BotTask)
-	taskIdAccMap = make(map[int64]string)
+	pool       *pgxpool.Pool
+	dbPathMap  = make(map[string]string)
+	dbPathInit = make(map[string]bool)
+	dbPathLock = sync.Mutex{}
+)
+
+//go:embed sql/trade_schema.sql
+var ddlTrade string
+
+//go:embed sql/ui_schema.sql
+var ddlUi string
+
+//go:embed sql/pg_schema.sql
+var ddlPg1 string
+
+//go:embed sql/pg_schema2.sql
+var ddlPg2 string
+
+var (
+	DbTrades = "trades"
+	DbUI     = "ui"
 )
 
 func Setup() *errs.Error {
@@ -56,14 +78,25 @@ func Setup() *errs.Error {
 	}
 	pool = dbPool
 	ctx := context.Background()
-	row := pool.QueryRow(ctx, "show max_connections;")
-	var maxConnections string
-	err = row.Scan(&maxConnections)
+	row := pool.QueryRow(ctx, "SELECT COUNT(*) FROM pg_class WHERE relname = 'kinfo'")
+	var kInfoCnt int64
+	err = row.Scan(&kInfoCnt)
 	if err != nil {
 		return NewDbErr(core.ErrDbReadFail, err)
 	}
-	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize),
-		zap.String("DB_MAX_CONN", maxConnections))
+	if kInfoCnt == 0 {
+		// 表不存在，创建
+		log.Warn("initializing database schema for kline ...")
+		_, err = pool.Exec(ctx, ddlPg1)
+		if err != nil {
+			return NewDbErr(core.ErrDbReadFail, err)
+		}
+		_, err = pool.Exec(ctx, ddlPg2)
+		if err != nil {
+			return NewDbErr(core.ErrDbReadFail, err)
+		}
+	}
+	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize))
 	err2 := LoadAllExSymbols()
 	if err2 != nil {
 		return err2
@@ -85,6 +118,49 @@ func Conn(ctx context.Context) (*Queries, *pgxpool.Conn, *errs.Error) {
 		return nil, nil, errs.New(core.ErrDbConnFail, err)
 	}
 	return New(conn), conn, nil
+}
+
+func SetDbPath(key, path string) {
+	dbPathLock.Lock()
+	dbPathMap[key] = path
+	dbPathLock.Unlock()
+}
+
+func DbLite(src string, path string, write bool) (*sql.DB, *errs.Error) {
+	dbPathLock.Lock()
+	defer dbPathLock.Unlock()
+	if target, ok := dbPathMap[path]; ok {
+		path = target
+	}
+	writeFlag := ""
+	if write {
+		writeFlag = "w"
+	}
+	var connStr = fmt.Sprintf("file:%s?cache=shared&mode=r%s", path, writeFlag)
+	db, err_ := sql.Open("sqlite", connStr)
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbConnFail, err_)
+	}
+	if _, ok := dbPathInit[path]; !ok {
+		ddl, tbl := ddlTrade, "bottask"
+		if src == DbUI {
+			ddl, tbl = ddlUi, "task"
+		}
+		checkSql := "SELECT name FROM sqlite_master WHERE type='table' AND name=?;"
+		_, err_ = db.Exec(checkSql, tbl)
+		if err_ != nil {
+			// 数据库不存在，创建表
+			db, err_ = sql.Open("sqlite", connStr+"c")
+			if err_ != nil {
+				return nil, errs.New(core.ErrDbConnFail, err_)
+			}
+			if _, err_ = db.Exec(ddl); err_ != nil {
+				return nil, errs.New(core.ErrDbExecFail, err_)
+			}
+		}
+		dbPathInit[path] = true
+	}
+	return db, nil
 }
 
 type Tx struct {
@@ -130,133 +206,6 @@ func (q *Queries) Exec(sql string, args ...interface{}) *errs.Error {
 		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	return nil
-}
-
-func GetTaskID(account string) int64 {
-	task := GetTask(account)
-	if task != nil {
-		return task.ID
-	}
-	return 0
-}
-
-func GetTask(account string) *BotTask {
-	if !core.EnvReal {
-		account = config.DefAcc
-	}
-	if task, ok := accTasks[account]; ok {
-		return task
-	}
-	return nil
-}
-
-func GetTaskAcc(id int64) string {
-	if acc, ok := taskIdAccMap[id]; ok {
-		return acc
-	}
-	return ""
-}
-
-func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
-	if !core.EnvReal {
-		account = config.DefAcc
-	}
-	val, ok := accOpenODs[account]
-	lock, _ := lockOpenMap[account]
-	if !ok {
-		val = make(map[int64]*InOutOrder)
-		accOpenODs[account] = val
-		lock = &sync.Mutex{}
-		lockOpenMap[account] = lock
-	}
-	return val, lock
-}
-
-func GetTriggerODs(account string) (map[string]map[int64]*InOutOrder, *sync.Mutex) {
-	if !core.EnvReal {
-		account = config.DefAcc
-	}
-	val, ok := accTriggerODs[account]
-	lock, _ := lockTriggerMap[account]
-	if !ok {
-		val = make(map[string]map[int64]*InOutOrder)
-		accTriggerODs[account] = val
-		lock = &sync.Mutex{}
-		lockTriggerMap[account] = lock
-	}
-	return val, lock
-}
-
-func AddTriggerOd(account string, od *InOutOrder) {
-	triggerOds, lock := GetTriggerODs(account)
-	lock.Lock()
-	ods, ok := triggerOds[od.Symbol]
-	if !ok {
-		ods = make(map[int64]*InOutOrder)
-		triggerOds[od.Symbol] = ods
-	}
-	ods[od.ID] = od
-	lock.Unlock()
-}
-
-/*
-OpenNum
-Returns the number of open orders that match the specified status
-返回符合指定状态的尚未平仓订单的数量
-*/
-func OpenNum(account string, status int16) int {
-	openNum := 0
-	openOds, lock := GetOpenODs(account)
-	lock.Lock()
-	for _, od := range openOds {
-		if od.Status >= status {
-			openNum += 1
-		}
-	}
-	lock.Unlock()
-	return openNum
-}
-
-/*
-SaveDirtyODs
-Find unsaved orders from open orders and save them all to the database
-从打开的订单中查找未保存的订单，全部保存到数据库
-*/
-func SaveDirtyODs(account string) *errs.Error {
-	var dirtyOds []*InOutOrder
-	for accKey, ods := range accOpenODs {
-		if account != "" && accKey != account {
-			continue
-		}
-		lock, _ := lockOpenMap[accKey]
-		lock.Lock()
-		for key, od := range ods {
-			if od.IsDirty() {
-				dirtyOds = append(dirtyOds, od)
-			}
-			if od.Status >= InOutStatusFullExit {
-				delete(ods, key)
-			}
-		}
-		lock.Unlock()
-	}
-	if len(dirtyOds) == 0 {
-		return nil
-	}
-	sess, conn, err := Conn(nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-	var odErr *errs.Error
-	for _, od := range dirtyOds {
-		err = od.Save(sess)
-		if err != nil {
-			odErr = err
-			log.Error("save unMatch od fail", zap.String("key", od.Key()), zap.Error(err))
-		}
-	}
-	return odErr
 }
 
 func LoadMarkets(exchange banexg.BanExchange, reload bool) (banexg.MarketMap, *errs.Error) {
@@ -310,16 +259,6 @@ func (a *AdjInfo) Apply(bars []*banexg.Kline, adj int) []*banexg.Kline {
 		result = append(result, k)
 	}
 	return result
-}
-
-func ResetVars() {
-	accOpenODs = make(map[string]map[int64]*InOutOrder)
-	accTriggerODs = make(map[string]map[string]map[int64]*InOutOrder)
-	lockOpenMap = make(map[string]*sync.Mutex)
-	lockTriggerMap = make(map[string]*sync.Mutex)
-	lockOds = make(map[string]*sync.Mutex)
-	accTasks = make(map[string]*BotTask)
-	taskIdAccMap = make(map[int64]string)
 }
 
 func NewDbErr(code int, err_ error) *errs.Error {

@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
@@ -22,15 +23,15 @@ import (
 	"time"
 )
 
-type FuncApplyMyTrade = func(od *orm.InOutOrder, subOd *orm.ExOrder, trade *banexg.MyTrade) *errs.Error
+type FuncApplyMyTrade = func(od *ormo.InOutOrder, subOd *ormo.ExOrder, trade *banexg.MyTrade) *errs.Error
 type FuncHandleMyOrder = func(trade *banexg.Order) bool
 
 type LiveOrderMgr struct {
 	OrderMgr
 	queue            chan *OdQItem
-	doneKeys         map[string]bool            // Completed Orders 已完成的订单：symbol+orderId
-	exgIdMap         map[string]*orm.InOutOrder // symbol+orderId: InOutOrder
-	doneTrades       map[string]bool            // Processed trades 已处理的交易：symbol+tradeId
+	doneKeys         map[string]bool             // Completed Orders 已完成的订单：symbol+orderId
+	exgIdMap         map[string]*ormo.InOutOrder // symbol+orderId: InOutOrder
+	doneTrades       map[string]bool             // Processed trades 已处理的交易：symbol+tradeId
 	lockDoneKeys     sync.Mutex
 	lockExgIdMap     sync.Mutex
 	lockDoneTrades   sync.Mutex
@@ -45,7 +46,7 @@ type LiveOrderMgr struct {
 }
 
 type OdQItem struct {
-	Order  *orm.InOutOrder
+	Order  *ormo.InOutOrder
 	Action string
 }
 
@@ -66,7 +67,7 @@ type PairValItem struct {
 	ExpireMS int64
 }
 
-func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
+func InitLiveOrderMgr(callBack func(od *ormo.InOutOrder, isEnter bool)) {
 	for account := range config.Accounts {
 		mgr, ok := accLiveOdMgrs[account]
 		if !ok {
@@ -79,7 +80,7 @@ func InitLiveOrderMgr(callBack func(od *orm.InOutOrder, isEnter bool)) {
 	}
 }
 
-func newLiveOrderMgr(account string, callBack func(od *orm.InOutOrder, isEnter bool)) *LiveOrderMgr {
+func newLiveOrderMgr(account string, callBack func(od *ormo.InOutOrder, isEnter bool)) *LiveOrderMgr {
 	res := &LiveOrderMgr{
 		OrderMgr: OrderMgr{
 			callBack: callBack,
@@ -87,7 +88,7 @@ func newLiveOrderMgr(account string, callBack func(od *orm.InOutOrder, isEnter b
 		},
 		queue:         make(chan *OdQItem, 1000),
 		doneKeys:      map[string]bool{},
-		exgIdMap:      map[string]*orm.InOutOrder{},
+		exgIdMap:      map[string]*ormo.InOutOrder{},
 		doneTrades:    map[string]bool{},
 		unMatchTrades: map[string]*banexg.MyTrade{},
 	}
@@ -125,9 +126,9 @@ For redundant positions, treat them as new orders opened by the user and create 
 	     从交易所订单记录来确定未平仓订单的当前状态：已平仓、部分平仓、未平仓
 	     对于冗余的仓位，视为用户开的新订单，创建新订单跟踪。
 */
-func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
+func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
 	exchange := exg.Default
-	task := orm.GetTask(o.Account)
+	task := ormo.GetTask(o.Account)
 	// Get the exchange order
 	// 获取交易所挂单
 	exOdList, err := exchange.FetchOpenOrders("", task.CreateAt, 1000, map[string]interface{}{
@@ -140,20 +141,19 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	for _, od := range exOdList {
 		exgOdMap[od.ID] = od
 	}
-	sess, conn, err := orm.Conn(nil)
+	sess, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	// Loading orders from the database
 	// 从数据库加载订单
-	openOds, lock := orm.GetOpenODs(o.Account)
-	orders, err := sess.GetOrders(orm.GetOrdersArgs{
+	openOds, lock := ormo.GetOpenODs(o.Account)
+	orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 		TaskID: task.ID,
 		Status: 1,
 		Limit:  1000,
 	})
 	if err != nil {
-		conn.Release()
 		return nil, nil, nil, err
 	}
 	// Query the most recent usage time period of a task
@@ -162,14 +162,13 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	if config.TakeOverStgy != "" {
 		pairLastTfs, err = sess.GetHistOrderTfs(task.ID, config.TakeOverStgy)
 		if err != nil {
-			conn.Release()
 			return nil, nil, nil, err
 		}
 	}
 	var lastEntMS int64
 	var openPairs = map[string]struct{}{}
 	for _, od := range orders {
-		if od.Status >= orm.InOutStatusFullExit {
+		if od.Status >= ormo.InOutStatusFullExit {
 			continue
 		}
 		lastEntMS = max(lastEntMS, od.EnterAt)
@@ -177,7 +176,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		if err != nil {
 			log.Error("restoreInOutOrder fail", zap.String("key", od.Key()), zap.Error(err))
 		}
-		if od.Status < orm.InOutStatusFullExit {
+		if od.Status < ormo.InOutStatusFullExit {
 			lock.Lock()
 			openOds[od.ID] = od
 			lock.Unlock()
@@ -188,9 +187,6 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 			log.Error("save order in SyncExgOrders fail", zap.String("key", od.Key()), zap.Error(err))
 		}
 	}
-	// Release it after use to prevent long-term connection occupation
-	// 这里用完就释放，防止长时间占用连接
-	conn.Release()
 	// Get exchange positions
 	// 获取交易所仓位
 	posList, err := exchange.FetchAccountPositions(nil, map[string]interface{}{
@@ -204,10 +200,10 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 		return v.Symbol
 	})
 	lock.Lock()
-	var resOdList = make([]*orm.InOutOrder, 0, len(openOds))
+	var resOdList = make([]*ormo.InOutOrder, 0, len(openOds))
 	lock.Unlock()
 	for pair := range openPairs {
-		curOds := make([]*orm.InOutOrder, 0, 2)
+		curOds := make([]*ormo.InOutOrder, 0, 2)
 		lock.Lock()
 		for _, od := range openOds {
 			if od.Symbol == pair {
@@ -233,16 +229,16 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 			return nil, nil, nil, err
 		}
 		for _, od := range curOds {
-			if od.Status >= orm.InOutStatusFullExit {
+			if od.Status >= ormo.InOutStatusFullExit {
 				continue
 			}
 			resOdList = append(resOdList, od)
 		}
 	}
-	var oldList = make([]*orm.InOutOrder, 0, 4)
-	var newList = make([]*orm.InOutOrder, 0, 4)
-	var delList = make([]*orm.InOutOrder, 0, 4)
-	resMap := utils.ArrToMap(resOdList, func(od *orm.InOutOrder) int64 {
+	var oldList = make([]*ormo.InOutOrder, 0, 4)
+	var newList = make([]*ormo.InOutOrder, 0, 4)
+	var delList = make([]*ormo.InOutOrder, 0, 4)
+	resMap := utils.ArrToMap(resOdList, func(od *ormo.InOutOrder) int64 {
 		return od.ID
 	})
 	lock.Lock()
@@ -268,7 +264,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []
 	if len(newList) > 0 {
 		log.Info(fmt.Sprintf("%s: Started tracking %v users' orders", o.Account, len(newList)))
 	}
-	err = orm.SaveDirtyODs(o.Account)
+	err = ormo.SaveDirtyODs(orm.DbTrades, o.Account)
 	if err != nil {
 		log.Error("SaveDirtyODs fail", zap.Error(err))
 	}
@@ -280,23 +276,23 @@ restoreInOutOrder
 Restore order status
 恢复订单状态
 */
-func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string]*banexg.Order) *errs.Error {
+func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[string]*banexg.Order) *errs.Error {
 	tryOd := od.Enter
 	if od.Exit != nil {
 		tryOd = od.Exit
 	}
 	var err *errs.Error
-	if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == orm.OdStatusInit {
+	if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == ormo.OdStatusInit {
 		// The order has not been submitted to the exchange and is an entry order
 		// 订单未提交到交易所，且是入场订单
 		if isFarEnter(od) {
-			orm.AddTriggerOd(o.Account, od)
+			ormo.AddTriggerOd(o.Account, od)
 		} else {
 			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "Restart and cancel orders that haven't been filled", "")
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			return err
 		}
-	} else if tryOd.OrderID != "" && tryOd.Status != orm.OdStatusClosed {
+	} else if tryOd.OrderID != "" && tryOd.Status != ormo.OdStatusClosed {
 		// Submitted to the exchange, not yet completed
 		// 已提交到交易所，尚未完成
 		exOd, ok := exgOdMap[tryOd.OrderID]
@@ -323,25 +319,25 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *orm.InOutOrder, exgOdMap map[string
 		if err != nil {
 			return err
 		}
-		if od.Status >= orm.InOutStatusFullExit {
+		if od.Status >= ormo.InOutStatusFullExit {
 			// 订单已退出
 			return nil
 		}
-		if tryOd.Status == orm.OdStatusClosed {
-			od.Status = orm.InOutStatusFullExit
+		if tryOd.Status == ormo.OdStatusClosed {
+			od.Status = ormo.InOutStatusFullExit
 			od.DirtyMain = true
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			return nil
-		} else if tryOd.Status > orm.OdStatusInit {
+		} else if tryOd.Status > ormo.OdStatusInit {
 			// You shouldn't go here.
 			// 这里不应该走到
-			log.Error("Exit Status Invalid", zap.String("key", od.Key()), zap.Int16("sta", tryOd.Status),
+			log.Error("Exit Status Invalid", zap.String("key", od.Key()), zap.Int64("sta", tryOd.Status),
 				zap.String("orderId", tryOd.OrderID))
 		} else {
 			// Here OrderID must be empty, and the number of entry orders must be filled.
 			// 这里OrderID一定为空，并且入场单数量一定有成交的。
 			o.queue <- &OdQItem{
-				Action: orm.OdActionExit,
+				Action: ormo.OdActionExit,
 				Order:  od,
 			}
 		}
@@ -354,7 +350,7 @@ For the specified currency, synchronize the exchange order status to the local m
 对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
 */
 func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, sinceMs int64,
-	openOds []*orm.InOutOrder) ([]*orm.InOutOrder, *errs.Error) {
+	openOds []*ormo.InOutOrder) ([]*ormo.InOutOrder, *errs.Error) {
 	var exOrders []*banexg.Order
 	var err *errs.Error
 	if len(openOds) > 0 {
@@ -369,11 +365,10 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	}
 	// Get the exchange order before getting the connection to reduce the time taken
 	// 获取交易所订单后再获取连接，减少占用时长
-	sess, conn, err := orm.Conn(nil)
+	sess, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		return openOds, err
 	}
-	defer conn.Release()
 	if len(openOds) > 0 {
 		for _, exod := range exOrders {
 			if !banexg.IsOrderDone(exod.Status) {
@@ -416,7 +411,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			if odAmt*iod.InitPrice < 1 {
 				// TODO: The quote value calculated here needs to be changed to the legal currency value later
 				// TODO: 这里计算的quote价值，后续需要改为法币价值
-				if iod.Status < orm.InOutStatusFullExit {
+				if iod.Status < ormo.InOutStatusFullExit {
 					msg := "The order has no corresponding position"
 					err = iod.LocalExit(core.ExitTagFatalErr, iod.InitPrice, msg, "")
 					strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
@@ -500,7 +495,7 @@ func getFeeNameCost(fee *banexg.Fee, pair, odType, side string, amount, price fl
 	return fee.Currency, fee.Cost
 }
 
-func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, od *banexg.Order, defTF string) ([]*orm.InOutOrder, *errs.Error) {
+func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder, od *banexg.Order, defTF string) ([]*ormo.InOutOrder, *errs.Error) {
 	isShort := od.PositionSide == banexg.PosSideShort
 	isSell := od.Side == banexg.OdSideSell
 	exs, err := orm.GetExSymbolCur(od.Symbol)
@@ -523,7 +518,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 		}
 		log.Info(fmt.Sprintf("%s %s: price:%.5f, amount: %.5f, %v, fee: %.5f, %v id:%v",
 			o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
-		iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, orm.OdStatusClosed,
+		iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, ormo.OdStatusClosed,
 			od.ID, defTF)
 		err = iod.Save(sess)
 		if err != nil {
@@ -532,8 +527,8 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 		ods = append(ods, iod)
 	} else {
 		// Close long or short 平多或平空
-		var part *orm.InOutOrder
-		var res []*orm.InOutOrder
+		var part *ormo.InOutOrder
+		var res []*ormo.InOutOrder
 		for _, iod := range ods {
 			if iod.Short != isShort {
 				continue
@@ -549,7 +544,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 			}
 			log.Info(fmt.Sprintf("%s %v: price:%.5f, amount: %.5f, %v, %v id: %v",
 				o.Account, tag, price, part.Exit.Filled, od.Type, odTime, od.ID))
-			if iod.Status < orm.InOutStatusFullExit {
+			if iod.Status < ormo.InOutStatusFullExit {
 				err = iod.Save(sess)
 				if err != nil {
 					return ods, err
@@ -572,7 +567,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 			}
 			log.Info(fmt.Sprintf("%s %v: price:%.5f, amount: %.5f, %v, fee: %.5f %v id: %v",
 				o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
-			iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, orm.OdStatusClosed,
+			iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, ormo.OdStatusClosed,
 				od.ID, defTF)
 			err = iod.Save(sess)
 			if err != nil {
@@ -585,39 +580,39 @@ func (o *LiveOrderMgr) applyHisOrder(sess *orm.Queries, ods []*orm.InOutOrder, o
 }
 
 func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, filled float64, odType string,
-	feeCost float64, feeName string, enterAt int64, entStatus int, entOdId string, defTF string) *orm.InOutOrder {
+	feeCost float64, feeName string, enterAt int64, entStatus int, entOdId string, defTF string) *ormo.InOutOrder {
 	notional := average * filled
 	leverage, _ := exg.GetLeverage(exs.Symbol, notional, o.Account)
 	if leverage == 0 {
 		leverage = config.GetAccLeverage(o.Account)
 	}
-	status := orm.InOutStatusPartEnter
-	if entStatus == orm.OdStatusClosed {
-		status = orm.InOutStatusFullEnter
+	status := ormo.InOutStatusPartEnter
+	if entStatus == ormo.OdStatusClosed {
+		status = ormo.InOutStatusFullEnter
 	}
 	stgVer, _ := strat.Versions[config.TakeOverStgy]
 	entSide := banexg.OdSideBuy
 	if short {
 		entSide = banexg.OdSideSell
 	}
-	taskId := orm.GetTaskID(o.Account)
-	od := &orm.InOutOrder{
-		IOrder: &orm.IOrder{
+	taskId := ormo.GetTaskID(o.Account)
+	od := &ormo.InOutOrder{
+		IOrder: &ormo.IOrder{
 			TaskID:    taskId,
 			Symbol:    exs.Symbol,
-			Sid:       exs.ID,
+			Sid:       int64(exs.ID),
 			Timeframe: defTF,
 			Short:     short,
-			Status:    int16(status),
+			Status:    int64(status),
 			EnterTag:  core.EnterTagThird,
 			InitPrice: average,
 			QuoteCost: notional * leverage,
 			Leverage:  leverage,
 			EnterAt:   enterAt,
 			Strategy:  config.TakeOverStgy,
-			StgVer:    int32(stgVer),
+			StgVer:    int64(stgVer),
 		},
-		Enter: &orm.ExOrder{
+		Enter: &ormo.ExOrder{
 			TaskID:    taskId,
 			Symbol:    exs.Symbol,
 			Enter:     true,
@@ -629,7 +624,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 			Average:   average,
 			Amount:    filled,
 			Filled:    filled,
-			Status:    int16(entStatus),
+			Status:    int64(entStatus),
 			Fee:       feeCost,
 			FeeType:   feeName,
 			UpdateAt:  enterAt,
@@ -637,7 +632,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 		DirtyMain:  true,
 		DirtyEnter: true,
 	}
-	if status >= orm.InOutStatusFullEnter {
+	if status >= ormo.InOutStatusFullEnter {
 		strat.FireOdChange(o.Account, od, strat.OdChgEnterFill)
 	} else {
 		strat.FireOdChange(o.Account, od, strat.OdChgEnter)
@@ -645,7 +640,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 	return od
 }
 
-func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*orm.InOutOrder, *errs.Error) {
+func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*ormo.InOutOrder, *errs.Error) {
 	if defTF == "" {
 		msg := fmt.Sprintf("take over job not found, %s %s", pos.Symbol, config.TakeOverStgy)
 		return nil, errs.NewMsg(core.ErrBadConfig, msg)
@@ -665,7 +660,7 @@ func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*orm
 	}
 	log.Info(fmt.Sprintf("%s [Pos]%v: price:%.5f, amount:%.5f, fee: %.5f", o.Account, tag, average, filled, feeCost))
 	enterAt := btime.TimeMS()
-	entStatus := orm.OdStatusClosed
+	entStatus := ormo.OdStatusClosed
 	iod := o.createInOutOd(exs, isShort, average, filled, entOdType, feeCost, feeName, enterAt, entStatus, "", defTF)
 	return iod, nil
 }
@@ -675,8 +670,8 @@ tryFillExit
 Try to close a position, used to update the closing status of the robot's order from a third-party transaction
 尝试平仓，用于从第三方交易中更新机器人订单的平仓状态
 */
-func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, odTime int64, orderID, odType,
-	feeName string, feeCost float64) (float64, float64, *orm.InOutOrder) {
+func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, odTime int64, orderID, odType,
+	feeName string, feeCost float64) (float64, float64, *ormo.InOutOrder) {
 	if iod.Enter.Filled == 0 {
 		err := iod.LocalExit(core.ExitTagForceExit, iod.InitPrice, "not entered", "")
 		strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
@@ -711,8 +706,8 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 		if part.Short {
 			exitSide = banexg.OdSideBuy
 		}
-		taskId := orm.GetTaskID(o.Account)
-		part.Exit = &orm.ExOrder{
+		taskId := ormo.GetTaskID(o.Account)
+		part.Exit = &ormo.ExOrder{
 			TaskID:    taskId,
 			InoutID:   part.ID,
 			Symbol:    part.Symbol,
@@ -725,7 +720,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 			Average:   price,
 			Amount:    part.Enter.Amount,
 			Filled:    fillAmt,
-			Status:    orm.OdStatusClosed,
+			Status:    ormo.OdStatusClosed,
 			Fee:       curFeeCost,
 			FeeType:   feeName,
 			UpdateAt:  odTime,
@@ -736,7 +731,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 		part.Exit.OrderID = orderID
 		part.Exit.Price = price
 		part.Exit.Average = price
-		part.Exit.Status = orm.OdStatusClosed
+		part.Exit.Status = ormo.OdStatusClosed
 		part.Exit.Fee = curFeeCost
 		part.Exit.FeeType = feeName
 		part.Exit.UpdateAt = odTime
@@ -744,21 +739,21 @@ func (o *LiveOrderMgr) tryFillExit(iod *orm.InOutOrder, filled, price float64, o
 	part.DirtyExit = true
 	part.ExitTag = core.ExitTagThird
 	part.ExitAt = odTime
-	part.Status = orm.InOutStatusFullExit
+	part.Status = ormo.InOutStatusFullExit
 	part.DirtyMain = true
 	strat.FireOdChange(o.Account, part, strat.OdChgExitFill)
 	return filled, feeCost, part
 }
 
-func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
-	exits []*strat.ExitReq, edits []*orm.InOutEdit) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
+func (o *LiveOrderMgr) ProcessOrders(sess *ormo.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
+	exits []*strat.ExitReq, edits []*ormo.InOutEdit) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
 	ents, extOrders, err := o.OrderMgr.ProcessOrders(sess, env, enters, exits)
 	if err != nil {
 		return ents, extOrders, err
 	}
 	for _, edit := range edits {
-		if edit.Action == orm.OdActionLimitEnter && isFarEnter(edit.Order) {
-			orm.AddTriggerOd(o.Account, edit.Order)
+		if edit.Action == ormo.OdActionLimitEnter && isFarEnter(edit.Order) {
+			ormo.AddTriggerOd(o.Account, edit.Order)
 			continue
 		}
 		o.queue <- &OdQItem{
@@ -770,35 +765,35 @@ func (o *LiveOrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enter
 }
 
 func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {
-	return func(order *orm.InOutOrder) *errs.Error {
+	return func(order *ormo.InOutOrder) *errs.Error {
 		fields := []zap.Field{zap.String("acc", o.Account), zap.String("key", order.Key())}
 		if isFarEnter(order) {
 			// Limit orders that are difficult to execute for a long time will not be submitted to the exchange to prevent funds from being occupied.
 			// 长时间难以成交的限价单，先不提交到交易所，防止资金占用
-			orm.AddTriggerOd(o.Account, order)
+			ormo.AddTriggerOd(o.Account, order)
 			log.Info("NEW Enter trigger", fields...)
 			return nil
 		}
 		log.Info("NEW Enter", fields...)
 		o.queue <- &OdQItem{
 			Order:  order,
-			Action: orm.OdActionEnter,
+			Action: ormo.OdActionEnter,
 		}
 		return nil
 	}
 }
 
 func makeAfterExit(o *LiveOrderMgr) FuncHandleIOrder {
-	return func(order *orm.InOutOrder) *errs.Error {
+	return func(order *ormo.InOutOrder) *errs.Error {
 		fields := []zap.Field{zap.String("acc", o.Account), zap.String("key", order.Key())}
-		action := orm.OdActionExit
+		action := ormo.OdActionExit
 		if order.Exit != nil {
 			fields = append(fields, zap.String("tag", order.ExitTag))
 			log.Info("Exit Order", fields...)
 		} else {
 			tp := order.GetTakeProfit()
 			if tp != nil {
-				action = orm.OdActionTakeProfit
+				action = ormo.OdActionTakeProfit
 				log.Info("Set Order TakeProfit", fields...)
 			} else {
 				log.Error("afterExit: unknown order status", fields...)
@@ -832,18 +827,18 @@ func (o *LiveOrderMgr) ConsumeOrderQueue() {
 	}()
 }
 
-func (o *LiveOrderMgr) handleOrderQueue(od *orm.InOutOrder, action string) {
+func (o *LiveOrderMgr) handleOrderQueue(od *ormo.InOutOrder, action string) {
 	var err *errs.Error
 	lock := od.Lock()
 	defer lock.Unlock()
 	switch action {
-	case orm.OdActionEnter:
+	case ormo.OdActionEnter:
 		err = o.execOrderEnter(od)
-	case orm.OdActionExit:
+	case ormo.OdActionExit:
 		err = o.execOrderExit(od)
-	case orm.OdActionStopLoss, orm.OdActionTakeProfit:
+	case ormo.OdActionStopLoss, ormo.OdActionTakeProfit:
 		o.editTriggerOd(od, action)
-	case orm.OdActionLimitEnter, orm.OdActionLimitExit:
+	case ormo.OdActionLimitEnter, ormo.OdActionLimitExit:
 		err = o.editLimitOd(od, action)
 	default:
 		log.Error("unknown od action", zap.String("action", action), zap.String("key", od.Key()))
@@ -859,18 +854,18 @@ func (o *LiveOrderMgr) handleOrderQueue(od *orm.InOutOrder, action string) {
 		}
 	}
 	logFields := []zap.Field{zap.String("acc", o.Account), zap.String("key", od.Key())}
-	if action == orm.OdActionEnter {
-		if od.Enter.OrderID != "" && od.Status < orm.InOutStatusFullExit {
+	if action == ormo.OdActionEnter {
+		if od.Enter.OrderID != "" && od.Status < ormo.InOutStatusFullExit {
 			log.Info("Enter Order Submitted", logFields...)
-		} else if od.Status >= orm.InOutStatusFullExit {
+		} else if od.Status >= ormo.InOutStatusFullExit {
 			logFields = append(logFields, zap.String("exitTag", od.ExitTag))
 			log.Info("Enter Order Closed", logFields...)
 		}
-	} else if action == orm.OdActionExit {
+	} else if action == ormo.OdActionExit {
 		if od.Exit.OrderID != "" {
-			logFields = append(logFields, zap.Int16("state", od.Status))
+			logFields = append(logFields, zap.Int64("state", od.Status))
 			log.Info("Exit Order Submitted", logFields...)
-		} else if od.Status >= orm.InOutStatusFullExit {
+		} else if od.Status >= ormo.InOutStatusFullExit {
 			logFields = append(logFields, zap.String("exitTag", od.ExitTag))
 			log.Info("Exit Order Closed", logFields...)
 		}
@@ -931,7 +926,7 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 		// 检查是否是机器人下单
 		orderId := getClientOrderId(trade.ClientID)
 		if orderId > 0 {
-			openOds, lock := orm.GetOpenODs(o.Account)
+			openOds, lock := ormo.GetOpenODs(o.Account)
 			lock.Lock()
 			iod, ok = openOds[orderId]
 			lock.Unlock()
@@ -973,11 +968,11 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 			zap.String("order", trade.Order))
 	}
 	if iod.IsDirty() {
-		if iod.Status == orm.InOutStatusFullEnter {
+		if iod.Status == ormo.InOutStatusFullEnter {
 			// Place stop loss and take profit orders only after full entry
 			// 仅在完全入场后，下止损止盈单
-			o.editTriggerOd(iod, orm.OdActionStopLoss)
-			o.editTriggerOd(iod, orm.OdActionTakeProfit)
+			o.editTriggerOd(iod, ormo.OdActionStopLoss)
+			o.editTriggerOd(iod, ormo.OdActionTakeProfit)
 		}
 		err = iod.Save(nil)
 		if err != nil {
@@ -1069,7 +1064,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			if unHandleNum > 0 {
 				log.Warn(fmt.Sprintf("expired unmatch orders: %v", unHandleNum))
 			}
-			err := orm.SaveDirtyODs(o.Account)
+			err := ormo.SaveDirtyODs(orm.DbTrades, o.Account)
 			if err != nil {
 				log.Error("SaveDirtyODs fail", zap.Error(err))
 			}
@@ -1077,7 +1072,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 	}()
 }
 
-func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade) *errs.Error {
+func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrade) *errs.Error {
 	sl := od.GetStopLoss()
 	tp := od.GetTakeProfit()
 	isSell := trade.Side == banexg.OdSideSell
@@ -1108,7 +1103,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 		}
 		subOd = od.Exit
 	}
-	if subOd.Status == orm.OdStatusClosed {
+	if subOd.Status == ormo.OdStatusClosed {
 		log.Debug(fmt.Sprintf("%s %s complete, skip trade: %v", od.Key(), dirtTag, trade.ID))
 		return nil
 	}
@@ -1125,7 +1120,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 	subOd.Amount = trade.Amount
 	state := trade.State
 	if state == banexg.OdStatusFilled || state == banexg.OdStatusPartFilled {
-		odStatus := orm.OdStatusPartOK
+		odStatus := ormo.OdStatusPartOK
 		if subOd.Filled == 0 {
 			if subOd.Enter {
 				od.EnterAt = trade.Timestamp
@@ -1138,34 +1133,34 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 		subOd.Filled = trade.Filled
 		subOd.Average = trade.Average
 		if state == banexg.OdStatusFilled {
-			odStatus = orm.OdStatusClosed
+			odStatus = ormo.OdStatusClosed
 			subOd.Price = trade.Average
 			if subOd.Enter {
-				od.Status = orm.InOutStatusFullEnter
+				od.Status = ormo.InOutStatusFullEnter
 			} else {
-				od.Status = orm.InOutStatusFullExit
+				od.Status = ormo.InOutStatusFullExit
 			}
 			od.DirtyMain = true
 		}
-		subOd.Status = int16(odStatus)
+		subOd.Status = int64(odStatus)
 		if trade.Fee != nil {
 			subOd.FeeType = trade.Fee.Currency
 			subOd.Fee = trade.Fee.Cost
 		}
 	} else if banexg.IsOrderDone(state) {
-		subOd.Status = orm.OdStatusClosed
+		subOd.Status = ormo.OdStatusClosed
 		if subOd.Enter {
 			if subOd.Filled == 0 {
-				od.Status = orm.InOutStatusFullExit
+				od.Status = ormo.InOutStatusFullExit
 			} else {
-				od.Status = orm.InOutStatusFullEnter
+				od.Status = ormo.InOutStatusFullEnter
 			}
 			od.DirtyMain = true
 		}
 	} else {
 		log.Error(fmt.Sprintf("unknown bnb order status: %s", state))
 	}
-	if od.Status == orm.InOutStatusFullExit {
+	if od.Status == ormo.InOutStatusFullExit {
 		// May be triggered by stop loss or take profit, delete and set to completed
 		// 可能由止盈止损触发，删除置为已完成
 		if isStopLoss {
@@ -1188,7 +1183,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *orm.InOutOrder, trade *banexg.MyTrade
 	return nil
 }
 
-func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
+func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 	if od.ExitTag != "" {
 		// 订单已取消，不提交到交易所
 		return nil
@@ -1196,12 +1191,11 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 	odKey := od.Key()
 	forceDelOd := func(err *errs.Error) {
 		log.Error("del enter order", zap.String("key", odKey), zap.Error(err))
-		sess, conn, err := orm.Conn(nil)
+		sess, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get db sess fail", zap.Error(err))
 			return
 		}
-		defer conn.Release()
 		err = sess.DelOrder(od)
 		if err != nil {
 			log.Error("del order fail", zap.String("key", odKey), zap.Error(err))
@@ -1252,8 +1246,8 @@ func (o *LiveOrderMgr) execOrderEnter(od *orm.InOutOrder) *errs.Error {
 	return nil
 }
 
-func (o *LiveOrderMgr) tryExitEnter(od *orm.InOutOrder) *errs.Error {
-	if od.Enter.Status == orm.OdStatusClosed {
+func (o *LiveOrderMgr) tryExitEnter(od *ormo.InOutOrder) *errs.Error {
+	if od.Enter.Status == ormo.OdStatusClosed {
 		return nil
 	}
 	// May not have entered yet, or may not have fully entered
@@ -1272,13 +1266,13 @@ func (o *LiveOrderMgr) tryExitEnter(od *orm.InOutOrder) *errs.Error {
 		}
 	}
 	if od.Enter.Filled == 0 {
-		od.Status = orm.InOutStatusFullExit
-		if od.Enter.Status < orm.OdStatusClosed {
-			od.Enter.Status = orm.OdStatusClosed
+		od.Status = ormo.InOutStatusFullExit
+		if od.Enter.Status < ormo.OdStatusClosed {
+			od.Enter.Status = ormo.OdStatusClosed
 			od.DirtyEnter = true
 		}
 		od.SetExit(core.ExitTagForceExit, "", od.Enter.Price)
-		od.Exit.Status = orm.OdStatusClosed
+		od.Exit.Status = ormo.OdStatusClosed
 		od.DirtyMain = true
 		od.DirtyExit = true
 		err := o.finishOrder(od, nil)
@@ -1288,8 +1282,8 @@ func (o *LiveOrderMgr) tryExitEnter(od *orm.InOutOrder) *errs.Error {
 		cancelTriggerOds(od)
 		strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 		return nil
-	} else if od.Enter.Status < orm.OdStatusClosed {
-		od.Enter.Status = orm.OdStatusClosed
+	} else if od.Enter.Status < ormo.OdStatusClosed {
+		od.Enter.Status = ormo.OdStatusClosed
 		od.DirtyEnter = true
 	}
 	if od.Enter.Filled > 0 {
@@ -1298,18 +1292,18 @@ func (o *LiveOrderMgr) tryExitEnter(od *orm.InOutOrder) *errs.Error {
 	return nil
 }
 
-func (o *LiveOrderMgr) execOrderExit(od *orm.InOutOrder) *errs.Error {
+func (o *LiveOrderMgr) execOrderExit(od *ormo.InOutOrder) *errs.Error {
 	err := o.tryExitEnter(od)
 	if err != nil {
 		return err
 	}
-	if od.Status >= orm.InOutStatusFullExit {
+	if od.Status >= ormo.InOutStatusFullExit {
 		return nil
 	}
 	return o.submitExgOrder(od, false)
 }
 
-func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Error {
+func (o *LiveOrderMgr) submitExgOrder(od *ormo.InOutOrder, isEnter bool) *errs.Error {
 	subOd := od.Exit
 	if isEnter {
 		subOd = od.Enter
@@ -1369,7 +1363,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		if subOd.Amount == 0 {
 			// No amount, direct local exit.
 			// 没有入场，直接本地退出。
-			od.Status = orm.InOutStatusFullExit
+			od.Status = ormo.InOutStatusFullExit
 			subOd.Price = od.Enter.Price
 			od.DirtyExit = true
 			od.DirtyMain = true
@@ -1402,24 +1396,24 @@ func (o *LiveOrderMgr) submitExgOrder(od *orm.InOutOrder, isEnter bool) *errs.Er
 		return err
 	}
 	if isEnter {
-		if od.Status == orm.InOutStatusFullEnter {
+		if od.Status == ormo.InOutStatusFullEnter {
 			// Place stop loss and take profit orders only after full entry
 			// 仅在完全入场后，下止损止盈单
-			o.editTriggerOd(od, orm.OdActionStopLoss)
-			o.editTriggerOd(od, orm.OdActionTakeProfit)
+			o.editTriggerOd(od, ormo.OdActionStopLoss)
+			o.editTriggerOd(od, ormo.OdActionTakeProfit)
 		}
 	} else {
 		// Close a position and cancel associated orders
 		// 平仓，取消关联订单
 		cancelTriggerOds(od)
 	}
-	if subOd.Status == orm.OdStatusClosed {
+	if subOd.Status == ormo.OdStatusClosed {
 		o.callBack(od, isEnter)
 	}
 	return nil
 }
 
-func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *banexg.Order) *errs.Error {
+func (o *LiveOrderMgr) updateOdByExgRes(od *ormo.InOutOrder, isEnter bool, res *banexg.Order) *errs.Error {
 	subOd := od.Exit
 	if isEnter {
 		subOd = od.Enter
@@ -1465,7 +1459,7 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 			}
 		}
 		if res.Status == "expired" || res.Status == "rejected" || res.Status == "closed" || res.Status == "canceled" {
-			subOd.Status = orm.OdStatusClosed
+			subOd.Status = ormo.OdStatusClosed
 			if subOd.Filled > 0 && subOd.Average > 0 {
 				subOd.Price = subOd.Average
 			}
@@ -1473,22 +1467,22 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *orm.InOutOrder, isEnter bool, res *b
 				if isEnter {
 					// Entry order, 0 trades, closed; overall status: fully exited
 					// 入场订单，0成交，被关闭；整体状态为：完全退出
-					od.Status = orm.InOutStatusFullExit
+					od.Status = ormo.InOutStatusFullExit
 				} else {
 					// Exit order, 0 transactions, closed, overall status: entered
 					// 出场订单，0成交，被关闭，整体状态为：已入场
-					od.Status = orm.InOutStatusFullEnter
+					od.Status = ormo.InOutStatusFullEnter
 				}
 			} else {
 				if isEnter {
-					od.Status = orm.InOutStatusFullEnter
+					od.Status = ormo.InOutStatusFullEnter
 				} else {
-					od.Status = orm.InOutStatusFullExit
+					od.Status = ormo.InOutStatusFullExit
 				}
 			}
 			od.DirtyMain = true
 		}
-		if od.Status == orm.InOutStatusFullExit {
+		if od.Status == ormo.InOutStatusFullExit {
 			err := o.finishOrder(od, nil)
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			if err != nil {
@@ -1524,7 +1518,7 @@ func (o *LiveOrderMgr) hasNewTrades(res *banexg.Order) bool {
 	return false
 }
 
-func (o *LiveOrderMgr) consumeUnMatches(od *orm.InOutOrder, subOd *orm.ExOrder) *errs.Error {
+func (o *LiveOrderMgr) consumeUnMatches(od *ormo.InOutOrder, subOd *ormo.ExOrder) *errs.Error {
 	data := make(map[string]*banexg.MyTrade)
 	o.lockUnMatches.Lock()
 	for key, trade := range o.unMatchTrades {
@@ -1535,7 +1529,7 @@ func (o *LiveOrderMgr) consumeUnMatches(od *orm.InOutOrder, subOd *orm.ExOrder) 
 		data[key] = trade
 	}
 	o.lockUnMatches.Unlock()
-	if subOd.Status == orm.OdStatusClosed {
+	if subOd.Status == ormo.OdStatusClosed {
 		return nil
 	}
 	for key, trade := range data {
@@ -1645,13 +1639,13 @@ func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 	return avg, last, err
 }
 
-func isFarEnter(od *orm.InOutOrder) bool {
-	if od.Status > orm.InOutStatusPartEnter || od.Enter.Price == 0 ||
+func isFarEnter(od *ormo.InOutOrder) bool {
+	if od.Status > ormo.InOutStatusPartEnter || od.Enter.Price == 0 ||
 		!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
 		// 跳过已完全入场，或者非限价单
 		return false
 	}
-	stopAfter := od.GetInfoInt64(orm.OdInfoStopAfter)
+	stopAfter := od.GetInfoInt64(ormo.OdInfoStopAfter)
 	if stopAfter == 0 || stopAfter <= btime.TimeMS() {
 		return false
 	}
@@ -1662,7 +1656,7 @@ func isFarEnter(od *orm.InOutOrder) bool {
 Determine whether an order is a limit order that is difficult to execute for a long time
 判断一个订单是否是长时间难以成交的限价单
 */
-func isFarLimit(od *orm.ExOrder) bool {
+func isFarLimit(od *ormo.ExOrder) bool {
 	if od.Price == 0 || !strings.Contains(od.OrderType, banexg.OdTypeLimit) {
 		// 非限价单，或没有指定价格，会很快成交
 		return false
@@ -1693,9 +1687,9 @@ func VerifyTriggerOds() {
 }
 
 func verifyAccountTriggerOds(account string) {
-	triggerOds, lock := orm.GetTriggerODs(account)
-	var resOds []*orm.InOutOrder
-	var copyTriggers = make(map[string]map[int64]*orm.InOutOrder)
+	triggerOds, lock := ormo.GetTriggerODs(account)
+	var resOds []*ormo.InOutOrder
+	var copyTriggers = make(map[string]map[int64]*ormo.InOutOrder)
 	lock.Lock()
 	for key, val := range triggerOds {
 		copyTriggers[key] = val
@@ -1704,7 +1698,7 @@ func verifyAccountTriggerOds(account string) {
 	var zeros []string
 	var fails []string
 	odMgr := GetLiveOdMgr(account)
-	var saves []*orm.InOutOrder
+	var saves []*ormo.InOutOrder
 	for pair, ods := range copyTriggers {
 		if len(ods) == 0 {
 			continue
@@ -1732,9 +1726,9 @@ func verifyAccountTriggerOds(account string) {
 			}
 			continue
 		}
-		var leftOds = make(map[int64]*orm.InOutOrder)
+		var leftOds = make(map[int64]*ormo.InOutOrder)
 		for _, od := range ods {
-			if od.Status >= orm.InOutStatusFullExit {
+			if od.Status >= ormo.InOutStatusFullExit {
 				continue
 			}
 			subOd := od.Enter
@@ -1750,7 +1744,7 @@ func verifyAccountTriggerOds(account string) {
 			if waitSecs < config.PutLimitSecs && rate >= 0.8 {
 				resOds = append(resOds, od)
 			} else {
-				stopAfter := od.GetInfoInt64(orm.OdInfoStopAfter)
+				stopAfter := od.GetInfoInt64(ormo.OdInfoStopAfter)
 				if stopAfter <= btime.TimeMS() {
 					cancelTimeoutEnter(odMgr, od)
 					saves = append(saves, od)
@@ -1770,12 +1764,12 @@ func verifyAccountTriggerOds(account string) {
 		log.Info("put trigger to exchange", zap.Int("num", len(resOds)))
 	}
 	for _, od := range resOds {
-		if od.Status >= orm.InOutStatusFullExit {
+		if od.Status >= ormo.InOutStatusFullExit {
 			continue
 		}
-		tag := orm.OdActionEnter
+		tag := ormo.OdActionEnter
 		if od.Exit != nil {
-			tag = orm.OdActionExit
+			tag = ormo.OdActionExit
 		}
 		odMgr.queue <- &OdQItem{
 			Order:  od,
@@ -1809,15 +1803,14 @@ func getSecsByLimit(pair, side string, price float64) (int, float64, *errs.Error
 	return int(math.Round(waitVol / secsVol)), rate, nil
 }
 
-func saveIOrders(saveOds []*orm.InOutOrder) {
+func saveIOrders(saveOds []*ormo.InOutOrder) {
 	// There are orders that need to be saved
 	// 有需要保存的订单
-	sess, conn, err := orm.Conn(nil)
+	sess, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		log.Error("get sess to save old limits fail", zap.Error(err))
 		return
 	}
-	defer conn.Release()
 	for _, od := range saveOds {
 		err = od.Save(sess)
 		if err != nil {
@@ -1826,7 +1819,7 @@ func saveIOrders(saveOds []*orm.InOutOrder) {
 	}
 }
 
-func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *orm.InOutOrder) {
+func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *ormo.InOutOrder) {
 	lock := od.Lock()
 	defer lock.Unlock()
 	if od.Enter.OrderID != "" {
@@ -1853,17 +1846,17 @@ func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *orm.InOutOrder) {
 	} else {
 		// Partial filled, set to fully admitted
 		// 部分入场，置为已完全入场
-		od.Enter.Status = orm.OdStatusClosed
-		od.Status = orm.InOutStatusFullEnter
+		od.Enter.Status = ormo.OdStatusClosed
+		od.Status = ormo.InOutStatusFullEnter
 		od.DirtyMain = true
 		od.DirtyEnter = true
 		strat.FireOdChange(odMgr.Account, od, strat.OdChgEnterFill)
 	}
 }
 
-func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Error {
+func (o *LiveOrderMgr) editLimitOd(od *ormo.InOutOrder, action string) *errs.Error {
 	subOd := od.Enter
-	if action == orm.OdActionLimitExit {
+	if action == ormo.OdActionLimitExit {
 		subOd = od.Exit
 	}
 	exchange := exg.Default
@@ -1895,8 +1888,8 @@ func (o *LiveOrderMgr) editLimitOd(od *orm.InOutOrder, action string) *errs.Erro
 	return o.updateOdByExgRes(od, subOd.Enter, res)
 }
 
-func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
-	if od.Status >= orm.InOutStatusFullExit {
+func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
+	if od.Status >= ormo.InOutStatusFullExit {
 		return
 	}
 	tg := od.GetExitTrigger(prefix)
@@ -1936,9 +1929,9 @@ func (o *LiveOrderMgr) editTriggerOd(od *orm.InOutOrder, prefix string) {
 		price = tg.Limit
 	}
 	params[banexg.ParamClosePosition] = true
-	if prefix == orm.OdActionStopLoss {
+	if prefix == ormo.OdActionStopLoss {
 		params[banexg.ParamStopLossPrice] = tg.Price
-	} else if prefix == orm.OdActionTakeProfit {
+	} else if prefix == ormo.OdActionTakeProfit {
 		params[banexg.ParamTakeProfitPrice] = tg.Price
 	} else {
 		log.Error("invalid trigger ", zap.String("prefix", prefix))
@@ -1997,7 +1990,7 @@ cancelTriggerOds
 Cancel the associated order of the order. When the order is closed, the associated stop loss order and take profit order will not be automatically exited, and this method needs to be called to exit
 取消订单的关联订单。订单在平仓时，关联的止损单止盈单不会自动退出，需要调用此方法退出
 */
-func cancelTriggerOds(od *orm.InOutOrder) {
+func cancelTriggerOds(od *ormo.InOutOrder) {
 	sl := od.GetStopLoss()
 	tp := od.GetTakeProfit()
 	if sl == nil && tp == nil {
@@ -2005,7 +1998,7 @@ func cancelTriggerOds(od *orm.InOutOrder) {
 	}
 	odKey := od.Key()
 	args := map[string]interface{}{
-		banexg.ParamAccount: orm.GetTaskAcc(od.TaskID),
+		banexg.ParamAccount: ormo.GetTaskAcc(od.TaskID),
 	}
 	var logFields []zap.Field
 	if sl != nil && sl.OrderId != "" {
@@ -2038,7 +2031,7 @@ sess 可为nil
 When the transaction is in progress, it will be saved to the database internally.
 实盘时，内部会保存到数据库
 */
-func (o *LiveOrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
+func (o *LiveOrderMgr) finishOrder(od *ormo.InOutOrder, sess *ormo.Queries) *errs.Error {
 	if od.Enter != nil && od.Enter.OrderID != "" {
 		o.lockDoneKeys.Lock()
 		o.doneKeys[od.Symbol+od.Enter.OrderID] = true
@@ -2094,15 +2087,14 @@ func checkAccFatalStop(account string, maxIntv int) {
 	if stopUntil >= btime.TimeMS() {
 		return
 	}
-	sess, conn, err := orm.Conn(nil)
+	sess, err := ormo.Conn(orm.DbTrades, false)
 	if err != nil {
 		log.Error("get db sess fail", zap.Error(err))
 		return
 	}
-	defer conn.Release()
 	minTimeMS := btime.TimeMS() - int64(maxIntv)*60000
-	taskId := orm.GetTaskID(account)
-	orders, err := sess.GetOrders(orm.GetOrdersArgs{
+	taskId := ormo.GetTaskID(account)
+	orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 		TaskID:     taskId,
 		Status:     2,
 		CloseAfter: minTimeMS,
@@ -2129,7 +2121,7 @@ calcFatalLoss
 Calculate the percentage of account balance loss in the last n minutes at the system level
 计算系统级别最近n分钟内，账户余额损失百分比
 */
-func calcFatalLoss(wallets *BanWallets, orders []*orm.InOutOrder, backMins int) float64 {
+func calcFatalLoss(wallets *BanWallets, orders []*ormo.InOutOrder, backMins int) float64 {
 	minTimeMS := btime.TimeMS() - int64(backMins)*60000
 	minTimeMS = min(minTimeMS, core.StartAt)
 	sumProfit := float64(0)
@@ -2149,11 +2141,10 @@ func calcFatalLoss(wallets *BanWallets, orders []*orm.InOutOrder, backMins int) 
 }
 
 func (o *LiveOrderMgr) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error {
-	sess, conn, err := orm.Conn(nil)
+	sess, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		return err
 	}
-	defer conn.Release()
 	_, err = o.ExitOpenOrders(sess, bar.Symbol, &strat.ExitReq{
 		Tag:  core.ExitTagEnvEnd,
 		Dirt: core.OdDirtBoth,

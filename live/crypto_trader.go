@@ -2,7 +2,7 @@ package live
 
 import (
 	"fmt"
-	"os"
+	"github.com/banbox/banbot/orm/ormo"
 	"time"
 
 	"github.com/banbox/banbot/biz"
@@ -36,19 +36,10 @@ func (t *CryptoTrader) Init() *errs.Error {
 		return err
 	}
 	t.dp = dp
-	err = orm.InitTask(true)
+	err = ormo.InitTask(true, "")
 	if err != nil {
 		return err
 	}
-	if config.Args.Logfile != "" {
-		outDir := fmt.Sprintf("%s/live", config.GetDataDir())
-		err_ := os.MkdirAll(outDir, 0755)
-		if err_ != nil {
-			return errs.New(core.ErrIOWriteFail, err_)
-		}
-		config.Args.Logfile = outDir + "/out.log"
-	}
-	config.Args.SetLog(true)
 	// Trading pair initialization
 	// 交易对初始化
 	err = orm.InitListDates()
@@ -88,7 +79,7 @@ func (t *CryptoTrader) initOdMgr() *errs.Error {
 		if err != nil {
 			return err
 		}
-		openOds, lock := orm.GetOpenODs(account)
+		openOds, lock := ormo.GetOpenODs(account)
 		lock.Lock()
 		msg := fmt.Sprintf("orders: %d restored, %d deleted, %d added, %d opened", len(oldList), len(delList), len(newList), len(openOds))
 		lock.Unlock()
@@ -135,7 +126,7 @@ func delayExecBatch() {
 	})
 }
 
-func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
+func (t *CryptoTrader) orderCB(od *ormo.InOutOrder, isEnter bool) {
 	msgType := rpc.MsgTypeExit
 	subOd := od.Exit
 	action := "Close Long"
@@ -151,10 +142,10 @@ func (t *CryptoTrader) orderCB(od *orm.InOutOrder, isEnter bool) {
 		}
 	}
 	filled, price := subOd.Filled, subOd.Average
-	if subOd.Status != orm.OdStatusClosed || filled == 0 {
+	if subOd.Status != ormo.OdStatusClosed || filled == 0 {
 		return
 	}
-	account := orm.GetTaskAcc(od.TaskID)
+	account := ormo.GetTaskAcc(od.TaskID)
 	rpc.SendMsg(map[string]interface{}{
 		"type":          msgType,
 		"account":       account,
@@ -218,7 +209,7 @@ func exitCleanUp() {
 		log.Error("close exg fail", zap.Error(err))
 	}
 	for account := range config.Accounts {
-		openOds, lock := orm.GetOpenODs(account)
+		openOds, lock := ormo.GetOpenODs(account)
 		lock.Lock()
 		openNum := len(openOds)
 		lock.Unlock()

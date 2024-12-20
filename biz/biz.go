@@ -10,6 +10,7 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/rpc"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
@@ -18,7 +19,6 @@ import (
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"strings"
@@ -82,7 +82,7 @@ func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
 	}
 	if len(accOds) > 0 {
 		// exit unfill orders
-		sess, conn, err := orm.Conn(nil)
+		sess, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			return err
 		}
@@ -92,12 +92,10 @@ func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
 				req := &strat.ExitReq{Tag: core.ExitTagPairDel, OrderID: od.ID, ExitRate: 1}
 				_, err = odMgr.ExitOrder(sess, od, req)
 				if err != nil {
-					conn.Release()
 					return err
 				}
 			}
 		}
-		conn.Release()
 	}
 	if showLog {
 		core.PrintStratGroups()
@@ -125,7 +123,7 @@ func InitOdSubs() {
 		return
 	}
 	for acc := range strat.AccJobs {
-		strat.AddOdSub(acc, func(acc string, od *orm.InOutOrder, evt int) {
+		strat.AddOdSub(acc, func(acc string, od *ormo.InOutOrder, evt int) {
 			stgy, ok := subStgys[od.Strategy]
 			if !ok {
 				// The current strategy does not monitor order status
@@ -184,18 +182,16 @@ func AddBatchJob(account, tf string, job *strat.StratJob, isInfo bool) {
 func TryFireBatches(currMS int64) int {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
-	var sess *orm.Queries
-	var conn *pgxpool.Conn
+	var sess *ormo.Queries
 	var err *errs.Error
 	if core.EnvReal {
 		// In real-time mode, the order is saved to the database. In non-real-time mode, the order is temporarily saved to the memory without the need for a database.
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
-		sess, conn, err = orm.Conn(nil)
+		sess, err = ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get db sess fail", zap.Error(err))
 			return 0
 		}
-		defer conn.Release()
 	}
 	var waitNum = 0
 	for key, tasks := range strat.BatchTasks {
@@ -229,8 +225,8 @@ func TryFireBatches(currMS int64) int {
 			// 执行入场/出场任务
 			keyParts := strings.Split(key, "_")
 			odMgr := GetOdMgr(keyParts[1])
-			var ents []*orm.InOutOrder
-			var exits []*orm.InOutOrder
+			var ents []*ormo.InOutOrder
+			var exits []*ormo.InOutOrder
 			for _, job := range enterJobs {
 				if len(job.Entrys) == 0 && len(job.Exits) == 0 {
 					continue
@@ -265,9 +261,9 @@ func ResetVars() {
 	accWallets = make(map[string]*BanWallets)
 	core.LastBarMs = 0
 	core.OdBooks = make(map[string]*banexg.OrderBook)
-	orm.HistODs = make([]*orm.InOutOrder, 0)
+	ormo.HistODs = make([]*ormo.InOutOrder, 0)
 	//orm.FakeOdId = 1
-	orm.ResetVars()
+	ormo.ResetVars()
 	strat.Envs = make(map[string]*ta.BarEnv)
 	strat.AccJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StratJob)

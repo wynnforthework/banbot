@@ -1,11 +1,11 @@
 package live
 
 import (
-	"github.com/banbox/banbot/orm"
 	"strings"
 	"time"
 
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/web/base"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -48,7 +48,7 @@ func postLogin(c *fiber.Ctx) error {
 		// 只返回正在运行的交易账户
 		var accRoles = make(map[string]string)
 		for acc, role := range u.AccRoles {
-			task := orm.GetTask(acc)
+			task := ormo.GetTask(acc)
 			if task != nil {
 				accRoles[acc] = role
 			}

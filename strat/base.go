@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -273,7 +273,7 @@ Return: Withdrawal ratio after profit, entry price, maximum profit margin
 计算当前订单，距离最大盈利的回撤
 返回：盈利后回撤比例，入场价格，最大利润率
 */
-func (s *StratJob) getMaxTp(od *orm.InOutOrder) (float64, float64, float64) {
+func (s *StratJob) getMaxTp(od *ormo.InOutOrder) (float64, float64, float64) {
 	entPrice := od.Enter.Average
 	if entPrice == 0 {
 		entPrice = od.InitPrice
@@ -325,7 +325,7 @@ func CalcDrawDownExitRate(maxChg float64) float64 {
 	return rate
 }
 
-func (s *StratJob) getDrawDownExitPrice(od *orm.InOutOrder) float64 {
+func (s *StratJob) getDrawDownExitPrice(od *ormo.InOutOrder) float64 {
 	_, entPrice, exmChg := s.getMaxTp(od)
 	var stopRate = float64(-1)
 	if s.Strat.GetDrawDownExitRate != nil {
@@ -350,7 +350,7 @@ drawDownExit
 Check whether the tracking profit check has reached the drawdown threshold. If it exceeds the threshold, exit. This method is called by the system
 按跟踪止盈检查是否达到回撤阈值，超出则退出，此方法由系统调用
 */
-func (s *StratJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
+func (s *StratJob) drawDownExit(od *ormo.InOutOrder) *ExitReq {
 	spVal := s.getDrawDownExitPrice(od)
 	if spVal == 0 {
 		return nil
@@ -363,7 +363,7 @@ func (s *StratJob) drawDownExit(od *orm.InOutOrder) *ExitReq {
 	if (spVal-curPrice)*odDirt >= 0 {
 		return &ExitReq{Tag: "take", OrderID: od.ID}
 	}
-	od.SetStopLoss(&orm.ExitTrigger{
+	od.SetStopLoss(&ormo.ExitTrigger{
 		Price: spVal,
 		Tag:   core.ExitTagDrawDown,
 	})
@@ -375,7 +375,7 @@ customExit
 Check if the order needs to be exited, this method is called by the system
 检查订单是否需要退出，此方法由系统调用
 */
-func (s *StratJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
+func (s *StratJob) customExit(od *ormo.InOutOrder) (*ExitReq, *errs.Error) {
 	var req *ExitReq
 	if s.Strat.OnCheckExit != nil {
 		req = s.Strat.OnCheckExit(s, od)
@@ -383,7 +383,7 @@ func (s *StratJob) customExit(od *orm.InOutOrder) (*ExitReq, *errs.Error) {
 			req.OrderID = od.ID
 		}
 	}
-	if req == nil && s.Strat.DrawDownExit && od.Status >= orm.InOutStatusFullEnter {
+	if req == nil && s.Strat.DrawDownExit && od.Status >= ormo.InOutStatusFullEnter {
 		// 只对已完全入场的订单启用回撤平仓
 		req = s.drawDownExit(od)
 	}
@@ -413,13 +413,13 @@ func (s *StratJob) Position(dirt float64, enterTag string) float64 {
 	return totalCost / s.Strat.GetStakeAmount(s)
 }
 
-func (s *StratJob) GetOrders(dirt float64) []*orm.InOutOrder {
+func (s *StratJob) GetOrders(dirt float64) []*ormo.InOutOrder {
 	if dirt < 0 {
 		return s.ShortOrders
 	} else if dirt > 0 {
 		return s.LongOrders
 	} else {
-		res := make([]*orm.InOutOrder, 0, len(s.ShortOrders)+len(s.LongOrders))
+		res := make([]*ormo.InOutOrder, 0, len(s.ShortOrders)+len(s.LongOrders))
 		res = append(res, s.ShortOrders...)
 		res = append(res, s.LongOrders...)
 		return res
@@ -436,7 +436,7 @@ func (s *StratJob) GetOrderNum(dirt float64) int {
 	}
 }
 
-func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTrigger) {
+func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTrigger) {
 	if s.GetOrderNum(dirt) == 0 {
 		return
 	}
@@ -444,11 +444,11 @@ func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTri
 		panic(fmt.Sprintf("%v SetAll%s.dirt should be 1/-1 when both long/short orders exists!", s.Strat.Name, key))
 	}
 	odList := s.GetOrders(dirt)
-	var entOds = make([]*orm.InOutOrder, 0, len(odList))
+	var entOds = make([]*ormo.InOutOrder, 0, len(odList))
 	var position float64
 	setAll := args == nil || args.Rate <= 0 || args.Rate >= 1
 	for _, od := range odList {
-		if od.Status >= orm.InOutStatusPartEnter && od.Status <= orm.InOutStatusPartExit {
+		if od.Status >= ormo.InOutStatusPartEnter && od.Status <= ormo.InOutStatusPartExit {
 			if setAll {
 				od.SetExitTrigger(key, args)
 			} else {
@@ -470,14 +470,14 @@ func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTri
 			od.SetExitTrigger(key, nil)
 		} else {
 			if setPos >= size+core.AmtDust {
-				od.SetExitTrigger(key, &orm.ExitTrigger{
+				od.SetExitTrigger(key, &ormo.ExitTrigger{
 					Price: args.Price,
 					Limit: args.Limit,
 					Tag:   args.Tag,
 				})
 				setPos -= size
 			} else {
-				od.SetExitTrigger(key, &orm.ExitTrigger{
+				od.SetExitTrigger(key, &ormo.ExitTrigger{
 					Price: args.Price,
 					Limit: args.Limit,
 					Rate:  setPos / size,
@@ -489,10 +489,10 @@ func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *orm.ExitTri
 	}
 }
 
-func (s *StratJob) SetAllStopLoss(dirt float64, args *orm.ExitTrigger) {
+func (s *StratJob) SetAllStopLoss(dirt float64, args *ormo.ExitTrigger) {
 	s.setAllExitTrigger(dirt, "StopLoss", args)
 }
 
-func (s *StratJob) SetAllTakeProfit(dirt float64, args *orm.ExitTrigger) {
+func (s *StratJob) SetAllTakeProfit(dirt float64, args *ormo.ExitTrigger) {
 	s.setAllExitTrigger(dirt, "TakeProfit", args)
 }

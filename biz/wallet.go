@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -421,9 +422,9 @@ Need to call confirm_od_enter to confirm. You can also call cancel to cancel
 	如果余额不足，会发出异常
 	需要调用confirm_od_enter确认。也可调用cancel取消
 */
-func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
+func (w *BanWallets) EnterOd(od *ormo.InOutOrder) (float64, *errs.Error) {
 	odKey := od.Key()
-	exs := orm.GetSymbolByID(od.Sid)
+	exs := orm.GetSymbolByID(int32(od.Sid))
 	if exs == nil {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
@@ -432,7 +433,7 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 	if od.Enter.Amount != 0 {
 		legalCost = od.Enter.Amount * core.GetPrice(od.Symbol)
 	} else {
-		legalCost = od.GetInfoFloat64(orm.OdInfoLegalCost)
+		legalCost = od.GetInfoFloat64(ormo.OdInfoLegalCost)
 	}
 
 	isFuture := banexg.IsContract(exs.Market)
@@ -486,11 +487,11 @@ func (w *BanWallets) EnterOd(od *orm.InOutOrder) (float64, *errs.Error) {
 	return legalCost, nil
 }
 
-func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
+func (w *BanWallets) ConfirmOdEnter(od *ormo.InOutOrder, enterPrice float64) {
 	if core.EnvReal {
 		return
 	}
-	exs := orm.GetSymbolByID(od.Sid)
+	exs := orm.GetSymbolByID(int32(od.Sid))
 	if exs == nil {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
@@ -517,11 +518,11 @@ func (w *BanWallets) ConfirmOdEnter(od *orm.InOutOrder, enterPrice float64) {
 		w.ConfirmPending(od.Key(), quoteCode, quoteAmount, baseCode, baseAmt, false)
 	}
 }
-func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
+func (w *BanWallets) ExitOd(od *ormo.InOutOrder, baseAmount float64) {
 	if core.EnvReal {
 		return
 	}
-	exs := orm.GetSymbolByID(od.Sid)
+	exs := orm.GetSymbolByID(int32(od.Sid))
 	if exs == nil {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
@@ -557,11 +558,11 @@ func (w *BanWallets) ExitOd(od *orm.InOutOrder, baseAmount float64) {
 	}
 }
 
-func (w *BanWallets) ConfirmOdExit(od *orm.InOutOrder, exitPrice float64) {
+func (w *BanWallets) ConfirmOdExit(od *ormo.InOutOrder, exitPrice float64) {
 	if core.EnvReal {
 		return
 	}
-	exs := orm.GetSymbolByID(od.Sid)
+	exs := orm.GetSymbolByID(int32(od.Sid))
 	if exs == nil {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
@@ -632,7 +633,7 @@ Wallet balance = initial net transfer balance (including initial margin) + reali
 	保证金比率： (仓位名义价值 * 维持保证金率 - 维持保证金速算数) / (钱包余额 + 未实现盈亏)
 	钱包余额 = 初始净划入余额（含初始保证金） + 已实现盈亏 + 净资金费用 - 手续费
 */
-func (w *BanWallets) UpdateOds(odList []*orm.InOutOrder, currency string) *errs.Error {
+func (w *BanWallets) UpdateOds(odList []*ormo.InOutOrder, currency string) *errs.Error {
 	if len(odList) == 0 {
 		for _, item := range w.Items {
 			item.lock.Lock()

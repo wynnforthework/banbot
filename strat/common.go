@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -139,7 +140,7 @@ func (q *ExitReq) Clone() *ExitReq {
 	return res
 }
 
-func (s *StratJob) InitBar(curOrders []*orm.InOutOrder) {
+func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 	s.CheckMS = btime.TimeMS()
 	if s.IsWarmUp {
 		s.LongOrders = nil
@@ -150,7 +151,7 @@ func (s *StratJob) InitBar(curOrders []*orm.InOutOrder) {
 		enteredNum := 0
 		for _, od := range curOrders {
 			if od.Symbol == s.Symbol.Symbol && od.Timeframe == s.TimeFrame && od.Strategy == s.Strat.Name {
-				if od.Status >= orm.InOutStatusPartEnter && od.Status <= orm.InOutStatusPartExit {
+				if od.Status >= ormo.InOutStatusPartEnter && od.Status <= ormo.InOutStatusPartExit {
 					enteredNum += 1
 				}
 				if od.Short {
@@ -167,8 +168,8 @@ func (s *StratJob) InitBar(curOrders []*orm.InOutOrder) {
 	s.Exits = nil
 }
 
-func (s *StratJob) SnapOrderStates() map[int64]*orm.InOutSnap {
-	var res = make(map[int64]*orm.InOutSnap)
+func (s *StratJob) SnapOrderStates() map[int64]*ormo.InOutSnap {
+	var res = make(map[int64]*ormo.InOutSnap)
 	orders := s.GetOrders(0)
 	for _, od := range orders {
 		res[od.ID] = od.TakeSnap()
@@ -176,14 +177,14 @@ func (s *StratJob) SnapOrderStates() map[int64]*orm.InOutSnap {
 	return res
 }
 
-func (s *StratJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOutEdit, *errs.Error) {
-	var res []*orm.InOutEdit
+func (s *StratJob) CheckCustomExits(snap map[int64]*ormo.InOutSnap) ([]*ormo.InOutEdit, *errs.Error) {
+	var res []*ormo.InOutEdit
 	var skipSL, skipTP = 0, 0
 	orders := s.GetOrders(0)
 	for _, od := range orders {
 		shot := od.TakeSnap()
 		old, ok := snap[od.ID]
-		if !od.CanClose() || od.Status < orm.InOutStatusFullEnter {
+		if !od.CanClose() || od.Status < ormo.InOutStatusFullEnter {
 			// Not fully entered yet, check if the limit price or trigger price has been updated
 			// 尚未完全入场，检查限价或触发价格是否更新
 			if !ok {
@@ -192,9 +193,9 @@ func (s *StratJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 			if old.EnterLimit != shot.EnterLimit {
 				// Modify the entry price
 				// 修改入场价格
-				res = append(res, &orm.InOutEdit{
+				res = append(res, &ormo.InOutEdit{
 					Order:  od,
-					Action: orm.OdActionLimitEnter,
+					Action: ormo.OdActionLimitEnter,
 				})
 			}
 		} else {
@@ -213,7 +214,7 @@ func (s *StratJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 			} else if old != nil && (old.StopLoss != shot.StopLoss || old.StopLossLimit != shot.StopLossLimit) {
 				// Updated stop loss elsewhere
 				// 在其他地方更新了止损
-				res = append(res, &orm.InOutEdit{Order: od, Action: orm.OdActionStopLoss})
+				res = append(res, &ormo.InOutEdit{Order: od, Action: ormo.OdActionStopLoss})
 			}
 			if tpEdit != nil {
 				if tpEdit.Action == "" {
@@ -224,14 +225,14 @@ func (s *StratJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 			} else if old != nil && (old.TakeProfit != shot.TakeProfit || old.TakeProfitLimit != shot.TakeProfitLimit) {
 				// Updated profit taking in other places
 				// 在其他地方更新了止盈
-				res = append(res, &orm.InOutEdit{Order: od, Action: orm.OdActionTakeProfit})
+				res = append(res, &ormo.InOutEdit{Order: od, Action: ormo.OdActionTakeProfit})
 			}
 			if old.ExitLimit != shot.ExitLimit {
 				// Modify the appearance price
 				// 修改出场价格
-				res = append(res, &orm.InOutEdit{
+				res = append(res, &ormo.InOutEdit{
 					Order:  od,
-					Action: orm.OdActionLimitExit,
+					Action: ormo.OdActionLimitExit,
 				})
 			}
 		}
@@ -243,26 +244,26 @@ func (s *StratJob) CheckCustomExits(snap map[int64]*orm.InOutSnap) ([]*orm.InOut
 	return res, nil
 }
 
-func (s *StratJob) checkOrderExit(od *orm.InOutOrder) (*orm.InOutEdit, *orm.InOutEdit, *errs.Error) {
+func (s *StratJob) checkOrderExit(od *ormo.InOutOrder) (*ormo.InOutEdit, *ormo.InOutEdit, *errs.Error) {
 	sl := od.GetStopLoss().Clone()
 	tp := od.GetTakeProfit().Clone()
 	req, err := s.customExit(od)
 	if err != nil || req != nil {
 		return nil, nil, err
 	}
-	var slEdit, tpEdit *orm.InOutEdit
+	var slEdit, tpEdit *ormo.InOutEdit
 	newSL := od.GetStopLoss()
 	newTP := od.GetTakeProfit()
 	// Check if the condition sheet needs to be modified
 	// 检查是否需要修改条件单
 	if sl != nil || newSL != nil {
 		if sl == nil || newSL == nil || sl.Price != newSL.Price || sl.Limit != newSL.Limit {
-			slEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionStopLoss}
+			slEdit = &ormo.InOutEdit{Order: od, Action: ormo.OdActionStopLoss}
 		}
 	}
 	if tp != nil || newTP != nil {
 		if tp == nil || newTP == nil || tp.Price != newTP.Price || tp.Limit != newTP.Limit {
-			tpEdit = &orm.InOutEdit{Order: od, Action: orm.OdActionTakeProfit}
+			tpEdit = &ormo.InOutEdit{Order: od, Action: ormo.OdActionTakeProfit}
 		}
 	}
 	return slEdit, tpEdit, nil
@@ -298,18 +299,17 @@ func GetInfoJobs(account string) map[string]map[string]*StratJob {
 }
 
 func CalcJobScores(pair, tf, stgy string) *errs.Error {
-	var orders []*orm.InOutOrder
+	var orders []*ormo.InOutOrder
 	cfg := GetStratPerf(pair, stgy)
 	if core.EnvReal {
 		// Retrieve recent orders from the database
 		// 从数据库查询最近订单
-		sess, conn, err := orm.Conn(nil)
+		sess, err := ormo.Conn(orm.DbTrades, false)
 		if err != nil {
 			return err
 		}
-		defer conn.Release()
-		taskId := orm.GetTaskID(config.DefAcc)
-		orders, err = sess.GetOrders(orm.GetOrdersArgs{
+		taskId := ormo.GetTaskID(config.DefAcc)
+		orders, err = sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID:    taskId,
 			Strategy:  stgy,
 			TimeFrame: tf,
@@ -322,7 +322,7 @@ func CalcJobScores(pair, tf, stgy string) *errs.Error {
 		}
 	} else {
 		// 从HistODs查询
-		for _, od := range orm.HistODs {
+		for _, od := range ormo.HistODs {
 			if od.Symbol != pair || od.Timeframe != tf || od.Strategy != stgy {
 				continue
 			}
@@ -472,7 +472,7 @@ func AddOdSub(acc string, cb FnOdChange) {
 	accOdSubs[acc] = append(subs, cb)
 }
 
-func FireOdChange(acc string, od *orm.InOutOrder, evt int) {
+func FireOdChange(acc string, od *ormo.InOutOrder, evt int) {
 	subs, _ := accOdSubs[acc]
 	subs2, _ := accOdSubs["*"]
 	subs = append(subs, subs2...)

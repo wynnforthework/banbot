@@ -4,6 +4,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -16,8 +17,8 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			return false
 		}
 		isShort := od.PositionSide == banexg.PosSideShort
-		var openOds []*orm.InOutOrder
-		accOpenOds, lock := orm.GetOpenODs(o.Account)
+		var openOds []*ormo.InOutOrder
+		accOpenOds, lock := ormo.GetOpenODs(o.Account)
 		lock.Lock()
 		for _, iod := range accOpenOds {
 			if iod.Short != isShort || iod.Symbol != od.Symbol || iod.Enter.Side == od.Side {
@@ -38,13 +39,13 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			feeCost = od.Fee.Cost
 		}
 		var err *errs.Error
-		var part *orm.InOutOrder
-		var doneParts []*orm.InOutOrder
+		var part *ormo.InOutOrder
+		var doneParts []*ormo.InOutOrder
 		for _, iod := range openOds {
 			lock = iod.Lock()
 			filled, feeCost, part = o.tryFillExit(iod, filled, od.Average, od.Timestamp, od.ID, od.Type, feeName, feeCost)
 			lock.Unlock()
-			if part.Status == orm.InOutStatusFullExit {
+			if part.Status == ormo.InOutStatusFullExit {
 				doneParts = append(doneParts, part)
 			}
 			if filled < AmtDust {
@@ -56,12 +57,11 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 		if len(doneParts) == 0 && !createInv {
 			return true
 		}
-		sess, conn, err := orm.Conn(nil)
+		sess, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get sess fail bnbExitByMyOrder.tryFillExit", zap.Error(err))
 			return true
 		}
-		defer conn.Release()
 		for _, part = range doneParts {
 			lock = part.Lock()
 			err = o.finishOrder(part, sess)
@@ -75,7 +75,7 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 		}
 		if createInv {
 			iod := o.makeInOutOd(sess, od.Symbol, isShort, od.Average, filled, od.Type, feeCost, feeName,
-				od.Timestamp, orm.OdStatusClosed, od.ID)
+				od.Timestamp, ormo.OdStatusClosed, od.ID)
 			if iod != nil {
 				o.callBack(iod, true)
 			}
@@ -84,8 +84,8 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 	}
 }
 
-func (o *LiveOrderMgr) makeInOutOd(sess *orm.Queries, pair string, short bool, average, filled float64, odType string,
-	feeCost float64, feeName string, enterAt int64, entStatus int, entOdId string) *orm.InOutOrder {
+func (o *LiveOrderMgr) makeInOutOd(sess *ormo.Queries, pair string, short bool, average, filled float64, odType string,
+	feeCost float64, feeName string, enterAt int64, entStatus int, entOdId string) *ormo.InOutOrder {
 	exs, err := orm.GetExSymbolCur(pair)
 	if err != nil {
 		log.Error("get exSymbol fail", zap.Error(err))
@@ -104,7 +104,7 @@ func (o *LiveOrderMgr) makeInOutOd(sess *orm.Queries, pair string, short bool, a
 		log.Error("save third order fail", zap.String("key", iod.Key()), zap.Error(err))
 		return nil
 	}
-	openOds, lock := orm.GetOpenODs(o.Account)
+	openOds, lock := ormo.GetOpenODs(o.Account)
 	lock.Lock()
 	openOds[iod.ID] = iod
 	lock.Unlock()
@@ -127,15 +127,14 @@ func bnbTraceExgOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			// 现货市场卖出即平仓，忽略平仓
 			return false
 		}
-		sess, conn, err := orm.Conn(nil)
+		sess, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get sess fail bnbTraceExgOrder", zap.Error(err))
 			return true
 		}
-		defer conn.Release()
 		feeName, feeCost := getFeeNameCost(od.Fee, od.Symbol, od.Type, od.Side, od.Amount, od.Average)
 		iod := o.makeInOutOd(sess, od.Symbol, isShort, od.Average, od.Filled, od.Type, feeCost, feeName,
-			od.Timestamp, orm.OdStatusClosed, od.ID)
+			od.Timestamp, ormo.OdStatusClosed, od.ID)
 		if iod != nil {
 			o.callBack(iod, true)
 		}

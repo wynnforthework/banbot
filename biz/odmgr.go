@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -24,28 +25,28 @@ var (
 )
 
 type IOrderMgr interface {
-	ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
-		exits []*strat.ExitReq, edits []*orm.InOutEdit) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error)
-	EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error)
-	ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.ExitReq) ([]*orm.InOutOrder, *errs.Error)
-	ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.ExitReq) (*orm.InOutOrder, *errs.Error)
-	UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *errs.Error
+	ProcessOrders(sess *ormo.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
+		exits []*strat.ExitReq, edits []*ormo.InOutEdit) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error)
+	EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*ormo.InOutOrder, *errs.Error)
+	ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.ExitReq) ([]*ormo.InOutOrder, *errs.Error)
+	ExitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat.ExitReq) (*ormo.InOutOrder, *errs.Error)
+	UpdateByBar(allOpens []*ormo.InOutOrder, bar *orm.InfoKline) *errs.Error
 	OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error
 	CleanUp() *errs.Error
 }
 
 type IOrderMgrLive interface {
 	IOrderMgr
-	SyncExgOrders() ([]*orm.InOutOrder, []*orm.InOutOrder, []*orm.InOutOrder, *errs.Error)
+	SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error)
 	WatchMyTrades()
 	TrialUnMatchesForever()
 	ConsumeOrderQueue()
 }
 
-type FuncHandleIOrder = func(order *orm.InOutOrder) *errs.Error
+type FuncHandleIOrder = func(order *ormo.InOutOrder) *errs.Error
 
 type OrderMgr struct {
-	callBack    func(order *orm.InOutOrder, isEnter bool)
+	callBack    func(order *ormo.InOutOrder, isEnter bool)
 	afterEnter  FuncHandleIOrder
 	afterExit   FuncHandleIOrder
 	Account     string
@@ -129,7 +130,7 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		o.simulOpen = 0
 		o.simulOpenSt = make(map[string]int)
 	}
-	openOds, lock := orm.GetOpenODs(o.Account)
+	openOds, lock := ormo.GetOpenODs(o.Account)
 	lock.Lock()
 	enters = checkOrderNum(enters, len(openOds), config.MaxOpenOrders, "max_open_orders")
 	if len(enters) > 0 && config.MaxSimulOpen > 0 {
@@ -198,9 +199,9 @@ Live trading: monitor the exchange to return the order status to update the entr
 回测：调用方根据下一个bar执行入场/出场订单，更新状态
 实盘：监听交易所返回订单状态更新入场出场
 */
-func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
-	exits []*strat.ExitReq) ([]*orm.InOutOrder, []*orm.InOutOrder, *errs.Error) {
-	var entOrders, extOrders []*orm.InOutOrder
+func (o *OrderMgr) ProcessOrders(sess *ormo.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
+	exits []*strat.ExitReq) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
+	var entOrders, extOrders []*ormo.InOutOrder
 	if len(enters) > 0 {
 		enters = o.allowOrderEnter(env, enters)
 		for _, ent := range enters {
@@ -223,7 +224,7 @@ func (o *OrderMgr) ProcessOrders(sess *orm.Queries, env *banta.BarEnv, enters []
 	return entOrders, extOrders, nil
 }
 
-func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*ormo.InOutOrder, *errs.Error) {
 	isSpot := core.Market == banexg.MarketSpot
 	if req.Short && isSpot {
 		return nil, errs.NewMsg(core.ErrRunTime, "short oder is invalid for spot")
@@ -248,23 +249,23 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 	if req.Short {
 		odSide = banexg.OdSideSell
 	}
-	taskId := orm.GetTaskID(o.Account)
-	od := &orm.InOutOrder{
-		IOrder: &orm.IOrder{
+	taskId := ormo.GetTaskID(o.Account)
+	od := &ormo.InOutOrder{
+		IOrder: &ormo.IOrder{
 			TaskID:    taskId,
 			Symbol:    env.Symbol,
-			Sid:       utils.GetMapVal(env.Data, "sid", int32(0)),
+			Sid:       utils.GetMapVal(env.Data, "sid", int64(0)),
 			Timeframe: env.TimeFrame,
 			Short:     req.Short,
-			Status:    orm.InOutStatusInit,
+			Status:    ormo.InOutStatusInit,
 			EnterTag:  req.Tag,
 			InitPrice: core.GetPrice(env.Symbol),
 			Leverage:  req.Leverage,
 			EnterAt:   btime.TimeMS(),
 			Strategy:  req.StgyName,
-			StgVer:    int32(stgVer),
+			StgVer:    int64(stgVer),
 		},
-		Enter: &orm.ExOrder{
+		Enter: &ormo.ExOrder{
 			TaskID:    taskId,
 			Symbol:    env.Symbol,
 			Enter:     true,
@@ -272,7 +273,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 			Side:      odSide,
 			Price:     req.Limit,
 			Amount:    req.Amount,
-			Status:    orm.OdStatusInit,
+			Status:    ormo.OdStatusInit,
 		},
 		Info:       map[string]interface{}{},
 		DirtyMain:  true,
@@ -288,12 +289,12 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 		}
 		if req.StopBars > 0 {
 			stopAfter := btime.TimeMS() + int64(req.StopBars*utils.TFToSecs(od.Timeframe))*1000
-			od.SetInfo(orm.OdInfoStopAfter, stopAfter)
+			od.SetInfo(ormo.OdInfoStopAfter, stopAfter)
 		}
 	}
-	od.SetInfo(orm.OdInfoLegalCost, req.LegalCost)
+	od.SetInfo(ormo.OdInfoLegalCost, req.LegalCost)
 	if req.StopLoss > 0 {
-		od.SetStopLoss(&orm.ExitTrigger{
+		od.SetStopLoss(&ormo.ExitTrigger{
 			Price: req.StopLoss,
 			Limit: req.StopLossLimit,
 			Rate:  req.StopLossRate,
@@ -301,7 +302,7 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 		})
 	}
 	if req.TakeProfit > 0 {
-		od.SetTakeProfit(&orm.ExitTrigger{
+		od.SetTakeProfit(&ormo.ExitTrigger{
 			Price: req.TakeProfit,
 			Limit: req.TakeProfitLimit,
 			Rate:  req.TakeProfitRate,
@@ -318,10 +319,10 @@ func (o *OrderMgr) EnterOrder(sess *orm.Queries, env *banta.BarEnv, req *strat.E
 	return od, err
 }
 
-func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.ExitReq) ([]*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.ExitReq) ([]*ormo.InOutOrder, *errs.Error) {
 	// Filter matching orders 筛选匹配的订单
-	var matches []*orm.InOutOrder
-	openOds, lock := orm.GetOpenODs(o.Account)
+	var matches []*ormo.InOutOrder
+	openOds, lock := ormo.GetOpenODs(o.Account)
 	if req.OrderID > 0 {
 		// Specify the exact order ID to exit 精确指定退出的订单ID
 		lock.Lock()
@@ -406,7 +407,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 			isTakeProfit = true
 		}
 	}
-	slices.SortFunc(matches, func(a, b *orm.InOutOrder) int {
+	slices.SortFunc(matches, func(a, b *ormo.InOutOrder) int {
 		fillA := a.Enter.Filled * a.InitPrice
 		fillB := b.Enter.Filled * b.InitPrice
 		fillChg := int(math.Round((fillA - fillB) * 100))
@@ -432,8 +433,8 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 		// Last entry time ascending 最后按入场时间升序
 		return int((a.EnterAt - b.EnterAt) / 1000)
 	})
-	var result []*orm.InOutOrder
-	var part *orm.InOutOrder
+	var result []*ormo.InOutOrder
+	var part *ormo.InOutOrder
 	var err *errs.Error
 	for i, od := range matches {
 		if !req.Force && !od.CanClose() {
@@ -467,8 +468,8 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 		}
 		q := req.Clone()
 		q.ExitRate = min(1, exitAmount/od.Enter.Amount)
-		if isTakeProfit && od.Status >= orm.InOutStatusPartEnter {
-			od.SetTakeProfit(&orm.ExitTrigger{
+		if isTakeProfit && od.Status >= ormo.InOutStatusPartEnter {
+			od.SetTakeProfit(&ormo.ExitTrigger{
 				Price: q.Limit,
 				Rate:  q.ExitRate,
 				Tag:   q.Tag,
@@ -488,7 +489,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *orm.Queries, pairs string, req *strat.Ex
 	return result, nil
 }
 
-func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.ExitReq) (*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) ExitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat.ExitReq) (*ormo.InOutOrder, *errs.Error) {
 	if od.ExitTag != "" || (od.Exit != nil && od.Exit.Amount > 0) {
 		// Exit一旦有值，表示全部退出
 		return nil, nil
@@ -501,7 +502,7 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.E
 		if price > 0 && (req.Limit-price)*float64(req.Dirt) > 0 {
 			// It is a valid limit order, set to take profit
 			// 是有效的限价出场单，设置到止盈中
-			od.SetTakeProfit(&orm.ExitTrigger{
+			od.SetTakeProfit(&ormo.ExitTrigger{
 				Price: req.Limit,
 				Rate:  req.ExitRate,
 				Tag:   req.Tag,
@@ -512,7 +513,7 @@ func (o *OrderMgr) ExitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.E
 	return o.exitOrder(sess, od, req)
 }
 
-func (o *OrderMgr) exitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.ExitReq) (*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) exitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat.ExitReq) (*ormo.InOutOrder, *errs.Error) {
 	// It has been confirmed externally that it is not a limit price stop profit
 	// 外部已确认不是限价止盈
 	odType := core.OrderTypeEnums[req.OrderType]
@@ -534,7 +535,7 @@ func (o *OrderMgr) exitOrder(sess *orm.Queries, od *orm.InOutOrder, req *strat.E
 	return o.postOrderExit(sess, od)
 }
 
-func (o *OrderMgr) postOrderExit(sess *orm.Queries, od *orm.InOutOrder) (*orm.InOutOrder, *errs.Error) {
+func (o *OrderMgr) postOrderExit(sess *ormo.Queries, od *ormo.InOutOrder) (*ormo.InOutOrder, *errs.Error) {
 	err := od.Save(sess)
 	if err != nil {
 		return od, err
@@ -550,9 +551,9 @@ UpdateByBar
 Use the price to update the profit of the order, etc. It may trigger a margin call
 使用价格更新订单的利润等。可能会触发爆仓
 */
-func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *errs.Error {
+func (o *OrderMgr) UpdateByBar(allOpens []*ormo.InOutOrder, bar *orm.InfoKline) *errs.Error {
 	for _, od := range allOpens {
-		if od.Symbol != bar.Symbol || od.Timeframe != bar.TimeFrame || od.Status >= orm.InOutStatusFullExit {
+		if od.Symbol != bar.Symbol || od.Timeframe != bar.TimeFrame || od.Status >= ormo.InOutStatusFullExit {
 			continue
 		}
 		od.UpdateProfits(bar.Close)
@@ -560,7 +561,7 @@ func (o *OrderMgr) UpdateByBar(allOpens []*orm.InOutOrder, bar *orm.InfoKline) *
 	return nil
 }
 
-func (o *OrderMgr) CutOrder(od *orm.InOutOrder, enterRate, exitRate float64) *orm.InOutOrder {
+func (o *OrderMgr) CutOrder(od *ormo.InOutOrder, enterRate, exitRate float64) *ormo.InOutOrder {
 	part := od.CutPart(od.Enter.Amount*enterRate, od.Enter.Amount*exitRate)
 	// Here the key of part is the same as the original one, so part is used as src_key
 	// 这里part的key和原始的一样，所以part作为src_key
@@ -578,7 +579,7 @@ sess 可为nil
 It will be saved internally to the database during the actual trading.
 实盘时内部会保存到数据库。
 */
-func (o *OrderMgr) finishOrder(od *orm.InOutOrder, sess *orm.Queries) *errs.Error {
+func (o *OrderMgr) finishOrder(od *ormo.InOutOrder, sess *ormo.Queries) *errs.Error {
 	od.UpdateProfits(0)
 	err := od.Save(sess)
 	cfg := strat.GetStratPerf(od.Symbol, od.Strategy)

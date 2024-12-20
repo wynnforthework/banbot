@@ -3,7 +3,7 @@ package strat
 import (
 	"fmt"
 	testcom "github.com/banbox/banbot/_testcom"
-	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/utils"
 	ta "github.com/banbox/banta"
 	"testing"
@@ -20,34 +20,34 @@ func TestStagyJob_DrawDownExit(t *testing.T) {
 	job := &StratJob{
 		Env: env,
 		Strat: &TradeStrat{
-			GetDrawDownExitRate: func(s *StratJob, od *orm.InOutOrder, maxChg float64) float64 {
+			GetDrawDownExitRate: func(s *StratJob, od *ormo.InOutOrder, maxChg float64) float64 {
 				return 0.5
 			},
 		},
 		TPMaxs: make(map[int64]float64),
 	}
-	var od *orm.InOutOrder
+	var od *ormo.InOutOrder
 	testcom.RunFakeEnv(env, func(i int, bar ta.Kline) {
 		if i == 2 {
-			od = &orm.InOutOrder{
-				IOrder: &orm.IOrder{
+			od = &ormo.InOutOrder{
+				IOrder: &ormo.IOrder{
 					ID:        1,
 					Short:     false,
 					InitPrice: bar.Close,
 				},
-				Enter: &orm.ExOrder{
+				Enter: &ormo.ExOrder{
 					Average: bar.Close,
 				},
 			}
 			fmt.Printf("open long: %f curPrice: %f\n", bar.Close, bar.Close)
 		} else if i == 10 {
-			od = &orm.InOutOrder{
-				IOrder: &orm.IOrder{
+			od = &ormo.InOutOrder{
+				IOrder: &ormo.IOrder{
 					ID:        2,
 					Short:     true,
 					InitPrice: bar.Close,
 				},
-				Enter: &orm.ExOrder{
+				Enter: &ormo.ExOrder{
 					Average: bar.Close,
 				},
 			}

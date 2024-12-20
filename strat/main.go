@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -32,7 +33,7 @@ strat.AccInfoJobs
 
 	返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
 */
-func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[string]map[string]int, map[string][]*orm.InOutOrder, *errs.Error) {
+func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[string]map[string]int, map[string][]*ormo.InOutOrder, *errs.Error) {
 	if len(pairs) == 0 || len(tfScores) == 0 {
 		return nil, nil, errs.NewMsg(errs.CodeParamRequired, "`pairs` and `tfScores` are required for LoadStratJobs")
 	}
@@ -111,7 +112,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	}
 	var envKeys = make(map[string]bool)
 	// 对AccJobs中，当前禁止开单的job，如果无入场订单，则删除job
-	exitOds := make([]*orm.InOutOrder, 0, 8)
+	exitOds := make([]*ormo.InOutOrder, 0, 8)
 	exitJobs := make(map[*StratJob]bool)
 	oldPairs := make(map[string]bool)
 	newPairs := make(map[string]bool)
@@ -240,13 +241,13 @@ func ExitStratJobs() {
 	}
 }
 
-func getUnfillOrders(ods []*orm.InOutOrder) map[string][]*orm.InOutOrder {
-	var res = make(map[string][]*orm.InOutOrder)
+func getUnfillOrders(ods []*ormo.InOutOrder) map[string][]*ormo.InOutOrder {
+	var res = make(map[string][]*ormo.InOutOrder)
 	for _, od := range ods {
-		if od.Status != orm.InOutStatusInit {
+		if od.Status != ormo.InOutStatusInit {
 			continue
 		}
-		acc := orm.GetTaskAcc(od.TaskID)
+		acc := ormo.GetTaskAcc(od.TaskID)
 		odList, _ := res[acc]
 		res[acc] = append(odList, od)
 	}
@@ -284,7 +285,7 @@ func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 			TimeFrame:  tf,
 			TFMSecs:    tfMSecs,
 			MaxCache:   core.NumTaCache,
-			Data:       map[string]interface{}{"sid": exs.ID},
+			Data:       map[string]interface{}{"sid": int64(exs.ID)},
 		}
 		Envs[envKey] = env
 	}
@@ -384,8 +385,8 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 */
 func resetJobs() {
 	for account := range config.Accounts {
-		openOds, lock := orm.GetOpenODs(account)
-		odList := make([]*orm.InOutOrder, 0, len(openOds))
+		openOds, lock := ormo.GetOpenODs(account)
+		odList := make([]*ormo.InOutOrder, 0, len(openOds))
 		lock.Lock()
 		for _, od := range openOds {
 			odList = append(odList, od)

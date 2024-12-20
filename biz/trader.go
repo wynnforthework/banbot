@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
@@ -15,7 +16,6 @@ import (
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
 
@@ -80,7 +80,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	if len(jobs) == 0 && len(infoJobs) == 0 {
 		return nil
 	}
-	openOds, lock := orm.GetOpenODs(account)
+	openOds, lock := ormo.GetOpenODs(account)
 	// Update orders in non-production mode 更新非生产模式的订单
 	lock.Lock()
 	allOrders := utils.ValsOfMap(openOds)
@@ -97,15 +97,15 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	}
 	// retrieve the current open orders after UpdateByBar, filter for closed orders
 	// 要在UpdateByBar后检索当前开放订单，过滤已平仓订单
-	var curOrders []*orm.InOutOrder
+	var curOrders []*ormo.InOutOrder
 	for _, od := range allOrders {
-		if od.Status < orm.InOutStatusFullExit && od.Symbol == bar.Symbol && od.Timeframe == bar.TimeFrame {
+		if od.Status < ormo.InOutStatusFullExit && od.Symbol == bar.Symbol && od.Timeframe == bar.TimeFrame {
 			curOrders = append(curOrders, od)
 		}
 	}
 	var enters []*strat.EnterReq
 	var exits []*strat.ExitReq
-	var edits []*orm.InOutEdit
+	var edits []*ormo.InOutEdit
 	for _, job := range jobs {
 		job.IsWarmUp = bar.IsWarmUp
 		job.InitBar(curOrders)
@@ -148,24 +148,22 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 }
 
 func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StratJob, env *ta.BarEnv,
-	enters []*strat.EnterReq, exits []*strat.ExitReq, edits []*orm.InOutEdit) *errs.Error {
+	enters []*strat.EnterReq, exits []*strat.ExitReq, edits []*ormo.InOutEdit) *errs.Error {
 	if len(enters)+len(exits)+len(edits) == 0 {
 		return nil
 	}
-	var sess *orm.Queries
-	var conn *pgxpool.Conn
+	var sess *ormo.Queries
 	var err *errs.Error
 	if core.EnvReal {
 		// Live mode is saved to the database. Non-real-time mode, orders are temporarily saved in memory, no database required
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
-		sess, conn, err = orm.Conn(nil)
+		sess, err = ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get db sess fail", zap.Error(err))
 			return err
 		}
-		defer conn.Release()
 	}
-	var ents, exts []*orm.InOutOrder
+	var ents, exts []*ormo.InOutOrder
 	ents, exts, err = odMgr.ProcessOrders(sess, env, enters, exits, edits)
 	if err != nil {
 		log.Error("process orders fail", zap.Error(err))

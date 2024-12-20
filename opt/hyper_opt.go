@@ -9,7 +9,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/goods"
-	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
@@ -42,7 +42,7 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 	if err != nil || t == nil {
 		return err
 	}
-	var allHisOds []*orm.InOutOrder
+	var allHisOds []*ormo.InOutOrder
 	var lastWal map[string]float64
 	var lastRes *BTResult
 	lastPols := config.RunPolicy
@@ -81,10 +81,10 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 		if lastRes != nil {
 			bt.BTResult = lastRes
 		}
-		orm.HistODs = allHisOds
+		ormo.HistODs = allHisOds
 		bt.Run()
 		lastRes = bt.BTResult
-		allHisOds = orm.HistODs
+		allHisOds = ormo.HistODs
 		lastWal = wallets.DumpAvas()
 		t.curMs += t.runMSecs
 	}

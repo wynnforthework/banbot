@@ -19,6 +19,11 @@ import (
 	"time"
 )
 
+var (
+	adjMap = map[int32][]*AdjInfo{} // Cache of the target's weighting factor. 标的的复权因子缓存
+	amLock = sync.Mutex{}
+)
+
 /*
 FetchApiOHLCV
 Download the K-line data of the trading pair according to the given time period.

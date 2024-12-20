@@ -1,4 +1,4 @@
-package orm
+package ormo
 
 import (
 	"context"
@@ -6,16 +6,19 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"path/filepath"
 	"strings"
 )
 
-func InitTask(showLog bool) *errs.Error {
+func InitTask(showLog bool, outDir string) *errs.Error {
 	if len(accTasks) > 0 {
 		return nil
 	}
+	orm.SetDbPath(orm.DbTrades, filepath.Join(outDir, "trades.db"))
 	if config.NoDB {
 		if core.LiveMode {
 			panic("`nodb` not available in live mode!")
@@ -28,9 +31,13 @@ func InitTask(showLog bool) *errs.Error {
 		}
 		return nil
 	}
+	q, err := Conn(orm.DbTrades, true)
+	if err != nil {
+		return err
+	}
 	idList := make([]string, 0, len(config.Accounts))
 	for account := range config.Accounts {
-		task, err := getAccTask(account)
+		task, err := q.GetAccTask(account)
 		if err != nil {
 			return err
 		}
@@ -44,21 +51,15 @@ func InitTask(showLog bool) *errs.Error {
 	return nil
 }
 
-func getAccTask(account string) (*BotTask, *errs.Error) {
+func (q *Queries) GetAccTask(account string) (*BotTask, *errs.Error) {
 	ctx := context.Background()
 	var err_ error
-	var err *errs.Error
 	var task *BotTask
-	sess, conn, err := Conn(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Release()
 	taskName := config.Name
 	if core.EnvReal {
 		taskName += "/" + account
 	}
-	task, err_ = sess.FindTask(ctx, FindTaskParams{
+	task, err_ = q.FindTask(ctx, FindTaskParams{
 		Mode: core.RunMode,
 		Name: taskName,
 	})
@@ -68,7 +69,7 @@ func getAccTask(account string) (*BotTask, *errs.Error) {
 		if !isLiveMode {
 			startAt = config.TimeRange.StartMS
 		}
-		task, err_ = sess.AddTask(ctx, AddTaskParams{
+		task, err_ = q.AddTask(ctx, AddTaskParams{
 			Mode:     core.RunMode,
 			Name:     taskName,
 			CreateAt: btime.UTCStamp(),
@@ -76,7 +77,7 @@ func getAccTask(account string) (*BotTask, *errs.Error) {
 			StopAt:   0,
 		})
 		if err_ != nil {
-			return nil, NewDbErr(core.ErrDbExecFail, err_)
+			return nil, errs.New(core.ErrDbExecFail, err_)
 		}
 	}
 	return task, nil

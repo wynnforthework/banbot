@@ -9,6 +9,7 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
@@ -106,7 +107,7 @@ func CompareExgBTOrders(args []string) {
 		}
 		// Find out if there are matching exchange orders
 		// 查找是否有匹配的交易所订单
-		var matOd *orm.InOutOrder
+		var matOd *ormo.InOutOrder
 		for i, exod := range exgOds {
 			if exod.Short == iod.Short && math.Abs(float64(exod.EnterAt-entFixMS)) < tfMSecsFlt {
 				matOd = exod
@@ -132,7 +133,7 @@ func CompareExgBTOrders(args []string) {
 		} else {
 			// 有匹配记录
 			if matOd.Exit == nil {
-				matOd.Exit = &orm.ExOrder{}
+				matOd.Exit = &ormo.ExOrder{}
 			}
 			entMSStr := btime.ToDateStr(matOd.EnterAt, "")
 			exitMSStr := btime.ToDateStr(matOd.ExitAt, "")
@@ -182,7 +183,7 @@ func CompareExgBTOrders(args []string) {
 				dirt = "short"
 			}
 			if iod.Exit == nil {
-				iod.Exit = &orm.ExOrder{}
+				iod.Exit = &ormo.ExOrder{}
 			}
 			entMSStr := btime.ToDateStr(iod.EnterAt, "")
 			exitMSStr := btime.ToDateStr(iod.ExitAt, "")
@@ -200,7 +201,7 @@ func CompareExgBTOrders(args []string) {
 	}
 }
 
-func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
+func readBackTestOrders(path string) ([]*ormo.InOutOrder, int64, int64) {
 	file, err := os.Open(path)
 	if err != nil {
 		log.Error("Error opening file:", zap.Error(err))
@@ -211,7 +212,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 	reader.Comma = ','
 	var pairIdx, tfIdx, dirtIdx, lvgIdx, entIdx, entPriceIdx, entAmtIdx, costIdx, entFeeIdx int
 	var exitIdx, exitPriceIdx, exitAmtIdx, exitFeeIdx, profitIdx int
-	var res []*orm.InOutOrder
+	var res []*ormo.InOutOrder
 	var startMS, endMS int64
 	var maxTfSecs int
 	for {
@@ -280,8 +281,8 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 			} else {
 				endMS = max(endMS, exitMS)
 			}
-			res = append(res, &orm.InOutOrder{
-				IOrder: &orm.IOrder{
+			res = append(res, &ormo.InOutOrder{
+				IOrder: &ormo.IOrder{
 					Symbol:    symbol,
 					Timeframe: timeFrame,
 					Short:     isShort,
@@ -290,7 +291,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 					ExitAt:    exitMS,
 					Profit:    profit,
 				},
-				Enter: &orm.ExOrder{
+				Enter: &ormo.ExOrder{
 					Enter:    true,
 					Symbol:   symbol,
 					CreateAt: enterMS,
@@ -301,7 +302,7 @@ func readBackTestOrders(path string) ([]*orm.InOutOrder, int64, int64) {
 					Filled:   entAmount,
 					Fee:      entFee,
 				},
-				Exit: &orm.ExOrder{
+				Exit: &ormo.ExOrder{
 					Symbol:   symbol,
 					CreateAt: exitMS,
 					UpdateAt: exitMS,
@@ -325,20 +326,20 @@ buildExgOrders
 Construct an InOutOrder from an exchange order for comparison; It is not used for real/backtesting
 从交易所订单构建InOutOrder用于对比；非实盘/回测时使用
 */
-func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.InOutOrder {
+func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo.InOutOrder {
 	sort.Slice(ods, func(i, j int) bool {
 		return ods[i].LastTradeTimestamp < ods[j].LastTradeTimestamp
 	})
-	var jobMap = make(map[string][]*orm.InOutOrder)
+	var jobMap = make(map[string][]*ormo.InOutOrder)
 	for _, od := range ods {
 		if od.Filled == 0 {
 			continue
 		}
 		odList, _ := jobMap[od.Symbol]
-		newList := make([]*orm.InOutOrder, 0, len(odList))
+		newList := make([]*ormo.InOutOrder, 0, len(odList))
 		if clientPrefix != "" && strings.HasPrefix(od.ClientOrderID, clientPrefix) {
 			// 优先通过ClientOrderID匹配
-			var openOd *orm.InOutOrder
+			var openOd *ormo.InOutOrder
 			for _, iod := range odList {
 				if od.ClientOrderID == iod.Enter.OrderID {
 					openOd = iod
@@ -347,7 +348,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.
 			}
 			if openOd != nil {
 				openOd.ExitAt = od.LastUpdateTimestamp
-				openOd.Exit = &orm.ExOrder{
+				openOd.Exit = &ormo.ExOrder{
 					Symbol:   openOd.Symbol,
 					CreateAt: od.LastUpdateTimestamp,
 					UpdateAt: od.LastUpdateTimestamp,
@@ -357,7 +358,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.
 					Filled:   openOd.Enter.Filled,
 					Fee:      od.Fee.Cost,
 				}
-				openOd.Status = orm.InOutStatusFullExit
+				openOd.Status = ormo.InOutStatusFullExit
 				openOd.UpdateProfits(od.Average)
 				continue
 			}
@@ -380,7 +381,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.
 					od.Fee.Cost -= curFee
 				}
 				part.ExitAt = od.LastUpdateTimestamp
-				part.Exit = &orm.ExOrder{
+				part.Exit = &ormo.ExOrder{
 					Symbol:   part.Symbol,
 					CreateAt: od.LastUpdateTimestamp,
 					UpdateAt: od.LastUpdateTimestamp,
@@ -390,7 +391,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.
 					Filled:   part.Enter.Filled,
 					Fee:      curFee,
 				}
-				part.Status = orm.InOutStatusFullExit
+				part.Status = ormo.InOutStatusFullExit
 				part.UpdateProfits(od.Average)
 				od.Filled -= iod.Enter.Amount
 				newList = append(newList, part)
@@ -407,13 +408,13 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*orm.
 		if od.Filled <= 0 {
 			continue
 		}
-		iod := &orm.InOutOrder{
-			IOrder: &orm.IOrder{
+		iod := &ormo.InOutOrder{
+			IOrder: &ormo.IOrder{
 				Symbol:  od.Symbol,
 				Short:   od.Side == banexg.OdSideSell,
 				EnterAt: od.LastTradeTimestamp,
 			},
-			Enter: &orm.ExOrder{
+			Enter: &ormo.ExOrder{
 				Enter:    true,
 				Symbol:   od.Symbol,
 				Side:     od.Side,

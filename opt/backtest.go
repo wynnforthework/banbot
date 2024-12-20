@@ -8,7 +8,9 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
+	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/robfig/cron/v3"
@@ -42,9 +44,10 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 		BTResult: NewBTResult(),
 		isOpt:    isOpt,
 	}
-	if outDir != "" {
-		p.OutDir = outDir
+	if outDir == "" {
+		outDir = fmt.Sprintf("%s/backtest/%s", config.GetDataDir(), utils.RandomStr(8))
 	}
+	p.OutDir = outDir
 	config.LoadPerfs(config.GetDataDir())
 	biz.InitFakeWallets()
 	wallets := biz.GetWallets("")
@@ -61,7 +64,11 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = orm.InitTask(!b.isOpt)
+	err_ := os.MkdirAll(b.OutDir, 0755)
+	if err_ != nil {
+		return errs.New(core.ErrIOWriteFail, err_)
+	}
+	err = ormo.InitTask(!b.isOpt, b.OutDir)
 	if err != nil {
 		return err
 	}
@@ -161,20 +168,12 @@ func (b *BackTest) Run() {
 }
 
 func (b *BackTest) initTaskOut() *errs.Error {
-	if b.OutDir == "" {
-		taskId := orm.GetTaskID("")
-		b.OutDir = fmt.Sprintf("%s/backtest/task_%d", config.GetDataDir(), taskId)
-	}
-	err_ := os.MkdirAll(b.OutDir, 0755)
-	if err_ != nil {
-		return errs.New(core.ErrIOWriteFail, err_)
-	}
 	config.Args.Logfile = b.OutDir + "/out.log"
 	config.Args.SetLog(!b.isOpt)
 	// 检查是否profile
 	if config.Args.CPUProfile {
 		outPath := b.OutDir + "/cpu.profile"
-		if _, err_ = os.Stat(outPath); err_ == nil {
+		if _, err_ := os.Stat(outPath); err_ == nil {
 			err_ = os.Remove(outPath)
 			if err_ != nil {
 				log.Error("del old cpu.profile fail", zap.Error(err_))
@@ -239,9 +238,9 @@ func (b *BackTest) onLiquidation(symbol string) {
 	}
 }
 
-func (b *BackTest) orderCB(order *orm.InOutOrder, isEnter bool) {
+func (b *BackTest) orderCB(order *ormo.InOutOrder, isEnter bool) {
 	if isEnter {
-		openNum := orm.OpenNum("", orm.InOutStatusPartEnter)
+		openNum := ormo.OpenNum("", ormo.InOutStatusPartEnter)
 		if openNum > b.MaxOpenOrders {
 			b.MaxOpenOrders = openNum
 		}
@@ -272,7 +271,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		drawDownPct := (b.MaxReal - totalLegal) * 100 / b.MaxReal
 		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
 	}
-	odNum := orm.OpenNum("", orm.InOutStatusPartEnter)
+	odNum := ormo.OpenNum("", ormo.InOutStatusPartEnter)
 	if b.TimeNum%b.PlotEvery != 0 {
 		if odNum > b.Plots.tmpOdNum {
 			b.Plots.tmpOdNum = odNum
@@ -318,7 +317,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 
 func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, totalLegal float64) {
 	if odNum < 0 {
-		odNum = orm.OpenNum("", orm.InOutStatusPartEnter)
+		odNum = ormo.OpenNum("", ormo.InOutStatusPartEnter)
 	}
 	jobNum := 0
 	jobMap := strat.GetJobs(wallets.Account)
@@ -336,8 +335,8 @@ func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, tot
 	profitLegal := wallets.UnrealizedPOLLegal(nil)
 	drawLegal := wallets.GetWithdrawLegal(nil)
 	curDate := btime.ToDateStr(timeMS, "")
-	b.donePftLegal += orm.LegalDoneProfits(b.histOdOff)
-	b.histOdOff = len(orm.HistODs)
+	b.donePftLegal += ormo.LegalDoneProfits(b.histOdOff)
+	b.histOdOff = len(ormo.HistODs)
 	b.Plots.Labels = append(b.Plots.Labels, curDate)
 	b.Plots.OdNum = append(b.Plots.OdNum, odNum)
 	b.Plots.JobNum = append(b.Plots.JobNum, jobNum)

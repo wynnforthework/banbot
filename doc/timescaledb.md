@@ -28,35 +28,6 @@ SELECT extversion FROM pg_extension where extname = 'timescaledb';
 ```
 > 如果启动容器时出现错误`OCI runtime create failed: unable to retrieve OCI runtime error: runc did not terminate successfully: exit status 127: unknown.` 是因为`libseccomp`版本过低需要升级：`yum update libseccomp`
 
-# 部署初始化
-## 修改时区为UTC（Docker无需修改）
-```shell
-# 进入数据库容器
-docker exec -it timescaledb /bin/bash
-# 执行下面命令，检查时区是否为UTC
-# 如果不是docker安装，路径可能为： /var/lib/pgsql/14/data/postgresql.conf
-cat /var/lib/postgresql/data/postgresql.conf|grep timezone
-# 这里应该默认为UTC，如果不是UTC，则按下面修改：
-exit  # 退出容器
-docker cp timescaledb:/var/lib/postgresql/data/postgresql.conf ~/download/postgresql.conf
-vim ~/download/postgresql.conf
-# 找到timezone和log_timezone，将值修改为UTC
-# 将文件复制到容器
-docker cp ~/download/postgresql.conf timescaledb:/var/lib/postgresql/data/postgresql.conf
-
-# 重新加载配置：
-docker exec -it timescaledb psql -U postgres -h localhost
-select pg_reload_conf();
-exit
-```
-## 初始化数据库表结构
-将`banbot/orm/sql`下的`schema.sql`和`schema2.sql`上传到服务器的`/opt/pgdata`目录下，用于初始化表结构。
-```shell
-docker exec -it timescaledb psql -U postgres -h localhost -d bantd
-\i /home/postgres/pgdata/data/schema.sql
-\i /home/postgres/pgdata/data/schema2.sql
-```
-
 # 常见问题
 ### 重复键违反唯一约束
 一般是在从别的数据库同步数据到当前数据库，然后再次插入数据时出现。原因是同步数据后，主键ID序列自增起始值未更新。可通过下面sql更新：

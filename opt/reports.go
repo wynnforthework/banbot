@@ -10,7 +10,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
@@ -70,14 +70,14 @@ type PlotData struct {
 }
 
 type RowPart struct {
-	WinCount     int               `json:"winCount"`
-	ProfitSum    float64           `json:"profitSum"`
-	ProfitPctSum float64           `json:"profitPctSum"`
-	CostSum      float64           `json:"costSum"`
-	Durations    []int             `json:"durations"`
-	Orders       []*orm.InOutOrder `json:"-"`
-	Sharpe       float64           `json:"sharpe"` // 夏普比率
-	Sortino      float64           `json:"sortino"`
+	WinCount     int                `json:"winCount"`
+	ProfitSum    float64            `json:"profitSum"`
+	ProfitPctSum float64            `json:"profitPctSum"`
+	CostSum      float64            `json:"costSum"`
+	Durations    []int              `json:"durations"`
+	Orders       []*ormo.InOutOrder `json:"-"`
+	Sharpe       float64            `json:"sharpe"` // 夏普比率
+	Sortino      float64            `json:"sortino"`
 }
 
 type RowItem struct {
@@ -103,7 +103,7 @@ func (r *BTResult) printBtResult() {
 	}
 
 	r.Collect()
-	orders := orm.HistODs
+	orders := ormo.HistODs
 	var b strings.Builder
 	var tblText string
 	if len(orders) > 0 {
@@ -138,7 +138,7 @@ func (r *BTResult) printBtResult() {
 }
 
 func (r *BTResult) dumpBtFiles() {
-	r.dumpOrders(orm.HistODs)
+	r.dumpOrders(ormo.HistODs)
 
 	r.dumpConfig()
 
@@ -152,7 +152,7 @@ func (r *BTResult) dumpBtFiles() {
 }
 
 func (r *BTResult) Collect() {
-	orders := orm.HistODs
+	orders := ormo.HistODs
 	r.OrderNum = len(orders)
 	sumProfit := float64(0)
 	sumFee := float64(0)
@@ -188,7 +188,7 @@ func (r *BTResult) Collect() {
 	}
 }
 
-func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
+func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
 	heads := []string{"Metric", "Value"}
@@ -215,7 +215,7 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	table.Append([]string{"Total Cost", strconv.FormatFloat(r.TotCost, 'f', 2, 64)})
 	avgCost := r.TotCost / float64(len(orders))
 	table.Append([]string{"Avg Cost", strconv.FormatFloat(avgCost, 'f', 2, 64)})
-	slices.SortFunc(orders, func(a, b *orm.InOutOrder) int {
+	slices.SortFunc(orders, func(a, b *ormo.InOutOrder) int {
 		return int((a.Profit - b.Profit) * 100)
 	})
 	if len(orders) > 0 {
@@ -238,8 +238,8 @@ func (r *BTResult) textMetrics(orders []*orm.InOutOrder) string {
 	return b.String()
 }
 
-func (r *BTResult) groupByPairs(orders []*orm.InOutOrder) {
-	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
+func (r *BTResult) groupByPairs(orders []*ormo.InOutOrder) {
+	groups := groupItems(orders, true, func(od *ormo.InOutOrder, i int) string {
 		return od.Symbol
 	})
 	sort.Slice(groups, func(i, j int) bool {
@@ -252,8 +252,8 @@ func textGroupPairs(r *BTResult) string {
 	return printGroups(r.PairGrps, "Pair", true, nil, nil)
 }
 
-func (r *BTResult) groupByEnters(orders []*orm.InOutOrder) {
-	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
+func (r *BTResult) groupByEnters(orders []*ormo.InOutOrder) {
+	groups := groupItems(orders, true, func(od *ormo.InOutOrder, i int) string {
 		return fmt.Sprintf("%s:%s", od.Strategy, od.EnterTag)
 	})
 	sort.Slice(groups, func(i, j int) bool {
@@ -266,8 +266,8 @@ func textGroupEntTags(r *BTResult) string {
 	return printGroups(r.EnterGrps, "Enter Tag", true, nil, nil)
 }
 
-func (r *BTResult) groupByExits(orders []*orm.InOutOrder) {
-	groups := groupItems(orders, true, func(od *orm.InOutOrder, i int) string {
+func (r *BTResult) groupByExits(orders []*ormo.InOutOrder) {
+	groups := groupItems(orders, true, func(od *ormo.InOutOrder, i int) string {
 		return fmt.Sprintf("%s:%s", od.Strategy, od.ExitTag)
 	})
 	sort.Slice(groups, func(i, j int) bool {
@@ -280,7 +280,7 @@ func textGroupExitTags(r *BTResult) string {
 	return printGroups(r.ExitGrps, "Exit Tag", true, nil, nil)
 }
 
-func (r *BTResult) groupByProfits(orders []*orm.InOutOrder) {
+func (r *BTResult) groupByProfits(orders []*ormo.InOutOrder) {
 	odNum := len(orders)
 	if odNum == 0 {
 		return
@@ -302,7 +302,7 @@ func (r *BTResult) groupByProfits(orders []*orm.InOutOrder) {
 		maxPct := strconv.FormatFloat(slices.Max(gp.Items)*100, 'f', 2, 64)
 		grpTitles = append(grpTitles, fmt.Sprintf("%s ~ %s%%", minPct, maxPct))
 	}
-	groups := groupItems(orders, false, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, false, func(od *ormo.InOutOrder, i int) string {
 		return grpTitles[res.RowGIds[i]]
 	})
 	sort.Slice(groups, func(i, j int) bool {
@@ -315,7 +315,7 @@ func textGroupProfitRanges(r *BTResult) string {
 	return printGroups(r.ProfitGrps, "Profit Range", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
-func (r *BTResult) groupByDates(orders []*orm.InOutOrder) {
+func (r *BTResult) groupByDates(orders []*ormo.InOutOrder) {
 	units := []string{"1Y", "1Q", "1M", "1w", "1d", "6h", "1h"}
 	startMS, endMS := orders[0].EnterAt, orders[len(orders)-1].EnterAt
 	var bestTF string
@@ -341,7 +341,7 @@ func (r *BTResult) groupByDates(orders []*orm.InOutOrder) {
 		bestTFSecs = utils2.TFToSecs(bestTF)
 	}
 	tfUnit := bestTF[1]
-	groups := groupItems(orders, false, func(od *orm.InOutOrder, i int) string {
+	groups := groupItems(orders, false, func(od *ormo.InOutOrder, i int) string {
 		if tfUnit == 'Y' {
 			return btime.ToDateStr(od.EnterAt, "2006")
 		} else if tfUnit == 'Q' {
@@ -366,7 +366,7 @@ func textGroupDays(r *BTResult) string {
 	return printGroups(r.DateGrps, "Date", false, []string{"Enter Tags", "Exit Tags"}, makeEnterExits)
 }
 
-func makeEnterExits(orders []*orm.InOutOrder) []string {
+func makeEnterExits(orders []*ormo.InOutOrder) []string {
 	enters := make(map[string]int)
 	exits := make(map[string]int)
 	for _, od := range orders {
@@ -395,7 +395,7 @@ func makeEnterExits(orders []*orm.InOutOrder) []string {
 	}
 }
 
-func groupItems(orders []*orm.InOutOrder, measure bool, getTag func(od *orm.InOutOrder, i int) string) []*RowItem {
+func groupItems(orders []*ormo.InOutOrder, measure bool, getTag func(od *ormo.InOutOrder, i int) string) []*RowItem {
 	if len(orders) == 0 {
 		return nil
 	}
@@ -413,7 +413,7 @@ func groupItems(orders []*orm.InOutOrder, measure bool, getTag func(od *orm.InOu
 					ProfitPctSum: od.ProfitRate,
 					CostSum:      od.EnterCost() / od.Leverage,
 					Durations:    []int{duration},
-					Orders:       make([]*orm.InOutOrder, 0, 8),
+					Orders:       make([]*ormo.InOutOrder, 0, 8),
 				},
 			}
 			sta.Orders = append(sta.Orders, od)
@@ -451,7 +451,7 @@ func groupItems(orders []*orm.InOutOrder, measure bool, getTag func(od *orm.InOu
 	return utils.ValsOfMap(groups)
 }
 
-func printGroups(groups []*RowItem, title string, measure bool, extHeads []string, prcGrp func([]*orm.InOutOrder) []string) string {
+func printGroups(groups []*RowItem, title string, measure bool, extHeads []string, prcGrp func([]*ormo.InOutOrder) []string) string {
 	var b bytes.Buffer
 	table := tablewriter.NewWriter(&b)
 	heads := []string{title, "Count", "Avg Profit %", "Tot Profit %", "Sum Profit", "Duration(h'm)", "Win Rate"}
@@ -489,7 +489,7 @@ func printGroups(groups []*RowItem, title string, measure bool, extHeads []strin
 	return b.String()
 }
 
-func measurePerformance(ods []*orm.InOutOrder, num int) (float64, float64, *errs.Error) {
+func measurePerformance(ods []*ormo.InOutOrder, num int) (float64, float64, *errs.Error) {
 	if len(ods) == 0 {
 		return 0, 0, nil
 	}
@@ -592,7 +592,7 @@ func kMeansDurations(durations []int, num int) string {
 	return b.String()
 }
 
-func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
+func (r *BTResult) dumpOrders(orders []*ormo.InOutOrder) {
 	sort.Slice(orders, func(i, j int) bool {
 		var a, b = orders[i], orders[j]
 		if a.EnterAt != b.EnterAt {
@@ -600,7 +600,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 		}
 		return a.Symbol < b.Symbol
 	})
-	taskId := orm.GetTaskID("")
+	taskId := ormo.GetTaskID("")
 	file, err_ := os.Create(fmt.Sprintf("%s/orders_%v.csv", r.OutDir, taskId))
 	if err_ != nil {
 		log.Error("create orders.csv fail", zap.Error(err_))
@@ -649,7 +649,7 @@ func (r *BTResult) dumpOrders(orders []*orm.InOutOrder) {
 	}
 }
 
-func calcExOrder(od *orm.ExOrder) (string, string, string, string) {
+func calcExOrder(od *ormo.ExOrder) (string, string, string, string) {
 	price := od.Average
 	if price == 0 {
 		price = od.Price
@@ -668,7 +668,7 @@ func (r *BTResult) dumpConfig() {
 		log.Error("marshal config as yaml fail", zap.Error(err))
 		return
 	}
-	taskId := orm.GetTaskID("")
+	taskId := ormo.GetTaskID("")
 	outName := fmt.Sprintf("%s/config_%v.yml", r.OutDir, taskId)
 	err_ := os.WriteFile(outName, data, 0644)
 	if err_ != nil {
@@ -737,7 +737,7 @@ func (r *BTResult) dumpGraph() {
 	for _, v := range r.Plots.JobNum {
 		jobNum = append(jobNum, float64(v))
 	}
-	taskId := orm.GetTaskID("")
+	taskId := ormo.GetTaskID("")
 	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, taskId)
 	title := "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders"
 	tplPath := fmt.Sprintf("%s/lines.html", config.GetDataDir())
@@ -756,7 +756,7 @@ func (r *BTResult) dumpGraph() {
 	}
 	// Draw cumulative profit curves for each entry tag separately
 	// 为入场标签分别绘制累计利润曲线
-	labels, dsList := genEnterTagCurves(orm.HistODs)
+	labels, dsList := genEnterTagCurves(ormo.HistODs)
 	outPath = fmt.Sprintf("%s/enters_%v.html", r.OutDir, taskId)
 	title = "Strategy Enter Tag Profits"
 	err = DumpLineGraph(outPath, title, labels, 5, tplData, dsList)
@@ -827,7 +827,7 @@ func (r *BTResult) Score() float64 {
 
 func (r *BTResult) dumpDetail(outPath string) {
 	if outPath == "" {
-		taskId := orm.GetTaskID("")
+		taskId := ormo.GetTaskID("")
 		outPath = fmt.Sprintf("%s/detail_%v.json", r.OutDir, taskId)
 	}
 	data, err_ := utils2.Marshal(r)
@@ -863,7 +863,7 @@ func parseBtResult(path string) (*BTResult, *errs.Error) {
 	return &res, nil
 }
 
-func genEnterTagCurves(odList []*orm.InOutOrder) ([]string, []*ChartDs) {
+func genEnterTagCurves(odList []*ormo.InOutOrder) ([]string, []*ChartDs) {
 	if len(odList) == 0 {
 		return nil, nil
 	}

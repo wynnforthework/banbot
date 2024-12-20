@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"fmt"
+	"github.com/banbox/banbot/orm/ormo"
 	"math"
 	"os"
 	"slices"
@@ -99,8 +100,8 @@ func getBalance(c *fiber.Ctx) error {
 }
 
 func getTodayNum(c *fiber.Ctx) error {
-	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
-		openOds, lock := orm.GetOpenODs(acc)
+	return wrapAccount(c, func(acc string) error {
+		openOds, lock := ormo.GetOpenODs(acc)
 		lock.Lock()
 		dayOpenNum := len(openOds)
 		dayOpenPft := float64(0)
@@ -113,11 +114,15 @@ func getTodayNum(c *fiber.Ctx) error {
 		tfMSecs := int64(utils2.TFToSecs("1d") * 1000)
 		nowMS := btime.UTCStamp()
 		todayStartMS := utils2.AlignTfMSecs(nowMS, tfMSecs)
-		taskId := orm.GetTaskID(acc)
+		taskId := ormo.GetTaskID(acc)
 		dayDoneNum := 0
 		dayDonePft := float64(0)
 		if taskId > 0 {
-			orders, err := sess.GetOrders(orm.GetOrdersArgs{
+			sess, err := ormo.Conn(orm.DbTrades, false)
+			if err != nil {
+				return err
+			}
+			orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 				TaskID:      taskId,
 				Status:      2, // 已完成状态
 				CloseAfter:  todayStartMS,
@@ -142,9 +147,13 @@ func getTodayNum(c *fiber.Ctx) error {
 }
 
 func getStatistics(c *fiber.Ctx) error {
-	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
-		taskId := orm.GetTaskID(acc)
-		orders, err := sess.GetOrders(orm.GetOrdersArgs{
+	return wrapAccount(c, func(acc string) error {
+		sess, err := ormo.Conn(orm.DbTrades, false)
+		if err != nil {
+			return err
+		}
+		taskId := ormo.GetTaskID(acc)
+		orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID: taskId,
 		})
 		if err != nil {
@@ -164,7 +173,7 @@ func getStatistics(c *fiber.Ctx) error {
 		var dayProfits []float64 // Daily Profit 每日利润
 		var dayMSecs = int64(utils2.TFToSecs("1d") * 1000)
 		for _, od := range orders {
-			if od.Status < orm.InOutStatusPartEnter || od.Status > orm.InOutStatusFullExit {
+			if od.Status < ormo.InOutStatusPartEnter || od.Status > ormo.InOutStatusFullExit {
 				continue
 			}
 			odNum += 1
@@ -176,7 +185,7 @@ func getStatistics(c *fiber.Ctx) error {
 			profitSum += od.Profit
 			profitRateSum += od.ProfitRate
 			totalCost += od.EnterCost()
-			if od.Status == orm.InOutStatusFullExit {
+			if od.Status == ormo.InOutStatusFullExit {
 				doneNum += 1
 				if od.ProfitRate > bestRate {
 					bestRate = od.ProfitRate
@@ -270,11 +279,15 @@ func getOrders(c *fiber.Ctx) error {
 		return err
 	}
 	type OdWrap struct {
-		*orm.InOutOrder
+		*ormo.InOutOrder
 		CurPrice float64 `json:"curPrice"`
 	}
-	getBotOrders := func(acc string, sess *orm.Queries) error {
-		taskId := orm.GetTaskID(acc)
+	getBotOrders := func(acc string) error {
+		sess, err := ormo.Conn(orm.DbTrades, false)
+		if err != nil {
+			return err
+		}
+		taskId := ormo.GetTaskID(acc)
 		var symbols []string
 		if data.Symbols != "" {
 			symbols = strings.Split(data.Symbols, ",")
@@ -285,7 +298,7 @@ func getOrders(c *fiber.Ctx) error {
 		} else if data.Status == "his" {
 			status = 2
 		}
-		orders, err := sess.GetOrders(orm.GetOrdersArgs{
+		orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID:      taskId,
 			Strategy:    data.Strategy,
 			Pairs:       symbols,
@@ -323,7 +336,7 @@ func getOrders(c *fiber.Ctx) error {
 			"data": odList,
 		})
 	}
-	getExgOrders := func(acc string, sess *orm.Queries) error {
+	getExgOrders := func(acc string) error {
 		orders, err := exg.Default.FetchOrders(data.Symbols, data.StartMs, data.Limit, nil)
 		if err != nil {
 			return err
@@ -335,7 +348,7 @@ func getOrders(c *fiber.Ctx) error {
 			"data": orders,
 		})
 	}
-	getExgPositions := func(acc string, sess *orm.Queries) error {
+	getExgPositions := func(acc string) error {
 		var symbols []string
 		if data.Symbols != "" {
 			symbols = strings.Split(data.Symbols, ",")
@@ -348,13 +361,13 @@ func getOrders(c *fiber.Ctx) error {
 			"data": posList,
 		})
 	}
-	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
+	return wrapAccount(c, func(acc string) error {
 		if data.Source == "bot" {
-			return getBotOrders(acc, sess)
+			return getBotOrders(acc)
 		} else if data.Source == "exchange" {
-			return getExgOrders(acc, sess)
+			return getExgOrders(acc)
 		} else if data.Source == "position" {
-			return getExgPositions(acc, sess)
+			return getExgPositions(acc)
 		} else {
 			return fiber.NewError(fiber.StatusBadRequest, "invalid source")
 		}
@@ -370,11 +383,11 @@ func postForceExit(c *fiber.Ctx) error {
 		return err
 	}
 
-	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
-		openOds, lock := orm.GetOpenODs(acc)
+	return wrapAccount(c, func(acc string) error {
+		openOds, lock := ormo.GetOpenODs(acc)
 		lock.Lock()
 
-		var targetOrders []*orm.InOutOrder
+		var targetOrders []*ormo.InOutOrder
 		if data.OrderID == "all" {
 			targetOrders = utils2.ValsOfMap(openOds)
 		} else {
@@ -396,6 +409,10 @@ func postForceExit(c *fiber.Ctx) error {
 		}
 		lock.Unlock()
 
+		sess, err := ormo.Conn(orm.DbTrades, true)
+		if err != nil {
+			return err
+		}
 		odMgr := biz.GetLiveOdMgr(acc)
 		closeNum, failNum := 0, 0
 		var errMsg strings.Builder
@@ -566,7 +583,7 @@ func getStratJobs(c *fiber.Ctx) error {
 	return wrapAccount(c, func(acc string) error {
 		jobs := strat.GetJobs(acc)
 		items := make([]*JobItem, 0, len(jobs))
-		openOds, lock := orm.GetOpenODs(acc)
+		openOds, lock := ormo.GetOpenODs(acc)
 		lock.Lock()
 		defer lock.Unlock()
 		for pairTF, jobMap := range jobs {
@@ -605,19 +622,23 @@ func getTaskPairs(c *fiber.Ctx) error {
 	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
 		return err_
 	}
-	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
+	return wrapAccount(c, func(acc string) error {
+		sess, err := ormo.Conn(orm.DbTrades, false)
+		if err != nil {
+			return err
+		}
 		ctx := context.Background()
-		taskId := orm.GetTaskID(acc)
+		taskId := ormo.GetTaskID(acc)
 		if data.Stop == 0 {
 			data.Stop = math.MaxInt64
 		}
-		pairs, err := sess.GetTaskPairs(ctx, orm.GetTaskPairsParams{
-			TaskID:    int32(taskId),
+		pairs, err_ := sess.GetTaskPairs(ctx, ormo.GetTaskPairsParams{
+			TaskID:    taskId,
 			EnterAt:   data.Start,
 			EnterAt_2: data.Stop,
 		})
-		if err != nil {
-			return err
+		if err_ != nil {
+			return err_
 		}
 		return c.JSON(fiber.Map{"pairs": pairs})
 	})
@@ -645,9 +666,13 @@ func getPerformance(c *fiber.Ctx) error {
 	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
 		return err_
 	}
-	return wrapAccDb(c, func(acc string, sess *orm.Queries) error {
-		taskId := orm.GetTaskID(acc)
-		orders, err := sess.GetOrders(orm.GetOrdersArgs{
+	return wrapAccount(c, func(acc string) error {
+		sess, err := ormo.Conn(orm.DbTrades, false)
+		if err != nil {
+			return err
+		}
+		taskId := ormo.GetTaskID(acc)
+		orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID:      taskId,
 			Pairs:       data.Pairs,
 			Status:      2,
@@ -657,26 +682,26 @@ func getPerformance(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
-		var odKey func(od *orm.InOutOrder) string
+		var odKey func(od *ormo.InOutOrder) string
 		if data.GroupBy == "symbol" {
-			odKey = func(od *orm.InOutOrder) string {
+			odKey = func(od *ormo.InOutOrder) string {
 				return od.Symbol
 			}
 		} else if data.GroupBy == "month" {
 			tfMSecs := int64(utils2.TFToSecs("1M") * 1000)
-			odKey = func(od *orm.InOutOrder) string {
+			odKey = func(od *ormo.InOutOrder) string {
 				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
 				return btime.ToDateStr(dateMS, "2006-01")
 			}
 		} else if data.GroupBy == "week" {
 			tfMSecs := int64(utils2.TFToSecs("1w") * 1000)
-			odKey = func(od *orm.InOutOrder) string {
+			odKey = func(od *ormo.InOutOrder) string {
 				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
 				return btime.ToDateStr(dateMS, "2006-01-02")
 			}
 		} else if data.GroupBy == "day" {
 			tfMSecs := int64(utils2.TFToSecs("1d") * 1000)
-			odKey = func(od *orm.InOutOrder) string {
+			odKey = func(od *ormo.InOutOrder) string {
 				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
 				return btime.ToDateStr(dateMS, "2006-01-02")
 			}
@@ -684,17 +709,17 @@ func getPerformance(c *fiber.Ctx) error {
 			return c.JSON(fiber.Map{"code": 400, "msg": "unsupport group type: " + data.GroupBy})
 		}
 		res := groupOrders(orders, odKey)
-		enterTags := groupOrders(orders, func(od *orm.InOutOrder) string {
+		enterTags := groupOrders(orders, func(od *ormo.InOutOrder) string {
 			return od.EnterTag
 		})
-		exitTags := groupOrders(orders, func(od *orm.InOutOrder) string {
+		exitTags := groupOrders(orders, func(od *ormo.InOutOrder) string {
 			return od.ExitTag
 		})
 		return c.JSON(fiber.Map{"items": res, "enters": enterTags, "exits": exitTags})
 	})
 }
 
-func groupOrders(orders []*orm.InOutOrder, odKey func(od *orm.InOutOrder) string) []*GroupItem {
+func groupOrders(orders []*ormo.InOutOrder, odKey func(od *ormo.InOutOrder) string) []*GroupItem {
 	var itemMap = map[string]*GroupItem{}
 	hourMSecs := float64(utils2.TFToSecs("1h") * 1000)
 	for _, od := range orders {

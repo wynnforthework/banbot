@@ -71,7 +71,7 @@ func TestStagyRun(t *testing.T) {
 			TimeFrame:  tf,
 			TFMSecs:    tfMSecs,
 			MaxCache:   core.NumTaCache,
-			Data:       map[string]interface{}{"sid": exs.ID},
+			Data:       map[string]interface{}{"sid": int64(exs.ID)},
 		}
 		strat.Envs[envKey] = env
 		job := &strat.StratJob{

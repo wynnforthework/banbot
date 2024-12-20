@@ -1,4 +1,4 @@
-package orm
+package ormo
 
 import (
 	"context"
@@ -7,12 +7,12 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"math"
 	"math/rand"
@@ -28,6 +28,23 @@ const (
 	iOrderFields  = "id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_pft_rate, max_draw_down, profit_rate, profit, info"
 	exOrderFields = "id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_at, price, average, amount, filled, status, fee, fee_type, update_at"
 )
+
+type InOutOrder struct {
+	*IOrder
+	Enter      *ExOrder
+	Exit       *ExOrder
+	Info       map[string]interface{}
+	DirtyMain  bool   // IOrder has unsaved temporary changes 有未保存的临时修改
+	DirtyEnter bool   // Enter has unsaved temporary changes 有未保存的临时修改
+	DirtyExit  bool   // Exit has unsaved temporary changes 有未保存的临时修改
+	DirtyInfo  bool   // Info has unsaved temporary changes 有未保存的临时修改
+	idKey      string // Key to distinguish orders 区分订单的key
+}
+
+type InOutEdit struct {
+	Order  *InOutOrder
+	Action string
+}
 
 func (i *InOutOrder) SetInfo(key string, val interface{}) {
 	i.loadInfo()
@@ -497,12 +514,10 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 		return err
 	}
 	if sess == nil {
-		var conn *pgxpool.Conn
-		sess, conn, err = Conn(nil)
+		sess, err = Conn(orm.DbTrades, true)
 		if err != nil {
 			return err
 		}
-		defer conn.Release()
 	}
 	if i.ID == 0 {
 		err = i.IOrder.saveAdd(sess)
@@ -701,7 +716,7 @@ func (i *InOutOrder) NanInfTo(v float64) {
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddIOrder(context.Background(), AddIOrderParams{
-		TaskID:      int32(i.TaskID),
+		TaskID:      i.TaskID,
 		Symbol:      i.Symbol,
 		Sid:         i.Sid,
 		Timeframe:   i.Timeframe,
@@ -723,14 +738,14 @@ func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 		Info:        i.Info,
 	})
 	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
+		return errs.New(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
 
 func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 	err_ := sess.SetIOrder(context.Background(), SetIOrderParams{
-		TaskID:      int32(i.TaskID),
+		TaskID:      i.TaskID,
 		Symbol:      i.Symbol,
 		Sid:         i.Sid,
 		Timeframe:   i.Timeframe,
@@ -753,7 +768,7 @@ func (i *IOrder) saveUpdate(sess *Queries) *errs.Error {
 		ID:          i.ID,
 	})
 	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
+		return errs.New(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
@@ -771,8 +786,8 @@ func (i *IOrder) NanInfTo(v float64) {
 func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddExOrder(context.Background(), AddExOrderParams{
-		TaskID:    int32(i.TaskID),
-		InoutID:   int32(i.InoutID),
+		TaskID:    i.TaskID,
+		InoutID:   i.InoutID,
 		Symbol:    i.Symbol,
 		Enter:     i.Enter,
 		OrderType: i.OrderType,
@@ -789,15 +804,15 @@ func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 		UpdateAt:  i.UpdateAt,
 	})
 	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
+		return errs.New(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
 
 func (i *ExOrder) saveUpdate(sess *Queries) *errs.Error {
 	err_ := sess.SetExOrder(context.Background(), SetExOrderParams{
-		TaskID:    int32(i.TaskID),
-		InoutID:   int32(i.InoutID),
+		TaskID:    i.TaskID,
+		InoutID:   i.InoutID,
 		Symbol:    i.Symbol,
 		Enter:     i.Enter,
 		OrderType: i.OrderType,
@@ -815,7 +830,7 @@ func (i *ExOrder) saveUpdate(sess *Queries) *errs.Error {
 		ID:        i.ID,
 	})
 	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
+		return errs.New(core.ErrDbExecFail, err_)
 	}
 	return nil
 }
@@ -888,9 +903,9 @@ func (q *Queries) DumpOrdersToDb() *errs.Error {
 }
 
 func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.Error) {
-	rows, err_ := q.db.Query(context.Background(), sql, args...)
+	rows, err_ := q.db.QueryContext(context.Background(), sql, args...)
 	if err_ != nil {
-		return nil, NewDbErr(core.ErrDbReadFail, err_)
+		return nil, errs.New(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	var res = make([]*IOrder, 0, 4)
@@ -920,7 +935,7 @@ func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.E
 			&iod.Info,
 		)
 		if err_ != nil {
-			return nil, NewDbErr(core.ErrDbReadFail, err_)
+			return nil, errs.New(core.ErrDbReadFail, err_)
 		}
 		res = append(res, &iod)
 	}
@@ -928,9 +943,9 @@ func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.E
 }
 
 func (q *Queries) getExOrders(sql string, args []interface{}) ([]*ExOrder, *errs.Error) {
-	rows, err_ := q.db.Query(context.Background(), sql, args...)
+	rows, err_ := q.db.QueryContext(context.Background(), sql, args...)
 	if err_ != nil {
-		return nil, NewDbErr(core.ErrDbReadFail, err_)
+		return nil, errs.New(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	var res = make([]*ExOrder, 0, 4)
@@ -956,7 +971,7 @@ func (q *Queries) getExOrders(sql string, args []interface{}) ([]*ExOrder, *errs
 			&iod.UpdateAt,
 		)
 		if err_ != nil {
-			return nil, NewDbErr(core.ErrDbReadFail, err_)
+			return nil, errs.New(core.ErrDbReadFail, err_)
 		}
 		res = append(res, &iod)
 	}
@@ -1100,15 +1115,15 @@ func (q *Queries) DelOrder(od *InOutOrder) *errs.Error {
 	od.Status = InOutStatusDelete
 	ctx := context.Background()
 	sql := fmt.Sprintf("delete from iorder where id=%v", od.ID)
-	_, err_ := q.db.Exec(ctx, sql)
+	_, err_ := q.db.ExecContext(ctx, sql)
 	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
+		return errs.New(core.ErrDbExecFail, err_)
 	}
 	delExOrder := func(exId int64) *errs.Error {
 		sql = fmt.Sprintf("delete from exorder where id=%v", exId)
-		_, err_ = q.db.Exec(ctx, sql)
+		_, err_ = q.db.ExecContext(ctx, sql)
 		if err_ != nil {
-			return NewDbErr(core.ErrDbExecFail, err_)
+			return errs.New(core.ErrDbExecFail, err_)
 		}
 		return nil
 	}
@@ -1132,9 +1147,9 @@ Retrieve the specified task and the latest usage time period of the specified po
 func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string, *errs.Error) {
 	ctx := context.Background()
 	sql := fmt.Sprintf("select DISTINCT ON (symbol) symbol,timeframe from iorder where task_id=%v and strategy=? ORDER BY symbol, enter_at DESC", taskId)
-	rows, err_ := q.db.Query(ctx, sql, stagy)
+	rows, err_ := q.db.QueryContext(ctx, sql, stagy)
 	if err_ != nil {
-		return nil, NewDbErr(core.ErrDbReadFail, err_)
+		return nil, errs.New(core.ErrDbReadFail, err_)
 	}
 	defer rows.Close()
 	var result = make(map[string]string)
@@ -1142,7 +1157,7 @@ func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string
 		var symbol, timeFrame string
 		err_ = rows.Scan(&symbol, &timeFrame)
 		if err_ != nil {
-			return result, NewDbErr(core.ErrDbReadFail, err_)
+			return result, errs.New(core.ErrDbReadFail, err_)
 		}
 		result[symbol] = timeFrame
 	}

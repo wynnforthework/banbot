@@ -3,6 +3,8 @@ package dev
 import (
 	"context"
 	"fmt"
+	"github.com/banbox/banbot/orm/ormo"
+	"github.com/banbox/banbot/orm/ormu"
 	"io"
 	"os"
 	"os/exec"
@@ -18,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/orm"
 	"github.com/gofiber/contrib/websocket"
 	"github.com/gofiber/fiber/v2"
 )
@@ -59,12 +60,20 @@ func getOrders(c *fiber.Ctx) error {
 		return err
 	}
 
-	sess, conn, err2 := orm.Conn(context.Background())
+	qu, err2 := ormu.Conn()
 	if err2 != nil {
 		return err2
 	}
-	defer conn.Release()
-	orders, err2 := sess.GetOrders(orm.GetOrdersArgs{
+	task, err := qu.GetTask(context.Background(), data.TaskID)
+	if err != nil {
+		return err
+	}
+
+	sess, err2 := ormo.Conn(task.Path, false)
+	if err2 != nil {
+		return err2
+	}
+	orders, err2 := sess.GetOrders(ormo.GetOrdersArgs{
 		TaskID: data.TaskID,
 	})
 	if err2 != nil {
