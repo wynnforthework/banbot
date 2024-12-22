@@ -47,7 +47,6 @@ func init() {
 	for _, k := range btInfoKeyList {
 		btInfoKeys[k] = true
 	}
-	startBtTaskScheduler()
 }
 
 // 启动后台任务处理
