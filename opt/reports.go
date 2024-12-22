@@ -6,6 +6,13 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"math"
+	"os"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -18,12 +25,6 @@ import (
 	utils2 "github.com/banbox/banexg/utils"
 	"github.com/olekukonko/tablewriter"
 	"go.uber.org/zap"
-	"math"
-	"os"
-	"slices"
-	"sort"
-	"strconv"
-	"strings"
 )
 
 type BTResult struct {
@@ -32,6 +33,8 @@ type BTResult struct {
 	MaxReal         float64    `json:"maxReal"`         // Maximum Assets 最大资产
 	MaxDrawDownPct  float64    `json:"maxDrawDownPct"`  // Maximum drawdown percentage 最大回撤百分比
 	ShowDrawDownPct float64    `json:"showDrawDownPct"` // Displays the maximum drawdown percentage 显示最大回撤百分比
+	MaxDrawDownVal  float64    `json:"maxDrawDownVal"`  // Maximum drawdown percentage 最大回撤金额
+	ShowDrawDownVal float64    `json:"showDrawDownVal"` // Displays the maximum drawdown percentage 显示最大回撤金额
 	BarNum          int        `json:"barNum"`
 	TimeNum         int        `json:"timeNum"`
 	OrderNum        int        `json:"orderNum"`
@@ -53,6 +56,7 @@ type BTResult struct {
 	TotCost         float64    `json:"totCost"`
 	TotFee          float64    `json:"totFee"`
 	TotProfitPct    float64    `json:"totProfitPct"`
+	WinRatePct      float64    `json:"winRatePct"`
 	SharpeRatio     float64    `json:"sharpeRatio"`
 	SortinoRatio    float64    `json:"sortinoRatio"`
 }
@@ -98,7 +102,7 @@ func NewBTResult() *BTResult {
 }
 
 func (r *BTResult) printBtResult() {
-	if config.StrtgPerf != nil && config.StrtgPerf.Enable {
+	if config.StratPerf != nil && config.StratPerf.Enable {
 		core.DumpPerfs(r.OutDir)
 	}
 
@@ -157,6 +161,7 @@ func (r *BTResult) Collect() {
 	sumProfit := float64(0)
 	sumFee := float64(0)
 	sumCost := float64(0)
+	winCount := float64(0)
 	for _, od := range orders {
 		sumProfit += od.Profit
 		sumFee += od.Enter.Fee
@@ -164,6 +169,9 @@ func (r *BTResult) Collect() {
 			sumFee += od.Exit.Fee
 		}
 		sumCost += od.EnterCost() / od.Leverage
+		if od.Profit > 0 {
+			winCount += 1
+		}
 	}
 	r.TotProfit = sumProfit
 	r.TotCost = sumCost
@@ -174,8 +182,11 @@ func (r *BTResult) Collect() {
 	}
 	// Calculate the maximum drawdown on the chart
 	// 计算图表上的最大回撤
-	r.ShowDrawDownPct = r.Plots.calcDrawDown() * 100
+	ddRate, ddVal := r.Plots.calcDrawDown()
+	r.ShowDrawDownPct = ddRate * 100
+	r.ShowDrawDownVal = ddVal
 	if len(orders) > 0 {
+		r.WinRatePct = winCount * 100 / float64(len(orders))
 		r.groupByPairs(orders)
 		r.groupByDates(orders)
 		r.groupByProfits(orders)
@@ -231,6 +242,9 @@ func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 	drawDownRate := strconv.FormatFloat(r.ShowDrawDownPct, 'f', 2, 64) + "%"
 	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 2, 64) + "%"
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
+	drawDownVal := strconv.FormatFloat(r.ShowDrawDownVal, 'f', 0, 64)
+	realDrawVal := strconv.FormatFloat(r.MaxDrawDownVal, 'f', 0, 64)
+	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownVal, realDrawVal)})
 	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
 	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
 	table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})
@@ -600,8 +614,7 @@ func (r *BTResult) dumpOrders(orders []*ormo.InOutOrder) {
 		}
 		return a.Symbol < b.Symbol
 	})
-	taskId := ormo.GetTaskID("")
-	file, err_ := os.Create(fmt.Sprintf("%s/orders_%v.csv", r.OutDir, taskId))
+	file, err_ := os.Create(fmt.Sprintf("%s/orders.csv", r.OutDir))
 	if err_ != nil {
 		log.Error("create orders.csv fail", zap.Error(err_))
 		return
@@ -668,8 +681,10 @@ func (r *BTResult) dumpConfig() {
 		log.Error("marshal config as yaml fail", zap.Error(err))
 		return
 	}
-	taskId := ormo.GetTaskID("")
-	outName := fmt.Sprintf("%s/config_%v.yml", r.OutDir, taskId)
+	outName := fmt.Sprintf("%s/config.yml", r.OutDir)
+	if _, err := os.Stat(outName); err == nil {
+		return
+	}
 	err_ := os.WriteFile(outName, data, 0644)
 	if err_ != nil {
 		log.Error("save yaml to file fail", zap.Error(err_))
@@ -737,8 +752,7 @@ func (r *BTResult) dumpGraph() {
 	for _, v := range r.Plots.JobNum {
 		jobNum = append(jobNum, float64(v))
 	}
-	taskId := ormo.GetTaskID("")
-	outPath := fmt.Sprintf("%s/assets_%v.html", r.OutDir, taskId)
+	outPath := fmt.Sprintf("%s/assets.html", r.OutDir)
 	title := "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders"
 	tplPath := fmt.Sprintf("%s/lines.html", config.GetDataDir())
 	tplData, _ := os.ReadFile(tplPath)
@@ -757,7 +771,7 @@ func (r *BTResult) dumpGraph() {
 	// Draw cumulative profit curves for each entry tag separately
 	// 为入场标签分别绘制累计利润曲线
 	labels, dsList := genEnterTagCurves(ormo.HistODs)
-	outPath = fmt.Sprintf("%s/enters_%v.html", r.OutDir, taskId)
+	outPath = fmt.Sprintf("%s/enters.html", r.OutDir)
 	title = "Strategy Enter Tag Profits"
 	err = DumpLineGraph(outPath, title, labels, 5, tplData, dsList)
 	if err != nil {
@@ -765,8 +779,8 @@ func (r *BTResult) dumpGraph() {
 	}
 }
 
-func (p *PlotData) calcDrawDown() float64 {
-	var drawDownRate, maxReal float64
+func (p *PlotData) calcDrawDown() (float64, float64) {
+	var drawDownRate, maxReal, drawDownVal float64
 	if len(p.Real) > 0 {
 		reals := p.Real
 		maxReal = reals[0]
@@ -774,6 +788,7 @@ func (p *PlotData) calcDrawDown() float64 {
 			if val > maxReal {
 				maxReal = val
 			} else {
+				drawDownVal = max(drawDownVal, maxReal-val)
 				curDown := math.Abs(val/maxReal - 1)
 				if curDown > drawDownRate {
 					drawDownRate = curDown
@@ -781,7 +796,7 @@ func (p *PlotData) calcDrawDown() float64 {
 			}
 		}
 	}
-	return drawDownRate
+	return drawDownRate, drawDownVal
 }
 
 func (r *BTResult) calcMeasures(num int) *errs.Error {
@@ -827,8 +842,7 @@ func (r *BTResult) Score() float64 {
 
 func (r *BTResult) dumpDetail(outPath string) {
 	if outPath == "" {
-		taskId := ormo.GetTaskID("")
-		outPath = fmt.Sprintf("%s/detail_%v.json", r.OutDir, taskId)
+		outPath = fmt.Sprintf("%s/detail.json", r.OutDir)
 	}
 	data, err_ := utils2.Marshal(r)
 	if err_ != nil {

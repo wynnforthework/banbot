@@ -6,6 +6,7 @@
   import {modals} from '$lib/stores/modals';
   import Modal from '$lib/kline/Modal.svelte';
   import { getDateStr, toUTCStamp } from '$lib/dateutil';
+  import OrderDetail from '$lib/order/OrderDetail.svelte';
 
   let tabName = $state('bot'); // bot/exchange/position
   let banodList = $state<any[]>([]);
@@ -465,145 +466,7 @@
 <!-- Modals -->
 <Modal title={m.order_details()} bind:show={showOdDetail} width={800}>
   {#if selectedOrder}
-    <div class="space-y-4">
-      <!-- 基本信息 -->
-      <div class="grid grid-cols-2 gap-4 p-4 border rounded-lg">
-        <div class="form-control">
-          <div class="flex items-center gap-4">
-            <label class="label w-24 whitespace-nowrap">ID</label>
-            <input type="text" class="input input-bordered flex-1" value={selectedOrder.id} readonly />
-          </div>
-        </div>
-        <div class="form-control">
-          <div class="flex items-center gap-4">
-            <label class="label w-24 whitespace-nowrap">{m.pair()}</label>
-            <input type="text" class="input input-bordered flex-1" value={selectedOrder.symbol} readonly />
-          </div>
-        </div>
-        <div class="form-control">
-          <div class="flex items-center gap-4">
-            <label class="label w-24 whitespace-nowrap">{m.timeframe()}</label>
-            <input type="text" class="input input-bordered flex-1" value={selectedOrder.timeframe} readonly />
-          </div>
-        </div>
-        <div class="form-control">
-          <div class="flex items-center gap-4">
-            <label class="label w-24 whitespace-nowrap">{m.side()}</label>
-            <input type="text" class="input input-bordered flex-1" value={selectedOrder.short ? m.short() : m.long()} readonly />
-          </div>
-        </div>
-        <div class="form-control">
-          <div class="flex items-center gap-4">
-            <label class="label w-24 whitespace-nowrap">{m.leverage()}</label>
-            <input type="text" class="input input-bordered flex-1" value={`${selectedOrder.leverage}x`} readonly />
-          </div>
-        </div>
-        <div class="form-control">
-          <div class="flex items-center gap-4">
-            <label class="label w-24 whitespace-nowrap">{m.strategy()}</label>
-            <input type="text" class="input input-bordered flex-1" value={`${selectedOrder.strategy}:${selectedOrder.stg_ver}`} readonly />
-          </div>
-        </div>
-      </div>
-
-      <!-- 入场订单信息 -->
-      <div class="border rounded-lg p-4">
-        <h3 class="text-lg font-bold mb-4">{m.enter_order()}</h3>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="form-control">
-            <div class="flex items-center gap-4">
-              <label class="label w-24 whitespace-nowrap">{m.enter_time()}</label>
-              <input type="text" class="input input-bordered flex-1" value={getDateStr(selectedOrder.enter_at)} readonly />
-            </div>
-          </div>
-          <div class="form-control">
-            <div class="flex items-center gap-4">
-              <label class="label w-24 whitespace-nowrap">{m.enter_tag()}</label>
-              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_tag} readonly />
-            </div>
-          </div>
-          <div class="form-control">
-            <div class="flex items-center gap-4">
-              <label class="label w-24 whitespace-nowrap">{m.init_price()}</label>
-              <input type="text" class="input input-bordered flex-1" value={selectedOrder.init_price?.toFixed(7)} readonly />
-            </div>
-          </div>
-          <div class="form-control">
-            <div class="flex items-center gap-4">
-              <label class="label w-24 whitespace-nowrap">{m.enter_price()}</label>
-              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_price?.toFixed(7)} readonly />
-            </div>
-          </div>
-          <div class="form-control">
-            <div class="flex items-center gap-4">
-              <label class="label w-24 whitespace-nowrap">{m.average_price()}</label>
-              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_average?.toFixed(7)} readonly />
-            </div>
-          </div>
-          <div class="form-control">
-            <div class="flex items-center gap-4">
-              <label class="label w-24 whitespace-nowrap">{m.amount()}</label>
-              <input type="text" class="input input-bordered flex-1" value={selectedOrder.enter_amount?.toFixed(5)} readonly />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 出场订单信息 -->
-      {#if selectedOrder.exit_tag}
-        <div class="border rounded-lg p-4">
-          <h3 class="text-lg font-bold mb-4">{m.exit_order()}</h3>
-          <div class="grid grid-cols-2 gap-4">
-            <div class="form-control">
-              <div class="flex items-center gap-4">
-                <label class="label w-24 whitespace-nowrap">{m.exit_time()}</label>
-                <input type="text" class="input input-bordered flex-1" value={getDateStr(selectedOrder.exit_at)} readonly />
-              </div>
-            </div>
-            <div class="form-control">
-              <div class="flex items-center gap-4">
-                <label class="label w-24 whitespace-nowrap">{m.exit_tag()}</label>
-                <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_tag} readonly />
-              </div>
-            </div>
-            {#if selectedOrder.exit_filled}
-              <div class="form-control">
-                <div class="flex items-center gap-4">
-                  <label class="label w-24 whitespace-nowrap">{m.exit_price()}</label>
-                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_price?.toFixed(7)} readonly />
-                </div>
-              </div>
-              <div class="form-control">
-                <div class="flex items-center gap-4">
-                  <label class="label w-24 whitespace-nowrap">{m.average_price()}</label>
-                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_average?.toFixed(7)} readonly />
-                </div>
-              </div>
-              <div class="form-control">
-                <div class="flex items-center gap-4">
-                  <label class="label w-24 whitespace-nowrap">{m.amount()}</label>
-                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_amount?.toFixed(5)} readonly />
-                </div>
-              </div>
-              <div class="form-control">
-                <div class="flex items-center gap-4">
-                  <label class="label w-24 whitespace-nowrap">{m.filled_amount()}</label>
-                  <input type="text" class="input input-bordered flex-1" value={selectedOrder.exit_filled?.toFixed(5)} readonly />
-                </div>
-              </div>
-            {/if}
-          </div>
-        </div>
-      {/if}
-
-      <!-- 额外信息 -->
-      {#if selectedOrder.info}
-        <div class="border rounded-lg p-4">
-          <h3 class="text-lg font-bold mb-4">{m.additional_info()}</h3>
-          <pre class="whitespace-pre-wrap bg-base-200 p-4 rounded-lg">{JSON.stringify(selectedOrder.info, null, 2)}</pre>
-        </div>
-      {/if}
-    </div>
+    <OrderDetail order={selectedOrder} editable={true} />
   {/if}
 </Modal>
 

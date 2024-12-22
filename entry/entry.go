@@ -25,28 +25,36 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	if args.OutPath == "" {
+		hash, err := config.Data.HashCode()
+		if err != nil {
+			panic(err)
+		}
+		args.OutPath = fmt.Sprintf("$/backtest/%s", hash)
+	}
+	args.OutPath = config.ParsePath(args.OutPath)
 	if args.Separate && len(config.RunPolicy) > 1 {
 		log.Info("run backtest separately for policies", zap.Int("num", len(config.RunPolicy)))
 		policyList := config.RunPolicy
 		for i, item := range policyList {
 			log.Info("start backtest", zap.Int("id", i+1), zap.String("name", item.Name))
 			config.RunPolicy = []*config.RunPolicyConfig{item}
-			outDir := runBackTest()
+			outDir := runBackTest(fmt.Sprintf("%s%d", args.OutPath, i+1))
 			err_ := utils.CopyDir(outDir, fmt.Sprintf("%s_%d", outDir, i+1))
 			if err_ != nil {
 				return errs.New(errs.CodeIOWriteFail, err_)
 			}
 		}
 	} else {
-		runBackTest()
+		runBackTest(args.OutPath)
 	}
 	return nil
 }
 
-func runBackTest() string {
+func runBackTest(outDir string) string {
 	core.BotRunning = true
 	biz.ResetVars()
-	b := opt.NewBackTest(false, "")
+	b := opt.NewBackTest(false, outDir)
 	b.Run()
 	core.RunExitCalls()
 	return b.OutDir

@@ -78,10 +78,9 @@ type CorrelationFilter struct {
 // VolatilityFilter StdDev(ln(close / prev_close)) * sqrt(num)
 type VolatilityFilter struct {
 	BaseFilter
-	BackDays      int     `yaml:"back_days" mapstructure:"back_days,omitempty"`           // 回顾的K线天数
-	Max           float64 `yaml:"max" mapstructure:"max,omitempty"`                       // 波动分数最大值
-	Min           float64 `yaml:"min" mapstructure:"min,omitempty"`                       // 波动分数最小值
-	RefreshPeriod int     `yaml:"refresh_period" mapstructure:"refresh_period,omitempty"` // 缓存时间
+	BackDays int     `yaml:"back_days" mapstructure:"back_days,omitempty"` // 回顾的K线天数
+	Max      float64 `yaml:"max" mapstructure:"max,omitempty"`             // 波动分数最大值
+	Min      float64 `yaml:"min" mapstructure:"min,omitempty"`             // 波动分数最小值
 }
 
 type AgeFilter struct {

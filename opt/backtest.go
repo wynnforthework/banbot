@@ -10,7 +10,6 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
-	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/robfig/cron/v3"
@@ -44,8 +43,12 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 		BTResult: NewBTResult(),
 		isOpt:    isOpt,
 	}
-	if outDir == "" {
-		outDir = fmt.Sprintf("%s/backtest/%s", config.GetDataDir(), utils.RandomStr(8))
+	if outDir == "" && !isOpt {
+		hash, err := config.Data.HashCode()
+		if err != nil {
+			panic(err)
+		}
+		outDir = fmt.Sprintf("%s/backtest/%s", config.GetDataDir(), hash)
 	}
 	p.OutDir = outDir
 	config.LoadPerfs(config.GetDataDir())
@@ -64,9 +67,11 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err_ := os.MkdirAll(b.OutDir, 0755)
-	if err_ != nil {
-		return errs.New(core.ErrIOWriteFail, err_)
+	if b.OutDir != "" {
+		err_ := os.MkdirAll(b.OutDir, 0755)
+		if err_ != nil {
+			return errs.New(core.ErrIOWriteFail, err_)
+		}
 	}
 	err = ormo.InitTask(!b.isOpt, b.OutDir)
 	if err != nil {
@@ -270,6 +275,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 	} else {
 		drawDownPct := (b.MaxReal - totalLegal) * 100 / b.MaxReal
 		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
+		b.MaxDrawDownVal = max(b.MaxDrawDownVal, b.MaxReal-totalLegal)
 	}
 	odNum := ormo.OpenNum("", ormo.InOutStatusPartEnter)
 	if b.TimeNum%b.PlotEvery != 0 {

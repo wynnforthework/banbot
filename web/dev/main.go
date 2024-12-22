@@ -65,6 +65,11 @@ func Run(args []string) error {
 	if err2 = biz.SetupComs(banArg); err2 != nil {
 		return err2
 	}
+	err_ = collectBtResults()
+	if err_ != nil {
+		return err_
+	}
+	startBtTaskScheduler()
 	num := len(orm.GetAllExSymbols())
 	log.Info("loaded symbols", zap.Int("num", num))
 

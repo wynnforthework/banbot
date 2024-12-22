@@ -44,7 +44,7 @@ var (
 	KlineSource      string
 	WatchJobs        map[string][]string
 	RunPolicy        []*RunPolicyConfig
-	StrtgPerf        *StrtgPerfConfig
+	StratPerf        *StratPerfConfig
 	Pairs            []string
 	PairMgr          *PairMgrConfig
 	PairFilters      []*CommonPairFilter
@@ -102,7 +102,7 @@ type Config struct {
 	KlineSource     string                            `yaml:"kline_source" mapstructure:"kline_source"`
 	WatchJobs       map[string][]string               `yaml:"watch_jobs" mapstructure:"watch_jobs"`
 	RunPolicy       []*RunPolicyConfig                `yaml:"run_policy" mapstructure:"run_policy"`
-	StrtgPerf       *StrtgPerfConfig                  `yaml:"strtg_perf" mapstructure:"strtg_perf"`
+	StratPerf       *StratPerfConfig                  `yaml:"strat_perf" mapstructure:"strat_perf"`
 	Pairs           []string                          `yaml:"pairs" mapstructure:"pairs"`
 	PairMgr         *PairMgrConfig                    `yaml:"pairmgr" mapstructure:"pairmgr"`
 	PairFilters     []*CommonPairFilter               `yaml:"pairlists" mapstructure:"pairlists"`
@@ -123,7 +123,7 @@ type RunPolicyConfig struct {
 	MaxOpen       int                           `yaml:"max_open" mapstructure:"max_open"`
 	MaxSimulOpen  int                           `yaml:"max_simul_open" mapstructure:"max_simul_open"`
 	Dirt          string                        `yaml:"dirt" mapstructure:"dirt"`
-	StrtgPerf     *StrtgPerfConfig              `yaml:"strtg_perf" mapstructure:"strtg_perf"`
+	StratPerf     *StratPerfConfig              `yaml:"strat_perf" mapstructure:"strat_perf"`
 	Pairs         []string                      `yaml:"pairs" mapstructure:"pairs"`
 	Params        map[string]float64            `yaml:"params" mapstructure:"params"`
 	PairParams    map[string]map[string]float64 `yaml:"pair_params" mapstructure:"pair_params"`
@@ -131,7 +131,7 @@ type RunPolicyConfig struct {
 	Score         float64
 }
 
-type StrtgPerfConfig struct {
+type StratPerfConfig struct {
 	Enable    bool    `yaml:"enable" mapstructure:"enable"`
 	MinOdNum  int     `yaml:"min_od_num" mapstructure:"min_od_num"`
 	MaxOdNum  int     `yaml:"max_od_num" mapstructure:"max_od_num"`

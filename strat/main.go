@@ -87,7 +87,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 				PairStrats[exs.Symbol] = items
 			}
 			if _, ok = items[polID]; ok {
-				// 当前pair+strtgID已有任务，跳过
+				// 当前pair+stratID已有任务，跳过
 				err = markStratJob(tf, polID, exs, dirt)
 				if err != nil {
 					return nil, nil, err

@@ -6,6 +6,11 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"net"
+	"runtime"
+	"strings"
+	"sync"
+
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
@@ -15,10 +20,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
-	"net"
-	"runtime"
-	"strings"
-	"sync"
 )
 
 var (
@@ -132,11 +133,11 @@ func DbLite(src string, path string, write bool) (*sql.DB, *errs.Error) {
 	if target, ok := dbPathMap[path]; ok {
 		path = target
 	}
-	writeFlag := ""
+	openFlag := "mode=ro"
 	if write {
-		writeFlag = "w"
+		openFlag = "cache=shared&mode=rw"
 	}
-	var connStr = fmt.Sprintf("file:%s?cache=shared&mode=r%s", path, writeFlag)
+	var connStr = fmt.Sprintf("file:%s?%s", path, openFlag)
 	db, err_ := sql.Open("sqlite", connStr)
 	if err_ != nil {
 		return nil, errs.New(core.ErrDbConnFail, err_)
@@ -146,16 +147,23 @@ func DbLite(src string, path string, write bool) (*sql.DB, *errs.Error) {
 		if src == DbUI {
 			ddl, tbl = ddlUi, "task"
 		}
-		checkSql := "SELECT name FROM sqlite_master WHERE type='table' AND name=?;"
-		_, err_ = db.Exec(checkSql, tbl)
-		if err_ != nil {
-			// 数据库不存在，创建表
-			db, err_ = sql.Open("sqlite", connStr+"c")
-			if err_ != nil {
-				return nil, errs.New(core.ErrDbConnFail, err_)
-			}
-			if _, err_ = db.Exec(ddl); err_ != nil {
+		checkSql := "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name=?;"
+		var count int
+		err_ = db.QueryRow(checkSql, tbl).Scan(&count)
+		if err_ != nil || count == 0 {
+			if write {
+				// 数据库不存在，创建表
+				db, err_ = sql.Open("sqlite", connStr+"c")
+				if err_ != nil {
+					return nil, errs.New(core.ErrDbConnFail, err_)
+				}
+				if _, err_ = db.Exec(ddl); err_ != nil {
+					return nil, errs.New(core.ErrDbExecFail, err_)
+				}
+			} else if err_ != nil {
 				return nil, errs.New(core.ErrDbExecFail, err_)
+			} else {
+				return nil, errs.NewMsg(core.ErrDbExecFail, "db is empty: %v", path)
 			}
 		}
 		dbPathInit[path] = true

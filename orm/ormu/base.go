@@ -13,3 +13,9 @@ func Conn() (*Queries, *errs.Error) {
 	}
 	return New(db), nil
 }
+
+const (
+	BtStatusInit = iota + 1
+	BtStatusRunning
+	BtStatusDone
+)

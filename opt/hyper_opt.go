@@ -500,7 +500,7 @@ func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, f
 	_ = strat.New(pol)
 	params := pol.HyperParams()
 	if len(params) == 0 {
-		log.Warn("no hyper params, skip optimize", zap.String("strtg", title))
+		log.Warn("no hyper params, skip optimize", zap.String("strat", title))
 		return
 	}
 	detailDir := filepath.Join(filepath.Dir(flog.Name()), "detail")

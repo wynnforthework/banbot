@@ -984,6 +984,8 @@ type GetOrdersArgs struct {
 	TimeFrame   string
 	Status      int   // 0 represents all, 1 represents open interest, 2 represents historical orders 0表示所有，1表示未平仓，2表示历史订单
 	TaskID      int64 // 0 represents all,>0 represents specified task 0表示所有，>0表示指定任务
+	EnterTag    string
+	ExitTag     string
 	CloseAfter  int64 // Start timestamp 开始时间戳
 	CloseBefore int64 // End timestamp 结束时间戳
 	Limit       int
@@ -1043,6 +1045,14 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	if args.CloseBefore > 0 {
 		b.WriteString(fmt.Sprintf("and exit_at < $%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, args.CloseBefore)
+	}
+	if args.EnterTag != "" {
+		b.WriteString(fmt.Sprintf("and enter_tag=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.EnterTag)
+	}
+	if args.ExitTag != "" {
+		b.WriteString(fmt.Sprintf("and exit_tag=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.ExitTag)
 	}
 	if args.OrderBy == "" {
 		args.OrderBy = "enter_at desc"

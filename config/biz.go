@@ -2,21 +2,23 @@ package config
 
 import (
 	"fmt"
-	"github.com/banbox/banbot/btime"
-	"github.com/banbox/banbot/core"
-	utils2 "github.com/banbox/banbot/utils"
-	"github.com/banbox/banexg"
-	"github.com/banbox/banexg/errs"
-	"github.com/banbox/banexg/log"
-	"github.com/mitchellh/mapstructure"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/core"
+	utils2 "github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg"
+	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	"github.com/banbox/banexg/utils"
+	"github.com/mitchellh/mapstructure"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 )
 
 func GetDataDir() string {
@@ -38,14 +40,26 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 	if Loaded {
 		return nil
 	}
-	Args = args
-	DataDir = args.DataDir
+	cfg, err := GetConfig(args, true)
+	if err != nil {
+		return err
+	}
+	return ApplyConfig(args, cfg)
+}
+
+/*
+GetConfig get config from args
+
+args: NoDefault, Configs, TimeRange, MaxPoolSize, StakeAmount, StakePct, TimeFrames, Pairs
+*/
+func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 	yamlData = nil
 	var paths []string
+	var res Config
 	if !args.NoDefault {
 		dataDir := GetDataDir()
 		if dataDir == "" {
-			return errs.NewMsg(errs.CodeParamRequired, "data_dir is required")
+			return nil, errs.NewMsg(errs.CodeParamRequired, "data_dir is required")
 		}
 		tryNames := []string{"config.yml", "config.local.yml"}
 		for _, name := range tryNames {
@@ -60,15 +74,17 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 	}
 	var merged = make(map[string]interface{})
 	for _, path := range paths {
-		log.Info("Using " + path)
+		if showLog {
+			log.Info("Using " + path)
+		}
 		fileData, err := os.ReadFile(ParsePath(path))
 		if err != nil {
-			return errs.NewFull(core.ErrIOReadFail, err, "Read %s Fail", path)
+			return nil, errs.NewFull(core.ErrIOReadFail, err, "Read %s Fail", path)
 		}
 		var unpak map[string]interface{}
 		err = yaml.Unmarshal(fileData, &unpak)
 		if err != nil {
-			return errs.NewFull(errs.CodeUnmarshalFail, err, "Unmarshal %s Fail", path)
+			return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "Unmarshal %s Fail", path)
 		}
 		for key := range noExtends {
 			if _, ok := unpak[key]; ok {
@@ -77,99 +93,114 @@ func LoadConfig(args *CmdArgs) *errs.Error {
 		}
 		utils2.DeepCopyMap(merged, unpak)
 	}
-	err := mapstructure.Decode(merged, &Data)
+	err := mapstructure.Decode(merged, &res)
 	if err != nil {
-		return errs.NewFull(errs.CodeUnmarshalFail, err, "decode Config Fail")
+		return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "decode Config Fail")
 	}
-	return apply(args)
+	res.Apply(args)
+	return &res, nil
 }
 
-func apply(args *CmdArgs) *errs.Error {
-	Loaded = true
-	NoDB = args.NoDb
+func (c *Config) Apply(args *CmdArgs) {
 	if args.TimeRange != "" {
-		Data.TimeRangeRaw = args.TimeRange
+		c.TimeRangeRaw = args.TimeRange
 	}
 	if args.MaxPoolSize > 0 {
-		Data.Database.MaxPoolSize = args.MaxPoolSize
+		c.Database.MaxPoolSize = args.MaxPoolSize
 	}
-	cutLen := len(Data.TimeRangeRaw) / 2
-	Data.TimeRange = &TimeTuple{
-		btime.ParseTimeMS(Data.TimeRangeRaw[:cutLen]),
-		btime.ParseTimeMS(Data.TimeRangeRaw[cutLen+1:]),
+	cutLen := len(c.TimeRangeRaw) / 2
+	c.TimeRange = &TimeTuple{
+		btime.ParseTimeMS(c.TimeRangeRaw[:cutLen]),
+		btime.ParseTimeMS(c.TimeRangeRaw[cutLen+1:]),
 	}
-	Name = Data.Name
-	core.SetRunEnv(Data.Env)
-	Leverage = Data.Leverage
-	LimitVolSecs = Data.LimitVolSecs
+	if args.StakeAmount > 0 {
+		c.StakeAmount = args.StakeAmount
+	}
+	if args.StakePct > 0 {
+		c.StakePct = args.StakePct
+	}
+	if len(args.TimeFrames) > 0 {
+		c.RunTimeframes = args.TimeFrames
+	}
+	if len(args.Pairs) > 0 {
+		c.Pairs = args.Pairs
+	}
+}
+
+func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
+	Loaded = true
+	NoDB = args.NoDb
+	Name = c.Name
+	Args = args
+	Data = *c
+	if args.DataDir != "" {
+		DataDir = args.DataDir
+	}
+	core.SetRunEnv(c.Env)
+	Leverage = c.Leverage
+	LimitVolSecs = c.LimitVolSecs
 	if LimitVolSecs == 0 {
 		LimitVolSecs = 10
 	}
-	PutLimitSecs = Data.PutLimitSecs
+	PutLimitSecs = c.PutLimitSecs
 	if PutLimitSecs == 0 {
 		PutLimitSecs = 120
 	}
-	core.ExgName = Data.Exchange.Name
-	core.Market = Data.MarketType
+	core.ExgName = c.Exchange.Name
+	core.Market = c.MarketType
 	if core.Market == banexg.MarketSpot || core.Market == banexg.MarketMargin {
-		Data.ContractType = ""
-	} else if Data.ContractType == "" {
-		Data.ContractType = banexg.MarketSwap
+		c.ContractType = ""
+	} else if c.ContractType == "" {
+		c.ContractType = banexg.MarketSwap
 	}
-	core.ContractType = Data.ContractType
-	OdBookTtl = Data.OdBookTtl
+	core.ContractType = c.ContractType
+	OdBookTtl = c.OdBookTtl
 	if OdBookTtl == 0 {
 		OdBookTtl = 500
 	}
-	StopEnterBars = Data.StopEnterBars
-	core.ConcurNum = Data.ConcurNum
+	StopEnterBars = c.StopEnterBars
+	core.ConcurNum = c.ConcurNum
 	if core.ConcurNum == 0 {
 		core.ConcurNum = 2
 	}
-	OrderType = Data.OrderType
-	PreFire = Data.PreFire
-	MarginAddRate = Data.MarginAddRate
+	OrderType = c.OrderType
+	PreFire = c.PreFire
+	MarginAddRate = c.MarginAddRate
 	if MarginAddRate == 0 {
 		MarginAddRate = 0.66
 	}
-	ChargeOnBomb = Data.ChargeOnBomb
-	TakeOverStgy = Data.TakeOverStgy
-	if args.StakeAmount > 0 {
-		Data.StakeAmount = args.StakeAmount
-	}
-	StakeAmount = Data.StakeAmount
-	if args.StakePct > 0 {
-		Data.StakePct = args.StakePct
-	}
-	StakePct = Data.StakePct
-	MaxStakeAmt = Data.MaxStakeAmt
-	OpenVolRate = Data.OpenVolRate
+	ChargeOnBomb = c.ChargeOnBomb
+	TakeOverStgy = c.TakeOverStgy
+	StakeAmount = c.StakeAmount
+	StakePct = c.StakePct
+	MaxStakeAmt = c.MaxStakeAmt
+	OpenVolRate = c.OpenVolRate
 	if OpenVolRate == 0 {
 		OpenVolRate = 1
 	}
-	MinOpenRate = Data.MinOpenRate
+	MinOpenRate = c.MinOpenRate
 	if MinOpenRate == 0 {
 		MinOpenRate = 0.5
 	}
-	BTNetCost = Data.BTNetCost
+	BTNetCost = c.BTNetCost
 	if BTNetCost == 0 {
 		BTNetCost = 15
 	}
-	MaxOpenOrders = Data.MaxOpenOrders
-	MaxSimulOpen = Data.MaxSimulOpen
-	WalletAmounts = Data.WalletAmounts
-	DrawBalanceOver = Data.DrawBalanceOver
-	StakeCurrency = Data.StakeCurrency
+	MaxOpenOrders = c.MaxOpenOrders
+	MaxSimulOpen = c.MaxSimulOpen
+	WalletAmounts = c.WalletAmounts
+	DrawBalanceOver = c.DrawBalanceOver
+	StakeCurrency = c.StakeCurrency
 	if len(StakeCurrency) == 0 {
 		panic("config `stake_currency` cannot be empty")
 	}
 	StakeCurrencyMap = make(map[string]bool)
-	for _, curr := range Data.StakeCurrency {
+	for _, curr := range c.StakeCurrency {
 		StakeCurrencyMap[curr] = true
 	}
 	FatalStop = make(map[int]float64)
-	if len(Data.FatalStop) > 0 {
-		for text, rate := range Data.FatalStop {
+	if len(c.FatalStop) > 0 {
+		for text, rate := range c.FatalStop {
 			mins, err_ := strconv.Atoi(text)
 			if err_ != nil || mins < 1 {
 				panic("config fatal_stop." + text + " invalid, must be int >= 1")
@@ -177,19 +208,16 @@ func apply(args *CmdArgs) *errs.Error {
 			FatalStop[mins] = rate
 		}
 	}
-	if Data.FatalStopHours == 0 {
-		Data.FatalStopHours = 8
+	if c.FatalStopHours == 0 {
+		c.FatalStopHours = 8
 	}
-	FatalStopHours = Data.FatalStopHours
-	TimeRange = Data.TimeRange
-	if len(args.TimeFrames) > 0 {
-		Data.RunTimeframes = args.TimeFrames
-	}
-	RunTimeframes = Data.RunTimeframes
-	WatchJobs = Data.WatchJobs
-	staticPairs, fixPairs := initPolicies()
-	if Data.StrtgPerf == nil {
-		Data.StrtgPerf = &StrtgPerfConfig{
+	FatalStopHours = c.FatalStopHours
+	TimeRange = c.TimeRange
+	RunTimeframes = c.RunTimeframes
+	WatchJobs = c.WatchJobs
+	staticPairs, fixPairs := initPolicies(c)
+	if c.StratPerf == nil {
+		c.StratPerf = &StratPerfConfig{
 			MinOdNum:  5,
 			MaxOdNum:  30,
 			MinJobNum: 10,
@@ -197,45 +225,42 @@ func apply(args *CmdArgs) *errs.Error {
 			BadWeight: 0.15,
 		}
 	} else {
-		Data.StrtgPerf.Validate()
+		c.StratPerf.Validate()
 	}
-	StrtgPerf = Data.StrtgPerf
-	if len(args.Pairs) > 0 {
-		Data.Pairs = args.Pairs
-	}
-	if len(Data.Pairs) > 0 {
+	StratPerf = c.StratPerf
+	if len(c.Pairs) > 0 {
 		staticPairs = true
-		fixPairs = append(fixPairs, Data.Pairs...)
+		fixPairs = append(fixPairs, c.Pairs...)
 	}
 	if staticPairs && len(fixPairs) > 0 {
-		Data.Pairs, _ = utils2.UniqueItems(fixPairs)
+		c.Pairs, _ = utils2.UniqueItems(fixPairs)
 	}
-	Pairs, _ = utils2.UniqueItems(Data.Pairs)
-	if Data.PairMgr == nil {
-		Data.PairMgr = &PairMgrConfig{}
+	Pairs, _ = utils2.UniqueItems(c.Pairs)
+	if c.PairMgr == nil {
+		c.PairMgr = &PairMgrConfig{}
 	}
-	PairMgr = Data.PairMgr
-	PairFilters = Data.PairFilters
-	Exchange = Data.Exchange
+	PairMgr = c.PairMgr
+	PairFilters = c.PairFilters
+	Exchange = c.Exchange
 	initExgAccs()
-	Database = Data.Database
-	SpiderAddr = Data.SpiderAddr
+	Database = c.Database
+	SpiderAddr = c.SpiderAddr
 	if SpiderAddr == "" {
 		SpiderAddr = "127.0.0.1:6789"
 	}
-	APIServer = Data.APIServer
-	RPCChannels = Data.RPCChannels
-	Webhook = Data.Webhook
+	APIServer = c.APIServer
+	RPCChannels = c.RPCChannels
+	Webhook = c.Webhook
 	return nil
 }
 
-func initPolicies() (bool, []string) {
-	if Data.RunPolicy == nil {
-		Data.RunPolicy = make([]*RunPolicyConfig, 0)
+func initPolicies(c *Config) (bool, []string) {
+	if c.RunPolicy == nil {
+		c.RunPolicy = make([]*RunPolicyConfig, 0)
 	}
 	var polPairs []string
 	staticPairs := true
-	for _, pol := range Data.RunPolicy {
+	for _, pol := range c.RunPolicy {
 		if pol.Params == nil {
 			pol.Params = make(map[string]float64)
 		}
@@ -249,7 +274,7 @@ func initPolicies() (bool, []string) {
 			staticPairs = false
 		}
 	}
-	RunPolicy = Data.RunPolicy
+	RunPolicy = c.RunPolicy
 	return staticPairs, polPairs
 }
 
@@ -317,7 +342,7 @@ func initExgAccs() {
 	}
 }
 
-func (p *StrtgPerfConfig) Validate() {
+func (p *StratPerfConfig) Validate() {
 	if p.MinOdNum < 5 {
 		p.MinOdNum = 5
 	}
@@ -367,13 +392,10 @@ func GetStakeAmount(accName string) float64 {
 	return amount
 }
 
-func DumpYaml() ([]byte, *errs.Error) {
-	if yamlData != nil {
-		return yamlData, nil
-	}
+func (c *Config) DumpYaml() ([]byte, *errs.Error) {
 	itemMap := make(map[string]interface{})
-	t := reflect.TypeOf(Data)
-	v := reflect.ValueOf(Data)
+	t := reflect.TypeOf(*c)
+	v := reflect.ValueOf(*c)
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
 		tag := field.Tag.Get("yaml")
@@ -387,6 +409,85 @@ func DumpYaml() ([]byte, *errs.Error) {
 	if err_ != nil {
 		return nil, errs.New(errs.CodeMarshalFail, err_)
 	}
+	return data, nil
+}
+
+func (c *Config) HashCode() (string, *errs.Error) {
+	cfgData, err2 := c.DumpYaml()
+	if err2 != nil {
+		return "", err2
+	}
+	return utils.MD5(cfgData)[:10], nil
+}
+
+func (c *Config) Strats() []string {
+	resMap := make(map[string]bool)
+	var result = make([]string, 0, 4)
+	for _, p := range c.RunPolicy {
+		if _, ok := resMap[p.Name]; !ok {
+			resMap[p.Name] = true
+			result = append(result, p.Name)
+		}
+	}
+	return result
+}
+
+func (c *Config) TimeFrames() []string {
+	resMap := make(map[string]bool)
+	var result = make([]string, 0, 4)
+	var requireRoot = false
+	for _, p := range c.RunPolicy {
+		if len(p.RunTimeframes) == 0 {
+			requireRoot = true
+			continue
+		}
+		for _, tf := range p.RunTimeframes {
+			if _, ok := resMap[tf]; !ok {
+				resMap[tf] = true
+				result = append(result, tf)
+			}
+		}
+	}
+	if requireRoot {
+		for _, tf := range c.RunTimeframes {
+			if _, ok := resMap[tf]; !ok {
+				resMap[tf] = true
+				result = append(result, tf)
+			}
+		}
+	}
+	return result
+}
+
+func (c *Config) ShowPairs() string {
+	var showPairs string
+	if len(c.Pairs) > 0 {
+		showPairs = fmt.Sprintf("num_%d", len(c.Pairs))
+	} else if len(c.PairFilters) > 0 {
+		for _, f := range c.PairFilters {
+			if f.Name == "OffsetFilter" {
+				limit := utils.GetMapVal(f.Items, "limit", 0)
+				if limit > 0 {
+					showPairs = fmt.Sprintf("top_%d", limit)
+				} else {
+					rate := utils.GetMapVal(f.Items, "rate", float64(0))
+					showPairs = fmt.Sprintf("top_%.0f", rate*100)
+				}
+			}
+		}
+	}
+	return showPairs
+}
+
+func DumpYaml() ([]byte, *errs.Error) {
+	if yamlData != nil {
+		return yamlData, nil
+	}
+	data, err := Data.DumpYaml()
+	if err != nil {
+		return nil, err
+	}
+	yamlData = data
 	return data, nil
 }
 
@@ -498,7 +599,7 @@ func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
 		MaxOpen:       c.MaxOpen,
 		MaxSimulOpen:  c.MaxSimulOpen,
 		Dirt:          c.Dirt,
-		StrtgPerf:     c.StrtgPerf,
+		StratPerf:     c.StratPerf,
 		Pairs:         c.Pairs,
 		Params:        make(map[string]float64),
 		PairParams:    make(map[string]map[string]float64),
@@ -539,39 +640,39 @@ func (c *RunPolicyConfig) PairDup(pair string) (*RunPolicyConfig, bool) {
 }
 
 func LoadPerfs(inDir string) {
-	if StrtgPerf == nil || !StrtgPerf.Enable {
+	if StratPerf == nil || !StratPerf.Enable {
 		return
 	}
-	inPath := fmt.Sprintf("%s/strtg_perfs.yml", inDir)
+	inPath := fmt.Sprintf("%s/strat_perfs.yml", inDir)
 	_, err_ := os.Stat(inPath)
 	if err_ != nil {
 		return
 	}
 	data, err_ := os.ReadFile(inPath)
 	if err_ != nil {
-		log.Error("read strtg_perfs.yml fail", zap.Error(err_))
+		log.Error("read strat_perfs.yml fail", zap.Error(err_))
 		return
 	}
 	var unpak map[string]map[string]interface{}
 	err_ = yaml.Unmarshal(data, &unpak)
 	if err_ != nil {
-		log.Error("unmarshal strtg_perfs fail", zap.Error(err_))
+		log.Error("unmarshal strat_perfs fail", zap.Error(err_))
 		return
 	}
-	for strtg, cfg := range unpak {
+	for strat, cfg := range unpak {
 		sta := &core.PerfSta{}
 		err_ = mapstructure.Decode(cfg, &sta)
 		if err_ != nil {
-			log.Error(fmt.Sprintf("decode %s fail", strtg), zap.Error(err_))
+			log.Error(fmt.Sprintf("decode %s fail", strat), zap.Error(err_))
 			continue
 		}
-		core.StratPerfSta[strtg] = sta
+		core.StratPerfSta[strat] = sta
 		perfVal, ok := cfg["perf"]
 		if ok && perfVal != nil {
 			var perf = map[string]string{}
 			err_ = mapstructure.Decode(perfVal, &perf)
 			if err_ != nil {
-				log.Error(fmt.Sprintf("decode %s.perf fail", strtg), zap.Error(err_))
+				log.Error(fmt.Sprintf("decode %s.perf fail", strat), zap.Error(err_))
 				continue
 			}
 			for pairTf, arrStr := range perf {
@@ -579,7 +680,7 @@ func LoadPerfs(inDir string) {
 				num, _ := strconv.Atoi(arr[0])
 				profit, _ := strconv.ParseFloat(arr[1], 64)
 				score, _ := strconv.ParseFloat(arr[2], 64)
-				core.JobPerfs[fmt.Sprintf("%s_%s", strtg, pairTf)] = &core.JobPerf{
+				core.JobPerfs[fmt.Sprintf("%s_%s", strat, pairTf)] = &core.JobPerf{
 					Num:       num,
 					TotProfit: profit,
 					Score:     score,
@@ -587,5 +688,5 @@ func LoadPerfs(inDir string) {
 			}
 		}
 	}
-	log.Info("load strtg_perfs ok", zap.String("path", inPath))
+	log.Info("load strat_perfs ok", zap.String("path", inPath))
 }

@@ -7,23 +7,34 @@ package ormu
 
 import (
 	"context"
+	"strings"
 )
 
 const addTask = `-- name: AddTask :one
 insert into task
-("mode", "args", "config", "create_at", "start_at", "stop_at", "info")
-values (?, ?, ?, ?, ?, ?, ?)
-    returning id, mode, args, config, path, create_at, start_at, stop_at, info
+(mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, order_num, profit_rate, win_rate, max_drawdown, sharpe, info)
+values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    returning id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, order_num, profit_rate, win_rate, max_drawdown, sharpe, info
 `
 
 type AddTaskParams struct {
-	Mode     string `json:"mode"`
-	Args     string `json:"args"`
-	Config   string `json:"config"`
-	CreateAt int64  `json:"create_at"`
-	StartAt  int64  `json:"start_at"`
-	StopAt   int64  `json:"stop_at"`
-	Info     string `json:"info"`
+	Mode        string  `json:"mode"`
+	Args        string  `json:"args"`
+	Config      string  `json:"config"`
+	Path        string  `json:"path"`
+	Strats      string  `json:"strats"`
+	Periods     string  `json:"periods"`
+	Pairs       string  `json:"pairs"`
+	CreateAt    int64   `json:"createAt"`
+	StartAt     int64   `json:"startAt"`
+	StopAt      int64   `json:"stopAt"`
+	Status      int64   `json:"status"`
+	OrderNum    int64   `json:"orderNum"`
+	ProfitRate  float64 `json:"profitRate"`
+	WinRate     float64 `json:"winRate"`
+	MaxDrawdown float64 `json:"maxDrawdown"`
+	Sharpe      float64 `json:"sharpe"`
+	Info        string  `json:"info"`
 }
 
 func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error) {
@@ -31,9 +42,19 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error)
 		arg.Mode,
 		arg.Args,
 		arg.Config,
+		arg.Path,
+		arg.Strats,
+		arg.Periods,
+		arg.Pairs,
 		arg.CreateAt,
 		arg.StartAt,
 		arg.StopAt,
+		arg.Status,
+		arg.OrderNum,
+		arg.ProfitRate,
+		arg.WinRate,
+		arg.MaxDrawdown,
+		arg.Sharpe,
 		arg.Info,
 	)
 	var i Task
@@ -43,16 +64,44 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error)
 		&i.Args,
 		&i.Config,
 		&i.Path,
+		&i.Strats,
+		&i.Periods,
+		&i.Pairs,
 		&i.CreateAt,
 		&i.StartAt,
 		&i.StopAt,
+		&i.Status,
+		&i.OrderNum,
+		&i.ProfitRate,
+		&i.WinRate,
+		&i.MaxDrawdown,
+		&i.Sharpe,
 		&i.Info,
 	)
 	return &i, err
 }
 
+const delTasks = `-- name: DelTasks :exec
+delete from task where id in (/*SLICE:ids*/?)
+`
+
+func (q *Queries) DelTasks(ctx context.Context, ids []int64) error {
+	query := delTasks
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	_, err := q.db.ExecContext(ctx, query, queryParams...)
+	return err
+}
+
 const getTask = `-- name: GetTask :one
-select id, mode, args, config, path, create_at, start_at, stop_at, info from task
+select id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, order_num, profit_rate, win_rate, max_drawdown, sharpe, info from task
 where id = ?
 `
 
@@ -65,46 +114,48 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (*Task, error) {
 		&i.Args,
 		&i.Config,
 		&i.Path,
+		&i.Strats,
+		&i.Periods,
+		&i.Pairs,
 		&i.CreateAt,
 		&i.StartAt,
 		&i.StopAt,
+		&i.Status,
+		&i.OrderNum,
+		&i.ProfitRate,
+		&i.WinRate,
+		&i.MaxDrawdown,
+		&i.Sharpe,
 		&i.Info,
 	)
 	return &i, err
 }
 
-const listTasks = `-- name: ListTasks :many
-select id, mode, args, config, path, create_at, start_at, stop_at, info from task
-where mode = ? and id < ?
-order by id desc
-limit ?
+const getTaskOptions = `-- name: GetTaskOptions :many
+select strats, periods, start_at, stop_at from task
 `
 
-type ListTasksParams struct {
-	Mode  string `json:"mode"`
-	ID    int64  `json:"id"`
-	Limit int64  `json:"limit"`
+type GetTaskOptionsRow struct {
+	Strats  string `json:"strats"`
+	Periods string `json:"periods"`
+	StartAt int64  `json:"startAt"`
+	StopAt  int64  `json:"stopAt"`
 }
 
-func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]*Task, error) {
-	rows, err := q.db.QueryContext(ctx, listTasks, arg.Mode, arg.ID, arg.Limit)
+func (q *Queries) GetTaskOptions(ctx context.Context) ([]*GetTaskOptionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getTaskOptions)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*Task
+	var items []*GetTaskOptionsRow
 	for rows.Next() {
-		var i Task
+		var i GetTaskOptionsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Mode,
-			&i.Args,
-			&i.Config,
-			&i.Path,
-			&i.CreateAt,
+			&i.Strats,
+			&i.Periods,
 			&i.StartAt,
 			&i.StopAt,
-			&i.Info,
 		); err != nil {
 			return nil, err
 		}
@@ -117,4 +168,33 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]*Task, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateTask = `-- name: UpdateTask :exec
+update task set status=?,order_num=?,profit_rate=?,win_rate=?,max_drawdown=?,sharpe=?,info=?  where id = ?
+`
+
+type UpdateTaskParams struct {
+	Status      int64   `json:"status"`
+	OrderNum    int64   `json:"orderNum"`
+	ProfitRate  float64 `json:"profitRate"`
+	WinRate     float64 `json:"winRate"`
+	MaxDrawdown float64 `json:"maxDrawdown"`
+	Sharpe      float64 `json:"sharpe"`
+	Info        string  `json:"info"`
+	ID          int64   `json:"id"`
+}
+
+func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) error {
+	_, err := q.db.ExecContext(ctx, updateTask,
+		arg.Status,
+		arg.OrderNum,
+		arg.ProfitRate,
+		arg.WinRate,
+		arg.MaxDrawdown,
+		arg.Sharpe,
+		arg.Info,
+		arg.ID,
+	)
+	return err
 }

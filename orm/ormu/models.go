@@ -5,13 +5,22 @@
 package ormu
 
 type Task struct {
-	ID       int64  `json:"id"`
-	Mode     string `json:"mode"`
-	Args     string `json:"args"`
-	Config   string `json:"config"`
-	Path     string `json:"path"`
-	CreateAt int64  `json:"create_at"`
-	StartAt  int64  `json:"start_at"`
-	StopAt   int64  `json:"stop_at"`
-	Info     string `json:"info"`
+	ID          int64   `json:"id"`
+	Mode        string  `json:"mode"`
+	Args        string  `json:"args"`
+	Config      string  `json:"config"`
+	Path        string  `json:"path"`
+	Strats      string  `json:"strats"`
+	Periods     string  `json:"periods"`
+	Pairs       string  `json:"pairs"`
+	CreateAt    int64   `json:"createAt"`
+	StartAt     int64   `json:"startAt"`
+	StopAt      int64   `json:"stopAt"`
+	Status      int64   `json:"status"`
+	OrderNum    int64   `json:"orderNum"`
+	ProfitRate  float64 `json:"profitRate"`
+	WinRate     float64 `json:"winRate"`
+	MaxDrawdown float64 `json:"maxDrawdown"`
+	Sharpe      float64 `json:"sharpe"`
+	Info        string  `json:"info"`
 }

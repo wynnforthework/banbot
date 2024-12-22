@@ -131,16 +131,16 @@ func DumpPerfs(outDir string) {
 	}
 	data, err_ := yaml.Marshal(res)
 	if err_ != nil {
-		log.Error("marshal strtg_perfs fail", zap.Error(err_))
+		log.Error("marshal strat_perfs fail", zap.Error(err_))
 		return
 	}
-	outName := fmt.Sprintf("%s/strtg_perfs.yml", outDir)
+	outName := fmt.Sprintf("%s/strat_perfs.yml", outDir)
 	err_ = os.WriteFile(outName, data, 0644)
 	if err_ != nil {
-		log.Error("save strtg_perfs fail", zap.Error(err_))
+		log.Error("save strat_perfs fail", zap.Error(err_))
 		return
 	}
-	log.Info("dump strtg_perfs ok", zap.String("path", outName))
+	log.Info("dump strat_perfs ok", zap.String("path", outName))
 }
 
 /*

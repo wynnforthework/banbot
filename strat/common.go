@@ -40,24 +40,24 @@ func New(pol *config.RunPolicyConfig) *TradeStrat {
 	return stgy
 }
 
-func Get(pair, strtgID string) *TradeStrat {
+func Get(pair, stratID string) *TradeStrat {
 	data, _ := PairStrats[pair]
 	if len(data) == 0 {
 		return nil
 	}
-	res, _ := data[strtgID]
+	res, _ := data[stratID]
 	return res
 }
 
-func GetStratPerf(pair, strtg string) *config.StrtgPerfConfig {
-	stg := Get(pair, strtg)
+func GetStratPerf(pair, strat string) *config.StratPerfConfig {
+	stg := Get(pair, strat)
 	if stg == nil {
 		return nil
 	}
-	if stg.Policy.StrtgPerf != nil {
-		return stg.Policy.StrtgPerf
+	if stg.Policy.StratPerf != nil {
+		return stg.Policy.StratPerf
 	}
-	return config.Data.StrtgPerf
+	return config.Data.StratPerf
 }
 
 //func loadNative(stratName string) *TradeStrat {
@@ -370,7 +370,7 @@ func CalcJobScores(pair, tf, stgy string) *errs.Error {
 	return nil
 }
 
-func defaultCalcJobScore(cfg *config.StrtgPerfConfig, stagy string, p *core.JobPerf, perfs []*core.JobPerf) float64 {
+func defaultCalcJobScore(cfg *config.StratPerfConfig, stagy string, p *core.JobPerf, perfs []*core.JobPerf) float64 {
 	if len(perfs) < cfg.MinJobNum {
 		return 1
 	}
@@ -396,7 +396,7 @@ func defaultCalcJobScore(cfg *config.StrtgPerfConfig, stagy string, p *core.JobP
 	return p.Score
 }
 
-func CalcJobPerfs(cfg *config.StrtgPerfConfig, p *core.PerfSta, perfs []*core.JobPerf) {
+func CalcJobPerfs(cfg *config.StratPerfConfig, p *core.PerfSta, perfs []*core.JobPerf) {
 	sumProfit := 0.0
 	var profits = make([]float64, 0, len(perfs))
 	for _, pf := range perfs {

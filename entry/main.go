@@ -58,7 +58,7 @@ func RunCmd() {
 			options = []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"}
 			entry = RunTrade
 		case "backtest":
-			options = []string{"timerange", "stake_amount", "pairs", "stg_dir", "separate", "cpu_profile", "mem_profile"}
+			options = []string{"out", "timerange", "stake_amount", "pairs", "stg_dir", "separate", "cpu_profile", "mem_profile"}
 			entry = RunBackTest
 		case "spider":
 			entry = RunSpider

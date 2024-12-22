@@ -16,7 +16,7 @@ var (
 )
 
 func Conn(path string, write bool) (*Queries, *errs.Error) {
-	db, err := orm.DbLite("trade", path, write)
+	db, err := orm.DbLite(orm.DbTrades, path, write)
 	if err != nil {
 		return nil, err
 	}
