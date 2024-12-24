@@ -139,12 +139,11 @@
 <style>
 	.context-menu {
 		position: fixed;
-		background: white;
-		border: 1px solid #ddd;
-		border-radius: 4px;
-		padding: 4px 4px;
-		min-width: 120px;
-		box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+		background: hsl(var(--b1));
+		border-radius: var(--rounded-lg, 0.5rem);
+		padding: 0.25rem;
+		min-width: 14rem;
+		box-shadow: var(--shadow-lg);
 		z-index: 1000;
 	}
 
@@ -157,14 +156,18 @@
 	}
 
 	.menu-item {
-		padding: 6px 12px;
+		padding: 0.375rem 0.75rem;
 		display: flex;
 		align-items: center;
-		gap: 8px;
+		gap: 0.5rem;
 		cursor: pointer;
+		border-radius: var(--rounded-btn, 0.5rem);
+		height: 1.75rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
 	}
 
 	.menu-item:hover {
-		background-color: rgba(0,0,0,0.05);
+		background-color: hsl(var(--bc) / 0.1);
 	}
 </style>

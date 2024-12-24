@@ -192,7 +192,7 @@
   {#if customLoad}
   <span class="p-0 m-0">
     <input type="file" bind:this={fileRef} class="hidden" accept="text/csv" onchange={loadDataFile}/>
-    <button class="btn btn-primary w-[60px]" onclick={() => fileRef?.click()}>打开</button>
+    <button class="btn btn-primary w-[70px]" onclick={() => fileRef?.click()}>{m.open()}</button>
   </span>
   {/if}
 
@@ -214,7 +214,7 @@
       <input bind:value={$save.dateEnd} placeholder="%Y%m%d" class="input input-bordered w-full"/>
     </span>
     <span class="p-0 m-0">
-      <button class="btn btn-primary w-[60px]" onclick={clickLoadData}>加载</button>
+      <button class="btn btn-primary w-[70px]" onclick={clickLoadData}>{m.load()}</button>
     </span>
   {/if}
   {@render MenuButton(() => showIndSearchModal = true, "indicator", m.indicator())}

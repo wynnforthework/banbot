@@ -19,6 +19,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/opt"
+	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/orm/ormu"
 	"github.com/banbox/banbot/utils"
@@ -61,6 +62,8 @@ func regApiDev(api fiber.Router) {
 	api.Get("/bt_config", getBtConfig)
 	api.Get("/bt_logs", getBtLogs)
 	api.Get("/bt_html", getBtHtml)
+	api.Get("/bt_strat_tree", getBtStratTree)
+	api.Get("/bt_strat_text", getBtStratText)
 }
 
 func onWsDev(c *websocket.Conn) {
@@ -254,39 +257,13 @@ func getText(c *fiber.Ctx) error {
 		return err
 	}
 
-	filePath := filepath.Join(baseDir, args.Path)
-
-	// 检查文件是否存在
-	info, err := os.Stat(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return c.Status(400).JSON(fiber.Map{
-				"msg": "File not found",
-			})
-		}
-		return err
-	}
-
-	// 检查是否是目录
-	if info.IsDir() {
-		return c.Status(400).JSON(fiber.Map{
-			"msg": "File is a directory",
-		})
-	}
-
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return err
-	}
-
-	if !utils.IsTextContent(content) {
-		return c.Status(400).JSON(fiber.Map{
-			"msg": "File is not a text file",
-		})
+	content, err2 := utils.ReadTextFile(filepath.Join(baseDir, args.Path))
+	if err2 != nil {
+		return err2
 	}
 
 	return c.JSON(fiber.Map{
-		"data": string(content),
+		"data": content,
 	})
 }
 
@@ -783,6 +760,12 @@ func getBtDetail(c *fiber.Ctx) error {
 	}
 	btPath := filepath.Join(config.GetDataDir(), "backtest", task.Path)
 
+	configPath := filepath.Join(btPath, "config.yml")
+	cfg, err2 := config.ParseConfig(configPath)
+	if err2 != nil {
+		return err2
+	}
+
 	// 读取detail.json
 	detailPath := filepath.Join(btPath, "detail.json")
 	detail, err := parseBtResult(detailPath)
@@ -794,6 +777,7 @@ func getBtDetail(c *fiber.Ctx) error {
 		"path":   btPath,
 		"detail": detail,
 		"task":   task.ToMap(),
+		"exsMap": orm.GetExSymbols(cfg.Exchange.Name, cfg.MarketType),
 	})
 }
 
@@ -1008,4 +992,95 @@ func getBtHtml(c *fiber.Ctx) error {
 
 	c.Set("Content-Type", "text/html")
 	return c.Send(content)
+}
+
+// getBtStratTree 获取回测策略代码文件树
+func getBtStratTree(c *fiber.Ctx) error {
+	type TreeArgs struct {
+		TaskID int64 `query:"task_id" validate:"required"`
+	}
+	var args = new(TreeArgs)
+	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
+		return err
+	}
+
+	btPath, err := getBtPath(args.TaskID)
+	if err != nil {
+		return fmt.Errorf("get backtest path failed: %v", err)
+	}
+
+	var files []FileNode
+	err = filepath.Walk(btPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// 只处理strat_开头的目录及其内容
+		relPath, err := filepath.Rel(btPath, path)
+		if err != nil {
+			return err
+		}
+		relPath = strings.ReplaceAll(relPath, "\\", "/")
+
+		parts := strings.Split(relPath, "/")
+		if len(parts) > 0 && !strings.HasPrefix(parts[0], "strat_") && parts[0] != "." {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if relPath == "." {
+			return nil
+		}
+
+		if info.IsDir() {
+			files = append(files, FileNode{
+				Path: relPath + "/",
+			})
+		} else {
+			files = append(files, FileNode{
+				Path:  relPath,
+				Size:  info.Size(),
+				Stamp: info.ModTime().UnixMilli(),
+			})
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("walk directory failed: %v", err)
+	}
+
+	return c.JSON(fiber.Map{
+		"code": 200,
+		"data": files,
+	})
+}
+
+func getBtStratText(c *fiber.Ctx) error {
+	type TextArgs struct {
+		TaskID int64  `query:"task_id" validate:"required"`
+		Path   string `query:"path" validate:"required"`
+	}
+
+	var args = new(TextArgs)
+	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
+		return err
+	}
+
+	btPath, err := getBtPath(args.TaskID)
+	if err != nil {
+		return err
+	}
+
+	content, err2 := utils.ReadTextFile(filepath.Join(btPath, args.Path))
+	if err2 != nil {
+		return err2
+	}
+
+	return c.JSON(fiber.Map{
+		"data": content,
+	})
 }

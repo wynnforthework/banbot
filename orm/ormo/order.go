@@ -3,6 +3,15 @@ package ormo
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/rand"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -14,14 +23,6 @@ import (
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
-	"math"
-	"math/rand"
-	"slices"
-	"strconv"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 const (
@@ -31,14 +32,14 @@ const (
 
 type InOutOrder struct {
 	*IOrder
-	Enter      *ExOrder
-	Exit       *ExOrder
-	Info       map[string]interface{}
-	DirtyMain  bool   // IOrder has unsaved temporary changes 有未保存的临时修改
-	DirtyEnter bool   // Enter has unsaved temporary changes 有未保存的临时修改
-	DirtyExit  bool   // Exit has unsaved temporary changes 有未保存的临时修改
-	DirtyInfo  bool   // Info has unsaved temporary changes 有未保存的临时修改
-	idKey      string // Key to distinguish orders 区分订单的key
+	Enter      *ExOrder               `json:"enter"`
+	Exit       *ExOrder               `json:"exit"`
+	Info       map[string]interface{} `json:"info"`
+	DirtyMain  bool                   `json:"-"` // IOrder has unsaved temporary changes 有未保存的临时修改
+	DirtyEnter bool                   `json:"-"` // Enter has unsaved temporary changes 有未保存的临时修改
+	DirtyExit  bool                   `json:"-"` // Exit has unsaved temporary changes 有未保存的临时修改
+	DirtyInfo  bool                   `json:"-"` // Info has unsaved temporary changes 有未保存的临时修改
+	idKey      string                 `json:"-"` // Key to distinguish orders 区分订单的key
 }
 
 type InOutEdit struct {

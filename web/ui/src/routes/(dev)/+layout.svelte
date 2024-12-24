@@ -109,10 +109,10 @@
   </div>
 
   <!-- 添加日志抽屉 -->
-  <div class="drawer drawer-end">
+  <div class="drawer drawer-end flex-1 flex flex-col">
     <input id="logs-drawer" type="checkbox" class="drawer-toggle" bind:checked={showLogs} />
     
-    <div class="drawer-content">
+    <div class="drawer-content flex-1 flex flex-col">
       <!-- 主页面内容 -->
       <main class="flex-1 flex flex-col">
         {@render children()}

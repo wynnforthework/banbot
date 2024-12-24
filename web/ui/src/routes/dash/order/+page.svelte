@@ -6,10 +6,10 @@
   import {modals} from '$lib/stores/modals';
   import Modal from '$lib/kline/Modal.svelte';
   import { getDateStr, toUTCStamp } from '$lib/dateutil';
-  import OrderDetail from '$lib/order/OrderDetail.svelte';
+  import { OrderDetail, type InOutOrder } from '$lib/order';
 
   let tabName = $state('bot'); // bot/exchange/position
-  let banodList = $state<any[]>([]);
+  let banodList = $state<InOutOrder[]>([]);
   let exgodList = $state<any[]>([]);
   let exgposList = $state<any[]>([]);
   let pageSize = $state(15);
@@ -275,7 +275,7 @@
           {#if tabName === 'bot'}
             <select class="select select-bordered" bind:value={search.status}>
               <option value="">{m.all()}</option>
-              <option value="open">{m.open()}</option>
+              <option value="open">{m.pos_opened()}</option>
               <option value="his">{m.closed()}</option>
             </select>
           {/if}
@@ -464,11 +464,7 @@
 </div>
 
 <!-- Modals -->
-<Modal title={m.order_details()} bind:show={showOdDetail} width={800}>
-  {#if selectedOrder}
-    <OrderDetail order={selectedOrder} editable={true} />
-  {/if}
-</Modal>
+<OrderDetail bind:show={showOdDetail} order={selectedOrder} editable={true} />
 
 <Modal title={m.exchange_details()} bind:show={showExOdDetail} width={800}>
   {#if selectedOrder}

@@ -26,3 +26,10 @@ export interface MenuClickEvent {
 	node: Node;
 	key: string;
 }
+
+
+export interface FileNode {
+	path: string;
+	size?: number;
+	stamp?: number;
+}

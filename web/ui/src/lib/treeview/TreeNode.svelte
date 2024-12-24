@@ -104,31 +104,34 @@
 
 <div class={nodeClz} onclick={handleClick} oncontextmenu={handleContextMenu}>
 	<div class="tree-view_content" class:active={node.id == active}>
-		{#if node.type === 'container' && collapsed}
-			<div class={arrowClz}><Icon name="chevron-right" /></div>
-		{:else if node.type === 'container' && !collapsed}
-			<div class={arrowClz}><Icon name="chevron-down" /></div>
-		{:else if node.type === 'leaf'}
-			<div class={arrowClz}><Icon name="(empty)" /></div>
-		{/if}
+		<div class={arrowClz}>
+			{#if node.type === 'container' && collapsed}
+				<Icon name="chevron-right" class="h-4 w-4" />
+			{:else if node.type === 'container' && !collapsed}
+				<Icon name="chevron-down" class="h-4 w-4" />
+			{:else if node.type === 'leaf'}
+				{#if node.name.endsWith('.go')}
+				<img src="/img/gopher_38.png" class="h-4 w-4" />
+				{:else}
+				<Icon name="document" class="h-4 w-4" />
+				{/if}
+			{/if}
+		</div>
 		<div class="tree-view_name">{node.name}</div>
 	</div>
 	{#if !collapsed && node.type === 'container' && node.children?.length}
-		<div
-			class={'tree-view_children ' + childrenContainerClass}
-			style:margin-left={childPaddingLeft}
-		>
+		<ul class={'tree-view_children ' + childrenContainerClass}>
 			{#each node.children as childId (childId)}
 				{#if tree[childId]}
-					<div>
+					<li>
 						<Self {tree} {active} {activeMenuId} node={tree[childId]} {treeNodeClass} {childrenContainerClass} {click}
 							onMenu={onMenu}
 							onMenuClick={onMenuClick}
 						/>
-					</div>
+					</li>
 				{/if}
 			{/each}
-		</div>
+		</ul>
 	{/if}
 </div>
 
@@ -155,61 +158,99 @@
 
 <style>
 	.tree-view_node {
-			cursor: pointer;
-			width: 100%;
+		cursor: pointer;
+		width: 100%;
 	}
 
 	.tree-view_node > .tree-view_content:hover {
-			background-color: rgba(0, 0, 0, 0.05);
+		background-color: rgba(0, 0, 0, 0.05);
 	}
 
 	.tree-view_node > .tree-view_content.active {
-			background-color: rgba(0, 0, 0, 0.08);
+		background-color: rgba(0, 0, 0, 0.08);
 	}
 
 	.tree-view_content {
-			align-items: center;
-			display: flex;
-			gap: 0.3rem;
-			padding: 0.2rem 0;
-			width: 100%;
+		align-items: center;
+		display: flex;
+		gap: 0.4rem;
+		padding: 0 0.55rem;
+		width: 100%;
+		height: 1.8rem;
+		color: inherit;
+		text-align: left;
+		font-size: 0.85rem;
+		border-radius: .35rem;
 	}
 
 	.tree-view_arrow {
-			align-items: center;
-			display: flex;
-			width: 1rem;
-			height: 1rem;
+		align-items: center;
+		display: flex;
+		width: 1rem;
+		height: 1rem;
+	}
+
+	.tree-view_children {
+		position: relative;
+		white-space: nowrap;
+		margin-inline-start: 1rem;
+    padding-inline-start: .5rem;
+	}
+
+	:where(.tree-view_node ul):before {
+		position: absolute;
+		bottom: 0.75rem;
+		inset-inline-start: 0;
+		top: 0;
+		width: 1px;
+		background-color: oklch(0.278078 0.029596 256.848);
+		opacity: 0.1;
+		content: "";
 	}
 
 	.context-menu {
-			position: fixed;
-			background: white;
-			border: 1px solid #ddd;
-			border-radius: 4px;
-			padding: 4px 4px;
-			min-width: 120px;
-			box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-			z-index: 1000;
+		position: fixed;
+		background: white;
+		border-radius: var(--rounded-lg, 0.5rem);
+		padding: 0.25rem;
+		min-width: 120px;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+		z-index: 1000;
 	}
 
 	.menu-icon {
-			width: 1rem;
-			height: 1rem;
-			display: flex;
-			align-items: center;
-			justify-content: center;
+		width: 1rem;
+		height: 1rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.menu-item {
-			padding: 6px 12px;
-			display: flex;
-			align-items: center;
-			gap: 8px;
-			cursor: pointer;
+		padding: 0.375rem 0.75rem;
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		cursor: pointer;
+		border-radius: var(--rounded-btn, 0.5rem);
+		height: 1.75rem;
+		font-size: 0.75rem;
+		line-height: 1rem;
 	}
 
 	.menu-item:hover {
-			background-color: rgba(0,0,0,0.05);
+		background-color: rgba(0,0,0,0.05);
+	}
+
+	.disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.tree-view_name {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 </style>

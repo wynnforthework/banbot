@@ -75,6 +75,7 @@ type PlotData struct {
 
 type RowPart struct {
 	WinCount     int                `json:"winCount"`
+	OrderNum     int                `json:"orderNum"`
 	ProfitSum    float64            `json:"profitSum"`
 	ProfitPctSum float64            `json:"profitPctSum"`
 	CostSum      float64            `json:"costSum"`

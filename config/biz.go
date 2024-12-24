@@ -101,6 +101,24 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 	return &res, nil
 }
 
+func ParseConfig(path string) (*Config, *errs.Error) {
+	var res Config
+	fileData, err := os.ReadFile(ParsePath(path))
+	if err != nil {
+		return nil, errs.NewFull(core.ErrIOReadFail, err, "Read %s Fail", path)
+	}
+	var unpak map[string]interface{}
+	err = yaml.Unmarshal(fileData, &unpak)
+	if err != nil {
+		return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "Unmarshal %s Fail", path)
+	}
+	err = mapstructure.Decode(unpak, &res)
+	if err != nil {
+		return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "decode Config Fail")
+	}
+	return &res, nil
+}
+
 func (c *Config) Apply(args *CmdArgs) {
 	if args.TimeRange != "" {
 		c.TimeRangeRaw = args.TimeRange

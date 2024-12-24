@@ -4,6 +4,13 @@ import (
 	"archive/zip"
 	"encoding/csv"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
@@ -11,12 +18,6 @@ import (
 	"github.com/flopp/go-findfont"
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/image/font/opentype"
-	"io"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func CopyDir(src, dst string) error {
@@ -393,6 +394,28 @@ func ReadCSV(path string) ([][]string, *errs.Error) {
 		return nil, errs.New(errs.CodeIOReadFail, err_)
 	}
 	return rows, nil
+}
+
+func ReadTextFile(path string) (string, *errs.Error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", errs.New(errs.CodeIOReadFail, err)
+	}
+
+	if info.IsDir() {
+		return "", errs.NewMsg(errs.CodeIOReadFail, "File is a directory")
+	}
+
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", errs.New(errs.CodeIOReadFail, err)
+	}
+
+	if !IsTextContent(content) {
+		return "", errs.NewMsg(errs.CodeIOReadFail, "File is not a text file")
+	}
+
+	return string(content), nil
 }
 
 /*

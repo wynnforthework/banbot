@@ -39,10 +39,12 @@
   let {
     ctx = writable<ChartCtx>(new ChartCtx()),
     save = persisted('chart', new ChartSave()),
+    class: className = '',
     customLoad=false,
   }: {
     ctx: Writable<ChartCtx>,
     save: Writable<ChartSave>,
+    class?: string,
     customLoad?: boolean
   } = $props()
 
@@ -169,7 +171,7 @@
     if (!chartObj) return
     $ctx.loadingKLine = true
     const strategy = $page.url.searchParams.get('strategy');
-    console.log('loadKlineRange', {symbol, period, start_ms, stop_ms, strategy})
+    console.debug('loadKlineRange', {symbol, period, start_ms, stop_ms, strategy})
     const kdata = await datafeed.getHistoryKLineData({
       symbol, period, from: start_ms, to: stop_ms, strategy
     })
@@ -296,7 +298,7 @@
 
 </script>
 
-<div class="kline-main" data-theme="{$save.theme}" onclick={() => $ctx.clickChart += 1}>
+<div class="kline-main {className}" data-theme="{$save.theme}" onclick={() => $ctx.clickChart += 1}>
   <div class="alerts-container">
     {#each $alerts as alert (alert.id)}
       <Alert type={alert.type} text={alert.text}/>
@@ -333,7 +335,7 @@
   .kline-widget{
     flex: 1;
     width: var(--widget-width);
-    height: 100%;
+    height: var(--widget-height);
     margin-left: 0;
     overflow: hidden;
   }
