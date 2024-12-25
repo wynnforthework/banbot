@@ -134,10 +134,10 @@ func runKlineCmds(args []string) {
 			entry = LoadKLinesToDB
 		case "export":
 			options = []string{"out", "pairs", "timeframes", "adj", "tz"}
-			entry = biz.ExportKlines
+			entry = runExportData
 		case "purge":
 			options = []string{"exg_real", "pairs", "timeframes"}
-			entry = biz.PurgeKlines
+			entry = runPurgeData
 		case "correct":
 			options = []string{"pairs"}
 			entry = RunKlineCorrect

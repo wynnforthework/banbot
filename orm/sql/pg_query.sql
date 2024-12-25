@@ -22,6 +22,10 @@ where id = $1;
 -- name: ListKInfos :many
 select * from kinfo;
 
+-- name: FindKInfos :many
+select * from kinfo
+where sid = $1;
+
 -- name: SetKInfo :exec
 update kinfo set start = $3, stop = $4
 where sid = $1 and timeframe = $2;

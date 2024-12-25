@@ -6,6 +6,9 @@ class SiteState {
   apiHost: string = ''
   apiReady: boolean = true
   apiReadyCbs: (() => void)[] = []
+  heavyName: string = ''
+  heavyDone: number = 0
+  heavyTotal: number = 0
 }
 
 export const site = writable(new SiteState())

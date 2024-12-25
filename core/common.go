@@ -264,3 +264,16 @@ func (p *Param) calcNormX(y, tol float64, maxIter int) float64 {
 func IsLimitOrder(t int) bool {
 	return t == OrderTypeLimit || t == OrderTypeLimitMaker
 }
+
+func SetHeavyProgress(done int, total int) {
+	heavyLock.Lock()
+	HeavyProgress = done * 1000 / total
+	for _, tg := range HeavyTriggers {
+		tg(done, total)
+	}
+	if done >= total {
+		HeavyTask = ""
+		HeavyProgress = 0
+	}
+	heavyLock.Unlock()
+}

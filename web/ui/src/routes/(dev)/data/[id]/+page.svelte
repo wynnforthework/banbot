@@ -1,0 +1,353 @@
+<script lang="ts">
+  import { page } from '$app/stores';
+  import { onMount } from 'svelte';
+  import { getApi } from '@/lib/netio';
+  import type { ExSymbol } from '$lib/dev/common';
+  import * as m from '$lib/paraglide/messages.js';
+  import { alerts } from "$lib/stores/alerts";
+  import { fmtDurationDays, getDateStr, tf_to_secs, toUTCStamp } from '$lib/dateutil';
+  import { makePeriod } from '$lib/kline/coms';
+  import Icon from '$lib/Icon.svelte';
+  import Icon2 from '$lib/kline/Icon.svelte';
+  import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
+
+  let { id } = $page.params;
+
+  let symbol = $state<ExSymbol | null>(null);
+  let kinfos = $state<any[]>([]);
+  let adjFactors = $state<any[]>([]);
+  let activeTab = $state('kinfos');
+
+  // 过滤条件
+  let timeframe = $state('1d');
+  let startDate = $state('');
+  let endDate = $state('');
+  let currentPage = $state(1);
+  let pageSize = $state(20);
+
+  let isDrawerOpen = $state(false);
+
+  // 数据列表
+  let dataList = $state<any[]>([]);
+  let total = $state(0);
+
+  onMount(() => {
+    loadSymbolInfo();
+  });
+
+  async function loadSymbolInfo() {
+    const rsp = await getApi('/dev/symbol_info', { id });
+    if(rsp.code != 200) {
+      alerts.addAlert("error", rsp.msg || 'load symbol info failed');
+      return;
+    }
+    symbol = rsp.symbol;
+    kinfos = rsp.kinfos;
+    adjFactors = rsp.adjFactors;
+  }
+
+  async function loadGaps() {
+    const rsp = await getApi('/dev/symbol_gaps', {
+      id,
+      tf: timeframe,
+      start: startDate ? toUTCStamp(startDate) : 0,
+      end: endDate ? toUTCStamp(endDate) : 0,
+      offset: (currentPage - 1) * pageSize,
+      limit: pageSize,
+    });
+    if(rsp.code != 200) {
+      alerts.addAlert("error", rsp.msg || 'load gaps failed');
+      return;
+    }
+    dataList = rsp.data;
+    total = rsp.total;
+  }
+
+  async function loadData(start: number = 0, end: number = 0) {
+    if(!timeframe) {
+      alerts.addAlert("error", m.timeframe() + " is required");
+      return;
+    }
+    if(!start && startDate) {
+      start = toUTCStamp(startDate);
+    }
+    if(!end && endDate) {
+      end = toUTCStamp(endDate);
+    }
+    const rsp = await getApi('/dev/symbol_data', {
+      id, tf: timeframe, start, end, limit: pageSize,
+    });
+    if(rsp.code != 200) {
+      alerts.addAlert("error", rsp.msg || 'load data failed');
+      return;
+    }
+    dataList = rsp.data;
+  }
+
+  $effect(() => {
+    if(activeTab === 'gaps') {
+      loadGaps();
+    } else if(activeTab === 'data') {
+      loadData();
+    }
+  });
+
+  function handlePageChange(newPage: number) {
+    const chg = newPage - currentPage;
+    currentPage = newPage;
+    if(activeTab === 'gaps') {
+      loadGaps();
+    } else if(activeTab === 'data') {
+      let start = 0;
+      let end = 0;
+      if(dataList.length > 0) {
+        if(chg > 0) {
+          start = dataList[dataList.length - 1][0] + tf_to_secs(timeframe) * 1000;
+        } else if(chg < 0) {
+          end = dataList[0][0];
+        }
+      }
+      loadData(start, end);
+    }
+  }
+
+  function handlePageSizeChange(newSize: number) {
+    pageSize = newSize;
+    currentPage = 1;
+    if(activeTab === 'gaps') {
+      loadGaps();
+    } else if(activeTab === 'data') {
+      loadData();
+    }
+  }
+
+  function setMenuItem(item: string) {
+    if(item === 'data' && !timeframe) {
+      timeframe = '1d';
+    }else if (item === 'gaps' && timeframe) {
+      timeframe = '';
+    }
+    currentPage = 1;
+    total = 0;
+    activeTab = item;
+  }
+
+  // 获取所有可用的时间周期
+  function getTimeframes() {
+    const tfs = new Set<string>();
+    kinfos.forEach(k => {
+      if(k.timeframe) {
+        tfs.add(k.timeframe);
+      }
+    });
+    return Array.from(tfs).sort((a, b) => {
+      return makePeriod(a).secs - makePeriod(b).secs;
+    });
+  }
+
+  // 过滤复权因子
+  function filterAdjFactors() {
+    let filtered = [...adjFactors];
+    if(startDate) {
+      const start = toUTCStamp(startDate);
+      filtered = filtered.filter(f => f.time >= start);
+    }
+    if(endDate) {
+      const end = toUTCStamp(endDate);
+      filtered = filtered.filter(f => f.time <= end);
+    }
+    return filtered;
+  }
+</script>
+
+<div class="container mx-auto max-w-[1500px] px-4 py-6">
+  <!-- 顶部品种信息 -->
+  {#if symbol}
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold">{symbol.symbol} - {symbol.market} - {symbol.exchange}: {id}</h1>
+      <button class="btn btn-primary m-1" onclick={() => isDrawerOpen = true}>{m.tools()}</button>
+    </div>
+  {/if}
+
+  <!-- 主体内容 -->
+  <div class="flex gap-6">
+    <!-- 左侧菜单 -->
+    <div class="w-[15%]">
+      <ul class="menu bg-base-200 rounded-box">
+        <li>
+          <button class:active={activeTab === 'kinfos'} onclick={() => setMenuItem('kinfos')}>
+            <Icon name="info" />
+            {m.kline_range()}
+          </button>
+        </li>
+        {#if symbol?.combined}
+          <li>
+            <button class:active={activeTab === 'adjs'} onclick={() => setMenuItem('adjs')}>
+              <Icon2 name="indicator" />
+              {m.adj_factor()}
+            </button>
+          </li>
+        {/if}
+        <li>
+          <button class:active={activeTab === 'gaps'} onclick={() => setMenuItem('gaps')}>
+            <Icon name="link-slash" />
+            {m.gaps()}
+          </button>
+        </li>
+        <li>
+          <button class:active={activeTab === 'data'} onclick={() => setMenuItem('data')}>
+            <Icon name="chart-bar" />
+            {m.data()}
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- 右侧内容 -->
+    <div class="flex-1">
+      {#if activeTab === 'kinfos'}
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>{m.timeframe()}</th>
+                <th>{m.start_time()}</th>
+                <th>{m.end_time()}</th>
+                <th>{m.duration()}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each kinfos as info}
+                <tr>
+                  <td>{info.timeframe}</td>
+                  <td>{getDateStr(info.start)}</td>
+                  <td>{getDateStr(info.stop)}</td>
+                  <td>{fmtDurationDays((info.stop - info.start)/1000)}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+
+      {:else if activeTab === 'adjs'}
+        <!-- 复权因子过滤器 -->
+        <div class="flex gap-4 mb-4">
+          <input type="date" class="input input-bordered" bind:value={startDate} />
+          <input type="date" class="input input-bordered" bind:value={endDate} />
+        </div>
+
+        <!-- 复权因子列表 -->
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>{m.time()}</th>
+                <th>{m.adj_factor()}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each filterAdjFactors() as adj}
+                <tr>
+                  <td>{getDateStr(adj.time)}</td>
+                  <td>{adj.factor}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+
+      {:else if activeTab === 'gaps' || activeTab === 'data'}
+        <!-- 过滤器 -->
+        <div class="flex gap-4 mb-4">
+          <select class="select select-bordered" bind:value={timeframe}>
+            <option value="">{m.timeframe()}</option>
+            {#each getTimeframes() as tf}
+              <option value={tf}>{tf}</option>
+            {/each}
+          </select>
+          <input type="date" class="input input-bordered" bind:value={startDate} />
+          <input type="date" class="input input-bordered" bind:value={endDate} />
+          <button class="btn btn-primary" onclick={() => {
+            if(activeTab === 'gaps') loadGaps();
+            else loadData();
+          }}>
+            {m.query()}
+          </button>
+        </div>
+
+        <!-- 数据列表 -->
+        <div class="overflow-x-auto">
+          <table class="table">
+            <thead>
+              <tr>
+                {#if activeTab === 'gaps'}
+                  <th>{m.timeframe()}</th>
+                  <th>{m.start_time()}</th>
+                  <th>{m.end_time()}</th>
+                  <th>Number</th>
+                {:else}
+                  <th>{m.time()}</th>
+                  <th>{m.time()}</th>
+                  <th>{m.kopen()}</th>
+                  <th>{m.khigh()}</th>
+                  <th>{m.klow()}</th>
+                  <th>{m.kclose()}</th>
+                  <th>{m.kvolume()}</th>
+                {/if}
+              </tr>
+            </thead>
+            <tbody>
+              {#each dataList as item}
+                <tr>
+                  {#if activeTab === 'gaps'}
+                    <td>{item.timeframe}</td>
+                    <td>{getDateStr(item.start)}</td>
+                    <td>{getDateStr(item.stop)}</td>
+                    <td>{Math.round((item.stop - item.start)/1000/tf_to_secs(item.timeframe))}</td>
+                  {:else}
+                    <td>{getDateStr(item[0])}</td>
+                    <td>{item[0]}</td>
+                    <td>{item[1]}</td>
+                    <td>{item[2]}</td>
+                    <td>{item[3]}</td>
+                    <td>{item[4]}</td>
+                    <td>{item[5]}</td>
+                  {/if}
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 分页器 -->
+        {@render pagination(total, pageSize, currentPage, handlePageChange, handlePageSizeChange)}
+      {/if}
+    </div>
+  </div>
+</div>
+
+{#snippet pagination(total: number, pageSize: number, currentPage: number, onPageChange: (newPage: number) => void, onPageSizeChange: (newSize: number) => void)}
+  <div class="flex justify-between items-center mt-4">
+    <div class="flex items-center gap-2">
+      <span>{m.page_size()}: </span>
+      <input type="number" class="input input-bordered input-sm w-20" value={pageSize} onchange={e => onPageSizeChange(Number(e.currentTarget.value))} />
+    </div>
+    <div class="join">
+      <button class="join-item btn btn-sm" disabled={currentPage === 1}
+        onclick={() => onPageChange(currentPage - 1)}>
+        {m.prev_page()}
+      </button>
+      {#if total > 0}
+        <button class="join-item btn btn-disabled btn-sm">
+          {currentPage} / {Math.ceil(total / pageSize)}
+        </button>
+      {/if}
+      <button class="join-item btn btn-sm" disabled={total > 0 && currentPage >= Math.ceil(total / pageSize)}
+        onclick={() => onPageChange(currentPage + 1)}>
+        {m.next_page()}
+      </button>
+    </div>
+  </div>
+{/snippet}
+
+<DrawerDataTools bind:show={isDrawerOpen} />

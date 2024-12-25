@@ -12,14 +12,14 @@
 
 <ParaglideJS {i18n}>
 	<!-- 添加alerts显示区域 -->
-	<div class="alerts-container">
+	<div class="alerts-container z-[1000]">
 		{#each $alerts as alert (alert.id)}
 			<Alert type={alert.type} text={alert.text}/>
 		{/each}
 	</div>
 	{#each $modals as modal (modal.id)}
 		<Modal title={modal.title} buttons={modal.buttons} show={true} center={true}
-			click={(tag) => modal.resolve(tag)}>{modal.text}</Modal>
+			click={(tag) => modal.resolve(tag)}>{@html modal.text}</Modal>
 	{/each}
 	{@render children()}
 </ParaglideJS>
@@ -30,7 +30,6 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 50;
     pointer-events: none; /* 允许点击alerts下面的元素 */
   }
   /*滚动条*/

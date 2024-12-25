@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+type PrgCB = func(done int, total int)
+
 type PrgBar struct {
 	bar      *progressbar.ProgressBar
 	m        *sync.Mutex
@@ -15,6 +17,7 @@ type PrgBar struct {
 	DoneNum  int
 	TotalNum int
 	Last     int64 // for outer usage
+	PrgCbs   []PrgCB
 }
 
 func NewPrgBar(totalNum int, title string) *PrgBar {
@@ -41,6 +44,11 @@ func (p *PrgBar) Add(num int) {
 		log.Warn("pBar progress exceed", zap.String("title", p.title), zap.Int("max", p.TotalNum),
 			zap.Int("cur", p.DoneNum))
 		return
+	}
+	if len(p.PrgCbs) > 0 {
+		for _, cb := range p.PrgCbs {
+			cb(p.DoneNum, p.TotalNum)
+		}
 	}
 	err_ := p.bar.Add(num)
 	if err_ != nil {

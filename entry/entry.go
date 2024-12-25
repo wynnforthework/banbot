@@ -2,6 +2,8 @@ package entry
 
 import (
 	"fmt"
+	"path/filepath"
+
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -16,7 +18,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
-	"path/filepath"
 )
 
 func RunBackTest(args *config.CmdArgs) *errs.Error {
@@ -105,6 +106,24 @@ func RunDownData(args *config.CmdArgs) *errs.Error {
 		}
 	}
 	return nil
+}
+
+func runExportData(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := biz.SetupComsExg(args)
+	if err != nil {
+		return err
+	}
+	return biz.ExportKlines(args)
+}
+
+func runPurgeData(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := biz.SetupComsExg(args)
+	if err != nil {
+		return err
+	}
+	return biz.PurgeKlines(args)
 }
 
 func RunKlineCorrect(args *config.CmdArgs) *errs.Error {

@@ -113,7 +113,19 @@ export function getDateStr(date_ts: number, template: string = 'YYYY-MM-DD HH:mm
 
 export function fmtDuration(cost_secs: number){
   if(!cost_secs)return '00:00'
-  return dayjs.utc(cost_secs * 1000).format('HH:mm:ss')
+  return dayjs.utc(cost_secs * 1000).format('HH:mm')
+}
+
+export function fmtDurationDays(cost_secs: number){
+  // 将秒数转换为天数，不足一天的按一天算，超过30天的前面显示XX月
+  let days = Math.ceil(cost_secs / secs_day)
+  let result = ''
+  if(days > 30){
+    result = `${Math.floor(days / 30)} Mons`
+    days = days % 30
+  }
+  result += ` ${days} Days`
+  return result
 }
 
 export function adjustFromTo(period: Period, toTimestamp: number, count: number) {

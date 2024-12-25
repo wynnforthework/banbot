@@ -26,7 +26,7 @@
       stroke-width="2"
       d={icons[type]} />
   </svg>
-  <span>{text}</span>
+  <pre>{text}</pre>
 </div>
 
 <style>

@@ -42,7 +42,14 @@ export function initWsConn(cb?: () => void) {
                 Object.assign(s, result.data);
                 return s;
               });
-            }else if(result.type){
+            }else if (result.type === 'heavyPrg'){
+                site.update(s => {
+                    s.heavyName = result.name
+                    s.heavyDone = result.done
+                    s.heavyTotal = result.total
+                    return s;
+                });
+            } else if(result.type){
               console.log(`ws dev unknown msg:`, result);
             }
         } catch (err) {

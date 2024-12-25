@@ -14,10 +14,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/banbox/banexg"
 	utils2 "github.com/banbox/banexg/utils"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
@@ -49,6 +51,9 @@ func regApiDev(api fiber.Router) {
 	api.Get("/strat_tree", getStratTree)
 	api.Get("/bt_tasks", getBtTasks)
 	api.Get("/bt_options", getBtOptions)
+	api.Get("/symbol_info", getSymbolInfo)
+	api.Get("/symbol_gaps", getSymbolGaps)
+	api.Get("/symbol_data", getSymbolData)
 	api.Post("/file_op", handleFileOp)
 	api.Post("/new_strat", handleNewStrat)
 	api.Get("/text", getText)
@@ -64,6 +69,8 @@ func regApiDev(api fiber.Router) {
 	api.Get("/bt_html", getBtHtml)
 	api.Get("/bt_strat_tree", getBtStratTree)
 	api.Get("/bt_strat_text", getBtStratText)
+	api.Get("/symbols", getSymbols)
+	api.Post("/data_tools", handleDataTools)
 }
 
 func onWsDev(c *websocket.Conn) {
@@ -1082,5 +1089,224 @@ func getBtStratText(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"data": content,
+	})
+}
+
+// getSymbols 获取交易品种列表
+func getSymbols(c *fiber.Ctx) error {
+	type SymbolArgs struct {
+		Exchange string `query:"exchange"`
+		Market   string `query:"market"`
+		Symbol   string `query:"symbol"`
+		Limit    int    `query:"limit"`
+		AfterID  int32  `query:"after_id"`
+	}
+
+	var args = new(SymbolArgs)
+	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
+		return err
+	}
+
+	if _, ok := exg.AllowExgIds[args.Exchange]; !ok {
+		return fmt.Errorf("invalid exchange: %s", args.Exchange)
+	}
+	if _, ok := banexg.AllMarketTypes[args.Market]; !ok {
+		return fmt.Errorf("invalid market: %s", args.Market)
+	}
+
+	if args.Limit <= 0 {
+		args.Limit = 20
+	}
+
+	// 获取所有品种
+	allSymbols := orm.GetExSymbols(args.Exchange, args.Market)
+
+	if len(allSymbols) == 0 {
+		exchange, err := exg.GetWith(args.Exchange, args.Market, "")
+		if err != nil {
+			return err
+		}
+		err = orm.InitExg(exchange)
+		if err != nil {
+			return err
+		}
+		allSymbols = orm.GetExSymbols(args.Exchange, args.Market)
+	}
+
+	// 过滤
+	var filtered []*orm.ExSymbol
+	for _, s := range allSymbols {
+		if args.Symbol != "" && !strings.Contains(strings.ToLower(s.Symbol), strings.ToLower(args.Symbol)) {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+
+	// 按ID排序
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].ID < filtered[j].ID
+	})
+
+	// 获取总数
+	total := len(filtered)
+
+	// 根据afterId过滤
+	if args.AfterID > 0 {
+		for i, s := range filtered {
+			if s.ID > args.AfterID {
+				filtered = filtered[i:]
+				break
+			}
+		}
+	}
+
+	// 截取limit个
+	if len(filtered) > args.Limit {
+		filtered = filtered[:args.Limit]
+	}
+
+	return c.JSON(fiber.Map{
+		"total": total,
+		"data":  filtered,
+	})
+}
+
+// getSymbolInfo 获取品种详情
+func getSymbolInfo(c *fiber.Ctx) error {
+	type SymbolArgs struct {
+		ID int32 `query:"id" validate:"required"`
+	}
+	var args = new(SymbolArgs)
+	if err_ := base.VerifyArg(c, args, base.ArgQuery); err_ != nil {
+		return err_
+	}
+
+	// 获取品种信息
+	symbol := orm.GetSymbolByID(args.ID)
+	if symbol == nil {
+		return fmt.Errorf("symbol not found: %d", args.ID)
+	}
+
+	// 获取K线信息
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	kinfos, err_ := sess.FindKInfos(context.Background(), args.ID)
+	if err_ != nil {
+		return err_
+	}
+
+	// 获取复权因子
+	var adjFactors []*orm.AdjInfo
+	if symbol.Combined {
+		adjFactors, err = sess.GetAdjs(args.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"symbol":     symbol,
+		"kinfos":     kinfos,
+		"adjFactors": adjFactors,
+	})
+}
+
+// getSymbolGaps 获取品种空洞数据
+func getSymbolGaps(c *fiber.Ctx) error {
+	type GapsArgs struct {
+		ID        int32  `query:"id" validate:"required"`
+		TimeFrame string `query:"tf"`
+		StartMS   int64  `query:"start"`
+		EndMS     int64  `query:"end"`
+		Offset    int    `query:"offset"`
+		Limit     int    `query:"limit"`
+	}
+	var args = new(GapsArgs)
+	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
+		return err
+	}
+
+	if args.Limit <= 0 {
+		args.Limit = 20
+	}
+
+	// 获取数据库连接
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	// 查询空洞数据
+	holes, total, err2 := sess.FindKHoles(orm.FindKHolesArgs{
+		Sid:       args.ID,
+		TimeFrame: args.TimeFrame,
+		Start:     args.StartMS,
+		Stop:      args.EndMS,
+		Offset:    args.Offset,
+		Limit:     args.Limit,
+	})
+	if err2 != nil {
+		return err2
+	}
+
+	return c.JSON(fiber.Map{
+		"data":  holes,
+		"total": total,
+	})
+}
+
+// getSymbolData 获取品种K线数据
+func getSymbolData(c *fiber.Ctx) error {
+	type DataArgs struct {
+		ID        int32  `query:"id" validate:"required"`
+		TimeFrame string `query:"tf" validate:"required"`
+		StartMS   int64  `query:"start"`
+		EndMS     int64  `query:"end"`
+		Limit     int    `query:"limit"`
+	}
+	var args = new(DataArgs)
+	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
+		return err
+	}
+
+	if args.Limit <= 0 {
+		args.Limit = 100
+	}
+	if args.StartMS <= 0 {
+		args.StartMS = core.MSMinStamp
+	}
+
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+
+	// 查询K线数据
+	data, err := sess.QueryOHLCV(args.ID, args.TimeFrame, args.StartMS, args.EndMS, args.Limit, false)
+	if err != nil {
+		return err
+	}
+
+	// 转换为float64数组
+	result := make([][]float64, len(data))
+	for i, bar := range data {
+		result[i] = []float64{
+			float64(bar.Time),
+			bar.Open,
+			bar.High,
+			bar.Low,
+			bar.Close,
+			bar.Volume,
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"data": result,
 	})
 }

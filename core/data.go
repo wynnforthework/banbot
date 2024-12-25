@@ -39,11 +39,17 @@ var (
 	ExitCalls []func()  // CALLBACK TO STOP EXECUTION 停止执行的回调
 	MemOut    io.Writer // Output memory profile 进行内存profile的输出
 
-	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "0.1.7"
-	LogFile   string
-	DevDbPath string
+	ConcurNum     = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
+	Version       = "0.1.7"
+	LogFile       string
+	DevDbPath     string
+	HeavyTask     string // 后台排他性耗时任务名称
+	HeavyProgress int    // 后台排他性耗时任务进度
+	heavyLock     sync.Mutex
+	HeavyTriggers []PrgCB
 )
+
+type PrgCB func(done int, total int)
 
 const (
 	MSMinStamp = int64(1001894400000) // 2001-10-01T00:00:00.000Z
@@ -57,6 +63,7 @@ const (
 	DelayBatchMS   = 3000  // Number of milliseconds to defer batch logic 批量逻辑推迟的毫秒数
 	PrefMinRate    = 0.001 // Job minimum opening ratio, directly use MinStakeAmount to open a position job最低开仓比率，直接使用MinStakeAmount开仓
 	AmtDust        = 1e-8
+	DownKNumMin    = 100000 // 经测试，单个goroutine每分钟下载K线约100k个
 )
 
 const (

@@ -3,6 +3,11 @@ package orm
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
@@ -13,10 +18,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 )
 
 var (
@@ -621,7 +622,14 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	if barNum*len(exsList) > 99000 || len(exsList) > 10 {
 		log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
 		pBar = utils.NewPrgBar(len(exsList)*core.StepTotal, "BulkDown")
-		defer pBar.Close()
+		core.HeavyTask = "DownKline"
+		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+			core.SetHeavyProgress(done, total)
+		})
+		defer func() {
+			core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
+			pBar.Close()
+		}()
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
@@ -895,4 +903,45 @@ func (q *Queries) GetExSHoles(exchange banexg.BanExchange, exs *ExSymbol, start,
 		res = append(res, [2]int64{validStop, stop})
 	}
 	return res, nil
+}
+
+func (q *Queries) DelKData(exs *ExSymbol, tfList []string, startMS, endMS int64) *errs.Error {
+	for _, tf := range tfList {
+		err := q.DelKLines(exs.ID, tf, startMS, endMS)
+		if err != nil {
+			return err
+		}
+		err = q.DelKInfo(exs.ID, tf)
+		if err != nil {
+			return err
+		}
+		if startMS > 0 || endMS > 0 {
+			realStart, realEnd, err := q.CalcKLineRange(exs.ID, tf, 0, 0)
+			if err != nil {
+				return err
+			}
+			if realStart > 0 && realEnd > 0 {
+				ctx := context.Background()
+				_, err_ := q.AddKInfo(ctx, AddKInfoParams{Sid: exs.ID, Timeframe: tf, Start: realStart, Stop: realEnd})
+				if err_ != nil {
+					return NewDbErr(core.ErrDbExecFail, err_)
+				}
+			}
+		}
+		err = q.DelKHoles(exs.ID, tf, startMS, endMS)
+		if err != nil {
+			return err
+		}
+		if endMS == 0 {
+			err = q.DelKLineUn(exs.ID, tf)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	err := q.DelFactors(exs.ID, startMS, endMS)
+	if err != nil {
+		return err
+	}
+	return nil
 }

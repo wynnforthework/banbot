@@ -121,7 +121,7 @@
     
     <div class="drawer-side">
       <label for="logs-drawer" aria-label="close logs" class="drawer-overlay"></label>
-      <div class="bg-base-200 w-3/5 min-h-full p-4 flex flex-col">
+      <div class="bg-base-200 w-2/3 h-full p-4 flex flex-col">
         <!-- 日志抽屉顶部按钮 -->
         <div class="flex justify-end gap-2 mb-4">
           <button class="btn btn-ghost btn-sm" 

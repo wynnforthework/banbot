@@ -5,6 +5,14 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
+	"math"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -18,13 +26,6 @@ import (
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
-	"math"
-	"path/filepath"
-	"slices"
-	"sort"
-	"strconv"
-	"strings"
-	"sync"
 )
 
 func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs.Error {
@@ -309,11 +310,6 @@ var adjMap = map[string]int{
 }
 
 func ExportKlines(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
-	err := SetupComsExg(args)
-	if err != nil {
-		return err
-	}
 	if args.OutPath == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
 	}
@@ -350,6 +346,14 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
 	start, stop := config.TimeRange.StartMS, config.TimeRange.EndMS
+	if args.TimeRange != "" {
+		parts := strings.Split(args.TimeRange, "-")
+		if len(parts) != 2 {
+			return errs.NewMsg(errs.CodeParamInvalid, "invalid timeRange: %v", args.TimeRange)
+		}
+		start = btime.ParseTimeMS(parts[0])
+		stop = btime.ParseTimeMS(parts[1])
+	}
 	loc, err := args.ParseTimeZone()
 	if err != nil {
 		return err
@@ -367,15 +371,27 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 		parts := strings.Split(strings.ReplaceAll(n, ".zip", ""), "_")
 		handles[strings.Join(parts[:len(parts)-1], "_")] = true
 	}
+	tfNum := len(args.TimeFrames)
+	pBar := utils.NewPrgBar(len(args.Pairs)*tfNum, "Export")
+	core.HeavyTask = "ExportKLine"
+	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+		core.SetHeavyProgress(done, total)
+	})
+	defer func() {
+		core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
+		pBar.Close()
+	}()
 	for _, symbol := range args.Pairs {
 		clean := strings.ReplaceAll(strings.ReplaceAll(symbol, "/", "_"), ":", "_")
 		if _, ok := handles[clean]; ok {
+			pBar.Add(tfNum)
 			log.Info("skip exist", zap.String("symbol", symbol))
 			continue
 		}
 		log.Info("handle", zap.String("symbol", symbol))
 		exs, err := orm.GetExSymbolCur(symbol)
 		if err != nil {
+			pBar.Add(tfNum)
 			log.Warn("export fail", zap.String("symbol", symbol), zap.Error(err))
 			continue
 		}
@@ -391,6 +407,7 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 			if err != nil {
 				return err
 			}
+			pBar.Add(1)
 		}
 	}
 	log.Info("export kline complete")
@@ -398,25 +415,11 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 }
 
 func PurgeKlines(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
-	err := SetupComsExg(args)
-	if err != nil {
-		return err
-	}
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		return err
 	}
 	defer conn.Release()
-	ctx := context.Background()
-	infos, err_ := sess.ListKInfos(ctx)
-	if err_ != nil {
-		return orm.NewDbErr(core.ErrDbReadFail, err_)
-	}
-	infoMap := make(map[int32]*orm.KInfo)
-	for _, i := range infos {
-		infoMap[i.Sid] = i
-	}
 	exchange := exg.Default
 	// 搜索需要删除的标的
 	// Search for the target to be deleted
@@ -455,9 +458,7 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 		pairs = append(pairs, exs.Symbol)
 	}
 	tfList := args.TimeFrames
-	isAllTf := false
 	if len(tfList) == 0 {
-		isAllTf = true
 		aggs := orm.GetKlineAggs()
 		for _, a := range aggs {
 			tfList = append(tfList, a.TimeFrame)
@@ -479,29 +480,9 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 	defer pBar.Close()
 	for _, exs := range exsList {
 		pBar.Add(1)
-		for _, tf := range tfList {
-			err = sess.DelKLines(exs.ID, tf)
-			if err != nil {
-				return err
-			}
-			err = sess.DelKInfo(exs.ID, tf)
-			if err != nil {
-				return err
-			}
-			err = sess.DelKHoles(exs.ID, tf)
-			if err != nil {
-				return err
-			}
-			err = sess.DelKLineUn(exs.ID, tf)
-			if err != nil {
-				return err
-			}
-		}
-		if isAllTf {
-			err = sess.DelFactors(exs.ID)
-			if err != nil {
-				return err
-			}
+		err := sess.DelKData(exs, tfList, 0, 0)
+		if err != nil {
+			return err
 		}
 	}
 	log.Info("all purge complete")

@@ -240,7 +240,11 @@ func InitExg(exchange banexg.BanExchange) *errs.Error {
 	if err != nil {
 		return err
 	}
-	return exchange.LoadLeverageBrackets(false, nil)
+	marketType := exchange.Info().MarketType
+	if marketType == banexg.MarketLinear || marketType == banexg.MarketInverse {
+		return exchange.LoadLeverageBrackets(false, nil)
+	}
+	return nil
 }
 
 func (a *AdjInfo) Apply(bars []*banexg.Kline, adj int) []*banexg.Kline {

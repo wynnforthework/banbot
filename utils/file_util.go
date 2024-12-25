@@ -256,7 +256,10 @@ func WriteCsvFile(path string, rows [][]string, compress bool) *errs.Error {
 			return errs.New(errs.CodeIOWriteFail, err_)
 		}
 		zipWriter := zip.NewWriter(zipFile)
-		defer zipWriter.Close()
+		defer func() {
+			zipWriter.Close()
+			zipFile.Close()
+		}()
 		header := &zip.FileHeader{
 			Name:     filepath.Base(path),
 			Method:   zip.Deflate,

@@ -1,0 +1,170 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import {getApi} from '$lib/netio'
+  import type { ExSymbol } from '$lib/dev/common';
+  import * as m from '$lib/paraglide/messages.js';
+  import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
+  import { exchanges, markets } from '$lib/common';
+
+  // 状态变量
+  let symbols: ExSymbol[] = $state([]);
+  let totalCount = $state(0);
+  let currentPage = $state(1);
+  let pageSize = $state(20);
+
+  // 工具抽屉状态
+  let isDrawerOpen = $state(false);
+
+  // 筛选条件
+  let selectedExchange = $state('');
+  let selectedMarket = $state('');
+  let symbolFilter = $state('');
+  let lastId = $state(0);
+
+  // 获取数据
+  async function fetchSymbols() {
+    const rsp = await getApi(`/dev/symbols`, {
+      exchange: selectedExchange,
+      market: selectedMarket,
+      symbol: symbolFilter,
+      limit: pageSize,
+      after_id: lastId,
+    });
+    symbols = rsp.data;
+    totalCount = rsp.total;
+  }
+
+  // 应用筛选
+  function applyFilters() {
+      currentPage = 1;
+      lastId = 0;
+      console.log('applyFilters');
+      fetchSymbols();
+  }
+
+  // 监听页面变化
+  $effect(() => {
+    if (currentPage > 1) {
+      setTimeout(() => {
+        lastId = symbols[symbols.length - 1]?.id || 0;
+        fetchSymbols();
+      }, 10);
+    }
+  });
+
+  // 分页相关
+  const totalPages = $derived(Math.ceil(totalCount / pageSize));
+
+  function toggleDrawer() {
+    isDrawerOpen = !isDrawerOpen;
+  }
+  onMount(() => {
+    fetchSymbols()
+  });
+</script>
+
+<div class="container mx-auto p-4">
+    <div class="flex justify-between items-center mb-4">
+        <div class="flex gap-4">
+            <select
+                class="select select-bordered w-full max-w-xs"
+                bind:value={selectedExchange}
+                onchange={applyFilters}
+            >
+                <option value="">所有交易所</option>
+                {#each exchanges as exchange}
+                    <option value={exchange}>{exchange}</option>
+                {/each}
+            </select>
+
+            <select
+                class="select select-bordered w-full max-w-xs"
+                bind:value={selectedMarket}
+                onchange={applyFilters}
+            >
+                <option value="">所有市场</option>
+                {#each markets as market}
+                    <option value={market}>{market}</option>
+                {/each}
+            </select>
+
+            <input
+                type="text"
+                placeholder="搜索品种..."
+                class="input input-bordered w-full max-w-xs"
+                bind:value={symbolFilter}
+                oninput={applyFilters}
+            />
+        </div>
+
+        <button class="btn btn-primary m-1" onclick={toggleDrawer}>{m.tools()}</button>
+    </div>
+
+    <div class="overflow-x-auto w-full" style="min-height: 24rem;">
+        <table class="table table-zebra w-full">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>交易所</th>
+                    <th>真实交易所</th>
+                    <th>市场</th>
+                    <th>品种</th>
+                    <th>是否组合</th>
+                    <th>上市时间</th>
+                    <th>退市时间</th>
+                    <th>-</th>
+                </tr>
+            </thead>
+            <tbody>
+                {#each symbols as symbol}
+                    <tr class="hover">
+                        <td>{symbol.id}</td>
+                        <td>{symbol.exchange}</td>
+                        <td>{symbol.exg_real}</td>
+                        <td>{symbol.market}</td>
+                        <td>{symbol.symbol}</td>
+                        <td>{symbol.combined ? '是' : '否'}</td>
+                        <td>{new Date(symbol.list_ms).toLocaleString()}</td>
+                        <td>{new Date(symbol.delist_ms).toLocaleString()}</td>
+                        <td>
+                            <a href={`/data/${symbol.id}`} class="btn btn-xs btn-info btn-outline">{m.details()}</a>
+                        </td>
+                    </tr>
+                {/each}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="flex justify-between items-center mt-4">
+        <div class="flex items-center gap-2">
+            <span>{m.page_size()}: </span>
+            <input 
+                type="number" 
+                class="input input-bordered input-sm w-20" 
+                value={pageSize} 
+                onchange={e => pageSize = Number(e.currentTarget.value)}
+            />
+        </div>
+        <div class="join">
+            <button 
+                class="join-item btn btn-sm" 
+                disabled={currentPage === 1}
+                onclick={() => currentPage = Math.max(1, currentPage - 1)}
+            >
+                {m.prev_page()}
+            </button>
+            <button class="join-item btn btn-disabled btn-sm">
+                {currentPage} / {totalPages}
+            </button>
+            <button 
+                class="join-item btn btn-sm" 
+                disabled={currentPage === totalPages || symbols.length < pageSize}
+                onclick={() => currentPage = currentPage + 1}
+            >
+                {m.next_page()}
+            </button>
+        </div>
+    </div>
+</div>
+
+<DrawerDataTools exchanges={exchanges} markets={markets} bind:show={isDrawerOpen} />

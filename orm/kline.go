@@ -1037,8 +1037,14 @@ func (q *Queries) DelKInfo(sid int32, timeFrame string) *errs.Error {
 	return q.Exec(sql, timeFrame)
 }
 
-func (q *Queries) DelKLines(sid int32, timeFrame string) *errs.Error {
+func (q *Queries) DelKLines(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
 	sql := fmt.Sprintf("delete from kline_%s where sid=%v", timeFrame, sid)
+	if startMS > 0 {
+		sql += fmt.Sprintf(" and time >= %v", startMS)
+	}
+	if endMS > 0 {
+		sql += fmt.Sprintf(" and time < %v", endMS)
+	}
 	return q.Exec(sql)
 }
 
@@ -1075,8 +1081,14 @@ func (q *Queries) GetKlineRanges(sidList []int32, timeFrame string) map[int32][2
 	return res
 }
 
-func (q *Queries) DelFactors(sid int32) *errs.Error {
+func (q *Queries) DelFactors(sid int32, startMS, endMS int64) *errs.Error {
 	sql := fmt.Sprintf("delete from adj_factors where sid=%v or sub_id=%v", sid, sid)
+	if startMS > 0 {
+		sql += fmt.Sprintf(" and time >= %v", startMS)
+	}
+	if endMS > 0 {
+		sql += fmt.Sprintf(" and time < %v", endMS)
+	}
 	return q.Exec(sql)
 }
 
@@ -1085,8 +1097,14 @@ func (q *Queries) DelKLineUn(sid int32, timeFrame string) *errs.Error {
 	return q.Exec(sql, timeFrame)
 }
 
-func (q *Queries) DelKHoles(sid int32, timeFrame string) *errs.Error {
+func (q *Queries) DelKHoles(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
 	sql := fmt.Sprintf("delete from khole where sid=%v and timeframe=$1", sid)
+	if startMS > 0 {
+		sql += fmt.Sprintf(" and start >= %v", startMS)
+	}
+	if endMS > 0 {
+		sql += fmt.Sprintf(" and stop <= %v", endMS)
+	}
 	return q.Exec(sql, timeFrame)
 }
 
@@ -1286,6 +1304,15 @@ func tryFillHoles(sess *Queries, sids map[int32]bool) *errs.Error {
 		}
 		return a.TfMSecs < b.TfMSecs
 	})
+	pBar := utils.NewPrgBar(len(rows), "FillHoles")
+	core.HeavyTask = "FillHoles"
+	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+		core.SetHeavyProgress(done, total)
+	})
+	defer func() {
+		core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
+		pBar.Close()
+	}()
 	// The kholes that need to be deleted have been filled in
 	// 已填充需要删除的khole
 	badIds := make([]int64, 0, len(rows)/10)
@@ -1294,6 +1321,7 @@ func tryFillHoles(sess *Queries, sids map[int32]bool) *errs.Error {
 	var editNum int
 	var newHoles [][4]int64 // 需要新增的记录[]sid,tfMSecs,start,stop
 	for _, row := range rows {
+		pBar.Add(1)
 		if row.Sid != curSid {
 			curSid = row.Sid
 			exs = GetSymbolByID(curSid)
@@ -1434,7 +1462,14 @@ func syncKlineInfos(sess *Queries, sids map[int32]bool) *errs.Error {
 	// 显示进度条
 	pgTotal := len(infos) + len(aggList)*10
 	pBar := utils.NewPrgBar(pgTotal, "sync tf")
-	defer pBar.Close()
+	core.HeavyTask = "SyncTf"
+	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+		core.SetHeavyProgress(done, total)
+	})
+	defer func() {
+		core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
+		pBar.Close()
+	}()
 	// 加载计算的区间
 	calcs := make(map[string]map[int32][2]int64)
 	for _, agg := range aggList {

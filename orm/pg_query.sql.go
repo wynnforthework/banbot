@@ -133,6 +133,36 @@ func (q *Queries) DelKHoleRange(ctx context.Context, arg DelKHoleRangeParams) er
 	return err
 }
 
+const findKInfos = `-- name: FindKInfos :many
+select sid, timeframe, start, stop from kinfo
+where sid = $1
+`
+
+func (q *Queries) FindKInfos(ctx context.Context, sid int32) ([]*KInfo, error) {
+	rows, err := q.db.Query(ctx, findKInfos, sid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*KInfo{}
+	for rows.Next() {
+		var i KInfo
+		if err := rows.Scan(
+			&i.Sid,
+			&i.Timeframe,
+			&i.Start,
+			&i.Stop,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAdjFactors = `-- name: GetAdjFactors :many
 select id, sid, sub_id, start_ms, factor from adj_factors
 where sid=$1
