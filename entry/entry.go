@@ -2,8 +2,6 @@ package entry
 
 import (
 	"fmt"
-	"path/filepath"
-
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -18,6 +16,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"path/filepath"
 )
 
 func RunBackTest(args *config.CmdArgs) *errs.Error {
@@ -47,9 +46,24 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 			}
 		}
 	} else {
+		if args.PrgOut != "" {
+			initProgressTip(args.PrgOut)
+		}
 		runBackTest(args.OutPath)
 	}
 	return nil
+}
+
+func initProgressTip(prefix string) {
+	lastSave := btime.UTCStamp()
+	core.HeavyTriggers = append(core.HeavyTriggers, func(done int, total int) {
+		curTime := btime.UTCStamp()
+		if curTime-lastSave < 1000 {
+			return
+		}
+		lastSave = curTime
+		fmt.Printf("%s: %v\n", prefix, core.HeavyProgress)
+	})
 }
 
 func runBackTest(outDir string) string {

@@ -43,8 +43,8 @@ var (
 	Version       = "0.1.7"
 	LogFile       string
 	DevDbPath     string
-	HeavyTask     string // 后台排他性耗时任务名称
-	HeavyProgress int    // 后台排他性耗时任务进度
+	HeavyTask     string  // 后台排他性耗时任务名称
+	HeavyProgress float64 // 后台排他性耗时任务进度
 	heavyLock     sync.Mutex
 	HeavyTriggers []PrgCB
 )

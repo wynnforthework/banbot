@@ -11,6 +11,7 @@ export interface BtTask {
   startAt: number; // 开始时间
   stopAt: number; // 结束时间
   status: number; // 当前任务状态
+  progress: number; // 进度
   orderNum: number; // 订单数量
   profitRate: number; // 收益率
   winRate: number; // 胜率

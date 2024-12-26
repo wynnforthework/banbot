@@ -2,10 +2,11 @@ package dev
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/utils"
 	utils2 "github.com/banbox/banexg/utils"
-	"sync"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
@@ -176,13 +177,8 @@ func runPurgeData(args *DataToolsArgs) *errs.Error {
 
 	pBar := utils.NewPrgBar(len(args.Pairs), "Export")
 	core.HeavyTask = "ExportKLine"
-	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
-		core.SetHeavyProgress(done, total)
-	})
-	defer func() {
-		core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
-		pBar.Close()
-	}()
+	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	defer pBar.Close()
 	exsMap := make(map[string]bool)
 	for _, pair := range args.Pairs {
 		if _, ok := exsMap[pair]; ok {
@@ -285,7 +281,7 @@ func handleDataTools(c *fiber.Ctx) error {
 				singleNum := int((args.EndMs - args.StartMs) / tfMSec)
 				barNum += singleNum * len(args.Pairs)
 			}
-			totalMins := barNum/core.DownKNumMin + 1
+			totalMins := barNum/core.ConcurNum/core.DownKNumMin + 1
 			msg += fmt.Sprintf("Cost Time: %d Hours %d Minutes", totalMins/60, totalMins%60)
 		}
 		return c.JSON(fiber.Map{

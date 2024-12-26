@@ -1,11 +1,13 @@
 package dev
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -49,12 +51,197 @@ func init() {
 	}
 }
 
+// 执行单个回测任务
+func executeBtTask(task *ormu.Task) {
+	defer func() {
+		runBtTasksMutex.Lock()
+		delete(runBtTasks, task.ID)
+		runBtTasksMutex.Unlock()
+	}()
+
+	// 获取当前执行文件路径
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Error("get executable path failed", zap.Error(err))
+		return
+	}
+
+	// 构建命令
+	cmdArgsStr := "backtest " + task.Args
+	cmd := exec.Command(exePath, strings.Split(cmdArgsStr, " ")...)
+
+	// 添加到运行列表
+	runBtTasksMutex.Lock()
+	runBtTasks[task.ID] = cmd
+	runBtTasksMutex.Unlock()
+
+	qu, conn, err2 := ormu.Conn()
+	if err2 != nil {
+		log.Error("connect to db failed", zap.Error(err2))
+		return
+	}
+	err = updateTaskStatus(qu, task.ID, int64(ormu.BtStatusRunning), 0)
+	_ = conn.Close()
+	if err != nil {
+		return
+	}
+
+	if err := runBtCommand(cmd, task); err != nil {
+		log.Error("run backtest failed", zap.Int64("id", task.ID), zap.Error(err))
+		return
+	}
+
+	// 收集并更新任务结果
+	updateBtTaskResult(task)
+}
+
+// 更新任务状态
+func updateTaskStatus(qu *ormu.Queries, taskID int64, status int64, progress float64) error {
+	err := qu.UpdateTask(context.Background(), ormu.UpdateTaskParams{
+		Status:   status,
+		Progress: progress,
+		ID:       taskID,
+	})
+	if err != nil {
+		log.Error("update task status failed", zap.Error(err))
+	}
+	return err
+}
+
+// 执行回测命令并处理输出
+func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
+	stdOut, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Error("get stdout failed", zap.Error(err))
+		return err
+	}
+	defer stdOut.Close()
+
+	stdErr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Error("get stderr failed", zap.Error(err))
+		return err
+	}
+	defer stdErr.Close()
+
+	log.Info("start backtest", zap.Int64("id", task.ID), zap.String("args", task.Args))
+	if err := cmd.Start(); err != nil {
+		log.Error("start backtest fail", zap.Error(err))
+		return err
+	}
+
+	// 处理输出
+	var b strings.Builder
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// 处理标准输出
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stdOut)
+		// 设置更大的缓冲区
+		buf := make([]byte, 1024*1024)
+		scanner.Buffer(buf, 1024*1024)
+
+		prefix := "uiPrg: "
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, prefix) {
+				if err := handleProgress(line[len(prefix):], task.ID); err != nil {
+					log.Error("handle progress failed", zap.Error(err))
+				}
+			} else {
+				b.WriteString(line)
+				b.WriteString("\n")
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Error("stdout scanner error", zap.Error(err))
+		}
+	}()
+
+	// 处理错误输出
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(stdErr)
+		for scanner.Scan() {
+			b.WriteString(scanner.Text())
+			b.WriteString("\n")
+		}
+		if err := scanner.Err(); err != nil {
+			log.Error("stderr scanner error", zap.Error(err))
+		}
+	}()
+
+	// 等待所有输出处理完成
+	wg.Wait()
+
+	// 等待命令执行完成
+	err = cmd.Wait()
+	if err != nil {
+		log.Error("run backtest failed", zap.String("path", task.Path), zap.String("output", b.String()), zap.Error(err))
+	} else {
+		log.Info("done backtest", zap.Int64("id", task.ID), zap.String("args", task.Args))
+	}
+
+	return err
+}
+
+// 处理进度更新
+func handleProgress(progressStr string, taskID int64) error {
+	qu, conn, err2 := ormu.Conn()
+	if err2 != nil {
+		return err2
+	}
+	defer conn.Close()
+	prgVal, err := strconv.ParseFloat(progressStr, 64)
+	if err != nil {
+		log.Warn("invalid progress", zap.String("progress", progressStr))
+		return err
+	}
+	log.Info("update progress", zap.Int64("t", taskID), zap.Float64("p", prgVal))
+	return updateTaskStatus(qu, taskID, int64(ormu.BtStatusRunning), prgVal)
+}
+
+// 更新回测任务结果
+func updateBtTaskResult(task *ormu.Task) {
+	btRoot := fmt.Sprintf("%s/backtest", config.GetDataDir())
+	collectedTask, err := collectBtTask(filepath.Join(btRoot, task.Path))
+	if err != nil {
+		log.Error("collect backtest task failed", zap.Error(err))
+		return
+	}
+	if collectedTask == nil {
+		collectedTask = &ormu.Task{}
+	}
+	qu, conn, err2 := ormu.Conn()
+	if err2 != nil {
+		log.Error("get dev conn fail", zap.Error(err2))
+		return
+	}
+	err = qu.UpdateTask(context.Background(), ormu.UpdateTaskParams{
+		Status:      int64(ormu.BtStatusDone),
+		Progress:    1,
+		OrderNum:    collectedTask.OrderNum,
+		ProfitRate:  collectedTask.ProfitRate,
+		WinRate:     collectedTask.WinRate,
+		MaxDrawdown: collectedTask.MaxDrawdown,
+		Sharpe:      collectedTask.Sharpe,
+		Info:        collectedTask.Info,
+		ID:          task.ID,
+	})
+	_ = conn.Close()
+	if err != nil {
+		log.Error("update task status failed", zap.Error(err))
+	}
+}
+
 // 启动后台任务处理
 func startBtTaskScheduler() {
-	btRoot := fmt.Sprintf("%s/backtest", config.GetDataDir())
 	go func() {
 		for {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(300 * time.Millisecond)
+
 			runBtTasksMutex.Lock()
 			runningCount := len(runBtTasks)
 			runBtTasksMutex.Unlock()
@@ -64,7 +251,7 @@ func startBtTaskScheduler() {
 			}
 
 			// 获取待执行的任务
-			qu, err := ormu.Conn()
+			qu, conn, err := ormu.Conn()
 			if err != nil {
 				log.Error("connect to db failed", zap.Error(err))
 				continue
@@ -72,11 +259,12 @@ func startBtTaskScheduler() {
 
 			tasks, err := qu.FindTasks(context.Background(), ormu.FindTasksParams{
 				Mode:   "backtest",
-				Status: ormu.BtStatusInit,
+				Status: int64(ormu.BtStatusInit),
 				Limit:  1,
 			})
+			_ = conn.Close()
 			if err != nil {
-				log.Error("find tasks failed", zap.Error(err))
+				log.Warn("find tasks failed", zap.Error(err))
 				continue
 			}
 
@@ -91,83 +279,23 @@ func startBtTaskScheduler() {
 				runBtTasks[task.ID] = nil
 			}
 			runBtTasksMutex.Unlock()
+
 			if exist {
 				continue
 			}
+
 			// 启动新的回测任务
-			go func(t *ormu.Task) {
-				defer func() {
-					runBtTasksMutex.Lock()
-					delete(runBtTasks, t.ID)
-					runBtTasksMutex.Unlock()
-				}()
-				// 获取当前执行文件路径
-				exePath, err := os.Executable()
-				if err != nil {
-					log.Error("get executable path failed", zap.Error(err))
-					return
-				}
-
-				// 构建命令
-				cmdArgsStr := "backtest " + t.Args
-				cmd := exec.Command(exePath, strings.Split(cmdArgsStr, " ")...)
-
-				// 添加到运行列表
-				runBtTasksMutex.Lock()
-				runBtTasks[t.ID] = cmd
-				runBtTasksMutex.Unlock()
-
-				// 更新任务状态为运行中
-				err = qu.UpdateTask(context.Background(), ormu.UpdateTaskParams{
-					Status: ormu.BtStatusRunning,
-					ID:     t.ID,
-				})
-				if err != nil {
-					log.Error("update task status failed", zap.Error(err))
-					return
-				}
-
-				// 执行命令
-				log.Info("start backtest", zap.Int64("id", task.ID), zap.String("args", cmdArgsStr))
-				output, err := cmd.CombinedOutput()
-				if err != nil {
-					log.Error("run backtest failed", zap.String("path", t.Path), zap.String("output", string(output)), zap.Error(err))
-				} else {
-					log.Info("done backtest", zap.Int64("id", task.ID), zap.String("args", cmdArgsStr))
-				}
-
-				// 更新任务状态
-				task, err = collectBtTask(filepath.Join(btRoot, t.Path))
-				if err != nil {
-					log.Error("collect backtest task failed", zap.Error(err))
-					return
-				}
-				if task == nil {
-					task = &ormu.Task{}
-				}
-				err = qu.UpdateTask(context.Background(), ormu.UpdateTaskParams{
-					Status:      ormu.BtStatusDone,
-					OrderNum:    task.OrderNum,
-					ProfitRate:  task.ProfitRate,
-					WinRate:     task.WinRate,
-					MaxDrawdown: task.MaxDrawdown,
-					Sharpe:      task.Sharpe,
-					Info:        task.Info,
-					ID:          t.ID,
-				})
-				if err != nil {
-					log.Error("update task status failed", zap.Error(err))
-				}
-			}(task)
+			go executeBtTask(task)
 		}
 	}()
 }
 
 func collectBtResults() error {
-	qu, err2 := ormu.Conn()
+	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		return err2
 	}
+	defer conn.Close()
 	tasks, err2 := qu.FindTasks(context.Background(), ormu.FindTasksParams{
 		Mode:  "backtest",
 		Limit: 1000,
@@ -214,6 +342,7 @@ func collectBtResults() error {
 			StartAt:     task.StartAt,
 			StopAt:      task.StopAt,
 			Status:      task.Status,
+			Progress:    task.Progress,
 			OrderNum:    task.OrderNum,
 			ProfitRate:  task.ProfitRate,
 			WinRate:     task.WinRate,
@@ -293,6 +422,7 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 		StartAt:     utils.AlignTfMSecs(cfg.TimeRange.StartMS, dayMSecs),
 		StopAt:      utils.AlignTfMSecs(cfg.TimeRange.EndMS, dayMSecs),
 		Status:      ormu.BtStatusDone,
+		Progress:    1,
 		OrderNum:    utils.GetMapVal(data, "orderNum", int64(0)),
 		ProfitRate:  utils.GetMapVal(data, "totProfitPct", float64(0)),
 		WinRate:     utils.GetMapVal(data, "winRatePct", float64(0)),

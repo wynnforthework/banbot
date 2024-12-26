@@ -33,7 +33,7 @@
         class: classes,
         tabSize = 4,
         styles,
-        lineWrapping = false,
+        lineWrapping = true,
         editable = true,
         readonly = false,
         placeholder,

@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as m from '$lib/paraglide/messages.js'
   import Icon from '@/lib/Icon.svelte';
+  import {page} from '$app/stores';
   let { children } = $props();
   import {site} from '@/lib/stores/site';
   import {dev} from '$app/environment';
@@ -74,21 +75,21 @@
           <Icon name="horz3"/>
         </div>
         <ul tabindex="0" class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow">
-          <li><a href="/strategy" class="py-3"><Icon name="code"/>{m.strategy()}</a></li>
-          <li><a href="/backtest" class="py-3"><Icon name="calculate"/>{m.backtest()}</a></li>
-          <li><a href="/optimize" class="py-3"><Icon name="cpu"/>{m.optimize()}</a></li>
-          <li><a href="/data" class="py-3"><Icon name="chart-bar"/>{m.data()}</a></li>
-          <li><a href="/tools" class="py-3"><Icon name="tool"/>{m.tools()}</a></li>
+          <li><a href="/strategy" class="py-3" class:text-primary={$page.url.pathname.startsWith('/strategy')}><Icon name="code"/>{m.strategy()}</a></li>
+          <li><a href="/backtest" class="py-3" class:text-primary={$page.url.pathname.startsWith('/backtest')}><Icon name="calculate"/>{m.backtest()}</a></li>
+          <li><a href="/data" class="py-3" class:text-primary={$page.url.pathname.startsWith('/data')}><Icon name="chart-bar"/>{m.data()}</a></li>
+          <li><a href="/trade" class="py-3" class:text-primary={$page.url.pathname.startsWith('/trade')}><Icon name="banknotes"/>{m.live_trading()}</a></li>
         </ul>
       </div>
       
       <!-- 桌面端的水平菜单 -->
       <ul class="menu menu-horizontal px-1 hidden lg:flex">
-        <li><a href="/strategy"><Icon name="code"/>{m.strategy()}</a></li>
-        <li><a href="/backtest"><Icon name="calculate"/>{m.backtest()}</a></li>
-        <li><a href="/optimize"><Icon name="cpu"/>{m.optimize()}</a></li>
-        <li><a href="/data"><Icon name="chart-bar"/>{m.data()}</a></li>
-        <li><a href="/tools"><Icon name="tool"/>{m.tools()}</a></li>
+        <li><a href="/strategy" class:text-primary={$page.url.pathname.startsWith('/strategy')}><Icon name="code"/>{m.strategy()}</a></li>
+        <li><a href="/backtest" class:text-primary={$page.url.pathname.startsWith('/backtest')}><Icon name="calculate"/>{m.backtest()}</a></li>
+        <li><a href="/data" class:text-primary={$page.url.pathname.startsWith('/data')}><Icon name="chart-bar"/>{m.data()}</a></li>
+        <li><a href="/trade" class:text-primary={$page.url.pathname.startsWith('/trade')}><Icon name="banknotes"/>{m.live_trading()}</a></li>
+        <!-- <li><a href="/tools"><Icon name="tool"/>{m.tools()}</a></li> -->
+        <!-- <li><a href="/optimize"><Icon name="cpu"/>{m.optimize()}</a></li> -->
       </ul>
     </div>
     
@@ -99,6 +100,11 @@
                 onclick={clickRefresh}>
           <Icon name="refresh"/>
         </button>
+      </div>
+      <div class="tooltip tooltip-bottom" data-tip={m.setting()}>
+        <a href="/setting" class="btn btn-ghost btn-circle">
+          <Icon name="setting"/>
+        </a>
       </div>
       <div class="tooltip tooltip-bottom" data-tip={m.logs()}>
         <button class="btn btn-ghost btn-circle" onclick={toggleLogs}>

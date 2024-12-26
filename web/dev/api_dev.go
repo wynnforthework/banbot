@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -58,6 +57,7 @@ func regApiDev(api fiber.Router) {
 	api.Post("/new_strat", handleNewStrat)
 	api.Get("/text", getText)
 	api.Post("/save_text", saveText)
+	api.Get("/build_envs", getBuildEnvs)
 	api.Post("/build", handleBuild)
 	api.Get("/logs", getLogs)
 	api.Get("/default_cfg", getDefaultCfg)
@@ -71,6 +71,7 @@ func regApiDev(api fiber.Router) {
 	api.Get("/bt_strat_text", getBtStratText)
 	api.Get("/symbols", getSymbols)
 	api.Post("/data_tools", handleDataTools)
+	api.Get("/download", handleDownload)
 }
 
 func onWsDev(c *websocket.Conn) {
@@ -87,10 +88,11 @@ func getOrders(c *fiber.Ctx) error {
 		return err
 	}
 
-	qu, err2 := ormu.Conn()
+	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		return err2
 	}
+	defer conn.Close()
 	task, err := qu.GetTask(context.Background(), data.TaskID)
 	if err != nil {
 		return err
@@ -249,22 +251,39 @@ func handleNewStrat(c *fiber.Ctx) error {
 	})
 }
 
+func parsePath(curPath string) (string, error) {
+	if curPath == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(curPath, "$") {
+		curPath = config.ParsePath(curPath)
+	} else {
+		baseDir, err := getRootDir()
+		if err != nil {
+			return "", err
+		}
+		filepath.Join(baseDir, curPath)
+	}
+	return curPath, nil
+}
+
 func getText(c *fiber.Ctx) error {
 	type TextArgs struct {
 		Path string `query:"path" validate:"required"`
 	}
 
 	var args = new(TextArgs)
-	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
-		return err
-	}
-
-	baseDir, err := getRootDir()
+	err := base.VerifyArg(c, args, base.ArgQuery)
 	if err != nil {
 		return err
 	}
 
-	content, err2 := utils.ReadTextFile(filepath.Join(baseDir, args.Path))
+	args.Path, err = parsePath(args.Path)
+	if err != nil {
+		return err
+	}
+
+	content, err2 := utils.ReadTextFile(args.Path)
 	if err2 != nil {
 		return err2
 	}
@@ -281,7 +300,8 @@ func saveText(c *fiber.Ctx) error {
 	}
 
 	var args = new(SaveTextArgs)
-	if err := base.VerifyArg(c, args, base.ArgBody); err != nil {
+	err := base.VerifyArg(c, args, base.ArgBody)
+	if err != nil {
 		return err
 	}
 
@@ -292,15 +312,13 @@ func saveText(c *fiber.Ctx) error {
 		})
 	}
 
-	baseDir, err := getRootDir()
+	args.Path, err = parsePath(args.Path)
 	if err != nil {
 		return err
 	}
 
-	filePath := filepath.Join(baseDir, args.Path)
-
 	// 检查文件是否存在
-	_, err = os.Stat(filePath)
+	_, err = os.Stat(args.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return c.Status(400).JSON(fiber.Map{
@@ -311,7 +329,7 @@ func saveText(c *fiber.Ctx) error {
 	}
 
 	// 写入文件内容
-	err = os.WriteFile(filePath, []byte(args.Content), 0644)
+	err = os.WriteFile(args.Path, []byte(args.Content), 0644)
 	if err != nil {
 		return err
 	}
@@ -323,6 +341,16 @@ func saveText(c *fiber.Ctx) error {
 
 // handleBuild 处理编译请求
 func handleBuild(c *fiber.Ctx) error {
+	type BuildArgs struct {
+		OS   string `json:"os"`
+		Arch string `json:"arch"`
+		Path string `json:"path"`
+	}
+	var args = new(BuildArgs)
+	if err := base.VerifyArg(c, args, base.ArgBody); err != nil {
+		return err
+	}
+
 	// 检查是否正在编译
 	buildMutex.Lock()
 	if status.Building {
@@ -343,27 +371,36 @@ func handleBuild(c *fiber.Ctx) error {
 		buildMutex.Unlock()
 	}()
 
-	// 获取根目录
-	rootDir, err := getRootDir()
-	if err != nil {
-		return err
+	// 设置目标操作系统和架构
+	targetOS := args.OS
+	if targetOS == "" {
+		targetOS = runtime.GOOS
+	}
+	targetArch := args.Arch
+	if targetArch == "" {
+		targetArch = runtime.GOARCH
 	}
 
-	// 获取可执行文件名称
-	exePath, err := os.Executable()
+	// 设置输出路径
+	outputPath, err := parsePath(args.Path)
 	if err != nil {
 		return err
 	}
-	exeName := path.Base(exePath)
+	if outputPath == "" {
+		exePath, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		outputPath = exePath
+	} else if targetOS == "windows" && !strings.HasSuffix(outputPath, ".exe") {
+		outputPath = outputPath + ".exe"
+	}
 
 	// 准备编译命令
-	cmd := exec.Command("go", "build", "-o", exeName)
-	cmd.Dir = rootDir
-
-	// 设置环境变量
+	cmd := exec.Command("go", "build", "-o", outputPath)
 	env := os.Environ()
-	env = append(env, fmt.Sprintf("GOARCH=amd64"))
-	env = append(env, fmt.Sprintf("GOOS=%s", runtime.GOOS))
+	env = append(env, fmt.Sprintf("GOARCH=%s", targetArch))
+	env = append(env, fmt.Sprintf("GOOS=%s", targetOS))
 	cmd.Env = env
 
 	// 捕获命令输出
@@ -484,10 +521,11 @@ func getBtTasks(c *fiber.Ctx) error {
 		args.Limit = 20
 	}
 
-	qu, err := ormu.Conn()
+	qu, conn, err := ormu.Conn()
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	var startMS, endMS int64
 	if args.RangeStr != "" {
@@ -527,10 +565,11 @@ func getBtTasks(c *fiber.Ctx) error {
 
 // getBtOptions 获取回测选项列表
 func getBtOptions(c *fiber.Ctx) error {
-	qu, err2 := ormu.Conn()
+	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		return err2
 	}
+	defer conn.Close()
 
 	options, err := qu.GetTaskOptions(context.Background())
 	if err != nil {
@@ -685,16 +724,17 @@ func handleRunBacktest(c *fiber.Ctx) error {
 	}
 
 	// 构建回测参数
-	btArgs := fmt.Sprintf("-out %s -config %s", btPath, btPath+"/config.yml")
+	btArgs := fmt.Sprintf("-out %s -prg uiPrg -config %s", btPath, btPath+"/config.yml")
 	if args.Separate {
 		btArgs = "-separate " + btArgs
 	}
 
 	// 添加回测任务
-	qu, err2 := ormu.Conn()
+	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		return err2
 	}
+	defer conn.Close()
 
 	task, err := qu.AddTask(context.Background(), ormu.AddTaskParams{
 		Mode:     "backtest",
@@ -708,6 +748,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		StartAt:  cfg.TimeRange.StartMS,
 		StopAt:   cfg.TimeRange.EndMS,
 		Status:   ormu.BtStatusInit,
+		Progress: 0,
 	})
 	if err != nil {
 		return err
@@ -722,10 +763,11 @@ func handleRunBacktest(c *fiber.Ctx) error {
 
 // getBtPath 获取回测输出目录
 func getBtPath(taskID int64) (string, error) {
-	qu, err2 := ormu.Conn()
+	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		return "", err2
 	}
+	defer conn.Close()
 	task, err := qu.GetTask(context.Background(), taskID)
 	if err != nil {
 		return "", fmt.Errorf("query task failed: %v", err)
@@ -757,10 +799,11 @@ func getBtDetail(c *fiber.Ctx) error {
 		return err
 	}
 
-	qu, err2 := ormu.Conn()
+	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		return err2
 	}
+	defer conn.Close()
 	task, err := qu.GetTask(context.Background(), args.TaskID)
 	if err != nil {
 		return fmt.Errorf("query task failed: %v", err)
@@ -813,10 +856,12 @@ func getBtOrders(c *fiber.Ctx) error {
 		args.PageSize = 20
 	}
 
-	qu, err2 := ormu.Conn()
+	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		return err2
 	}
+	defer conn.Close()
+
 	task, err := qu.GetTask(context.Background(), args.TaskID)
 	if err != nil {
 		return fmt.Errorf("query task failed: %v", err)
@@ -1309,4 +1354,58 @@ func getSymbolData(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"data": result,
 	})
+}
+
+// getBuildEnvs 获取Go支持的所有构建环境
+func getBuildEnvs(c *fiber.Ctx) error {
+	// 执行 go tool dist list 命令
+	cmd := exec.Command("go", "tool", "dist", "list")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("execute command failed: %v", err)
+	}
+
+	// 将输出按行分割
+	envs := strings.Split(strings.TrimSpace(string(output)), "\n")
+
+	return c.JSON(fiber.Map{
+		"data": envs,
+	})
+}
+
+// handleDownload 处理文件下载请求
+func handleDownload(c *fiber.Ctx) error {
+	type DownloadArgs struct {
+		Path string `query:"path" validate:"required"`
+	}
+	var args = new(DownloadArgs)
+	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
+		return err
+	}
+
+	// 解析路径
+	absPath, err := parsePath(args.Path)
+	if err != nil {
+		return err
+	}
+
+	// 检查文件是否存在
+	if _, err := os.Stat(absPath); err != nil {
+		if os.IsNotExist(err) {
+			return c.Status(404).JSON(fiber.Map{
+				"msg": "File not found",
+			})
+		}
+		return err
+	}
+
+	// 获取文件名
+	fileName := filepath.Base(absPath)
+
+	// 设置下载头
+	c.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, fileName))
+	c.Set("Content-Type", "application/octet-stream")
+
+	// 发送文件
+	return c.SendFile(absPath)
 }

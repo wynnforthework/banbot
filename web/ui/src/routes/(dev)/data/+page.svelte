@@ -98,7 +98,10 @@
             />
         </div>
 
-        <button class="btn btn-primary m-1" onclick={toggleDrawer}>{m.tools()}</button>
+        <div class="flex items-center gap-2">
+            <a href="/kline" target="_blank" class="btn btn-primary btn-outline m-1">{m.kline()}</a>
+            <button class="btn btn-primary m-1" onclick={toggleDrawer}>{m.tools()}</button>
+        </div>
     </div>
 
     <div class="overflow-x-auto w-full" style="min-height: 24rem;">

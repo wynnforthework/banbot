@@ -8,6 +8,7 @@
 	import { getApi, postApi } from '@/lib/netio';
   import {alerts} from "$lib/stores/alerts"
   import AllConfig from '@/lib/dev/AllConfig.svelte';
+  import {modals} from '$lib/stores/modals';
 
   let separateStrat = $state(false);
   let theme: Extension | null = $state(oneDark);
@@ -38,6 +39,9 @@
       return;
     }
 
+    const ok = await modals.confirm(m.confirm_backtest());
+    if (!ok) return;
+
     const rsp = await postApi('/dev/run_backtest', {
       separate: separateStrat,
       config: configText
@@ -66,7 +70,7 @@
         <button class="btn btn-outline" onclick={goBack}>{m.back()}</button>
       </div>
 
-      <div class="form-control mb-6">
+      <!-- <div class="form-control mb-6">
         <div class="flex items-center gap-4">
           <span class="text-lg">{m.options()}: </span>
           <label class="label cursor-pointer">
@@ -74,7 +78,7 @@
             <input type="checkbox" class="checkbox" bind:checked={separateStrat} />
           </label>
         </div>
-      </div>
+      </div> -->
 
       <div class="mb-6">
         <div class="flex justify-between items-center mb-2">

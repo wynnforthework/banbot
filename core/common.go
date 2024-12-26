@@ -268,7 +268,7 @@ func IsLimitOrder(t int) bool {
 
 func SetHeavyProgress(done int, total int) {
 	heavyLock.Lock()
-	HeavyProgress = done * 1000 / total
+	HeavyProgress = float64(done) / float64(total)
 	for _, tg := range HeavyTriggers {
 		tg(done, total)
 	}

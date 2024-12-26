@@ -12,9 +12,9 @@ import (
 
 const addTask = `-- name: AddTask :one
 insert into task
-(mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, order_num, profit_rate, win_rate, max_drawdown, sharpe, info)
-values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    returning id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, order_num, profit_rate, win_rate, max_drawdown, sharpe, info
+(mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info)
+values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    returning id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info
 `
 
 type AddTaskParams struct {
@@ -29,6 +29,7 @@ type AddTaskParams struct {
 	StartAt     int64   `json:"startAt"`
 	StopAt      int64   `json:"stopAt"`
 	Status      int64   `json:"status"`
+	Progress    float64 `json:"progress"`
 	OrderNum    int64   `json:"orderNum"`
 	ProfitRate  float64 `json:"profitRate"`
 	WinRate     float64 `json:"winRate"`
@@ -50,6 +51,7 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error)
 		arg.StartAt,
 		arg.StopAt,
 		arg.Status,
+		arg.Progress,
 		arg.OrderNum,
 		arg.ProfitRate,
 		arg.WinRate,
@@ -71,6 +73,7 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error)
 		&i.StartAt,
 		&i.StopAt,
 		&i.Status,
+		&i.Progress,
 		&i.OrderNum,
 		&i.ProfitRate,
 		&i.WinRate,
@@ -101,7 +104,7 @@ func (q *Queries) DelTasks(ctx context.Context, ids []int64) error {
 }
 
 const getTask = `-- name: GetTask :one
-select id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, order_num, profit_rate, win_rate, max_drawdown, sharpe, info from task
+select id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info from task
 where id = ?
 `
 
@@ -121,6 +124,7 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (*Task, error) {
 		&i.StartAt,
 		&i.StopAt,
 		&i.Status,
+		&i.Progress,
 		&i.OrderNum,
 		&i.ProfitRate,
 		&i.WinRate,
@@ -171,11 +175,12 @@ func (q *Queries) GetTaskOptions(ctx context.Context) ([]*GetTaskOptionsRow, err
 }
 
 const updateTask = `-- name: UpdateTask :exec
-update task set status=?,order_num=?,profit_rate=?,win_rate=?,max_drawdown=?,sharpe=?,info=?  where id = ?
+update task set status=?,progress=?,order_num=?,profit_rate=?,win_rate=?,max_drawdown=?,sharpe=?,info=?  where id = ?
 `
 
 type UpdateTaskParams struct {
 	Status      int64   `json:"status"`
+	Progress    float64 `json:"progress"`
 	OrderNum    int64   `json:"orderNum"`
 	ProfitRate  float64 `json:"profitRate"`
 	WinRate     float64 `json:"winRate"`
@@ -188,6 +193,7 @@ type UpdateTaskParams struct {
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) error {
 	_, err := q.db.ExecContext(ctx, updateTask,
 		arg.Status,
+		arg.Progress,
 		arg.OrderNum,
 		arg.ProfitRate,
 		arg.WinRate,

@@ -2,6 +2,10 @@ package data
 
 import (
 	"fmt"
+	"math"
+	"sort"
+	"sync"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -12,9 +16,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
-	"math"
-	"sort"
-	"sync"
 )
 
 type IProvider interface {
@@ -252,6 +253,7 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	}
 	totalMS := (config.TimeRange.EndMS - config.TimeRange.StartMS) / 1000
 	var pBar = utils.NewPrgBar(int(totalMS), "RunHist")
+	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
 	defer pBar.Close()
 	pBar.Last = config.TimeRange.StartMS
 	if p.showLog {

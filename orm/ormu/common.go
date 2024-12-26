@@ -18,6 +18,7 @@ func (t *Task) ToMap() map[string]interface{} {
 		"startAt":     t.StartAt,
 		"stopAt":      t.StopAt,
 		"status":      t.Status,
+		"progress":    t.Progress,
 		"orderNum":    t.OrderNum,
 		"profitRate":  t.ProfitRate,
 		"winRate":     t.WinRate,

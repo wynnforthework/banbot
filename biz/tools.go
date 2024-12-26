@@ -374,13 +374,8 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	tfNum := len(args.TimeFrames)
 	pBar := utils.NewPrgBar(len(args.Pairs)*tfNum, "Export")
 	core.HeavyTask = "ExportKLine"
-	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
-		core.SetHeavyProgress(done, total)
-	})
-	defer func() {
-		core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
-		pBar.Close()
-	}()
+	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	defer pBar.Close()
 	for _, symbol := range args.Pairs {
 		clean := strings.ReplaceAll(strings.ReplaceAll(symbol, "/", "_"), ":", "_")
 		if _, ok := handles[clean]; ok {

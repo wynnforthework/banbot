@@ -623,13 +623,8 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 		log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
 		pBar = utils.NewPrgBar(len(exsList)*core.StepTotal, "BulkDown")
 		core.HeavyTask = "DownKline"
-		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
-			core.SetHeavyProgress(done, total)
-		})
-		defer func() {
-			core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
-			pBar.Close()
-		}()
+		pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+		defer pBar.Close()
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {

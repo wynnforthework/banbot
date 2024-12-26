@@ -13,6 +13,7 @@ CREATE TABLE task
     start_at  INTEGER NOT NULL,
     stop_at   INTEGER NOT NULL,
     status    INTEGER NOT NULL,
+    progress  REAL    NOT NULL DEFAULT 0,
     order_num INTEGER NOT NULL,
     profit_rate REAL  NOT NULL,
     win_rate  REAL    NOT NULL,

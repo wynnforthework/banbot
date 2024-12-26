@@ -28,7 +28,6 @@ type CmdArgs struct {
 	Pairs         []string
 	RawTables     string
 	Tables        []string
-	StrategyDirs  ArrString
 	Force         bool
 	WithSpider    bool
 	Medium        string
@@ -38,6 +37,7 @@ type CmdArgs struct {
 	CPUProfile    bool
 	MemProfile    bool
 	InPath        string
+	PrgOut        string
 	OutPath       string
 	OutType       string // output data type
 	AdjType       string // adjustment type: 复权类型: pre,post,none

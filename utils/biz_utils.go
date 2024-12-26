@@ -1,11 +1,12 @@
 package utils
 
 import (
+	"sync"
+
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/log"
 	"github.com/schollz/progressbar/v3"
 	"go.uber.org/zap"
-	"sync"
 )
 
 type PrgCB = func(done int, total int)
@@ -63,6 +64,9 @@ func (p *PrgBar) NewJob(num int) *PrgBarJob {
 func (p *PrgBar) Close() {
 	if p.bar == nil || p.TotalNum == 0 {
 		return
+	}
+	for _, cb := range p.PrgCbs {
+		cb(p.TotalNum, p.TotalNum)
 	}
 	if p.DoneNum < p.TotalNum {
 		p.Add(p.TotalNum - p.DoneNum)

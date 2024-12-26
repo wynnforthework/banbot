@@ -1306,13 +1306,8 @@ func tryFillHoles(sess *Queries, sids map[int32]bool) *errs.Error {
 	})
 	pBar := utils.NewPrgBar(len(rows), "FillHoles")
 	core.HeavyTask = "FillHoles"
-	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
-		core.SetHeavyProgress(done, total)
-	})
-	defer func() {
-		core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
-		pBar.Close()
-	}()
+	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	defer pBar.Close()
 	// The kholes that need to be deleted have been filled in
 	// 已填充需要删除的khole
 	badIds := make([]int64, 0, len(rows)/10)
@@ -1463,13 +1458,8 @@ func syncKlineInfos(sess *Queries, sids map[int32]bool) *errs.Error {
 	pgTotal := len(infos) + len(aggList)*10
 	pBar := utils.NewPrgBar(pgTotal, "sync tf")
 	core.HeavyTask = "SyncTf"
-	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
-		core.SetHeavyProgress(done, total)
-	})
-	defer func() {
-		core.SetHeavyProgress(pBar.TotalNum, pBar.TotalNum)
-		pBar.Close()
-	}()
+	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	defer pBar.Close()
 	// 加载计算的区间
 	calcs := make(map[string]map[int32][2]int64)
 	for _, agg := range aggList {

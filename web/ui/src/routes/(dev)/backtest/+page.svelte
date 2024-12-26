@@ -19,6 +19,7 @@
   let selectedRange = $state<{label: string, value: number}|null>(null);
   let hasPrev = $state(false);
   let hasNext = $state(true);
+  let loading = $state(false);
 
   onMount(async () => {
     await loadOptions();
@@ -46,6 +47,8 @@
   }
 
   async function fetchTasks(maxId?: number) {
+    if(loading) return;
+    loading = true;
     const rsp = await getApi('/dev/bt_tasks', {
       mode: 'backtest',
       strat: selectedStrat,
@@ -54,6 +57,7 @@
       limit: 20,
       maxId: maxId || 0
     });
+    loading = false;
     if(rsp.code != 200) {
       console.error('load backtest tasks failed', rsp);
       alerts.addAlert('error', rsp.msg || 'load backtest tasks failed');
@@ -64,10 +68,20 @@
     hasNext = tasks.length >= 20;
   }
 
+  function showStrats(strats: string) {
+    if(strats.includes(',')) {
+      const parts = strats.split(',');
+      return parts[0] + ' & ' + (parts.length - 1) + ' More';
+    }
+    return strats;
+  }
+
   $effect(() => {
     // 这行不能删除，用于监控变化
     console.log('filter changed', selectedStrat, selectedPeriod, selectedRange);
-    fetchTasks();
+    setTimeout(() => {
+      fetchTasks();
+    }, 0)
   });
 
   function clickTask(id: number) {
@@ -121,7 +135,12 @@
         {/each}
       </select>
 
-      <button class="btn" onclick={() => fetchTasks()}>{m.refresh()}</button>
+      <button class="btn" disabled={loading} onclick={() => fetchTasks()}>
+        {#if loading}
+        <span class="loading loading-spinner"></span>
+        {/if}
+        {m.refresh()}
+      </button>
     </div>
 
     <a class="btn btn-primary" href="/backtest/new">{m.run_backtest()}</a>
@@ -142,7 +161,7 @@ ${m.max_open_orders()}: ${task.maxOpenOrders || '-'}
 ${m.bar_num()}: ${task.barNum || '-'}
 ${m.max_drawdown_val()}: ${task.maxDrawDownVal?.toFixed(2) || '-'}
 ${m.show_drawdown_val()}: ${task.showDrawDownVal?.toFixed(2) || '-'}
-${m.show_drawdown_pct()}: ${task.showDrawDownPct?.toFixed(2) || '-'}%
+${m.show_drawdown()}: ${task.showDrawDownPct?.toFixed(2) || '-'}%
 ${m.tot_fee()}: ${task.totFee?.toFixed(2) || '-'}` : 
 `ID: ${task.id}
 Path: $/backtest/${task.path}`}
@@ -153,27 +172,27 @@ Path: $/backtest/${task.path}`}
           <div class="flex justify-between items-center mb-3">
             <div class="flex items-center gap-3">
               <h2 class="text-lg font-bold" title={task.strats}>
-                {#if task.strats.includes(',')}
-                  {task.strats.split(',')[0] + '等' + task.strats.split(',').length + '个'}
-                {:else}
-                  {task.strats}
-                {/if}
+                {showStrats(task.strats)}
               </h2>
               <div class="text-sm opacity-60">{task.periods} · {showPairs(task.pairs)}</div>
             </div>
             {#if task.status === 3}
               <div class="text-2xl font-bold">{task.profitRate.toFixed(1)}%</div>
             {:else}
-              <div class="badge badge-lg {task.status === 1 ? 'badge-neutral' : 'badge-primary'}">
-                {task.status === 1 ? '等待开始' : '运行中'}
-              </div>
+              {#if task.status === 1}
+                <div class="badge badge-lg badge-neutral">{m.pending()}</div>
+              {:else}
+                <div class="radial-progress text-primary" style="--value:{(task.progress || 0) * 100}; --size:2.5rem; --thickness: 2px;" role="progressbar">
+                  {((task.progress || 0) * 100).toFixed(0)}%
+                </div>
+              {/if}
             {/if}
           </div>
 
           <!-- 第二行 -->
           <div class="flex justify-between items-center mb-5">
             <div class="text-sm opacity-60">
-              {getDateStr(task.startAt)} - {getDateStr(task.stopAt)}
+              {getDateStr(task.startAt, 'YYYYMMDD HH:mm')} - {getDateStr(task.stopAt, 'YYYYMMDD HH:mm')}
             </div>
             {#if task.status === 3}
               <div class="text-sm opacity-80">{m.max_drawdown()}: {task.maxDrawdown.toFixed(1)}%</div>

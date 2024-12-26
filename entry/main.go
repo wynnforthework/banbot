@@ -55,10 +55,10 @@ func RunCmd() {
 		var entry FuncEntry
 		switch name {
 		case "trade":
-			options = []string{"stake_amount", "pairs", "stg_dir", "with_spider", "task_hash", "task_id"}
+			options = []string{"stake_amount", "pairs", "with_spider", "task_hash", "task_id"}
 			entry = RunTrade
 		case "backtest":
-			options = []string{"out", "timerange", "stake_amount", "pairs", "stg_dir", "separate", "cpu_profile", "mem_profile"}
+			options = []string{"out", "timerange", "stake_amount", "pairs", "prg", "separate", "cpu_profile", "mem_profile"}
 			entry = RunBackTest
 		case "spider":
 			entry = RunSpider
@@ -294,8 +294,6 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.Float64Var(&args.StakePct, "stake-pct", 0.0, "Override `stake_pct` in config")
 		case "pairs":
 			cmd.StringVar(&args.RawPairs, "pairs", "", "comma-separated pairs")
-		case "stg_dir":
-			cmd.Var(&args.StrategyDirs, "stg-dir", "dir path for strategies")
 		case "with_spider":
 			cmd.BoolVar(&args.WithSpider, "spider", false, "start spider if not running")
 		case "timerange":
@@ -316,6 +314,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.BoolVar(&args.MemProfile, "mem-profile", false, "enable memory profile")
 		case "task_id":
 			cmd.IntVar(&args.TaskId, "task-id", 0, "task")
+		case "prg":
+			cmd.StringVar(&args.PrgOut, "prg", "", "prefix for progress in stdout")
 		case "in":
 			cmd.StringVar(&args.InPath, "in", "", "input file or directory")
 		case "in_type":

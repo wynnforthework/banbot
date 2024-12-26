@@ -296,7 +296,7 @@
     const inAction = `${td.short ? m.open_short() : m.open_long()}`;
     const outAction = `${td.short ? m.close_short() : m.close_long()}`;
 
-    const inText = `${inAction} ${td.enter_tag} ${td.leverage}${m.times()}
+    const inText = `${inAction} ${td.enter_tag} ${td.leverage}x
 ${td.strategy}
 ${m.order()}: ${getDateStr(td.enter_at)}
 ${m.entry()}: ${getDateStr(td.enter!.create_at)}
@@ -310,7 +310,7 @@ ${m.cost()}: ${td.quote_cost?.toFixed(2)}`;
     }];
 
     if (td.exit && td.exit.filled) {
-      const outText = `${outAction} ${td.exit_tag} ${td.leverage}${m.times()}
+      const outText = `${outAction} ${td.exit_tag} ${td.leverage}x
 ${td.strategy}
 ${m.order()}: ${getDateStr(td.exit_at)}
 ${m.exit()}: ${getDateStr(td.exit?.create_at)}

@@ -17,6 +17,7 @@ type Task struct {
 	StartAt     int64   `json:"startAt"`
 	StopAt      int64   `json:"stopAt"`
 	Status      int64   `json:"status"`
+	Progress    float64 `json:"progress"`
 	OrderNum    int64   `json:"orderNum"`
 	ProfitRate  float64 `json:"profitRate"`
 	WinRate     float64 `json:"winRate"`
