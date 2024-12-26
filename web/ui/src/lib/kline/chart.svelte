@@ -17,7 +17,7 @@
   import {makeCloudInds} from './indicators/cloudInds';
   import {browser} from '$app/environment';
   import {getThemeStyles,GetNumberDotOffset, build_ohlcvs} from './coms';
-  import {tf_to_secs, toUTCStamp, getDateStr} from '../dateutil';
+  import {TFToSecs, toUTCStamp, getDateStr} from '../dateutil';
   import { createAlertStore } from '../stores/alerts';
 	import Alert from '../Alert.svelte';
   import { derived, writable } from 'svelte/store';
@@ -191,7 +191,7 @@
     // 触发K线加载完毕事件
     $ctx.klineLoaded += 1
     if (klines.length) {
-      const tf_msecs = tf_to_secs(period.timeframe) * 1000
+      const tf_msecs = TFToSecs(period.timeframe) * 1000
       const curTime = new Date().getTime()
       const stop_ms = klines[klines.length - 1].timestamp + tf_msecs
       if (stop_ms + tf_msecs > curTime) {
@@ -217,7 +217,7 @@
       alerts.addAlert('error', 'invalid time, please use: 202301011200')
       return;
     }
-    const tf_msecs = tf_to_secs($save.period.timeframe) * 1000
+    const tf_msecs = TFToSecs($save.period.timeframe) * 1000
     const totalNum = (stop_ms - start_ms) / tf_msecs;
     if(totalNum > maxBarNum){
       stop_ms = start_ms + tf_msecs * maxBarNum;

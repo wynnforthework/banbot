@@ -33,3 +33,36 @@ const (
 	ErrNetTemporary
 	ErrNetConnect
 )
+
+var ErrCodeNames = map[int]string{
+	ErrBadConfig:         "BadConfig",
+	ErrInvalidPath:       "InvalidPath",
+	ErrIOReadFail:        "IOReadFail",
+	ErrIOWriteFail:       "IOWriteFail",
+	ErrDbConnFail:        "DbConnFail",
+	ErrDbReadFail:        "DbReadFail",
+	ErrDbExecFail:        "DbExecFail",
+	ErrDbUniqueViolation: "DbUniqueViolation",
+	ErrLiquidation:       "Liquidation",
+	ErrLowFunds:          "LowFunds",
+	ErrLowSrcAmount:      "LowSrcAmount",
+	ErrInvalidCost:       "InvalidCost",
+	ErrExgNotInit:        "ExgNotInit",
+	ErrCacheErr:          "CacheErr",
+	ErrInvalidTF:         "InvalidTF",
+	ErrInvalidSymbol:     "InvalidSymbol",
+	ErrInvalidBars:       "InvalidBars",
+	ErrInvalidAddr:       "InvalidAddr",
+	ErrRunTime:           "RunTime",
+	ErrMarshalFail:       "MarshalFail",
+	ErrCompressFail:      "CompressFail",
+	ErrDeCompressFail:    "DeCompressFail",
+	ErrTimeout:           "Timeout",
+	ErrEOF:               "EOF",
+	ErrNetWriteFail:      "NetWriteFail",
+	ErrNetReadFail:       "NetReadFail",
+	ErrNetUnknown:        "NetUnknown",
+	ErrNetTimeout:        "NetTimeout",
+	ErrNetTemporary:      "NetTemporary",
+	ErrNetConnect:        "NetConnect",
+}

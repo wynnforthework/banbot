@@ -453,6 +453,13 @@
   "symbols_default_all": "品种列表（未提供时，默认全部）",
   "periods": "周期列表",
   "execute": "执行",
+  "all_exchanges": "所有交易所",
+  "all_markets": "所有市场",
+  "search_symbol": "搜索品种",
+  "list_time": "上市时间",
+  "delist_time": "退市时间",
+  "combined": "组合",
+  "yes": "是",
 
   "cfg_name": "机器人名称，用于在消息通知中区分不同的机器人",
   "cfg_env": "运行环境，prod代表生产网络，test代表测试网络（币安测试网），dry_run代表模拟环境",

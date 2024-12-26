@@ -5,8 +5,10 @@
 	import Alert from '$lib/Alert.svelte';
 	import Modal from '$lib/kline/Modal.svelte';
 	import { modals } from '$lib/stores/modals';
+	import { setTimezone } from '$lib/dateutil';
 
 	let { children } = $props();
+	setTimezone('UTC')
   import "tailwindcss/tailwind.css";
 </script>
 

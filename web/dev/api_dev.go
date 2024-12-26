@@ -1107,10 +1107,10 @@ func getSymbols(c *fiber.Ctx) error {
 		return err
 	}
 
-	if _, ok := exg.AllowExgIds[args.Exchange]; !ok {
+	if _, ok := exg.AllowExgIds[args.Exchange]; !ok && args.Exchange != "" {
 		return fmt.Errorf("invalid exchange: %s", args.Exchange)
 	}
-	if _, ok := banexg.AllMarketTypes[args.Market]; !ok {
+	if _, ok := banexg.AllMarketTypes[args.Market]; !ok && args.Market != "" {
 		return fmt.Errorf("invalid market: %s", args.Market)
 	}
 

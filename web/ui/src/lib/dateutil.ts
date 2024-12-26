@@ -171,7 +171,7 @@ export function adjustFromTo(period: Period, toTimestamp: number, count: number)
   return [from, to]
 }
 
-export function tf_to_secs(timeframe?: string): number{
+export function TFToSecs(timeframe?: string): number{
   if(!timeframe)return 0
   const unit = timeframe.substring(timeframe.length - 1);
   const amount = parseInt(timeframe.substring(0, timeframe.length - 1))
@@ -204,7 +204,7 @@ export function tf_to_secs(timeframe?: string): number{
 }
 
 
-export function secs_to_tf(secs: number): string{
+export function secsToTF(secs: number): string{
   if(secs > secs_year){
     return `${Math.floor(secs / secs_year)}y`
   }
@@ -310,7 +310,7 @@ export async function setTimezone(timezone: string) {
  * 此函数只返回用户本地时区，并不是返回当前设置的时区。
  * 故使用setTimezone设置默认时区后，调用此方法依然返回的是本地时区
  */
-export function get_tz(){
+export function getTZ(){
   return dayjs.tz.guess()
 }
 

@@ -5,6 +5,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
   import { exchanges, markets } from '$lib/common';
+  import {getDateStr} from '$lib/dateutil'
 
   // 状态变量
   let symbols: ExSymbol[] = $state([]);
@@ -71,7 +72,7 @@
                 bind:value={selectedExchange}
                 onchange={applyFilters}
             >
-                <option value="">所有交易所</option>
+                <option value="">{m.all_exchanges()}</option>
                 {#each exchanges as exchange}
                     <option value={exchange}>{exchange}</option>
                 {/each}
@@ -82,7 +83,7 @@
                 bind:value={selectedMarket}
                 onchange={applyFilters}
             >
-                <option value="">所有市场</option>
+                <option value="">{m.all_markets()}</option>
                 {#each markets as market}
                     <option value={market}>{market}</option>
                 {/each}
@@ -90,8 +91,8 @@
 
             <input
                 type="text"
-                placeholder="搜索品种..."
-                class="input input-bordered w-full max-w-xs"
+                placeholder={m.search_symbol()}
+                class="input input-bordered w-full max-w-lg"
                 bind:value={symbolFilter}
                 oninput={applyFilters}
             />
@@ -105,13 +106,13 @@
             <thead>
                 <tr>
                     <th>ID</th>
-                    <th>交易所</th>
-                    <th>真实交易所</th>
-                    <th>市场</th>
-                    <th>品种</th>
-                    <th>是否组合</th>
-                    <th>上市时间</th>
-                    <th>退市时间</th>
+                    <th>{m.exchange()}</th>
+                    <th>{m.exg_real()}</th>
+                    <th>{m.market()}</th>
+                    <th>{m.symbol()}</th>
+                    <th>{m.combined()}</th>
+                    <th>{m.list_time()}</th>
+                    <th>{m.delist_time()}</th>
                     <th>-</th>
                 </tr>
             </thead>
@@ -123,9 +124,9 @@
                         <td>{symbol.exg_real}</td>
                         <td>{symbol.market}</td>
                         <td>{symbol.symbol}</td>
-                        <td>{symbol.combined ? '是' : '否'}</td>
-                        <td>{new Date(symbol.list_ms).toLocaleString()}</td>
-                        <td>{new Date(symbol.delist_ms).toLocaleString()}</td>
+                        <td>{symbol.combined ? m.yes() : ''}</td>
+                        <td>{getDateStr(symbol.list_ms)}</td>
+                        <td>{getDateStr(symbol.delist_ms)}</td>
                         <td>
                             <a href={`/data/${symbol.id}`} class="btn btn-xs btn-info btn-outline">{m.details()}</a>
                         </td>

@@ -2,6 +2,7 @@ package dev
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/utils"
 	utils2 "github.com/banbox/banexg/utils"
 	"sync"
@@ -266,28 +267,30 @@ func handleDataTools(c *fiber.Ctx) error {
 			args.Pairs = append(args.Pairs, exs.Symbol)
 		}
 	}
+	if args.StartMs > 0 && args.EndMs == 0 {
+		args.EndMs = btime.UTCStamp()
+	}
+	if args.StartMs >= args.EndMs {
+		return errs.NewMsg(errs.CodeParamInvalid, "startMs should <= endMs")
+	}
 
 	if !args.Force {
-		barNum := 0
-		for _, tf := range args.Periods {
-			tfMSec := int64(utils2.TFToSecs(tf) * 1000)
-			singleNum := int((args.EndMs - args.StartMs) / tfMSec)
-			barNum += singleNum * len(args.Pairs)
+		msgTpl := "\nExchange: %s\nExgReal: %s\nMarket: %s\nPairs: %v\nPeriods: %v\nStartMs: %d\nEndMs: %d\n"
+		msg := fmt.Sprintf(msgTpl, args.Exchange, args.ExgReal, args.Market, len(args.Pairs),
+			args.Periods, args.StartMs, args.EndMs)
+		if args.Action == "download" {
+			barNum := 0
+			for _, tf := range args.Periods {
+				tfMSec := int64(utils2.TFToSecs(tf) * 1000)
+				singleNum := int((args.EndMs - args.StartMs) / tfMSec)
+				barNum += singleNum * len(args.Pairs)
+			}
+			totalMins := barNum/core.DownKNumMin + 1
+			msg += fmt.Sprintf("Cost Time: %d Hours %d Minutes", totalMins/60, totalMins%60)
 		}
-		totalMins := barNum/core.DownKNumMin + 1
 		return c.JSON(fiber.Map{
 			"code": 401,
-			"msg": fmt.Sprintf(`
-Exchange: %s
-ExgReal: %s
-Market: %s
-Pairs: %v
-Periods: %v
-StartMs: %d
-EndMs: %d
-Cost Time: %d Hours %d Minutes
-`, args.Exchange, args.ExgReal, args.Market, len(args.Pairs), args.Periods, args.StartMs, args.EndMs,
-				totalMins/60, totalMins%60),
+			"msg":  msg,
 		})
 	}
 

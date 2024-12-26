@@ -22,7 +22,8 @@
     click
   }: PropsType = $props();
 
-  function handleButtonClick(type: string) {
+  function handleButtonClick(type: string, e: MouseEvent) {
+    e.stopPropagation()
     if (type === 'close') {
       show = false;
     }
@@ -70,7 +71,7 @@
         <div class="modal-action">
           {#each buttons as btn}
             <button class="btn {getButtonClass(btn)}"
-              onclick={() => handleButtonClick(btn)}>{m[btn]()}</button>
+              onclick={(e) => handleButtonClick(btn, e)}>{m[btn]()}</button>
           {/each}
         </div>
       {/if}

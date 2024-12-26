@@ -40,7 +40,9 @@ const requestApi = async function(method: ApiType, url: string,
   }catch (e){
     const err = (e as FetchError)
     let msg = err.toString()
-    if(err.data && err.data.detail){
+    if(typeof err.data === 'string'){
+      msg = err.data
+    }else if(err.data && err.data.detail){
       msg = `${err.status}: ${err.data.detail}`
     }else if(err.data && err.data.msg){
       msg = `${err.status}: ${err.data.msg}`

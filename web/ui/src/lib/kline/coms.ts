@@ -1,7 +1,7 @@
 import * as kc from 'klinecharts';
 import type {CandleTooltipCustomCallbackData, CandleStyle} from 'klinecharts';
 import type {BarArr, Period, Timespan} from "./types";
-import {tf_to_secs, formatDate, dateTimeFormat} from "../dateutil";
+import {TFToSecs, formatDate, dateTimeFormat} from "../dateutil";
 import * as m from '$lib/paraglide/messages.js'
 
 
@@ -48,7 +48,7 @@ export function makePeriod(timeframe: string): Period {
   } else {
     throw new Error(`unsupport period: ${timeframe}`)
   }
-  const secs = tf_to_secs(timeframe)
+  const secs = TFToSecs(timeframe)
   _periods[timeframe] = {multiplier: num_val, timespan, timeframe, secs}
   return _periods[timeframe]
 }

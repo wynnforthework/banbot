@@ -105,7 +105,7 @@
       </div>
 
       {#if $site.heavyTotal > 0}
-        <div class="flex items-center gap-2 mb-4">
+        <div class="flex items-center gap-2 mb-4 pr-4">
           <span>{$site.heavyName}</span>
           <progress class="flex-1 progress progress-info w-56" value={$site.heavyDone} max={$site.heavyTotal}></progress>
           <span>{$site.heavyDone}/{$site.heavyTotal}</span>

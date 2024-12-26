@@ -212,10 +212,6 @@
     }
   });
 
-  function formatTime(ms: number) {
-    return new Date(ms).toLocaleString();
-  }
-
   function formatNumber(num: number, decimals = 2) {
     if(!num) return '0';
     if(decimals >= 6 && num > 1){
@@ -513,7 +509,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
 
         <!-- 次要统计信息 -->
         <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {@render infoCard(m.bt_range(), `${formatTime(detail.startMS)} ~ ${formatTime(detail.endMS)}`)}
+          {@render infoCard(m.bt_range(), `${getDateStr(detail.startMS)} ~ ${getDateStr(detail.endMS)}`)}
           {@render infoCard(
             `${m.total_invest()}/${m.final_balance()}`,
             `${task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest)} / ${formatNumber(detail.maxReal)}`
@@ -752,11 +748,11 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
                     <td>{order.symbol}</td>
                     <td>{order.short ? m.short() : m.long()}</td>
                     <td>{order.leverage}x</td>
-                    <td>{formatTime(order.enter_at)}</td>
+                    <td>{getDateStr(order.enter_at)}</td>
                     <td>{order.enter_tag}</td>
                     <td>{formatNumber(order.enter?.average||order.enter?.price || 0, 8)}</td>
                     <td>{formatNumber(order.enter?.filled ||order.enter?.amount || 0, 8)}</td>
-                    <td>{formatTime(order.exit_at)}</td>
+                    <td>{getDateStr(order.exit_at)}</td>
                     <td>{order.exit_tag}</td>
                     <td>{formatNumber(order.exit?.average||order.exit?.price || 0, 8)}</td>
                     <td>{formatNumber(order.exit?.filled ||order.exit?.amount || 0, 8)}</td>
@@ -903,7 +899,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
 
       <div class="flex justify-between text-xs text-base-content/60">
         <div class="tooltip" data-tip={m.exit_time()}>
-          {formatTime(order.exit_at)}
+          {getDateStr(order.exit_at)}
         </div>
         <div class="tooltip" data-tip={m.strategy()}>
           {order.strategy}

@@ -1084,10 +1084,10 @@ func (q *Queries) GetKlineRanges(sidList []int32, timeFrame string) map[int32][2
 func (q *Queries) DelFactors(sid int32, startMS, endMS int64) *errs.Error {
 	sql := fmt.Sprintf("delete from adj_factors where sid=%v or sub_id=%v", sid, sid)
 	if startMS > 0 {
-		sql += fmt.Sprintf(" and time >= %v", startMS)
+		sql += fmt.Sprintf(" and start_ms >= %v", startMS)
 	}
 	if endMS > 0 {
-		sql += fmt.Sprintf(" and time < %v", endMS)
+		sql += fmt.Sprintf(" and start_ms < %v", endMS)
 	}
 	return q.Exec(sql)
 }

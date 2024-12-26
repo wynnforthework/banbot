@@ -3,6 +3,7 @@ package base
 import (
 	"errors"
 	"fmt"
+	"github.com/banbox/banbot/core"
 	"strings"
 
 	"github.com/banbox/banexg/errs"
@@ -96,6 +97,12 @@ func ErrHandler(c *fiber.Ctx, err error) error {
 	} else if errors.As(err, &fe) {
 		code = fe.Code
 	} else if errors.As(err, &banErr) {
+		eCode := banErr.Code
+		if eCode == errs.CodeParamInvalid || eCode == errs.CodeParamRequired || eCode == core.ErrBadConfig {
+			code = fiber.StatusBadRequest
+		} else if name, ok := core.ErrCodeNames[eCode]; ok && strings.HasPrefix(name, "Invalid") {
+			code = fiber.StatusBadRequest
+		}
 		errText = banErr.Short()
 	}
 

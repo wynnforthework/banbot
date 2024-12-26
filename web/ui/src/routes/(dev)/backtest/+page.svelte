@@ -6,6 +6,7 @@
   import * as m from '$lib/paraglide/messages.js'
   import { goto } from '$app/navigation';
   import { showPairs } from '$lib/dev/common';
+  import { getDateStr } from '$lib/dateutil';
 
   let tasks = $state<BtTask[]>([]);
   let strats = $state<string[]>([]);
@@ -172,7 +173,7 @@ Path: $/backtest/${task.path}`}
           <!-- 第二行 -->
           <div class="flex justify-between items-center mb-5">
             <div class="text-sm opacity-60">
-              {new Date(task.startAt).toLocaleDateString()} - {new Date(task.stopAt).toLocaleDateString()}
+              {getDateStr(task.startAt)} - {getDateStr(task.stopAt)}
             </div>
             {#if task.status === 3}
               <div class="text-sm opacity-80">{m.max_drawdown()}: {task.maxDrawdown.toFixed(1)}%</div>

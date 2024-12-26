@@ -5,7 +5,7 @@
   import type { ExSymbol } from '$lib/dev/common';
   import * as m from '$lib/paraglide/messages.js';
   import { alerts } from "$lib/stores/alerts";
-  import { fmtDurationDays, getDateStr, tf_to_secs, toUTCStamp } from '$lib/dateutil';
+  import { fmtDurationDays, getDateStr, TFToSecs, toUTCStamp } from '$lib/dateutil';
   import { makePeriod } from '$lib/kline/coms';
   import Icon from '$lib/Icon.svelte';
   import Icon2 from '$lib/kline/Icon.svelte';
@@ -102,7 +102,7 @@
       let end = 0;
       if(dataList.length > 0) {
         if(chg > 0) {
-          start = dataList[dataList.length - 1][0] + tf_to_secs(timeframe) * 1000;
+          start = dataList[dataList.length - 1][0] + TFToSecs(timeframe) * 1000;
         } else if(chg < 0) {
           end = dataList[0][0];
         }
@@ -303,7 +303,7 @@
                     <td>{item.timeframe}</td>
                     <td>{getDateStr(item.start)}</td>
                     <td>{getDateStr(item.stop)}</td>
-                    <td>{Math.round((item.stop - item.start)/1000/tf_to_secs(item.timeframe))}</td>
+                    <td>{Math.round((item.stop - item.start)/1000/TFToSecs(item.timeframe))}</td>
                   {:else}
                     <td>{getDateStr(item[0])}</td>
                     <td>{item[0]}</td>

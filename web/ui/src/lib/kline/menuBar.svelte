@@ -6,7 +6,7 @@
   import type {Writable} from 'svelte/store';
   import {ChartSave, ChartCtx} from './chart';
   import {GetNumberDotOffset, makePeriod} from './coms';
-  import {secs_to_tf} from '../dateutil';
+  import {secsToTF} from '../dateutil';
   import { derived } from 'svelte/store';
   import * as m from '$lib/paraglide/messages.js';
   import Papa from 'papaparse';
@@ -99,7 +99,7 @@
         if (karr.length > 1) {
           const lastIdx = karr.length - 1;
           const min_intv = Math.min(karr[1].timestamp - karr[0].timestamp, karr[lastIdx].timestamp - karr[lastIdx-1].timestamp);
-          $save.period = makePeriod(secs_to_tf(min_intv / 1000));
+          $save.period = makePeriod(secsToTF(min_intv / 1000));
         }
         if (karr.length > 0) {
           const pricePrec = GetNumberDotOffset(Math.min(karr[0].low, karr[karr.length - 1].low)) + 3
