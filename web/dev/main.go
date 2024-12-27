@@ -9,7 +9,6 @@ import (
 
 	"github.com/banbox/banbot/web/ui"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
@@ -89,14 +88,10 @@ func Run(args []string) error {
 	regApiDev(app.Group("/api/dev"))
 
 	// 添加静态文件服务
-	distFS, err_ := ui.BuildDistFS()
+	err_ = ui.ServeStatic(app)
 	if err_ != nil {
 		return err_
 	}
-	app.Use("/", filesystem.New(filesystem.Config{
-		Root:         distFS,
-		NotFoundFile: "404.html",
-	}))
 
 	// 启动k线监听和websocket推送
 	go base.RunReceiver()

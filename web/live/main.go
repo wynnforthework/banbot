@@ -11,7 +11,6 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/filesystem"
 	"go.uber.org/zap"
 )
 
@@ -40,14 +39,10 @@ func StartApi() *errs.Error {
 	regApiPub(app.Group("/api"))
 
 	// 添加静态文件服务
-	distFS, err_ := ui.BuildDistFS()
+	err_ := ui.ServeStatic(app)
 	if err_ != nil {
 		return errs.New(errs.CodeRunTime, err_)
 	}
-	app.Use("/", filesystem.New(filesystem.Config{
-		Root:         distFS,
-		NotFoundFile: "404.html",
-	}))
 
 	addr := fmt.Sprintf("%s:%v", cfg.BindIPAddr, cfg.Port)
 	log.Info("serve bot api at", zap.String("addr", addr))

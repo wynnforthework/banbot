@@ -1,5 +1,5 @@
 <script lang="ts">
-  import * as m from '../paraglide/messages.js'
+  import * as m from '$lib/paraglide/messages.js'
   import CodeMirror from '$lib/dev/CodeMirror.svelte';
   import { oneDark } from '@codemirror/theme-one-dark';
   import type { Extension } from '@codemirror/state';

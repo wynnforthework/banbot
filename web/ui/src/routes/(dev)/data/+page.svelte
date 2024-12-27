@@ -131,7 +131,7 @@
                         <td>{getDateStr(symbol.list_ms)}</td>
                         <td>{getDateStr(symbol.delist_ms)}</td>
                         <td>
-                            <a href={`/data/${symbol.id}`} class="btn btn-xs btn-info btn-outline">{m.details()}</a>
+                            <a href={`/data/item?id=${symbol.id}`} class="btn btn-xs btn-info btn-outline">{m.details()}</a>
                         </td>
                     </tr>
                 {/each}

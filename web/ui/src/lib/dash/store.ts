@@ -93,6 +93,6 @@ export async function loadAccounts(request: boolean = false) {
       return s;
     });
   }else{
-    console.log('no accounts avaiable', saveShot);
+    //console.log('no accounts avaiable', saveShot);
   }
 }

@@ -59,7 +59,7 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 	if !args.NoDefault {
 		dataDir := GetDataDir()
 		if dataDir == "" {
-			return nil, errs.NewMsg(errs.CodeParamRequired, "data_dir is required")
+			return nil, errs.NewMsg(errs.CodeParamRequired, "-datadir or env `BanDataDir` is required")
 		}
 		tryNames := []string{"config.yml", "config.local.yml"}
 		for _, name := range tryNames {

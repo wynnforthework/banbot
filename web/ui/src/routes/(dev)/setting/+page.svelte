@@ -18,7 +18,7 @@
   let tabs: Record<string, string> = {'config.local.yml': '$/config.local.yml', 'config.yml': '$/config.yml'};
 
   // 构建相关状态
-  let activePage = $state($page.url.searchParams.get('tab') || 'config');
+  let activePage = $state('config');
   let buildEnvs: string[] = $state([]);
   let osMap = $state(new Map<string, string[]>());
   let selectedOS = $state('');
@@ -27,6 +27,10 @@
   let buildOk = $state(false);
 
   onMount(() => {
+    const tab = $page.url.searchParams.get('tab');
+    if(tab){
+      activePage = tab
+    }
     loadConfig();
     loadBuildEnvs();
   });

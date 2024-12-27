@@ -11,12 +11,11 @@
   import Icon2 from '$lib/kline/Icon.svelte';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
 
-  let { id } = $page.params;
-
   let symbol = $state<ExSymbol | null>(null);
   let kinfos = $state<any[]>([]);
   let adjFactors = $state<any[]>([]);
   let activeTab = $state('kinfos');
+  let id = $state('');
 
   // 过滤条件
   let timeframe = $state('1d');
@@ -32,6 +31,7 @@
   let total = $state(0);
 
   onMount(() => {
+    id = $page.url.searchParams.get('id') || '';
     loadSymbolInfo();
   });
 

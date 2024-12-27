@@ -443,7 +443,7 @@
           
           <div class="divider">{m.or()}</div>
           
-          <a href="/strategy/examples" class="link text-base-content/60 text-center block">
+          <a href="https://github.com/banbox/banstrats" class="link text-base-content/60 text-center block">
             {m.browse_example_strategy()}
           </a>
         </div>

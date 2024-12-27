@@ -86,7 +86,7 @@
 
   function clickTask(task: BtTask) {
     if(task.path) {
-      goto(`/backtest/${task.id}`);
+      goto(`/backtest/item?id=${task.id}`);
     }else{
       alerts.addAlert('warning', m.bt_result_not_exist());
     }

@@ -458,7 +458,7 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 func MergeConfig(inText string) (string, error) {
 	dataDir := config.GetDataDir()
 	if dataDir == "" {
-		return "", errs.NewMsg(errs.CodeParamRequired, "data_dir is empty")
+		return "", errs.NewMsg(errs.CodeParamRequired, "-datadir is empty")
 	}
 	tryNames := []string{"config.yml", "config.local.yml"}
 	var paths []string

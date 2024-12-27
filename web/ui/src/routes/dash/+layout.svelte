@@ -17,7 +17,6 @@
   loadAccounts().then(() => {
     $site.apiHost = $acc.url;
     $site.apiReady = true;
-    console.log('api ready:', $site);
     $site.apiReadyCbs.forEach(cb => cb());
     $site.apiReadyCbs = [];
   })

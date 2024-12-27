@@ -23,7 +23,7 @@
   import type { OverlayCreate } from 'klinecharts';
   import type { TradeInfo } from '$lib/kline/types';
 
-  let { id } = $page.params;
+  let id = $state('');
   let btPath = $state('');
   let detail = $state<BacktestDetail | null>(null);
   let activeTab = $state('overview');
@@ -74,12 +74,13 @@
   let saveRaw = new ChartSave();
   saveRaw.key = 'chart';
   const kcSave = persisted(saveRaw.key, saveRaw);
-  let kc: Chart;
+  let kc = $state<Chart|null>(null);
 
 
   let activeGroupTab = $state('pairs'); // 添加分组tab状态
 
   onMount(async () => {
+    id = $page.url.searchParams.get('id') || '';
     await loadDetail();
     if(task?.status !== 3) {
       activeTab = 'logs';
@@ -276,7 +277,7 @@
   const klineLoad = derived(kcCtx, ($ctx) => $ctx.klineLoaded);
   klineLoad.subscribe(val => {
     if(!drawOrder)return
-    const chart = kc.getChart();
+    const chart = kc?.getChart();
     if(!chart)return;
     chart.removeOverlay({ groupId: TRADE_GROUP });
     const range = chart.getVisibleRange();

@@ -2,6 +2,8 @@ package base
 
 import (
 	"fmt"
+	"sync"
+
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
@@ -13,7 +15,6 @@ import (
 	utils2 "github.com/banbox/banexg/utils"
 	"github.com/gofiber/contrib/websocket"
 	"go.uber.org/zap"
-	"sync"
 )
 
 var (
@@ -80,7 +81,7 @@ func RunReceiver() {
 	var err *errs.Error
 	receiver, err = data.NewKlineWatcher(config.SpiderAddr)
 	if err != nil {
-		log.Error("connect spider fail", zap.String("addr", config.SpiderAddr), zap.Error(err))
+		log.Warn("connect spider fail", zap.String("addr", config.SpiderAddr), zap.String("err", err.Short()))
 		return
 	}
 	receiver.OnKLineMsg = klineHandler
