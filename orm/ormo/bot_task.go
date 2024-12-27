@@ -18,11 +18,7 @@ func InitTask(showLog bool, outDir string) *errs.Error {
 	if len(accTasks) > 0 {
 		return nil
 	}
-	orm.SetDbPath(orm.DbTrades, filepath.Join(outDir, "trades.db"))
-	if config.NoDB {
-		if core.LiveMode {
-			panic("`nodb` not available in live mode!")
-		}
+	if !core.LiveMode {
 		accTasks[config.DefAcc] = &BotTask{ID: -1, Mode: core.RunMode, CreateAt: btime.UTCStamp(),
 			StartAt: config.TimeRange.StartMS, StopAt: config.TimeRange.EndMS}
 		taskIdAccMap[-1] = config.DefAcc
@@ -31,6 +27,7 @@ func InitTask(showLog bool, outDir string) *errs.Error {
 		}
 		return nil
 	}
+	orm.SetDbPath(orm.DbTrades, filepath.Join(outDir, "orders.db"))
 	q, err := Conn(orm.DbTrades, true)
 	if err != nil {
 		return err

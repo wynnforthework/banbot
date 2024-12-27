@@ -1,0 +1,133 @@
+name: ban
+env: prod
+leverage: 2
+limit_vol_secs: 5
+put_limit_secs: 120
+market_type: spot
+contract_type: swap
+odbook_ttl: 1000
+concur_num: 2
+order_type: market
+stop_enter_bars: 20
+prefire: 0
+margin_add_rate: 0.66
+stake_amount: 30
+# stake_pct: 10
+max_stake_amt: 500
+min_open_rate: 0.5
+bt_net_cost: 15
+wallet_amounts:
+  USDT: 10000
+stake_currency: [USDT, USDC]
+fatal_stop:
+  '1440': 0.1
+  '180': 0.2
+  '30': 0.3
+fatal_stop_hours: 8
+run_timeframes: []
+pairs: []
+run_policy: []
+pairmgr:
+  cron: '25 1 0 */2 * *'
+  offset: 0
+  limit: 999
+  force_filters: false
+pairlists:
+  - name: VolumePairList
+    limit: 100
+    limit_rate: 1
+    min_value: 100000
+    refresh_secs: 7200
+    back_timeframe: 1d
+    back_period: 1
+  - name: PriceFilter
+    max_unit_value: 100
+    precision: 0.0015
+    min: 0.001
+    max: 100000
+  - name: RateOfChangeFilter
+    back_days: 5
+    min: 0.03
+    max: 10
+    refresh_period: 1440
+  - name: SpreadFilter
+    max_ratio: 0.005
+  - name: CorrelationFilter
+    min: -1
+    max: 1
+    timeframe: 5m
+    back_num: 70
+    sort: asc
+    top_n: 50
+  - name: VolatilityFilter
+    back_days: 10
+    max: 1
+    min: 0.05
+  - name: AgeFilter
+    min: 5
+  - name: OffsetFilter
+    reverse: false
+    offset: 10
+    rate: 0.5
+    limit: 20
+  - name: ShuffleFilter
+    seed: 42
+exchange:
+  name: binance
+  binance:
+    account_prods:
+      user1:
+        api_key: xxx
+        api_secret: bbb
+        max_stake_amt: 1000
+        stake_rate: 1
+        leverage: 0
+      user2:
+        api_key: xxx
+        api_secret: bbb
+    account_tests:
+      default:
+        api_key: xxx
+        api_secret: bbb
+    options:
+      proxy: http://127.0.0.1:10808
+      fees:
+        linear:
+          taker: 0.0005
+          maker: 0.0002
+database:
+  retention: all
+  max_pool_size: 10
+  url: postgresql://postgres:123@[127.0.0.1]:5432/ban
+spider_addr: 127.0.0.1:6789
+rpc_channels:
+  wx_notify:
+    corp_id: ww0f12345678b7e
+    agent_id: '1000002'
+    corp_secret: b123456789_1Cx1234YB9K-MuVW1234
+    touser: '@all'
+    type: wework
+    msg_types: [exception]
+    accounts: []
+    keywords: []
+    retry_num: 0
+    retry_delay: 1000
+    disable: false
+webhook:
+  entry:
+    content: "{name} {action}\nSymbol: {pair} {timeframe}\nTag: {strategy}  {enter_tag}\nPrice: {price:.5f}\nCost: {value:.2f}"
+  exit:
+    content: "{name} {action}\nSymbol: {pair} {timeframe}\nTag: {strategy}  {exit_tag}\nPrice: {price:.5f}\nCost: {value:.2f}\nProfit: {profit:.2f}"
+  status:
+    content: '{name}: {status}'
+  exception:
+    content: '{name}: {status}'
+api_server:
+  enabled: false
+  bind_ip: 0.0.0.0
+  port: 8081
+  jwt_secret_key: 123456789
+  users:
+    - user: ban
+      pwd: 123
+      acc_roles: {user1: admin}

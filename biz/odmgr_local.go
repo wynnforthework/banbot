@@ -430,11 +430,7 @@ func (o *LocalOrderMgr) onLowFunds() {
 }
 
 func (o *LocalOrderMgr) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error {
-	sess, err := ormo.Conn(orm.DbTrades, true)
-	if err != nil {
-		return err
-	}
-	err = o.exitAndFill(sess, &strat.ExitReq{
+	err := o.exitAndFill(nil, &strat.ExitReq{
 		Tag:  core.ExitTagEnvEnd,
 		Dirt: core.OdDirtBoth,
 	}, &orm.InfoKline{PairTFKline: bar, Adj: adj})
@@ -460,11 +456,7 @@ func (o *LocalOrderMgr) exitAndFill(sess *ormo.Queries, req *strat.ExitReq, bar 
 }
 
 func (o *LocalOrderMgr) CleanUp() *errs.Error {
-	sess, err := ormo.Conn(orm.DbTrades, true)
-	if err != nil {
-		return err
-	}
-	err = o.exitAndFill(sess, &strat.ExitReq{
+	err := o.exitAndFill(nil, &strat.ExitReq{
 		Tag:  core.ExitTagBotStop,
 		Dirt: core.OdDirtBoth,
 	}, nil)
@@ -490,7 +482,7 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 		validOds = append(validOds, od)
 	}
 	ormo.HistODs = validOds
-	return sess.DumpOrdersToDb()
+	return nil
 }
 
 func simMarketPrice(bar *banexg.Kline, rate float64) float64 {

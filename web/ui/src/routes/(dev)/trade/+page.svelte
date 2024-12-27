@@ -4,7 +4,7 @@
 
 <main class="flex-1 flex items-center justify-center">
   <div class="max-w-4xl w-full px-4 py-8">
-    <div class="steps-container relative flex flex-col gap-12">
+    <div class="steps-container relative flex flex-col gap-4">
       <!-- 垂直连接线 -->
       <div class="absolute left-[1rem] top-[40px] bottom-[40px] w-[0.5rem] bg-base-300"></div>
 

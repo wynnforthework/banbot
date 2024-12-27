@@ -147,7 +147,6 @@ func (c *Config) Apply(args *CmdArgs) {
 
 func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	Loaded = true
-	NoDB = args.NoDb
 	Name = c.Name
 	Args = args
 	Data = *c

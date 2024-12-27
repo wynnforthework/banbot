@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -46,7 +47,6 @@ var buildMutex sync.Mutex
 
 func regApiDev(api fiber.Router) {
 	api.Get("/ws", websocket.New(onWsDev))
-	api.Get("/orders", getOrders)
 	api.Get("/strat_tree", getStratTree)
 	api.Get("/bt_tasks", getBtTasks)
 	api.Get("/bt_options", getBtOptions)
@@ -76,42 +76,6 @@ func regApiDev(api fiber.Router) {
 
 func onWsDev(c *websocket.Conn) {
 	NewWsClient(c).HandleForever()
-}
-
-func getOrders(c *fiber.Ctx) error {
-	type OrderArgs struct {
-		TaskID int64 `query:"task_id" validate:"required"`
-	}
-
-	var data = new(OrderArgs)
-	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
-		return err
-	}
-
-	qu, conn, err2 := ormu.Conn()
-	if err2 != nil {
-		return err2
-	}
-	defer conn.Close()
-	task, err := qu.GetTask(context.Background(), data.TaskID)
-	if err != nil {
-		return err
-	}
-
-	sess, err2 := ormo.Conn(task.Path, false)
-	if err2 != nil {
-		return err2
-	}
-	orders, err2 := sess.GetOrders(ormo.GetOrdersArgs{
-		TaskID: data.TaskID,
-	})
-	if err2 != nil {
-		return err2
-	}
-
-	return c.JSON(fiber.Map{
-		"data": orders,
-	})
 }
 
 func getStratTree(c *fiber.Ctx) error {
@@ -648,6 +612,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 	type RunBtArgs struct {
 		Separate bool   `json:"separate"`
 		Config   string `json:"config" validate:"required"`
+		DupMode  string `json:"dupMode"`
 	}
 
 	var args = new(RunBtArgs)
@@ -717,8 +682,50 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		return err
 	}
 
+	// 添加回测任务
+	qu, conn, err2 := ormu.Conn()
+	if err2 != nil {
+		return err2
+	}
+	defer conn.Close()
+
 	// 移动配置文件
 	cfgPath := filepath.Join(absPath, "config.yml")
+	if utils.Exists(cfgPath) {
+		oldTasks, err2 := qu.FindTasks(context.Background(), ormu.FindTasksParams{
+			Mode: "backtest",
+			Path: hashVal,
+		})
+		if err2 != nil {
+			return err2
+		}
+		var old *ormu.Task
+		if len(oldTasks) > 0 {
+			old = oldTasks[0]
+		}
+		backupPath := ""
+		if args.DupMode == "" {
+			return errs.NewMsg(errs.CodeParamRequired, "already_exist")
+		} else if args.DupMode == "backup" {
+			backupPath = hashVal + "_bak"
+			if old != nil {
+				backupPath = hashVal + "_" + strconv.FormatInt(old.ID, 10)
+			}
+			err = utils.CopyDir(absPath, backupPath)
+			if err != nil {
+				return err
+			}
+		}
+		if old != nil {
+			err = qu.SetTaskPath(context.Background(), ormu.SetTaskPathParams{
+				ID:   old.ID,
+				Path: backupPath,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
 	if err = os.WriteFile(cfgPath, cfgData, 0644); err != nil {
 		return err
 	}
@@ -728,13 +735,6 @@ func handleRunBacktest(c *fiber.Ctx) error {
 	if args.Separate {
 		btArgs = "-separate " + btArgs
 	}
-
-	// 添加回测任务
-	qu, conn, err2 := ormu.Conn()
-	if err2 != nil {
-		return err2
-	}
-	defer conn.Close()
 
 	task, err := qu.AddTask(context.Background(), ormu.AddTaskParams{
 		Mode:     "backtest",
@@ -811,23 +811,39 @@ func getBtDetail(c *fiber.Ctx) error {
 	btPath := filepath.Join(config.GetDataDir(), "backtest", task.Path)
 
 	configPath := filepath.Join(btPath, "config.yml")
-	cfg, err2 := config.ParseConfig(configPath)
-	if err2 != nil {
-		return err2
+	var cfg *config.Config
+	if utils.Exists(configPath) {
+		cfg, err2 = config.ParseConfig(configPath)
+		if err2 != nil {
+			return err2
+		}
 	}
 
 	// 读取detail.json
 	detailPath := filepath.Join(btPath, "detail.json")
-	detail, err := parseBtResult(detailPath)
-	if err != nil {
-		return fmt.Errorf("parse backtest result failed: %v", err)
+	var detail *opt.BTResult
+	if utils.Exists(detailPath) {
+		detail, err = parseBtResult(detailPath)
+		if err != nil {
+			return fmt.Errorf("parse backtest result failed: %v", err)
+		}
+	} else if cfg != nil && cfg.TimeRange != nil {
+		detail = &opt.BTResult{
+			StartMS: cfg.TimeRange.StartMS,
+			EndMS:   cfg.TimeRange.EndMS,
+			OutDir:  btPath,
+		}
+	}
+	var exsMap map[int32]*orm.ExSymbol
+	if cfg != nil {
+		exsMap = orm.GetExSymbols(cfg.Exchange.Name, cfg.MarketType)
 	}
 
 	return c.JSON(fiber.Map{
 		"path":   btPath,
 		"detail": detail,
 		"task":   task.ToMap(),
-		"exsMap": orm.GetExSymbols(cfg.Exchange.Name, cfg.MarketType),
+		"exsMap": exsMap,
 	})
 }
 
@@ -867,26 +883,35 @@ func getBtOrders(c *fiber.Ctx) error {
 		return fmt.Errorf("query task failed: %v", err)
 	}
 
-	dbPath := filepath.Join(config.GetDataDir(), "backtest", task.Path, "trades.db")
-	sess, err2 := ormo.Conn(dbPath, false)
+	dbPath := filepath.Join(config.GetDataDir(), "backtest", task.Path, "orders.gob")
+	allOrders, lock, err2 := getGobOrders(dbPath)
 	if err2 != nil {
 		return err2
 	}
+	lock.Lock()
+	defer lock.Unlock()
 
-	var symbols []string
-	if args.Symbol != "" {
-		symbols = append(symbols, args.Symbol)
-	}
-	orders, err2 := sess.GetOrders(ormo.GetOrdersArgs{
-		Pairs:       symbols,
-		Strategy:    args.Strategy,
-		EnterTag:    args.EnterTag,
-		ExitTag:     args.ExitTag,
-		CloseAfter:  args.StartMS,
-		CloseBefore: args.EndMS,
-	})
-	if err2 != nil {
-		return err2
+	var orders = make([]*ormo.InOutOrder, 0, len(allOrders)/10)
+	for _, od := range allOrders {
+		if args.Symbol != "" && od.Symbol != args.Symbol {
+			continue
+		}
+		if args.Strategy != "" && od.Strategy != args.Strategy {
+			continue
+		}
+		if args.EnterTag != "" && od.EnterTag != args.EnterTag {
+			continue
+		}
+		if args.ExitTag != "" && od.ExitTag != args.ExitTag {
+			continue
+		}
+		if args.StartMS > 0 && od.ExitAt < args.StartMS {
+			continue
+		}
+		if args.EndMS > 0 && od.ExitAt > args.EndMS {
+			continue
+		}
+		orders = append(orders, od)
 	}
 
 	total := len(orders)

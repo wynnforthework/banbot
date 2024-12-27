@@ -84,8 +84,12 @@
     }, 0)
   });
 
-  function clickTask(id: number) {
-    goto(`/backtest/${id}`);
+  function clickTask(task: BtTask) {
+    if(task.path) {
+      goto(`/backtest/${task.id}`);
+    }else{
+      alerts.addAlert('warning', m.bt_result_not_exist());
+    }
   }
 </script>
 
@@ -150,7 +154,7 @@
   <div class="grid grid-cols-3 gap-6 mb-6">
     {#each tasks as task, tidx}
       <div class="card bg-base-100 shadow hover:shadow-lg transition-shadow duration-200 cursor-pointer relative" 
-           onclick={() => clickTask(task.id)} onmouseenter={() => hoveredCard = tidx}
+           onclick={() => clickTask(task)} onmouseenter={() => hoveredCard = tidx}
            onmouseleave={() => hoveredCard = null}>
         {#if hoveredCard === tidx}
           <div class="custom-tooltip {tidx >= 3 ? 'loc-top' : ''}">

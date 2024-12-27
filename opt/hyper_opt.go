@@ -256,7 +256,6 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 		log.Warn("-out is required")
 		return nil
 	}
-	args.NoDb = true
 	args.CPUProfile = false
 	args.MemProfile = false
 	args.LogLevel = "warn"

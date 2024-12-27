@@ -81,6 +81,10 @@
 
   onMount(async () => {
     await loadDetail();
+    if(task?.status !== 3) {
+      activeTab = 'logs';
+      loadLogs(true);
+    }
     if(activeTab === 'strat_code') {
       await loadStratTree();
     }
@@ -136,29 +140,33 @@
     }
   }
 
-  async function loadLogs() {
+  async function loadLogs(refresh = false) {
     if(loadingLogs) return;
+    if(refresh) {
+      logStart = -1;
+    }
     if(logStart === 0) {
       alerts.addAlert("info", m.no_more_logs());
       return;
     }
     loadingLogs = true;
-    try {
-      const rsp = await getApi('/dev/bt_logs', {
-        task_id: id,
-        end: logStart,
-        limit: logLimit
-      });
-      if(rsp.code != 200) {
-        console.error('load logs failed', rsp);
-        alerts.addAlert("error", rsp.msg || 'load logs failed');
-        return;
-      }
-      logs = rsp.data + logs;
-      logStart = rsp.start;
-    } finally {
-      loadingLogs = false;
+    const rsp = await getApi('/dev/bt_logs', {
+      task_id: id,
+      end: logStart,
+      limit: logLimit
+    });
+    loadingLogs = false;
+    if(rsp.code != 200) {
+      console.error('load logs failed', rsp);
+      alerts.addAlert("error", rsp.msg || 'load logs failed');
+      return;
     }
+    if(refresh) {
+      logs = rsp.data;
+    }else{
+      logs = rsp.data + logs;
+    }
+    logStart = rsp.start;
   }
 
   async function loadStratTree() {
@@ -200,7 +208,7 @@
     } else if(activeTab === 'config') {
       loadConfig();
     } else if(activeTab === 'logs' && !logs) {
-      loadLogs();
+      loadLogs(true);
     } else if(activeTab === 'strat_code') {
       loadStratTree();
     } else if(activeTab === 'analysis') {
@@ -391,6 +399,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
     <!-- 左侧导航 -->
     <div class="w-[13%] flex-shrink-0">
       <ul class="menu bg-base-200 rounded-box">
+        {#if task?.status == 3}
         <li>
           <button class:active={activeTab === 'overview'} onclick={() => activeTab = 'overview'}>
             {m.overview()}
@@ -426,6 +435,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
             {m.bt_strat_code()}
           </button>
         </li>
+        {/if}
         <li>
           <button class:active={activeTab === 'logs'} onclick={() => activeTab = 'logs'}>
             {m.bt_logs()}
@@ -464,6 +474,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
     <!-- 右侧内容 -->
     <div class="flex-1 flex flex-col">
       {#if activeTab === 'overview' && detail}
+        {#if task?.status == 3}
         <!-- 重要统计信息 -->
         <div class="stats stats-vertical lg:stats-horizontal shadow mb-6">
           {@render statCard(
@@ -695,6 +706,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
 
           </div>
         </div>
+        {/if}
 
       {:else if activeTab === 'assets'}
         <iframe src={assetsUrl} class="w-full flex-1" title={m.bt_assets()} ></iframe>
@@ -809,9 +821,12 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
       {:else if activeTab === 'logs'}
         <div class="flex flex-col gap-4 flex-1">
           <div class="bg-base-200 rounded-box p-4 font-mono text-sm whitespace-pre-wrap flex-1 overflow-y-auto">
-            <a class="link link-primary link-hover" onclick={loadLogs}>{loadingLogs ? m.loading() : m.load_more()}</a>
+            <a class="link link-primary link-hover" onclick={() => loadLogs(false)}>{loadingLogs ? m.loading() : m.load_more()}</a>
             <br/>
             {logs}
+            {#if task?.status == 2}
+              <a class="link link-primary link-hover" onclick={() => loadLogs(true)}>{loadingLogs ? m.refreshing() : m.refresh()}</a>
+            {/if}
           </div>
         </div>
       {/if}

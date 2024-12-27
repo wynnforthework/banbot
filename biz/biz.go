@@ -82,9 +82,12 @@ func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
 	}
 	if len(accOds) > 0 {
 		// exit unfill orders
-		sess, err := ormo.Conn(orm.DbTrades, true)
-		if err != nil {
-			return err
+		var sess *ormo.Queries
+		if core.LiveMode {
+			sess, err = ormo.Conn(orm.DbTrades, true)
+			if err != nil {
+				return err
+			}
 		}
 		for acc, odList := range accOds {
 			odMgr := GetOdMgr(acc)

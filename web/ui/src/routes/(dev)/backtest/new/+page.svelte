@@ -9,12 +9,15 @@
   import {alerts} from "$lib/stores/alerts"
   import AllConfig from '@/lib/dev/AllConfig.svelte';
   import {modals} from '$lib/stores/modals';
+  import Modal from '@/lib/kline/Modal.svelte';
 
   let separateStrat = $state(false);
   let theme: Extension | null = $state(oneDark);
   let editor: CodeMirror | null = $state(null);
   let configDrawer = $state(false);
   let configText = $state('');
+  let showDuplicate = $state(false);
+  let dupMode = $state('');
 
   onMount(async () => {
     const rsp = await getApi('/dev/default_cfg');
@@ -39,13 +42,15 @@
       return;
     }
 
-    const ok = await modals.confirm(m.confirm_backtest());
-    if (!ok) return;
-
     const rsp = await postApi('/dev/run_backtest', {
       separate: separateStrat,
-      config: configText
+      config: configText,
+      dupMode: dupMode
     });
+    if (rsp.code === 400 && rsp.msg === "[-18] already_exist") {
+      showDuplicate = true;
+      return;
+    }
 
     if (rsp.code === 200) {
       alerts.addAlert("success", m.add_bt_ok());
@@ -56,10 +61,33 @@
     }
   }
 
+  async function clickDuplicate(type: string) {
+    showDuplicate = false;
+    if (type === 'backup_start') {
+      dupMode = 'backup';
+    }else if (type === 'overwrite_start') {
+      dupMode = 'overwrite';
+    }else{
+      return;
+    }
+    startBacktest();
+  }
+
+  async function clickBacktest(){
+    const ok = await modals.confirm(m.confirm_backtest());
+    if (!ok) return;
+    startBacktest();
+  }
+
   function goBack() {
     goto('/backtest');
   }
 </script>
+
+<Modal title={m.duplicate_backtest()} buttons={['backup_start', 'overwrite_start', 'cancel']} show={showDuplicate} 
+click={clickDuplicate} center={true} width={600}>
+  {m.backtest_duplicate_info()}
+</Modal>
 
 <div class="drawer drawer-end">
   <input id="config-drawer" type="checkbox" class="drawer-toggle" bind:checked={configDrawer} />
@@ -89,7 +117,7 @@
       </div>
 
       <div class="flex gap-4">
-        <button class="btn btn-primary flex-1" onclick={startBacktest}>{m.start_backtest()}</button>
+        <button class="btn btn-primary flex-1" onclick={clickBacktest}>{m.start_backtest()}</button>
         <button class="btn btn-outline flex-1" onclick={goBack}>{m.back()}</button>
       </div>
     </div>

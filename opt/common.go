@@ -131,7 +131,6 @@ func (o *OptInfo) ToPol(name, dirt, tfStr, pairStr string) *config.RunPolicyConf
 }
 
 func newRollBtOpt(args *config.CmdArgs) (*rollBtOpt, *errs.Error) {
-	args.NoDb = true
 	core.SetRunMode(core.RunModeBackTest)
 	err := biz.SetupComsExg(args)
 	if err != nil {

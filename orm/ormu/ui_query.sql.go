@@ -174,6 +174,20 @@ func (q *Queries) GetTaskOptions(ctx context.Context) ([]*GetTaskOptionsRow, err
 	return items, nil
 }
 
+const setTaskPath = `-- name: SetTaskPath :exec
+update task set path=? where id = ?
+`
+
+type SetTaskPathParams struct {
+	Path string `json:"path"`
+	ID   int64  `json:"id"`
+}
+
+func (q *Queries) SetTaskPath(ctx context.Context, arg SetTaskPathParams) error {
+	_, err := q.db.ExecContext(ctx, setTaskPath, arg.Path, arg.ID)
+	return err
+}
+
 const updateTask = `-- name: UpdateTask :exec
 update task set status=?,progress=?,order_num=?,profit_rate=?,win_rate=?,max_drawdown=?,sharpe=?,info=?  where id = ?
 `

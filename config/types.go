@@ -14,7 +14,6 @@ var (
 
 	Name             string
 	Loaded           bool
-	NoDB             bool
 	Leverage         float64
 	LimitVolSecs     int // How long the limit order is expected to wait for execution, in seconds 限价单预期等待多长时间成交，单位秒
 	PutLimitSecs     int // Only limit orders executed within this expected time will be submitted to the exchange. 在此预期时间内成交的限价单，才提交到交易所

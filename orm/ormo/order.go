@@ -886,23 +886,6 @@ func (i *ExOrder) NanInfTo(v float64) {
 	i.Fee = utils.NanInfTo(i.Fee, v)
 }
 
-func (q *Queries) DumpOrdersToDb() *errs.Error {
-	if config.NoDB {
-		return nil
-	}
-	for _, orders := range accOpenODs {
-		allOrders := append(HistODs, utils.ValsOfMap(orders)...)
-		for _, od := range allOrders {
-			od.ID = 0
-			err := od.saveToDb(q)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.Error) {
 	rows, err_ := q.db.QueryContext(context.Background(), sql, args...)
 	if err_ != nil {

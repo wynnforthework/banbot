@@ -65,6 +65,8 @@ func RunCmd() {
 		case "optimize":
 			options = []string{"out", "opt_rounds", "sampler", "picker", "each_pairs", "concur"}
 			entry = opt.RunOptimize
+		case "init":
+			entry = runInit
 		case "bt_opt":
 			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
 				"concur", "alpha", "pair_picker"}
@@ -280,7 +282,6 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 	cmd.Var(&args.Configs, "config", "config path to use, Multiple -config options may be used")
 	cmd.StringVar(&args.Logfile, "logfile", "", "Log to the file specified")
 	cmd.StringVar(&args.DataDir, "datadir", "", "Path to data dir.")
-	cmd.BoolVar(&args.NoDb, "nodb", false, "dont save orders to database")
 	cmd.StringVar(&args.LogLevel, "level", "info", "set logging level to debug")
 	cmd.BoolVar(&args.NoCompress, "no-compress", false, "disable compress for hyper table")
 	cmd.BoolVar(&args.NoDefault, "no-default", false, "ignore default: config.yml, config.local.yml")

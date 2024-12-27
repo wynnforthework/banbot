@@ -15,7 +15,6 @@ type CmdArgs struct {
 	Configs       ArrString
 	Logfile       string
 	DataDir       string
-	NoDb          bool
 	NoCompress    bool
 	NoDefault     bool
 	LogLevel      string

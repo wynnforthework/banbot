@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/banbox/banbot/orm/ormo"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -43,12 +45,32 @@ var (
 	maxBtTasks      = 3 // 最大并发回测任务数
 	runBtTasks      = make(map[int64]*exec.Cmd)
 	runBtTasksMutex sync.Mutex
+
+	// 缓存回测任务订单到内存，加速分页查看。
+	cacheOrders []*ormo.InOutOrder
+	cachePath   string
+	ordersLock  sync.Mutex
 )
 
 func init() {
 	for _, k := range btInfoKeyList {
 		btInfoKeys[k] = true
 	}
+}
+
+func getGobOrders(path string) ([]*ormo.InOutOrder, *sync.Mutex, *errs.Error) {
+	ordersLock.Lock()
+	defer ordersLock.Unlock()
+	if cachePath == path {
+		return cacheOrders, &ordersLock, nil
+	}
+	orders, err := ormo.LoadOrdersGob(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	cacheOrders = orders
+	cachePath = path
+	return cacheOrders, &ordersLock, nil
 }
 
 // 执行单个回测任务
@@ -138,11 +160,7 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 	// 处理标准输出
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stdOut)
-		// 设置更大的缓冲区
-		buf := make([]byte, 1024*1024)
-		scanner.Buffer(buf, 1024*1024)
-
+		scanner := readScanner(stdOut)
 		prefix := "uiPrg: "
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -163,7 +181,7 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 	// 处理错误输出
 	go func() {
 		defer wg.Done()
-		scanner := bufio.NewScanner(stdErr)
+		scanner := readScanner(stdErr)
 		for scanner.Scan() {
 			b.WriteString(scanner.Text())
 			b.WriteString("\n")
@@ -187,6 +205,13 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 	return err
 }
 
+func readScanner(out io.ReadCloser) *bufio.Scanner {
+	scanner := bufio.NewScanner(out)
+	buf := make([]byte, 1024*1024)
+	scanner.Buffer(buf, 1024*1024)
+	return scanner
+}
+
 // 处理进度更新
 func handleProgress(progressStr string, taskID int64) error {
 	qu, conn, err2 := ormu.Conn()
@@ -199,7 +224,6 @@ func handleProgress(progressStr string, taskID int64) error {
 		log.Warn("invalid progress", zap.String("progress", progressStr))
 		return err
 	}
-	log.Info("update progress", zap.Int64("t", taskID), zap.Float64("p", prgVal))
 	return updateTaskStatus(qu, taskID, int64(ormu.BtStatusRunning), prgVal)
 }
 
@@ -371,8 +395,7 @@ func collectBtResults() error {
 }
 
 func collectBtTask(btDir string) (*ormu.Task, error) {
-	tradesDB := filepath.Join(btDir, "trades.db")
-	tradesInfo, err := os.Stat(tradesDB)
+	fileInfo, err := os.Stat(filepath.Join(btDir, "assets.html"))
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -418,7 +441,7 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 		Strats:      strings.Join(cfg.Strats(), ","),
 		Periods:     strings.Join(cfg.TimeFrames(), ","),
 		Pairs:       cfg.ShowPairs(),
-		CreateAt:    tradesInfo.ModTime().UnixMilli(),
+		CreateAt:    fileInfo.ModTime().UnixMilli(),
 		StartAt:     utils.AlignTfMSecs(cfg.TimeRange.StartMS, dayMSecs),
 		StopAt:      utils.AlignTfMSecs(cfg.TimeRange.EndMS, dayMSecs),
 		Status:      ormu.BtStatusDone,
