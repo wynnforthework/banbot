@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg"
@@ -51,13 +53,62 @@ func Setup() *errs.Error {
 		pool.Close()
 		pool = nil
 	}
+	var err2 *errs.Error
+	pool, err2 = pgConnPool()
+	if err2 != nil {
+		return err2
+	}
+	dbCfg := config.Database
+	ctx := context.Background()
+	row := pool.QueryRow(ctx, "SELECT COUNT(*) FROM pg_class WHERE relname = 'kinfo'")
+	var kInfoCnt int64
+	err := row.Scan(&kInfoCnt)
+	if err != nil {
+		dbErr := NewDbErr(core.ErrDbReadFail, err)
+		if dbCfg.AutoCreate && dbErr.Code == core.ErrDbConnFail && dbErr.Message() == "db not exist" {
+			// 数据库不存在，需要创建
+			log.Warn("database not exist, creating...")
+			err2 = createPgDb(dbCfg.Url)
+			if err2 != nil {
+				return err2
+			}
+		} else {
+			return dbErr
+		}
+	}
+	if kInfoCnt == 0 {
+		// 表不存在，创建
+		log.Warn("initializing database schema for kline ...")
+		_, err = pool.Exec(ctx, ddlPg1)
+		if err != nil {
+			return NewDbErr(core.ErrDbReadFail, err)
+		}
+		_, err = pool.Exec(ctx, ddlPg2)
+		if err != nil {
+			return NewDbErr(core.ErrDbReadFail, err)
+		}
+	}
+	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize))
+	err2 = LoadAllExSymbols()
+	if err2 != nil {
+		return err2
+	}
+	sess, conn, err2 := Conn(ctx)
+	if err2 != nil {
+		return err2
+	}
+	defer conn.Release()
+	return sess.UpdatePendingIns()
+}
+
+func pgConnPool() (*pgxpool.Pool, *errs.Error) {
 	dbCfg := config.Database
 	if dbCfg == nil {
-		return errs.NewMsg(core.ErrBadConfig, "database config is missing!")
+		return nil, errs.NewMsg(core.ErrBadConfig, "database config is missing!")
 	}
 	poolCfg, err_ := pgxpool.ParseConfig(dbCfg.Url)
 	if err_ != nil {
-		return errs.New(core.ErrBadConfig, err_)
+		return nil, errs.New(core.ErrBadConfig, err_)
 	}
 	if dbCfg.MaxPoolSize == 0 {
 		dbCfg.MaxPoolSize = max(4, runtime.NumCPU())
@@ -73,41 +124,32 @@ func Setup() *errs.Error {
 	//poolCfg.BeforeClose = func(conn *pgx.Conn) {
 	//	log.Info(fmt.Sprintf("close conn: %v", conn))
 	//}
-	dbPool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
-	if err != nil {
-		return errs.New(core.ErrDbConnFail, err)
+	dbPool, err_ := pgxpool.NewWithConfig(context.Background(), poolCfg)
+	if err_ != nil {
+		return nil, errs.New(core.ErrDbConnFail, err_)
 	}
-	pool = dbPool
-	ctx := context.Background()
-	row := pool.QueryRow(ctx, "SELECT COUNT(*) FROM pg_class WHERE relname = 'kinfo'")
-	var kInfoCnt int64
-	err = row.Scan(&kInfoCnt)
-	if err != nil {
-		return NewDbErr(core.ErrDbReadFail, err)
+	return dbPool, nil
+}
+
+func createPgDb(dbUrl string) *errs.Error {
+	// 连接到默认的postgres数据库
+	tmpConfig, err_ := pgx.ParseConfig(dbUrl)
+	if err_ != nil {
+		return errs.New(core.ErrBadConfig, err_)
 	}
-	if kInfoCnt == 0 {
-		// 表不存在，创建
-		log.Warn("initializing database schema for kline ...")
-		_, err = pool.Exec(ctx, ddlPg1)
-		if err != nil {
-			return NewDbErr(core.ErrDbReadFail, err)
-		}
-		_, err = pool.Exec(ctx, ddlPg2)
-		if err != nil {
-			return NewDbErr(core.ErrDbReadFail, err)
-		}
+	dbName := tmpConfig.Database
+	tmpConfig.Database = "postgres"
+	conn, err_ := pgx.ConnectConfig(context.Background(), tmpConfig)
+	if err_ != nil {
+		return errs.New(core.ErrDbConnFail, err_)
 	}
-	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize))
-	err2 := LoadAllExSymbols()
-	if err2 != nil {
-		return err2
+	defer conn.Close(context.Background())
+
+	_, err_ = conn.Exec(context.Background(), fmt.Sprintf("CREATE DATABASE %s", dbName))
+	if err_ != nil {
+		return errs.New(core.ErrDbExecFail, err_)
 	}
-	sess, conn, err2 := Conn(ctx)
-	if err2 != nil {
-		return err2
-	}
-	defer conn.Release()
-	return sess.UpdatePendingIns()
+	return nil
 }
 
 func Conn(ctx context.Context) (*Queries, *pgxpool.Conn, *errs.Error) {
@@ -157,6 +199,7 @@ func DbLite(src string, path string, write bool) (*sql.DB, *errs.Error) {
 				if err_ != nil {
 					return nil, errs.New(core.ErrDbConnFail, err_)
 				}
+				log.Info("init sqlite structure", zap.String("path", path))
 				if _, err_ = db.Exec(ddl); err_ != nil {
 					return nil, errs.New(core.ErrDbExecFail, err_)
 				}
@@ -275,9 +318,15 @@ func (a *AdjInfo) Apply(bars []*banexg.Kline, adj int) []*banexg.Kline {
 
 func NewDbErr(code int, err_ error) *errs.Error {
 	var opErr *net.OpError
+	var pgErr *pgconn.ConnectError
 	if errors.As(err_, &opErr) {
 		if strings.Contains(opErr.Err.Error(), "connection reset") {
 			return errs.New(core.ErrDbConnFail, err_)
+		}
+	} else if errors.As(err_, &pgErr) {
+		var errMsg = pgErr.Error()
+		if strings.Contains(errMsg, "SQLSTATE 3D000") {
+			return errs.NewMsg(core.ErrDbConnFail, "db not exist")
 		}
 	}
 	return errs.New(code, err_)

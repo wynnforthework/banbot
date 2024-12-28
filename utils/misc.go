@@ -1,21 +1,25 @@
 package utils
 
 import (
+	"bufio"
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"regexp"
+	"strings"
+	"sync"
+
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
-	"regexp"
-	"strings"
-	"sync"
 )
 
 var (
-	regHolds, _ = regexp.Compile("[{]([^}]+)[}]")
+	regHolds, _  = regexp.Compile("[{]([^}]+)[}]")
+	dockerStatus = 0
 )
 
 /*
@@ -244,4 +248,26 @@ func MD5(data []byte) string {
 	hashInBytes := hash.Sum(nil)
 
 	return hex.EncodeToString(hashInBytes)
+}
+
+func IsDocker() bool {
+	if dockerStatus != 0 {
+		return dockerStatus == 1
+	}
+	dockerStatus = -1
+	file, err := os.Open("/proc/1/cgroup")
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		if strings.Contains(scanner.Text(), "docker") {
+			dockerStatus = 1
+			return true
+		}
+	}
+
+	return false
 }

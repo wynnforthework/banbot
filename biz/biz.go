@@ -4,6 +4,10 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"path/filepath"
+	"strings"
+	"sync"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -22,9 +26,6 @@ import (
 	ta "github.com/banbox/banta"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"path/filepath"
-	"strings"
-	"sync"
 )
 
 //go:embed config.yml
@@ -287,9 +288,22 @@ func ResetVars() {
 	strat.LastBatchMS = 0
 }
 
+func replaceDockerHosts(data []byte) []byte {
+	if !utils.IsDocker() {
+		return data
+	}
+	content := string(data)
+	content = strings.ReplaceAll(content, "127.0.0.1", "host.docker.internal")
+	content = strings.ReplaceAll(content, "localhost", "host.docker.internal")
+	return []byte(content)
+}
+
 func initDataDir() *errs.Error {
 	dataDir := config.GetDataDir()
 	err_ := utils.EnsureDir(dataDir, 0755)
+	if dataDir == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "-datadir or env `BanDataDir` is required")
+	}
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
@@ -303,11 +317,11 @@ func initDataDir() *errs.Error {
 		return nil
 	}
 	if !exists {
-		err = utils.WriteFile(configPath, configData)
+		err = utils.WriteFile(configPath, replaceDockerHosts(configData))
 		log.Info("init done: $/config.yml")
 	}
 	if !existLocal {
-		err = utils.WriteFile(configLocalPath, configLocalData)
+		err = utils.WriteFile(configLocalPath, replaceDockerHosts(configLocalData))
 		log.Info("init done: $/config.local.yml")
 	}
 	return err

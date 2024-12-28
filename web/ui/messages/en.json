@@ -478,8 +478,8 @@
     "edit_config": "Edit Config",
     "run_banbot": "Run Banbot",
     "dashboard": "DashBoard",
-    "database_desc": "Install and start TimescaleDb, and create a database",
-    "trade_edit_config_desc": "Execute `bot init` command to initialize global config, Set api key & secret, single transaction amount, market, trading pairs, message notification, Dashboard password, etc.",
+    "database_desc": "Install and start TimescaleDb, and note the connection string",
+    "trade_edit_config_desc": "Execute `bot init` command to initialize global config, Set api key & secret, dbConnStr, single transaction amount, market, trading pairs, message notification, Dashboard password, etc.",
     "run_banbot_desc": "Start spider process & trader: `bot spider & bot trade`",
     "dashboard_desc": "Go to Dashboard to view and manage your trading robot",
     "confirm_build": "Compiling may take several minutes, are you sure to compile?",
@@ -573,5 +573,16 @@
     "cfg_acc_lvg": "Futures leverage, takes priority over the default",
     "cfg_acc_another": "Another account",
     "cfg_acc_test": "API key and secret for test network, required when env is set to test",
-    "cfg_exg_options": "Parameters for initializing the exchange via banexg, keys will be automatically converted from snake_case to camelCase."
+    "cfg_exg_options": "Parameters for initializing the exchange via banexg, keys will be automatically converted from snake_case to camelCase.",
+    "cfg_db_auto_create": "Whether to automatically create the database if it does not exist",
+    "cfg_spider": "Port and address monitored by the spider process",
+    "cfg_rpc_channels": "RPC channels for sending message notifications",
+    "cfg_rpc_name": "Name of the RPC channel",
+    "cfg_rpc_type": "RPC type, supports: wework",
+    "cfg_rpc_msg_types": "Allowed message types to send",
+    "cfg_rpc_account": "Allowed accounts, allows all if empty",
+    "cfg_rpc_keyword": "Message filter keywords",
+    "cfg_webhook": "Message types that can be sent via RPC",
+    "cfg_webhook_status": "Bot status messages: start, stop, etc.",
+    "cfg_api_server": "For external control of the bot or access to dashboard via API"
 }

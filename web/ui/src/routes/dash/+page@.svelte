@@ -52,7 +52,7 @@
         <div class="flex justify-center items-center gap-3 text-md text-base-content/70">
           <span>{m.dash_help()}</span>
           <a class="link link-primary hover:link-accent transition-colors duration-200" 
-             href="https://www.banbox.top/">{m.our_doc()}</a>
+             href="https://www.banbot.site/">{m.our_doc()}</a>
         </div>
       </div>
     </div>

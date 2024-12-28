@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/banbox/banbot/orm/ormo"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/banbox/banbot/orm/ormo"
 
 	utils2 "github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
@@ -334,7 +335,11 @@ func collectBtResults() error {
 
 	addNum, delNum := 0, 0
 	btRoot := fmt.Sprintf("%s/backtest", config.GetDataDir())
-	err := filepath.Walk(btRoot, func(fullPath string, info os.FileInfo, err error) error {
+	err := utils2.EnsureDir(btRoot, 0755)
+	if err != nil {
+		return err
+	}
+	err = filepath.Walk(btRoot, func(fullPath string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}

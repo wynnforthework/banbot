@@ -143,6 +143,7 @@ type DatabaseConfig struct {
 	Url         string `yaml:"url" mapstructure:"url"`
 	Retention   string `yaml:"retention" mapstructure:"retention"`
 	MaxPoolSize int    `yaml:"max_pool_size" mapstructure:"max_pool_size"`
+	AutoCreate  bool   `yaml:"auto_create" mapstructure:"auto_create"`
 }
 
 type APIServerConfig struct {

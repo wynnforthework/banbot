@@ -695,7 +695,7 @@ func (r *BTResult) dumpConfig() {
 func (r *BTResult) dumpStrategy() {
 	stratDir := config.GetStratDir()
 	if stratDir == "" {
-		log.Info("env `BanStgyDir` not configured, skip backup strategy")
+		log.Info("env `BanStratDir` not configured, skip backup strategy")
 		return
 	}
 	for name := range core.StgPairTfs {

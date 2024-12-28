@@ -29,9 +29,9 @@ func GetDataDir() string {
 }
 
 func GetStratDir() string {
-	result := os.Getenv("BanStgyDir")
+	result := os.Getenv("BanStratDir")
 	if result == "" {
-		panic(fmt.Errorf("`BanStgyDir` env is required"))
+		panic(fmt.Errorf("`BanStratDir` env is required"))
 	}
 	return result
 }
@@ -261,7 +261,7 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	Exchange = c.Exchange
 	initExgAccs()
 	Database = c.Database
-	SpiderAddr = c.SpiderAddr
+	SpiderAddr = strings.ReplaceAll(c.SpiderAddr, "host.docker.internal", "127.0.0.1")
 	if SpiderAddr == "" {
 		SpiderAddr = "127.0.0.1:6789"
 	}

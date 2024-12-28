@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/banbox/banbot/utils"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/utils"
 )
 
 var (
@@ -20,6 +22,11 @@ var (
 )
 
 func getRootDir() (string, error) {
+	stratDir := config.GetStratDir()
+	if stratDir != "" {
+		return stratDir, nil
+	}
+
 	// 获取可执行文件路径
 	execPath, err := os.Executable()
 	if err != nil {
@@ -196,6 +203,7 @@ func regGoInit(filePath, stratDir, stratName string) error {
 	var initFound bool
 	var inInit bool
 	var mapFound bool
+	var baseName = filepath.Base(stratDir)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -209,7 +217,7 @@ func regGoInit(filePath, stratDir, stratName string) error {
 	strat.AddStratGroup("%s", map[string]strat.FuncMakeStrat{
 		"%s": %s,
 	})
-`, stratDir, stratName, stratName))
+`, baseName, stratName, stratName))
 				}
 				inInit = false
 			} else {

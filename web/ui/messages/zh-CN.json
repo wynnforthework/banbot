@@ -478,8 +478,8 @@
   "edit_config": "编辑配置",
   "run_banbot": "运行banbot",
   "dashboard": "Dashboard",
-  "database_desc": "安装并启动TimescaleDb，并创建数据库",
-  "trade_edit_config_desc": "执行`bot init`初始化全局配置，设置api key & secret, 单笔交易金额，市场，交易品种，消息通知，Dashboard密码等信息",
+  "database_desc": "安装并启动TimescaleDb，记录数据库连接字符串",
+  "trade_edit_config_desc": "执行`bot init`初始化全局配置，设置api key & secret, 数据库连接字符串, 单笔交易金额，市场，交易品种，消息通知，Dashboard密码等信息",
   "run_banbot_desc": "启动爬虫进程&机器人: `bot spider & bot trade`",
   "dashboard_desc": "去Dashboard查看并管理您的交易机器人",
   "confirm_build": "编译可能需要几分钟，确定要编译吗？",
@@ -573,5 +573,16 @@
   "cfg_acc_lvg": "期货杠杆，优先级高于默认值",
   "cfg_acc_another": "另一个账户",
   "cfg_acc_test": "测试网络的API密钥和密码，env设置为test时必需",
-  "cfg_exg_options": "通过banexg初始化交易所的参数，键名会自动从snake_case转换为camelCase"
+  "cfg_exg_options": "通过banexg初始化交易所的参数，键名会自动从snake_case转换为camelCase",
+  "cfg_db_auto_create": "数据库不存在时，是否自动创建",
+  "cfg_spider": "爬虫进程监听的端口和地址",
+  "cfg_rpc_channels": "通过RPC发送消息通知的通道",
+  "cfg_rpc_name": "rpc的渠道名",
+  "cfg_rpc_type": "rpc类型，支持：wework",
+  "cfg_rpc_msg_types": "允许发送的消息类型",
+  "cfg_rpc_account": "允许的账户，为空允许所有",
+  "cfg_rpc_keyword": "消息过滤关键词",
+  "cfg_webhook": "可通过rpc发送的消息类型",
+  "cfg_webhook_status": "机器人状态消息：启动，停止等",
+  "cfg_api_server": "供外部通过api控制机器人或访问dashboard"
 }

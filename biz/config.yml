@@ -90,7 +90,7 @@ exchange:
         api_key: xxx
         api_secret: bbb
     options:
-      proxy: http://127.0.0.1:10808
+      # proxy: http://127.0.0.1:10808
       fees:
         linear:
           taker: 0.0005
@@ -98,6 +98,7 @@ exchange:
 database:
   retention: all
   max_pool_size: 10
+  auto_create: true
   url: postgresql://postgres:123@[127.0.0.1]:5432/ban
 spider_addr: 127.0.0.1:6789
 rpc_channels:
@@ -125,9 +126,9 @@ webhook:
 api_server:
   enabled: false
   bind_ip: 0.0.0.0
-  port: 8081
-  jwt_secret_key: 123456789
+  port: 8001
+  jwt_secret_key: '123456789'
   users:
     - user: ban
-      pwd: 123
+      pwd: '123'
       acc_roles: {user1: admin}

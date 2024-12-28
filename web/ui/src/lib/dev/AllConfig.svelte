@@ -120,6 +120,43 @@ exchange:
         api_key: xxx
         api_secret: bbb
     options:  # ${m.cfg_exg_options()}
+database:
+  retention: all
+  max_pool_size: 10
+  auto_create: true  # ${m.cfg_db_auto_create()}
+  url: postgresql://postgres:123@[127.0.0.1]:5432/ban
+spider_addr: 127.0.0.1:6789  # ${m.cfg_spider()}
+rpc_channels:  # ${m.cfg_rpc_channels()}
+  wx_notify:  # ${m.cfg_rpc_name()}
+    corp_id: ww0f12345678b7e
+    agent_id: '1000005'
+    corp_secret: b123456789_1Cx1234YB9K-MuVW1234
+    touser: '@all'
+    type: wework  # ${m.cfg_rpc_type()}
+    msg_types: [exception]  # ${m.cfg_rpc_msg_types()}
+    accounts: []  # ${m.cfg_rpc_account()}
+    keywords: []  # ${m.cfg_rpc_keyword()}
+    retry_num: 0
+    retry_delay: 1000
+    disable: false
+webhook:  # ${m.cfg_webhook()}
+  entry:
+    content: "{name} {action}\\nSymbol: {pair} {timeframe}\\nTag: {strategy}  {enter_tag}\\nPrice: {price:.5f}\\nCost: {value:.2f}"
+  exit:
+    content: "{name} {action}\\nSymbol: {pair} {timeframe}\\nTag: {strategy}  {exit_tag}\\nPrice: {price:.5f}\\nCost: {value:.2f}\\nProfit: {profit:.2f}"
+  status:  # ${m.cfg_webhook_status()}
+    content: '{name}: {status}'
+  exception:
+    content: '{name}: {status}'
+api_server:  # ${m.cfg_api_server()}
+  enabled: true
+  bind_ip: 0.0.0.0
+  port: 8001
+  jwt_secret_key: fn234njkcu89234nbf
+  users:
+    - user: ban
+      pwd: 123
+      acc_roles: {user1: admin}
 `
   let theme: Extension | null = $state(oneDark);
   let editor: CodeMirror | null = $state(null);

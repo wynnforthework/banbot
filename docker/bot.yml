@@ -8,8 +8,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+      - "8001:8001"
     volumes:
       - /ban:/ban
     environment:
       - BanDataDir=/ban/data
-    restart: unless-stopped 
+      - BanStratDir=/ban/strats
+    restart: unless-stopped

@@ -1191,7 +1191,7 @@ func getSymbols(c *fiber.Ctx) error {
 	// 获取所有品种
 	allSymbols := orm.GetExSymbols(args.Exchange, args.Market)
 
-	if len(allSymbols) == 0 {
+	if len(allSymbols) == 0 && args.Exchange != "" {
 		exchange, err := exg.GetWith(args.Exchange, args.Market, "")
 		if err != nil {
 			return err

@@ -101,6 +101,14 @@ func RunDataTools(args *DataToolsArgs) *errs.Error {
 // runDownloadData 下载数据
 func runDownloadData(args *DataToolsArgs) *errs.Error {
 	exsMap := make(map[int32]*orm.ExSymbol)
+	exchange, err := exg.GetWith(args.Exchange, args.Market, "")
+	if err != nil {
+		return err
+	}
+	err = orm.InitExg(exchange)
+	if err != nil {
+		return err
+	}
 	for _, pair := range args.Pairs {
 		exs, err := orm.GetExSymbolCur(pair)
 		if err != nil {
@@ -116,9 +124,9 @@ func runDownloadData(args *DataToolsArgs) *errs.Error {
 		zap.Int64("start", args.StartMs),
 		zap.Int64("end", args.EndMs))
 
-	startMs, endMs := config.TimeRange.StartMS, config.TimeRange.EndMS
+	startMs, endMs := args.StartMs, args.EndMs
 	for _, tf := range args.Periods {
-		err := orm.BulkDownOHLCV(args.Exg, exsMap, tf, startMs, endMs, 0)
+		err = orm.BulkDownOHLCV(args.Exg, exsMap, tf, startMs, endMs, 0)
 		if err != nil {
 			return err
 		}

@@ -28,7 +28,23 @@ banbot support exchanges powered by [banexg](https://github/banbox/banexg):
 |-----------------------------------------------------------------------------------------------------------------|---------|-------------------|-----|-----------|
 | ![binance](https://user-images.githubusercontent.com/1294454/29604020-d5483cdc-87ee-11e7-94c7-d1a8d9169293.jpg) | binance | spot/usd-m/coin-m | *   | Y         |
 
-### How to start
+### Quick start
+![image](https://www.banbot.site/uidev.gif)
+#### 1. start timescaledb
+```bash
+docker run -d --name timescaledb -p 5432:5432 \
+  -v /opt/pgdata:/var/lib/postgresql/data \
+  -e POSTGRES_PASSWORD=123 timescale/timescaledb:latest-pg17
+```
+
+#### 2. start banbot 
+```bash
+docker run -d --name banbot -p 8000:8000 -p 8001:8001 \
+  --add-host=host.docker.internal:host-gateway banbot/banbot:latest
+```
+> banbot use `postgresql://postgres:123@[127.0.0.1]:5432/ban`, if you change the password/host/port/db, please update the `/ban/data/config.yml` in the container.
+
+### Document
 Please go to [BanBot Website](https://www.banbot.site/) for documents.
 
 ### Contributing
