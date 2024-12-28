@@ -3,6 +3,8 @@ package entry
 import (
 	_ "embed"
 	"fmt"
+	"path/filepath"
+
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -17,14 +19,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
-	"path/filepath"
 )
-
-//go:embed config.yml
-var configData []byte
-
-//go:embed config.local.yml
-var configLocalData []byte
 
 func RunBackTest(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeBackTest)
@@ -212,28 +207,10 @@ func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
 
 func runInit(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
-	err := biz.SetupComsExg(args)
+	err := biz.SetupComs(args)
 	if err != nil {
 		return err
 	}
-	dataDir := config.GetDataDir()
-	err_ := utils.EnsureDir(dataDir, 0755)
-	if err_ != nil {
-		return errs.New(errs.CodeIOWriteFail, err_)
-	}
-	configPath := filepath.Join(dataDir, "config.yml")
-	configLocalPath := filepath.Join(dataDir, "config.local.yml")
-	if !utils.Exists(configPath) {
-		err = utils.WriteFile(configPath, configData)
-		log.Info("init done: $/config.yml")
-	} else {
-		log.Warn("$/config.yml exist, skip")
-	}
-	if !utils.Exists(configLocalPath) {
-		err = utils.WriteFile(configLocalPath, configLocalData)
-		log.Info("init done: $/config.local.yml")
-	} else {
-		log.Warn("$/config.local.yml exist, skip")
-	}
-	return err
+	log.Info("init done")
+	return nil
 }

@@ -13,6 +13,7 @@ banbot is a high-performance, easy-to-use, multi-symbol, multi-strategy, multi-p
 [discord-url]: https://discord.com/invite/XXjA8ctqga
 
 ### Main Features
+* web ui: write strategy, backtest, and deploy without IDE.
 * high-performance: backtest for 1 year klines in seconds.
 * easy-to-use: write once, support both backtesting and real trading.
 * flexible: free combination of symbols, strategies and time frames.
@@ -28,7 +29,7 @@ banbot support exchanges powered by [banexg](https://github/banbox/banexg):
 | ![binance](https://user-images.githubusercontent.com/1294454/29604020-d5483cdc-87ee-11e7-94c7-d1a8d9169293.jpg) | binance | spot/usd-m/coin-m | *   | Y         |
 
 ### How to start
-Please go to [BanBot Website](https://bot.banbox.top/) for documents.
+Please go to [BanBot Website](https://www.banbot.site/) for documents.
 
 ### Contributing
 Follow the [How to Contribute](/doc/contribute.md). Please do get hesitate to get touch via the [Discord](https://discord.com/invite/XXjA8ctqga) Chat to discuss development, new features, and the future roadmap.  

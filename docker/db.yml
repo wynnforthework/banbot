@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  timescaledb:
+    container_name: timescaledb
+    image: timescale/timescaledb:latest-pg17
+    ports:
+      - "5432:5432"
+    volumes:
+      - /opt/pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_PASSWORD=123
+    restart: unless-stopped 

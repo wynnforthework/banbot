@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  banbot:
+    container_name: banbot
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - /ban:/ban
+    environment:
+      - BanDataDir=/ban/data
+    restart: unless-stopped 

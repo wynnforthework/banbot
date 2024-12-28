@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -21,16 +22,27 @@ import (
 	ta "github.com/banbox/banta"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"path/filepath"
 	"strings"
 	"sync"
 )
+
+//go:embed config.yml
+var configData []byte
+
+//go:embed config.local.yml
+var configLocalData []byte
 
 func SetupComs(args *config.CmdArgs) *errs.Error {
 	errs.PrintErr = utils.PrintErr
 	ctx, cancel := context.WithCancel(context.Background())
 	core.Ctx = ctx
 	core.StopAll = cancel
-	err := config.LoadConfig(args)
+	err := initDataDir()
+	if err != nil {
+		return err
+	}
+	err = config.LoadConfig(args)
 	if err != nil {
 		return err
 	}
@@ -273,4 +285,30 @@ func ResetVars() {
 	strat.PairStrats = make(map[string]map[string]*strat.TradeStrat)
 	strat.BatchTasks = make(map[string]*strat.BatchMap)
 	strat.LastBatchMS = 0
+}
+
+func initDataDir() *errs.Error {
+	dataDir := config.GetDataDir()
+	err_ := utils.EnsureDir(dataDir, 0755)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+	var err *errs.Error
+	configPath := filepath.Join(dataDir, "config.yml")
+	configLocalPath := filepath.Join(dataDir, "config.local.yml")
+	exists := utils.Exists(configPath)
+	existLocal := utils.Exists(configLocalPath)
+	if exists || existLocal {
+		// dont init config in dataDir if any of config.yml/config.local.yml exist
+		return nil
+	}
+	if !exists {
+		err = utils.WriteFile(configPath, configData)
+		log.Info("init done: $/config.yml")
+	}
+	if !existLocal {
+		err = utils.WriteFile(configLocalPath, configLocalData)
+		log.Info("init done: $/config.local.yml")
+	}
+	return err
 }

@@ -23,7 +23,7 @@
         </div>
         <div>
           <h3 class="font-semibold text-lg mb-2">
-            <a href="https://bot.banbox.top" target="_blank">{m.document()}</a>
+            <a href="https://www.banbot.site" target="_blank">{m.document()}</a>
           </h3>
           <p class="text-gray-600">
             {m.doc_desc()}

@@ -23,7 +23,7 @@ func ServeStatic(app *fiber.App) error {
 	uiDistDir := filepath.Join(config.GetDataDir(), "uidist")
 	indexPath := filepath.Join(uiDistDir, "index.html")
 	if !utils.Exists(indexPath) {
-		downUrl := strings.Replace(downUrlTpl, "{tag}", core.Version, 1)
+		downUrl := strings.Replace(downUrlTpl, "{tag}", core.UIVersion, 1)
 		log.Info("$/uidist/index.html not exists, downloading", zap.String("url", downUrl))
 
 		// 创建临时目录

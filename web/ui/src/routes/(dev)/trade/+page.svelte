@@ -42,26 +42,11 @@
         </div>
       </div>
 
-      <!-- Initialize -->
-      <div class="step-item flex items-start relative">
-        <div class="step-circle-container flex-none relative">
-          <div class="step-circle w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-content font-bold">
-            3
-          </div>
-        </div>
-        <div class="step-content flex gap-8 items-start flex-1">
-          <h3 class="step-title text-xl font-bold w-[13rem]">{m.initialize()}</h3>
-          <div class="content-block flex-1 p-6 bg-base-200 rounded-lg">
-            <p>{m.initialize_desc()}</p>
-          </div>
-        </div>
-      </div>
-
       <!-- Edit Config -->
       <div class="step-item flex items-start relative">
         <div class="step-circle-container flex-none relative">
           <div class="step-circle w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-content font-bold">
-            4
+            3
           </div>
         </div>
         <div class="step-content flex gap-8 items-start flex-1">
@@ -76,7 +61,7 @@
       <div class="step-item flex items-start relative">
         <div class="step-circle-container flex-none relative">
           <div class="step-circle w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-content font-bold">
-            5
+            4
           </div>
         </div>
         <div class="step-content flex gap-8 items-start flex-1">
@@ -91,14 +76,14 @@
       <div class="step-item flex items-start relative">
         <div class="step-circle-container flex-none relative">
           <div class="step-circle w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-content font-bold">
-            6
+            5
           </div>
         </div>
         <div class="step-content flex gap-8 items-start flex-1">
           <h3 class="step-title text-xl font-bold w-[13rem]">{m.dashboard()}</h3>
           <div class="content-block flex-1 p-6 bg-base-200 rounded-lg">
             <p>{m.dashboard_desc()}</p>
-            <a href="https://bot.banbox.top/dash/" class="btn btn-primary mt-2 btn-outline btn-sm">{m.dashboard()}</a>
+            <a href="https://www.banbot.site/dash/" class="btn btn-primary mt-2 btn-outline btn-sm">{m.dashboard()}</a>
           </div>
         </div>
       </div>

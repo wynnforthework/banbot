@@ -139,5 +139,5 @@ exchange:
   <h3 class="text-lg font-semibold">{m.full_config()}</h3>
   <label for="config-drawer" class="btn btn-sm btn-circle">✕</label>
 </div>
-<a href="https://bot.banbox.top/en/configuration.html" target="_blank" class="link">{m.doc_config()}</a>
+<a href="https://www.banbot.site/en/configuration.html" target="_blank" class="link">{m.doc_config()}</a>
 <CodeMirror bind:this={editor} {theme} editable={false}/>
