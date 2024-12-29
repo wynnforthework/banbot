@@ -28,4 +28,5 @@ export interface BtTask {
   leverage?: number;
   walletAmount?: number;
   stakeAmount?: number;
+  info?: string;
 }

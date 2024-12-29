@@ -3,7 +3,21 @@ import { get } from "svelte/store";
 
 let ws: WebSocket | undefined;
 const callbacks: Record<string, (res: Record<string, any>) => void> = {};
+const listeners: Record<string, ((res: Record<string, any>) => void)[]> = {};
+const btPrgs: Record<number, number> = {};
 let msgId = 0;
+
+/**
+ * 添加消息监听器
+ * @param key 监听器key
+ * @param callback 回调函数
+ */
+export function addListener(key: string, callback: (res: Record<string, any>) => void) {
+    if (!listeners[key]) {
+        listeners[key] = [];
+    }
+    listeners[key].push(callback);
+}
 
 /**
  * 初始化WebSocket连接
@@ -49,6 +63,35 @@ export function initWsConn(cb?: () => void) {
                     s.heavyTotal = result.total
                     return s;
                 });
+            } else if (result.type === 'btPrg') {
+                const key = `btPrg_${result.taskId}`;
+                if (listeners[key]) {
+                    listeners[key].forEach(callback => callback(result));
+                }
+                if (result.progress >= 0.99999) {
+                    delete btPrgs[result.taskId];
+                }else{
+                    btPrgs[result.taskId] = result.progress;
+                }
+                let siteShot = get(site);
+                if(siteShot.heavyName == "" || siteShot.heavyName == "backtest"){
+                    let done = 0;
+                    for(let prg of Object.values(btPrgs)){
+                        done += prg;
+                    }
+                    let total = Object.keys(btPrgs).length;
+                    let name = 'backtest';
+                    if (total == 0){
+                        done = 0;
+                        name = "";
+                    }
+                    site.update(s => {
+                        s.heavyName = name;
+                        s.heavyDone = done;
+                        s.heavyTotal = total;
+                        return s;
+                    });
+                }
             } else if(result.type){
               console.log(`ws dev unknown msg:`, result);
             }

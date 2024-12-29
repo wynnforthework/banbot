@@ -109,13 +109,10 @@ func executeBtTask(task *ormu.Task) {
 		return
 	}
 
-	if err := runBtCommand(cmd, task); err != nil {
-		log.Error("run backtest failed", zap.Int64("id", task.ID), zap.Error(err))
-		return
-	}
+	err = runBtCommand(cmd, task)
 
 	// 收集并更新任务结果
-	updateBtTaskResult(task)
+	updateBtTaskResult(task, err)
 }
 
 // 更新任务状态
@@ -198,7 +195,8 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 	// 等待命令执行完成
 	err = cmd.Wait()
 	if err != nil {
-		log.Error("run backtest failed", zap.String("path", task.Path), zap.String("output", b.String()), zap.Error(err))
+		log.Error("run backtest failed", zap.Int64("task", task.ID), zap.String("args", task.Args),
+			zap.String("path", task.Path), zap.String("output", b.String()), zap.Error(err))
 	} else {
 		log.Info("done backtest", zap.Int64("id", task.ID), zap.String("args", task.Args))
 	}
@@ -225,37 +223,57 @@ func handleProgress(progressStr string, taskID int64) error {
 		log.Warn("invalid progress", zap.String("progress", progressStr))
 		return err
 	}
+	BroadcastWS("", map[string]interface{}{
+		"type":     "btPrg",
+		"taskId":   taskID,
+		"progress": prgVal,
+	})
 	return updateTaskStatus(qu, taskID, int64(ormu.BtStatusRunning), prgVal)
 }
 
 // 更新回测任务结果
-func updateBtTaskResult(task *ormu.Task) {
-	btRoot := fmt.Sprintf("%s/backtest", config.GetDataDir())
-	collectedTask, err := collectBtTask(filepath.Join(btRoot, task.Path))
-	if err != nil {
-		log.Error("collect backtest task failed", zap.Error(err))
-		return
-	}
-	if collectedTask == nil {
-		collectedTask = &ormu.Task{}
-	}
+func updateBtTaskResult(task *ormu.Task, errTask error) {
 	qu, conn, err2 := ormu.Conn()
 	if err2 != nil {
 		log.Error("get dev conn fail", zap.Error(err2))
 		return
 	}
+	defer conn.Close()
+	btRoot := fmt.Sprintf("%s/backtest", config.GetDataDir())
+	taskRes, err := collectBtTask(filepath.Join(btRoot, task.Path))
+	if err != nil {
+		var errMsg string
+		if errTask != nil {
+			errMsg = errTask.Error()
+		} else {
+			errMsg = err.Error()
+		}
+		log.Error("collect backtest task failed", zap.Error(err))
+		err = qu.UpdateTask(context.Background(), ormu.UpdateTaskParams{
+			Status:   int64(ormu.BtStatusFail),
+			Progress: 1,
+			Info:     errMsg,
+			ID:       task.ID,
+		})
+		if err != nil {
+			log.Error("update task status fail", zap.Error(err))
+		}
+		return
+	}
+	if taskRes == nil {
+		taskRes = &ormu.Task{}
+	}
 	err = qu.UpdateTask(context.Background(), ormu.UpdateTaskParams{
 		Status:      int64(ormu.BtStatusDone),
 		Progress:    1,
-		OrderNum:    collectedTask.OrderNum,
-		ProfitRate:  collectedTask.ProfitRate,
-		WinRate:     collectedTask.WinRate,
-		MaxDrawdown: collectedTask.MaxDrawdown,
-		Sharpe:      collectedTask.Sharpe,
-		Info:        collectedTask.Info,
+		OrderNum:    taskRes.OrderNum,
+		ProfitRate:  taskRes.ProfitRate,
+		WinRate:     taskRes.WinRate,
+		MaxDrawdown: taskRes.MaxDrawdown,
+		Sharpe:      taskRes.Sharpe,
+		Info:        taskRes.Info,
 		ID:          task.ID,
 	})
-	_ = conn.Close()
 	if err != nil {
 		log.Error("update task status failed", zap.Error(err))
 	}
@@ -413,7 +431,7 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 	}
 
 	var data = make(map[string]interface{})
-	if err = utils.Unmarshal(detailBytes, &data, utils.JsonNumAuto); err != nil {
+	if err = utils.Unmarshal(detailBytes, &data, utils.JsonNumDefault); err != nil {
 		return nil, nil
 	}
 
@@ -451,7 +469,7 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 		StopAt:      utils.AlignTfMSecs(cfg.TimeRange.EndMS, dayMSecs),
 		Status:      ormu.BtStatusDone,
 		Progress:    1,
-		OrderNum:    utils.GetMapVal(data, "orderNum", int64(0)),
+		OrderNum:    int64(utils.GetMapVal(data, "orderNum", float64(0))),
 		ProfitRate:  utils.GetMapVal(data, "totProfitPct", float64(0)),
 		WinRate:     utils.GetMapVal(data, "winRatePct", float64(0)),
 		MaxDrawdown: utils.GetMapVal(data, "maxDrawDownPct", float64(0)),

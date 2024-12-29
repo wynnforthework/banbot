@@ -55,7 +55,7 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 	p.OutDir = outDir
 	config.LoadPerfs(config.GetDataDir())
 	biz.InitFakeWallets()
-	wallets := biz.GetWallets("")
+	wallets := biz.GetWallets(config.DefAcc)
 	p.TotalInvest = wallets.TotalLegal(nil, false)
 	p.dp = data.NewHistProvider(p.FeedKLine, p.OnEnvEnd, !isOpt)
 	biz.InitLocalOrderMgr(p.orderCB, !isOpt)
@@ -159,7 +159,7 @@ func (b *BackTest) Run() {
 		return
 	}
 	btCost := btime.UTCTime() - btStart
-	err = biz.GetOdMgr("").CleanUp()
+	err = biz.GetOdMgr(config.DefAcc).CleanUp()
 	strat.ExitStratJobs()
 	if err != nil {
 		log.Error("backtest clean orders fail", zap.Error(err))
@@ -169,7 +169,7 @@ func (b *BackTest) Run() {
 	if err != nil {
 		log.Warn("dump orders fail", zap.Error(err))
 	}
-	b.logPlot(biz.GetWallets(""), btime.TimeMS(), -1, -1)
+	b.logPlot(biz.GetWallets(config.DefAcc), btime.TimeMS(), -1, -1)
 	if !b.isOpt {
 		log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
 		b.printBtResult()
@@ -242,7 +242,7 @@ func (b *BackTest) initTaskOut() *errs.Error {
 func (b *BackTest) onLiquidation(symbol string) {
 	date := btime.ToDateStr(btime.TimeMS(), "")
 	if config.ChargeOnBomb {
-		wallets := biz.GetWallets("")
+		wallets := biz.GetWallets(config.DefAcc)
 		oldVal := wallets.TotalLegal(nil, false)
 		biz.InitFakeWallets(symbol)
 		newVal := wallets.TotalLegal(nil, false)
@@ -257,12 +257,12 @@ func (b *BackTest) onLiquidation(symbol string) {
 
 func (b *BackTest) orderCB(order *ormo.InOutOrder, isEnter bool) {
 	if isEnter {
-		openNum := ormo.OpenNum("", ormo.InOutStatusPartEnter)
+		openNum := ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
 		if openNum > b.MaxOpenOrders {
 			b.MaxOpenOrders = openNum
 		}
 	} else {
-		wallets := biz.GetWallets("")
+		wallets := biz.GetWallets(config.DefAcc)
 		// 更新单笔开单金额
 		wallets.TryUpdateStakePctAmt()
 		if config.DrawBalanceOver > 0 {
@@ -279,7 +279,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		b.StartMS = startMS
 	}
 	b.EndMS = timeMS
-	wallets := biz.GetWallets("")
+	wallets := biz.GetWallets(config.DefAcc)
 	totalLegal := wallets.TotalLegal(nil, true)
 	b.MinReal = min(b.MinReal, totalLegal)
 	if totalLegal >= b.MaxReal {
@@ -289,7 +289,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
 		b.MaxDrawDownVal = max(b.MaxDrawDownVal, b.MaxReal-totalLegal)
 	}
-	odNum := ormo.OpenNum("", ormo.InOutStatusPartEnter)
+	odNum := ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
 	if b.TimeNum%b.PlotEvery != 0 {
 		if odNum > b.Plots.tmpOdNum {
 			b.Plots.tmpOdNum = odNum
@@ -335,7 +335,7 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 
 func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, totalLegal float64) {
 	if odNum < 0 {
-		odNum = ormo.OpenNum("", ormo.InOutStatusPartEnter)
+		odNum = ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
 	}
 	jobNum := 0
 	jobMap := strat.GetJobs(wallets.Account)

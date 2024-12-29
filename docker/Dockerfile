@@ -15,4 +15,6 @@ WORKDIR /ban
 RUN chmod +x bot && \
     ./bot init
 
+EXPOSE 8000 8001
+
 ENTRYPOINT ["/ban/bot"] 

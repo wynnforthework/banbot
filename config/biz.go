@@ -29,11 +29,7 @@ func GetDataDir() string {
 }
 
 func GetStratDir() string {
-	result := os.Getenv("BanStratDir")
-	if result == "" {
-		panic(fmt.Errorf("`BanStratDir` env is required"))
-	}
-	return result
+	return os.Getenv("BanStratDir")
 }
 
 func LoadConfig(args *CmdArgs) *errs.Error {

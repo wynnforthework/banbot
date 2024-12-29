@@ -81,3 +81,26 @@
   {/if}
 </svg>
 
+<style>
+  @keyframes colorPulse {
+    0% {
+      stroke: oklch(var(--n));
+      color: oklch(var(--n))red;
+    }
+    50% {
+      stroke: oklch(var(--p));
+      color: oklch(var(--p));
+    }
+    100% {
+      stroke: oklch(var(--n));
+      color: oklch(var(--n));
+    }
+  }
+  
+  svg.gradient {
+    animation: colorPulse 2s ease-in-out infinite;
+  }
+  :global(svg.gradient path){
+    animation: colorPulse 2s ease-in-out infinite;
+  }
+</style>

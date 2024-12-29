@@ -75,16 +75,16 @@ pairlists:
 exchange:
   name: binance
   binance:
-    account_prods:
-      user1:
-        api_key: xxx
-        api_secret: bbb
-        max_stake_amt: 1000
-        stake_rate: 1
-        leverage: 0
-      user2:
-        api_key: xxx
-        api_secret: bbb
+#    account_prods:
+#      user1:
+#        api_key: xxx
+#        api_secret: bbb
+#        max_stake_amt: 1000
+#        stake_rate: 1
+#        leverage: 0
+#      user2:
+#        api_key: xxx
+#        api_secret: bbb
     account_tests:
       default:
         api_key: xxx

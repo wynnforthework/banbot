@@ -490,6 +490,9 @@
     "backup_start": "Backup and Backtest",
     "overwrite_start": "Just Overwrite",
     "bt_result_not_exist": "Backtest result does not exist, it may have been deleted or moved",
+    "heavy_task_busy": "Please wait for the existing task to complete before retrying",
+    "already_saved": "Auto saved successfully",
+    "code_modified_need_build": "Code modified, please build before backtesting",
 
     "cfg_name": "Bot name, used to distinguish different bots in message notifications",
     "cfg_env": "Running environment, prod represents production network, test represents test network (Binance testnet), dry_run represents simulation",

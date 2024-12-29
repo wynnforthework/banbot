@@ -194,10 +194,12 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StratJob, en
 }
 
 func (t *Trader) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) {
-	mgr := GetOdMgr("")
-	err := mgr.OnEnvEnd(bar, adj)
-	if err != nil {
-		log.Warn("close orders on env end fail", zap.Error(err))
+	mgrs := GetAllOdMgr()
+	for acc, mgr := range mgrs {
+		err := mgr.OnEnvEnd(bar, adj)
+		if err != nil {
+			log.Warn("close orders on env end fail", zap.String("acc", acc), zap.Error(err))
+		}
 	}
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
 	env, ok := strat.Envs[envKey]

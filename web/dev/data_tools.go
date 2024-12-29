@@ -72,7 +72,8 @@ func (m *DataToolsManager) EndTask() {
 
 // RunDataTools 执行数据工具任务
 func RunDataTools(args *DataToolsArgs) *errs.Error {
-	trg := func(done int, total int) {
+	key := fmt.Sprintf("dtt_%s", args.Action)
+	core.HeavyTriggers[key] = func(done int, total int) {
 		BroadcastWS("", map[string]interface{}{
 			"type":  "heavyPrg",
 			"name":  core.HeavyTask,
@@ -80,9 +81,8 @@ func RunDataTools(args *DataToolsArgs) *errs.Error {
 			"total": total,
 		})
 	}
-	core.HeavyTriggers = append(core.HeavyTriggers, trg)
 	defer func() {
-		core.HeavyTriggers = nil
+		delete(core.HeavyTriggers, key)
 	}()
 	switch args.Action {
 	case "download":

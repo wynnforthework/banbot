@@ -46,12 +46,14 @@ exchange:
       user1:  # you can change this
         api_key: your_api_key_here
         api_secret: your_secret_here
+#database:
+#  url: postgresql://postgres:123@[host.docker.internal]:5432/ban
 ```
+> banbot docker use `postgresql://postgres:123@[host.docker.internal]:5432/ban`, you can set `database.url` in the config to change it.
 ```bash
 docker run -d --name banbot -p 8000:8000 -p 8001:8001 -v /root:/root\
   --add-host=host.docker.internal:host-gateway banbot/banbot:latest -config /root/config.yml
 ```
-> banbot use `postgresql://postgres:123@[127.0.0.1]:5432/ban`, if you change the password/host/port/db, please update the `/ban/data/config.yml` in the container.
 
 ### Document
 Please go to [BanBot Website](https://www.banbot.site/) for documents.

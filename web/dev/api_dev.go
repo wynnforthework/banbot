@@ -726,12 +726,12 @@ func handleRunBacktest(c *fiber.Ctx) error {
 			}
 		}
 	}
-	if err = os.WriteFile(cfgPath, cfgData, 0644); err != nil {
+	if err = os.WriteFile(cfgPath, []byte(args.Config), 0644); err != nil {
 		return err
 	}
 
 	// 构建回测参数
-	btArgs := fmt.Sprintf("-out %s -prg uiPrg -config %s", btPath, btPath+"/config.yml")
+	btArgs := fmt.Sprintf("-out %s -prg uiPrg -no-default -config %s", btPath, btPath+"/config.yml")
 	if args.Separate {
 		btArgs = "-separate " + btArgs
 	}

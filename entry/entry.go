@@ -58,14 +58,16 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 
 func initProgressTip(prefix string) {
 	lastSave := btime.UTCStamp()
-	core.HeavyTriggers = append(core.HeavyTriggers, func(done int, total int) {
+	core.HeavyTriggers["btPrg"] = func(done int, total int) {
 		curTime := btime.UTCStamp()
-		if curTime-lastSave < 1000 {
+		if curTime-lastSave < 200 && done < total {
 			return
+		} else if done >= total {
+			delete(core.HeavyTriggers, "btPrg")
 		}
 		lastSave = curTime
 		fmt.Printf("%s: %v\n", prefix, core.HeavyProgress)
-	})
+	}
 }
 
 func runBackTest(outDir string) string {

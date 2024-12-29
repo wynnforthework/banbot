@@ -19,4 +19,5 @@ const (
 	BtStatusInit = iota + 1
 	BtStatusRunning
 	BtStatusDone
+	BtStatusFail
 )

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { TreeView, type Tree, type Node, buildTree } from '$lib/treeview';
   import Icon from '$lib/Icon.svelte';
   import * as m from '$lib/paraglide/messages.js'
@@ -12,7 +12,7 @@
   import { type Extension } from '@codemirror/state';
   import {oneDark} from '@codemirror/theme-one-dark';
   import { site } from '@/lib/stores/site';
-
+  import { page } from '$app/stores';
 
   interface FileOp {
     op: string;
@@ -62,6 +62,8 @@
   let activeTab: Writable<number> = writable(0);
   let theme: Extension | null = $state(oneDark);
   let editor: CodeMirror | null = $state(null);
+  let showSaveIndicator = $state(false);
+  let saveIndicatorTimer: number | null = $state(null);
 
   // 在 interface EditTab 后添加常量
   const MAX_TABS = 7;
@@ -192,7 +194,21 @@
   }
 
   onMount(async () => {
-    await refreshTree()
+    await refreshTree();
+    // 添加 Ctrl+S 保存事件监听
+    window.addEventListener('keydown', async (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        alerts.addAlert('success', m.already_saved());
+      }
+    });
+  });
+
+  onDestroy(() => {
+    if ($site.dirtyBin){
+      alerts.addAlert('warning', m.code_modified_need_build(), 2);
+      $site.compileNeed = true;
+    }
   });
 
   async function onTreeClick(event: { node: Node; collapsed: boolean }) {
@@ -323,8 +339,18 @@
       if (rsp.code !== 200) {
         console.error('save file failed', rsp);
         alerts.addAlert('error', rsp.msg || 'save file failed');
-      }else if(tab.path.endsWith('.go')){
-        $site.dirtyBin = true;
+      }else{
+        if(tab.path.endsWith('.go')){
+          $site.dirtyBin = true;
+        }
+        // 显示保存提示
+        showSaveIndicator = true;
+        if (saveIndicatorTimer) {
+          clearTimeout(saveIndicatorTimer);
+        }
+        saveIndicatorTimer = setTimeout(() => {
+          showSaveIndicator = false;
+        }, 2000) as unknown as number;
       }
     }
   }
@@ -404,15 +430,20 @@
               </button>
             {/each}
           </div>
-          {#if $tabs.length > 0}
-            <button 
-              class="p-2 hover:bg-base-200 rounded-md tooltip tooltip-left" 
-              data-tip={m.close_all()}
-              onclick={closeAllTabs}
-            >
-              <Icon name="x" class="w-4 h-4" />
-            </button>
-          {/if}
+          <div class="flex items-center gap-2">
+            {#if showSaveIndicator}
+              <span class="text-primary text-sm">Saved</span>
+            {/if}
+            {#if $tabs.length > 0}
+              <button 
+                class="p-2 hover:bg-base-200 rounded-md tooltip tooltip-left" 
+                data-tip={m.close_all()}
+                onclick={closeAllTabs}
+              >
+                <Icon name="x" class="w-4 h-4" />
+              </button>
+            {/if}
+          </div>
         </div>
       </div>
       <div class="flex-1 flex flex-col">

@@ -213,7 +213,7 @@ func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 	table.Append([]string{"Max Open Orders", strconv.Itoa(r.MaxOpenOrders)})
 	table.Append([]string{"Total Orders/BarNum", fmt.Sprintf("%v/%v", len(orders), r.BarNum)})
 	table.Append([]string{"Total Investment", strconv.FormatFloat(r.TotalInvest, 'f', 0, 64)})
-	wallets := biz.GetWallets("")
+	wallets := biz.GetWallets(config.DefAcc)
 	finBalance := wallets.AvaLegal(nil)
 	table.Append([]string{"Final Balance", strconv.FormatFloat(finBalance, 'f', 2, 64)})
 	finWithDraw := wallets.GetWithdrawLegal(nil)

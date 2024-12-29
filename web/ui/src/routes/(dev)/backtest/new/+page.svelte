@@ -42,6 +42,7 @@
       return;
     }
 
+    // 可以同时开始多个，后端会逐个启动执行
     const rsp = await postApi('/dev/run_backtest', {
       separate: separateStrat,
       config: configText,

@@ -60,6 +60,10 @@
 
 
   async function handleExecute() {
+    if ($site.heavyDone < $site.heavyTotal){
+      alerts.addAlert("error", m.heavy_task_busy());
+      return;
+    }
     // 构建请求参数
     let params: Record<string, any> = {
       action: activeTab,

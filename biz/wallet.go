@@ -56,7 +56,7 @@ func InitFakeWallets(symbols ...string) {
 			}
 		}
 	}
-	wallets := GetWallets("")
+	wallets := GetWallets(config.DefAcc)
 	wallets.SetWallets(updates)
 	wallets.TryUpdateStakePctAmt()
 }

@@ -69,7 +69,7 @@ func RunBTOverOpt(args *config.CmdArgs) *errs.Error {
 		}
 		applyOptPolicies(lastPols, polList, args.Alpha)
 		lastPols = config.RunPolicy
-		wallets := biz.GetWallets("")
+		wallets := biz.GetWallets(config.DefAcc)
 		core.BotRunning = true
 		t.dateRange.StartMS = t.curMs
 		t.dateRange.EndMS = t.curMs + t.runMSecs

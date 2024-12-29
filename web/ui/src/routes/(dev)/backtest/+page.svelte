@@ -7,6 +7,7 @@
   import { goto } from '$app/navigation';
   import { showPairs } from '$lib/dev/common';
   import { getDateStr } from '$lib/dateutil';
+  import {addListener} from '$lib/dev/websocket';
 
   let tasks = $state<BtTask[]>([]);
   let strats = $state<string[]>([]);
@@ -45,10 +46,14 @@
       await fetchTasks();
     }
   }
-
+  
   async function fetchTasks(maxId?: number) {
     if(loading) return;
-    loading = true;
+    await doFetchTasks(maxId, true);
+  }
+
+  async function doFetchTasks(maxId?: number, show: boolean = true) {
+    if(show) loading = true;
     const rsp = await getApi('/dev/bt_tasks', {
       mode: 'backtest',
       strat: selectedStrat,
@@ -57,7 +62,7 @@
       limit: 20,
       maxId: maxId || 0
     });
-    loading = false;
+    if(show) loading = false;
     if(rsp.code != 200) {
       console.error('load backtest tasks failed', rsp);
       alerts.addAlert('error', rsp.msg || 'load backtest tasks failed');
@@ -66,6 +71,28 @@
     tasks = rsp.data;
     hasPrev = !!(maxId && maxId > 0);
     hasNext = tasks.length >= 20;
+    let nearDone = false;
+    tasks.forEach(task => {
+      if(task.status >= 3)return;
+      if(task.progress >= 0.99999){
+        nearDone = true;
+      }
+      if(show){
+        addListener(`btPrg_${task.id}`, (res) => {
+          task.progress = res.progress;
+          if(task.progress >= 0.99999){
+            setTimeout(() => {
+              doFetchTasks(undefined, false);
+            }, 300);
+          }
+        });
+      }
+    });
+    if(nearDone){
+      setTimeout(() => {
+        doFetchTasks(undefined, false);
+      }, 300);
+    }
   }
 
   function showStrats(strats: string) {
@@ -74,6 +101,24 @@
       return parts[0] + ' & ' + (parts.length - 1) + ' More';
     }
     return strats;
+  }
+
+  function taskTooltip(task: BtTask){
+    var base = `ID: ${task.id}
+Path: $/backtest/${task.path}`
+    if(task.status === 3){
+      return base + `
+${m.max_open_orders()}: ${task.maxOpenOrders || '-'}
+${m.bar_num()}: ${task.barNum || '-'}
+${m.max_drawdown_val()}: ${task.maxDrawDownVal?.toFixed(2) || '-'}
+${m.show_drawdown_val()}: ${task.showDrawDownVal?.toFixed(2) || '-'}
+${m.show_drawdown()}: ${task.showDrawDownPct?.toFixed(2) || '-'}%
+${m.tot_fee()}: ${task.totFee?.toFixed(2) || '-'}`
+    }else if(task.status === 4){
+      return base + `
+Error: ${task.info}`
+    }
+    return base
   }
 
   $effect(() => {
@@ -157,19 +202,7 @@
            onclick={() => clickTask(task)} onmouseenter={() => hoveredCard = tidx}
            onmouseleave={() => hoveredCard = null}>
         {#if hoveredCard === tidx}
-          <div class="custom-tooltip {tidx >= 3 ? 'loc-top' : ''}">
-            {task.status === 3 ? 
-`ID: ${task.id}
-Path: $/backtest/${task.path}
-${m.max_open_orders()}: ${task.maxOpenOrders || '-'}
-${m.bar_num()}: ${task.barNum || '-'}
-${m.max_drawdown_val()}: ${task.maxDrawDownVal?.toFixed(2) || '-'}
-${m.show_drawdown_val()}: ${task.showDrawDownVal?.toFixed(2) || '-'}
-${m.show_drawdown()}: ${task.showDrawDownPct?.toFixed(2) || '-'}%
-${m.tot_fee()}: ${task.totFee?.toFixed(2) || '-'}` : 
-`ID: ${task.id}
-Path: $/backtest/${task.path}`}
-          </div>
+          <div class="custom-tooltip {tidx >= 3 ? 'loc-top' : ''}">{taskTooltip(task)}</div>
         {/if}
         <div class="card-body p-5">
           <!-- 第一行 -->
@@ -182,6 +215,10 @@ Path: $/backtest/${task.path}`}
             </div>
             {#if task.status === 3}
               <div class="text-2xl font-bold">{task.profitRate.toFixed(1)}%</div>
+            {:else if task.status === 4}
+              <div class="badge badge-lg badge-error gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-4 h-4 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </div>
             {:else}
               {#if task.status === 1}
                 <div class="badge badge-lg badge-neutral">{m.pending()}</div>
@@ -200,6 +237,8 @@ Path: $/backtest/${task.path}`}
             </div>
             {#if task.status === 3}
               <div class="text-sm opacity-80">{m.max_drawdown()}: {task.maxDrawdown.toFixed(1)}%</div>
+            {:else if task.status === 4}
+              <div class="text-sm text-error">{task.info}</div>
             {/if}
           </div>
         

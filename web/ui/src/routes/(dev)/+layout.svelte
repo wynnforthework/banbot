@@ -25,7 +25,7 @@
   let showLogs = $state(false);
   let logs = $state('');
   let lastStart: number | null = null;
-  
+
   async function fetchLogs(end?: number) {
     const params = end ? { end } : {};
     const res = await getApi('/dev/logs', params);
@@ -50,6 +50,8 @@
   }
   
   async function clickRefresh() {
+    $site.compileNeed = false;
+    $site.dirtyBin = false;
     if ($site.building) {
       alerts.addAlert('warning', m.already_building());
       return;
@@ -95,10 +97,8 @@
     
     <div class="navbar-end">
       <div class="tooltip tooltip-bottom" data-tip={m.build()}>
-        <button class="btn btn-ghost btn-circle" 
-                class:animate-spin={$site.building}
-                onclick={clickRefresh}>
-          <Icon name="refresh"/>
+        <button class="btn btn-ghost btn-circle" class:animate-spin={$site.building} onclick={clickRefresh}>
+          <Icon name="refresh" class={$site.compileNeed ? 'gradient' : ''}/>
         </button>
       </div>
       <div class="tooltip tooltip-bottom" data-tip={m.setting()}>
@@ -112,6 +112,12 @@
         </button>
       </div>
     </div>
+
+    {#if $site.heavyTotal > 0 && $site.heavyDone < $site.heavyTotal }
+      <div class="absolute bottom-0 left-0 w-full">
+        <progress class="progress progress-info w-full h-[2px] opacity-80" value={$site.heavyDone} max={$site.heavyTotal}></progress>
+      </div>
+    {/if}
   </div>
 
   <!-- 添加日志抽屉 -->

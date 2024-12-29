@@ -63,6 +63,20 @@ func GetOdMgr(account string) IOrderMgr {
 	return val
 }
 
+func GetAllOdMgr() map[string]IOrderMgr {
+	var result = make(map[string]IOrderMgr)
+	if core.EnvReal {
+		for acc, mgr := range accLiveOdMgrs {
+			result[acc] = mgr
+		}
+	} else {
+		for acc, mgr := range accOdMgrs {
+			result[acc] = mgr
+		}
+	}
+	return result
+}
+
 func GetLiveOdMgr(account string) *LiveOrderMgr {
 	if !core.EnvReal {
 		panic("call GetLiveOdMgr in FakeEnv is forbidden: " + core.RunEnv)

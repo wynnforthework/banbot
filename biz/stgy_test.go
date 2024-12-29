@@ -57,7 +57,7 @@ func TestStagyRun(t *testing.T) {
 	if stagy == nil {
 		panic("load strategy fail")
 	}
-	accJobs := strat.GetJobs("")
+	accJobs := strat.GetJobs(config.DefAcc)
 	for _, symbol := range pairs {
 		exs, err := orm.GetExSymbolCur(symbol)
 		if err != nil {

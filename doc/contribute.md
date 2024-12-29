@@ -81,6 +81,10 @@ git push origin --tags
 3. 在当前项目（和依赖当前项目的入口项目）添加依赖：`go get 模块名@version`
 4. 在当前项目（和依赖当前项目的入口项目）的`go.mod`中添加`replace`指令，改为本地绝对或相对路径
 
+### 如何修改测试web UI？
+您只需将`web/ui/svelte.config.js`中的`adapter-static`改为`adapter-auto`，然后执行`npm run dev`，浏览器访问`http://localhost:5173`，即可实时预览ui变动。
+后端接口默认访问`http://localhost:8000`。
+
 ### json
 It is not recommended to replace `encoding/json` with [sonic](https://github.com/bytedance/sonic/issues/574). The binary file will increase by 15M (on Windows)
 
