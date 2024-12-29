@@ -38,9 +38,18 @@ docker run -d --name timescaledb -p 5432:5432 \
 ```
 
 #### 2. start banbot 
+create your `/root/config.yaml`:
+```yaml
+exchange:
+  binance:
+    account_prods:
+      user1:  # you can change this
+        api_key: your_api_key_here
+        api_secret: your_secret_here
+```
 ```bash
-docker run -d --name banbot -p 8000:8000 -p 8001:8001 \
-  --add-host=host.docker.internal:host-gateway banbot/banbot:latest
+docker run -d --name banbot -p 8000:8000 -p 8001:8001 -v /root:/root\
+  --add-host=host.docker.internal:host-gateway banbot/banbot:latest -config /root/config.yml
 ```
 > banbot use `postgresql://postgres:123@[127.0.0.1]:5432/ban`, if you change the password/host/port/db, please update the `/ban/data/config.yml` in the container.
 
