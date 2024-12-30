@@ -2,9 +2,9 @@ package dev
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"sync"
 
-	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/utils"
 	utils2 "github.com/banbox/banexg/utils"
 
@@ -243,14 +243,23 @@ func handleDataTools(c *fiber.Ctx) error {
 	}
 
 	// 验证必填参数
-	if args.Action != "correct" && len(args.Periods) == 0 {
-		return c.Status(400).JSON(fiber.Map{
-			"msg": "periods is required",
-		})
+	if args.StartMs > 0 && args.EndMs == 0 {
+		args.EndMs = btime.UTCStamp()
+	}
+	var errMsg string
+	if args.Action != "correct" {
+		if args.StartMs == 0 {
+			errMsg = "startTime is required"
+		} else if len(args.Periods) == 0 {
+			errMsg = "periods is required"
+		}
 	}
 	if args.Action == "export" && args.Folder == "" {
+		errMsg = "folder is required"
+	}
+	if errMsg != "" {
 		return c.Status(400).JSON(fiber.Map{
-			"msg": "folder is required",
+			"msg": errMsg,
 		})
 	}
 
@@ -270,12 +279,6 @@ func handleDataTools(c *fiber.Ctx) error {
 		for _, exs := range exsMap {
 			args.Pairs = append(args.Pairs, exs.Symbol)
 		}
-	}
-	if args.StartMs > 0 && args.EndMs == 0 {
-		args.EndMs = btime.UTCStamp()
-	}
-	if args.StartMs >= args.EndMs {
-		return errs.NewMsg(errs.CodeParamInvalid, "startMs should <= endMs")
 	}
 
 	if !args.Force {

@@ -331,9 +331,6 @@ func initExgAccs() {
 	}
 	Accounts = make(map[string]*AccountConfig)
 	BakAccounts = make(map[string]*AccountConfig)
-	if len(accs) == 0 {
-		return
-	}
 	if core.EnvReal {
 		DefAcc = ""
 	}

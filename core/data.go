@@ -40,7 +40,7 @@ var (
 	MemOut    io.Writer // Output memory profile 进行内存profile的输出
 
 	ConcurNum     = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version       = "0.1.15"
+	Version       = "0.1.16"
 	UIVersion     = "0.1.15"
 	LogFile       string
 	DevDbPath     string

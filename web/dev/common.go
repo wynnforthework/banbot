@@ -491,6 +491,9 @@ func MergeConfig(inText string) (string, error) {
 			paths = append(paths, path)
 		}
 	}
+	if config.Args != nil && len(config.Args.Configs) > 0 {
+		paths = append(paths, config.Args.Configs...)
+	}
 	if inText != "" {
 		tmp, err := os.CreateTemp(os.TempDir(), "tmp_cfg")
 		if err != nil {
