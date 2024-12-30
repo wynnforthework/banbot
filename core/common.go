@@ -1,8 +1,9 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
-	"github.com/banbox/banbot/utils"
+	"gopkg.in/yaml.v3"
 	"math"
 	"os"
 	"runtime/pprof"
@@ -130,7 +131,7 @@ func DumpPerfs(outDir string) {
 			"perf":       perf,
 		}
 	}
-	data, err_ := utils.MarshalYaml(res)
+	data, err_ := MarshalYaml(res)
 	if err_ != nil {
 		log.Error("marshal strat_perfs fail", zap.Error(err_))
 		return
@@ -277,4 +278,13 @@ func SetHeavyProgress(done int, total int) {
 		HeavyProgress = 0
 	}
 	heavyLock.Unlock()
+}
+
+func MarshalYaml(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	err := enc.Encode(v)
+	_ = enc.Close()
+	return buf.Bytes(), err
 }

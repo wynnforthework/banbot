@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"github.com/banbox/banbot/core"
 	"os"
 	"regexp"
 	"strings"
@@ -69,7 +70,7 @@ func MergeYamlStr(paths []string, skips map[string]bool) (string, error) {
 						if err := yaml.Unmarshal([]byte(oldValue), &oldMap); err == nil {
 							if err := yaml.Unmarshal([]byte(newVal), &newMap); err == nil {
 								DeepCopyMap(newMap, oldMap)
-								if mergedData, err := MarshalYaml(newMap); err == nil {
+								if mergedData, err := core.MarshalYaml(newMap); err == nil {
 									mergedStr := strings.TrimRight(string(mergedData), "\n\r")
 									newVal = "\n  " + strings.ReplaceAll(mergedStr, "\n", "\n  ")
 								}

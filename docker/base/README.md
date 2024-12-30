@@ -11,5 +11,5 @@ docker build -f base.Dockerfile -t banbase .
 
 ## 2. Build the latest image (构建最新镜像)
 ```shell
-docker build -t banbot/banbot .
+docker build --no-cache -t banbot/banbot .
 ```

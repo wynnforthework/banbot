@@ -415,7 +415,7 @@ func (c *Config) DumpYaml() ([]byte, *errs.Error) {
 		val := v.Field(i)
 		itemMap[tag] = val.Interface()
 	}
-	data, err_ := utils2.MarshalYaml(&itemMap)
+	data, err_ := core.MarshalYaml(&itemMap)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeMarshalFail, err_)
 	}
