@@ -32,7 +32,7 @@ banbot support exchanges powered by [banexg](https://github/banbox/banexg):
 ![image](https://www.banbot.site/uidev.gif)
 #### 1. start timescaledb
 ```bash
-docker run -d --name timescaledb -p 5432:5432 \
+docker run -d --name timescaledb -p 127.0.0.1:5432:5432 \
   -v /opt/pgdata:/var/lib/postgresql/data \
   -e POSTGRES_PASSWORD=123 timescale/timescaledb:latest-pg17
 ```

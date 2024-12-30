@@ -205,19 +205,23 @@
 
   $effect(() => {
     if(activeTab === 'orders') {
-      loadOrders();
+      setTimeout(loadOrders, 0);
     } else if(activeTab === 'config') {
-      loadConfig();
+      setTimeout(loadConfig, 0);
     } else if(activeTab === 'logs' && !logs) {
-      loadLogs(true);
+      setTimeout(() => {
+        loadLogs(true);
+      }, 0)
     } else if(activeTab === 'strat_code') {
-      loadStratTree();
+      setTimeout(loadStratTree, 0);
     } else if(activeTab === 'analysis') {
-      loadOrders().then(() => {
-        if(orders.length > 0) {
-          onOrderAnalysis(orders[0]);
-        }
-      });
+      setTimeout(() => {
+        loadOrders().then(() => {
+          if(orders.length > 0) {
+            onOrderAnalysis(orders[0]);
+          }
+        });
+      })
     }
   });
 

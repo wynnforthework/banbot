@@ -35,7 +35,9 @@
 
 	$effect(() => {
 		if (collapseControlled) {
+			setTimeout(() => {
 				collapsed = !!node.collapsed;
+			})
 		}
 	});
 

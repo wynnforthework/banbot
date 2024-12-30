@@ -281,6 +281,9 @@ func readBackTestOrders(path string) ([]*ormo.InOutOrder, int64, int64) {
 			} else {
 				endMS = max(endMS, exitMS)
 			}
+			if leverage == 0 {
+				leverage = 1
+			}
 			res = append(res, &ormo.InOutOrder{
 				IOrder: &ormo.IOrder{
 					Symbol:    symbol,

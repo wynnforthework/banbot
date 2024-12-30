@@ -316,7 +316,7 @@ func GetAccLeverage(account string) float64 {
 	}
 }
 
-func initExgAccs() {
+func initExgAccs() *errs.Error {
 	if Exchange.Name == "china" {
 		btime.LocShow, _ = time.LoadLocation("Asia/Shanghai")
 	} else {
@@ -350,6 +350,14 @@ func initExgAccs() {
 			}
 		}
 	}
+	if len(Accounts) == 0 {
+		if core.EnvReal {
+			return errs.NewMsg(core.ErrBadConfig, "no valid accounts for %s", Exchange.Name)
+		}
+		log.Warn("no account configured, use default", zap.String("exg", Exchange.Name))
+		Accounts[DefAcc] = &AccountConfig{}
+	}
+	return nil
 }
 
 func (p *StratPerfConfig) Validate() {
@@ -472,7 +480,11 @@ func (c *Config) TimeFrames() []string {
 func (c *Config) ShowPairs() string {
 	var showPairs string
 	if len(c.Pairs) > 0 {
-		showPairs = fmt.Sprintf("num_%d", len(c.Pairs))
+		if len(c.Pairs) == 1 {
+			showPairs = c.Pairs[0]
+		} else {
+			showPairs = fmt.Sprintf("num_%d", len(c.Pairs))
+		}
 	} else if len(c.PairFilters) > 0 {
 		for _, f := range c.PairFilters {
 			if f.Name == "OffsetFilter" {

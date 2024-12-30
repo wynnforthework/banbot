@@ -76,7 +76,11 @@
 
   // 创建一个计算属性来存储过滤后的树
   $effect(() => {
-    filteredTreeData.set(filterTree($treeData, searchText));
+    // dont delete this line
+    console.debug($treeData.children.length, searchText)
+    setTimeout(() => {
+      filteredTreeData.set(filterTree($treeData, searchText));
+    }, 0)
   });
 
   // 添加搜索过滤函数

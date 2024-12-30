@@ -249,13 +249,16 @@ func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.
 			return nil, nil
 		}
 	}
-	if req.Leverage == 0 && !isSpot {
-		exchange := exg.Default
-		exInfo := exchange.Info()
-		if exInfo.FixedLvg {
-			req.Leverage, _ = exchange.GetLeverage(env.Symbol, 0, o.Account)
-		} else {
-			req.Leverage = config.GetAccLeverage(o.Account)
+	if req.Leverage == 0 {
+		req.Leverage = 1
+		if !isSpot {
+			exchange := exg.Default
+			exInfo := exchange.Info()
+			if exInfo.FixedLvg {
+				req.Leverage, _ = exchange.GetLeverage(env.Symbol, 0, o.Account)
+			} else {
+				req.Leverage = config.GetAccLeverage(o.Account)
+			}
 		}
 	}
 	stgVer, _ := strat.Versions[req.StgyName]

@@ -175,7 +175,7 @@ func (r *BTResult) Collect() {
 		}
 	}
 	r.TotProfit = sumProfit
-	r.TotCost = sumCost
+	r.TotCost = utils.NanInfTo(sumCost, 0)
 	r.TotFee = sumFee
 	r.TotProfitPct = r.TotProfit * 100 / r.TotalInvest
 	if r.MinReal > r.MaxReal {

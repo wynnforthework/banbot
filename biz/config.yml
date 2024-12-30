@@ -28,11 +28,11 @@ fatal_stop_hours: 8
 run_timeframes: []
 pairs: []
 run_policy: []
-pairmgr:
-  cron: '25 1 0 */2 * *'
-  offset: 0
-  limit: 999
-  force_filters: false
+#pairmgr:
+#  cron: '25 1 0 */2 * *'
+#  offset: 0
+#  limit: 999
+#  force_filters: false
 pairlists:
   - name: VolumePairList
     limit: 100

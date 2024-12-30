@@ -111,7 +111,7 @@ func (i *InOutOrder) EnterCost() float64 {
 	} else {
 		price = i.InitPrice
 	}
-	return i.Enter.Filled * price
+	return utils.NanInfTo(i.Enter.Filled*price, 0)
 }
 
 func (i *InOutOrder) HoldCost() float64 {

@@ -86,9 +86,9 @@
 
   $effect(() => {
     if(activeTab === 'gaps') {
-      loadGaps();
+      setTimeout(loadGaps, 0);
     } else if(activeTab === 'data') {
-      loadData();
+      setTimeout(loadData, 0);
     }
   });
 

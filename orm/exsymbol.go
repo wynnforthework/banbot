@@ -7,8 +7,11 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"strings"
 	"sync"
 )
@@ -316,8 +319,41 @@ func InitListDates() *errs.Error {
 	exInfo := exchange.Info()
 	exsList := GetExSymbols(exInfo.ID, exInfo.MarketType)
 	hasFetch := exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType)
+	startZeroNum := 0
+	caches := make([]*ExSymbol, 0, len(exsList))
 	for _, exs := range exsList {
-		var oldListMS, oldDeListMS = exs.ListMs, exs.DelistMs
+		needCheck := false
+		if exs.DelistMs == 0 {
+			mar, err := exchange.GetMarket(exs.Symbol)
+			if err != nil {
+				if err.Code != errs.CodeNoMarketForPair {
+					return err
+				}
+			} else if mar.Expiry > 0 {
+				exs.DelistMs = mar.Expiry
+				needCheck = true
+			}
+		}
+		if needCheck || exs.ListMs == 0 {
+			if exs.ListMs == 0 {
+				startZeroNum += 1
+			}
+			caches = append(caches, exs)
+		}
+	}
+	var prgBar *utils.PrgBar
+	cacheNum := len(caches)
+	if cacheNum > 10 && hasFetch {
+		costSecs := float64(cacheNum) / 7.7
+		log.Info("calculating listDates for new symbols", zap.Int("num", cacheNum),
+			zap.Int("secs", int(costSecs)))
+		prgBar = utils.NewPrgBar(cacheNum, "InitListDates")
+		defer prgBar.Close()
+	}
+	for _, exs := range caches {
+		if prgBar != nil {
+			prgBar.Add(1)
+		}
 		if exs.ListMs == 0 {
 			startMS := core.MSMinStamp
 			var klines []*banexg.Kline
@@ -333,25 +369,13 @@ func InitListDates() *errs.Error {
 				exs.ListMs = klines[0].Time
 			}
 		}
-		if exs.DelistMs == 0 {
-			mar, err := exchange.GetMarket(exs.Symbol)
-			if err != nil {
-				if err.Code != errs.CodeNoMarketForPair {
-					return err
-				}
-			} else if mar.Expiry > 0 {
-				exs.DelistMs = mar.Expiry
-			}
-		}
-		if oldListMS != exs.ListMs || oldDeListMS != exs.DelistMs {
-			err_ := sess.SetListMS(context.Background(), SetListMSParams{
-				ID:       exs.ID,
-				ListMs:   exs.ListMs,
-				DelistMs: exs.DelistMs,
-			})
-			if err_ != nil {
-				return NewDbErr(core.ErrDbExecFail, err_)
-			}
+		err_ := sess.SetListMS(context.Background(), SetListMSParams{
+			ID:       exs.ID,
+			ListMs:   exs.ListMs,
+			DelistMs: exs.DelistMs,
+		})
+		if err_ != nil {
+			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 	}
 	return nil

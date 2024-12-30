@@ -74,7 +74,7 @@ func Run(args []string) error {
 
 	// 新建web应用
 	app := fiber.New(fiber.Config{
-		AppName:      "banweb",
+		AppName:      "banbot",
 		ErrorHandler: base.ErrHandler,
 	})
 

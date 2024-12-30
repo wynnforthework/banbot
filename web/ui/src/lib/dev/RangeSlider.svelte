@@ -151,7 +151,7 @@
 
     $effect(() => {
         if (canvas && data) {
-            drawChart();
+            setTimeout(drawChart, 0);
         }
     })
 </script>

@@ -80,6 +80,9 @@
       if(show){
         addListener(`btPrg_${task.id}`, (res) => {
           task.progress = res.progress;
+          if(task.status == 1){
+            task.status = 2
+          }
           if(task.progress >= 0.99999){
             setTimeout(() => {
               doFetchTasks(undefined, false);

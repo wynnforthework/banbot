@@ -143,7 +143,9 @@
   }
 
   $effect(() => {
-    loadConfig();
+    if(activeTab){
+      setTimeout(loadConfig, 0)
+    }
   });
 </script>
 
