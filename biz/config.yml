@@ -16,6 +16,7 @@ stake_amount: 30
 max_stake_amt: 500
 min_open_rate: 0.5
 bt_net_cost: 15
+timerange: '20230701-20250101'
 wallet_amounts:
   USDT: 10000
 stake_currency: [USDT, USDC]

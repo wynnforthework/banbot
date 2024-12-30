@@ -4,6 +4,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -33,6 +35,7 @@ func MergeYamlStr(paths []string, skips map[string]bool) (string, error) {
 		text = emptyLineRe.ReplaceAllString(text, "\n")
 
 		lines := strings.Split(text, "\n")
+		lines = append(lines, "tmp: tmp")
 		var currentKey string
 		var valueBuilder strings.Builder
 
@@ -46,6 +49,8 @@ func MergeYamlStr(paths []string, skips map[string]bool) (string, error) {
 			if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "-") && keyStartRe.MatchString(line) {
 				// 保存之前的键值对
 				if currentKey != "" {
+					newVal := valueBuilder.String()
+					valueBuilder.Reset()
 					if _, exists := resMap[currentKey]; !exists {
 						if lastIdx >= len(keys)-1 {
 							keys = append(keys, currentKey)
@@ -54,9 +59,24 @@ func MergeYamlStr(paths []string, skips map[string]bool) (string, error) {
 							keys = append(keys[:lastIdx+1], append([]string{currentKey}, keys[lastIdx+1:]...)...)
 							lastIdx += 1
 						}
+					} else if strings.Contains(newVal, ": ") && strings.Contains(newVal, "\n") &&
+						!strings.HasPrefix(strings.TrimSpace(newVal), "-") {
+						// 当key已存在时，进行深度合并
+						oldValue := resMap[currentKey]
+						oldMap := make(map[string]interface{})
+						newMap := make(map[string]interface{})
+
+						if err := yaml.Unmarshal([]byte(oldValue), &oldMap); err == nil {
+							if err := yaml.Unmarshal([]byte(newVal), &newMap); err == nil {
+								DeepCopyMap(newMap, oldMap)
+								if mergedData, err := MarshalYaml(newMap); err == nil {
+									mergedStr := strings.TrimRight(string(mergedData), "\n\r")
+									newVal = "\n  " + strings.ReplaceAll(mergedStr, "\n", "\n  ")
+								}
+							}
+						}
 					}
-					resMap[currentKey] = valueBuilder.String()
-					valueBuilder.Reset()
+					resMap[currentKey] = newVal
 				}
 
 				parts := commaRe.Split(line, 2)
@@ -69,20 +89,7 @@ func MergeYamlStr(paths []string, skips map[string]bool) (string, error) {
 				valueBuilder.WriteString(line)
 			}
 		}
-
-		// 保存最后一个键值对
-		if currentKey != "" {
-			if _, exists := resMap[currentKey]; !exists {
-				if lastIdx >= len(keys)-1 {
-					keys = append(keys, currentKey)
-					lastIdx = len(keys) - 1
-				} else {
-					keys = append(keys[:lastIdx+1], append([]string{currentKey}, keys[lastIdx+1:]...)...)
-					lastIdx += 1
-				}
-			}
-			resMap[currentKey] = valueBuilder.String()
-		}
+		// 无需保存最后一个键值对，因为是附加的
 	}
 
 	// 生成最终的yaml字符串

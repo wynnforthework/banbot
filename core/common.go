@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/utils"
 	"math"
 	"os"
 	"runtime/pprof"
@@ -11,7 +12,6 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/dgraph-io/ristretto"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -130,7 +130,7 @@ func DumpPerfs(outDir string) {
 			"perf":       perf,
 		}
 	}
-	data, err_ := yaml.Marshal(res)
+	data, err_ := utils.MarshalYaml(res)
 	if err_ != nil {
 		log.Error("marshal strat_perfs fail", zap.Error(err_))
 		return

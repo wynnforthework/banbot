@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"math/big"
 	"sort"
 	"strconv"
@@ -142,4 +143,13 @@ func IsTextContent(data []byte) bool {
 	}
 
 	return true
+}
+
+func MarshalYaml(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	err := enc.Encode(v)
+	_ = enc.Close()
+	return buf.Bytes(), err
 }
