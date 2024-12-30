@@ -51,7 +51,7 @@ exchange:
 ```
 > banbot docker use `postgresql://postgres:123@[host.docker.internal]:5432/ban`, you can set `database.url` in the config to change it.
 ```bash
-docker run -d --name banbot -p 8000:8000 -p 8001:8001 -v /root:/root\
+docker run -d --name banbot -p 8000:8000 -v /root:/root\
   --add-host=host.docker.internal:host-gateway banbot/banbot:latest -config /root/config.yml
 ```
 
