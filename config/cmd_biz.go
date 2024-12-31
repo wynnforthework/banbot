@@ -32,7 +32,22 @@ func (a *CmdArgs) ParseTimeZone() (*time.Location, *errs.Error) {
 }
 
 func (a *CmdArgs) SetLog(showLog bool, handlers ...zapcore.Core) {
-	log.Setup(a.LogLevel, a.Logfile, handlers...)
+	logCfg := &log.Config{
+		Stdout:            true,
+		Format:            "text",
+		Level:             a.LogLevel,
+		Handlers:          handlers,
+		DisableStacktrace: true,
+	}
+	if a.LogLevel == "" {
+		logCfg.Level = "info"
+	}
+	if a.Logfile != "" {
+		logCfg.File = &log.FileLogConfig{
+			LogPath: a.Logfile,
+		}
+	}
+	log.SetupLogger(logCfg)
 	core.LogFile = a.Logfile
 	if showLog && a.Logfile != "" {
 		log.Info("Log To", zap.String("path", a.Logfile))

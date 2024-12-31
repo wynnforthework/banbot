@@ -10,7 +10,7 @@
     <div class="text-center mb-16">
       <p class="text-xl mb-2">
         {m.need_help_doc()}
-        <a class="text-blue-500 hover:text-blue-600" href="#">
+        <a class="text-blue-500 hover:text-blue-600" href="https://www.banbot.site">
           {m.document()}
         </a>
       </p>

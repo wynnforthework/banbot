@@ -209,7 +209,17 @@ func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
 
 func runInit(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeOther)
-	err := biz.SetupComs(args)
+	errs.PrintErr = utils.PrintErr
+	err := biz.InitDataDir()
+	if err != nil {
+		return err
+	}
+	err = config.LoadConfig(args)
+	if err != nil {
+		return err
+	}
+	args.SetLog(true)
+	err = orm.Setup()
 	if err != nil {
 		return err
 	}

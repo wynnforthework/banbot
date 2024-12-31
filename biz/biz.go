@@ -39,7 +39,7 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	ctx, cancel := context.WithCancel(context.Background())
 	core.Ctx = ctx
 	core.StopAll = cancel
-	err := initDataDir()
+	err := InitDataDir()
 	if err != nil {
 		return err
 	}
@@ -298,7 +298,7 @@ func replaceDockerHosts(data []byte) []byte {
 	return []byte(content)
 }
 
-func initDataDir() *errs.Error {
+func InitDataDir() *errs.Error {
 	dataDir := config.GetDataDir()
 	err_ := utils.EnsureDir(dataDir, 0755)
 	if dataDir == "" {
