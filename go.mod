@@ -6,7 +6,7 @@ toolchain go1.23.0
 
 require (
 	github.com/anyongjin/go-bayesopt v1.0.1
-	github.com/banbox/banexg v0.2.10
+	github.com/banbox/banexg v0.2.11
 	github.com/banbox/banta v0.1.8
 	github.com/c-bata/goptuna v0.9.0
 	github.com/dgraph-io/ristretto v0.2.0
@@ -74,7 +74,6 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
-	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.9.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
