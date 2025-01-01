@@ -60,7 +60,7 @@
 
 
   async function handleExecute() {
-    if ($site.heavyDone < $site.heavyTotal){
+    if ($site.heavyProgress > 0 && $site.heavyProgress < 1){
       alerts.addAlert("error", m.heavy_task_busy());
       return;
     }
@@ -108,11 +108,11 @@
         <button class="btn btn-ghost btn-sm" onclick={() => show = false}>✕</button>
       </div>
 
-      {#if $site.heavyTotal > 0}
+      {#if $site.heavyProgress > 0 && $site.heavyProgress < 1}
         <div class="flex items-center gap-2 mb-4 pr-4">
           <span>{$site.heavyName}</span>
-          <progress class="flex-1 progress progress-info w-56" value={$site.heavyDone} max={$site.heavyTotal}></progress>
-          <span>{$site.heavyDone}/{$site.heavyTotal}</span>
+          <progress class="flex-1 progress progress-info w-56" value={$site.heavyProgress} max=1></progress>
+          <span>{($site.heavyProgress * 100).toFixed(1)}%</span>
         </div>
       {/if}
 

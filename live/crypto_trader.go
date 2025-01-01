@@ -60,7 +60,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = biz.LoadRefreshPairs(dp, true)
+	err = biz.LoadRefreshPairs(dp, true, nil)
 	biz.InitOdSubs()
 	// add exit callback
 	core.ExitCalls = append(core.ExitCalls, exitCleanUp)

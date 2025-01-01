@@ -1212,7 +1212,7 @@ SyncKlineTFs
 Check the data consistency of each kline table. If there is more low dimensional data than high dimensional data, aggregate and update to high dimensional data
 检查各kline表的数据一致性，如果低维度数据比高维度多，则聚合更新到高维度
 */
-func SyncKlineTFs(args *config.CmdArgs) *errs.Error {
+func SyncKlineTFs(args *config.CmdArgs, pb *utils.StagedPrg) *errs.Error {
 	log.Info("run kline data sync ...")
 	pairs := make(map[string]bool)
 	for _, p := range args.Pairs {
@@ -1238,6 +1238,9 @@ func SyncKlineTFs(args *config.CmdArgs) *errs.Error {
 	err = sess.FixKInfoZeros()
 	if err != nil {
 		return err
+	}
+	if pb != nil {
+		pb.SetProgress("fixKInfoZeros", 1)
 	}
 	// load all markets
 	exsList := GetAllExSymbols()
@@ -1267,12 +1270,20 @@ func SyncKlineTFs(args *config.CmdArgs) *errs.Error {
 			cc[exs.Market] = true
 		}
 	}
-	err = syncKlineInfos(sess, sidMap)
+	err = syncKlineInfos(sess, sidMap, func(done int, total int) {
+		if pb != nil {
+			pb.SetProgress("syncTfKinfo", float64(done)/float64(total))
+		}
+	})
 	if err != nil {
 		return err
 	}
 	log.Info("try filling KLine Holes ...")
-	return tryFillHoles(sess, sidMap)
+	return tryFillHoles(sess, sidMap, func(done int, total int) {
+		if pb != nil {
+			pb.SetProgress("fillKHole", float64(done)/float64(total))
+		}
+	})
 }
 
 type KHoleExt struct {
@@ -1280,7 +1291,7 @@ type KHoleExt struct {
 	TfMSecs int64
 }
 
-func tryFillHoles(sess *Queries, sids map[int32]bool) *errs.Error {
+func tryFillHoles(sess *Queries, sids map[int32]bool, prg utils.PrgCB) *errs.Error {
 	ctx := context.Background()
 	sidList := utils2.KeysOfMap(sids)
 	holes, err_ := sess.ListKHoles(ctx, sidList)
@@ -1305,8 +1316,9 @@ func tryFillHoles(sess *Queries, sids map[int32]bool) *errs.Error {
 		return a.TfMSecs < b.TfMSecs
 	})
 	pBar := utils.NewPrgBar(len(rows), "FillHoles")
-	core.HeavyTask = "FillHoles"
-	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	if prg != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, prg)
+	}
 	defer pBar.Close()
 	// The kholes that need to be deleted have been filled in
 	// 已填充需要删除的khole
@@ -1440,7 +1452,7 @@ type KInfoExt struct {
 	TfMSecs int64
 }
 
-func syncKlineInfos(sess *Queries, sids map[int32]bool) *errs.Error {
+func syncKlineInfos(sess *Queries, sids map[int32]bool, prg utils.PrgCB) *errs.Error {
 	infos, err_ := sess.ListKInfos(context.Background())
 	if err_ != nil {
 		return NewDbErr(core.ErrDbExecFail, err_)
@@ -1457,8 +1469,9 @@ func syncKlineInfos(sess *Queries, sids map[int32]bool) *errs.Error {
 	// 显示进度条
 	pgTotal := len(infos) + len(aggList)*10
 	pBar := utils.NewPrgBar(pgTotal, "sync tf")
-	core.HeavyTask = "SyncTf"
-	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	if prg != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, prg)
+	}
 	defer pBar.Close()
 	// 加载计算的区间
 	calcs := make(map[string]map[int32][2]int64)

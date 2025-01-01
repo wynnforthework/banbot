@@ -41,39 +41,33 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 		for i, item := range policyList {
 			log.Info("start backtest", zap.Int("id", i+1), zap.String("name", item.Name))
 			config.RunPolicy = []*config.RunPolicyConfig{item}
-			outDir := runBackTest(fmt.Sprintf("%s%d", args.OutPath, i+1))
+			outDir := runBackTest(fmt.Sprintf("%s%d", args.OutPath, i+1), "")
 			err_ := utils.CopyDir(outDir, fmt.Sprintf("%s_%d", outDir, i+1))
 			if err_ != nil {
 				return errs.New(errs.CodeIOWriteFail, err_)
 			}
 		}
 	} else {
-		if args.PrgOut != "" {
-			initProgressTip(args.PrgOut)
-		}
-		runBackTest(args.OutPath)
+		runBackTest(args.OutPath, args.PrgOut)
 	}
 	return nil
 }
 
-func initProgressTip(prefix string) {
-	lastSave := btime.UTCStamp()
-	core.HeavyTriggers["btPrg"] = func(done int, total int) {
-		curTime := btime.UTCStamp()
-		if curTime-lastSave < 200 && done < total {
-			return
-		} else if done >= total {
-			delete(core.HeavyTriggers, "btPrg")
-		}
-		lastSave = curTime
-		fmt.Printf("%s: %v\n", prefix, core.HeavyProgress)
-	}
-}
-
-func runBackTest(outDir string) string {
+func runBackTest(outDir string, prgOut string) string {
 	core.BotRunning = true
 	biz.ResetVars()
 	b := opt.NewBackTest(false, outDir)
+	if prgOut != "" {
+		lastSave := btime.UTCStamp()
+		b.PBar.AddTrigger("", func(task string, rate float64) {
+			curTime := btime.UTCStamp()
+			if curTime-lastSave < 200 && rate < 1 {
+				return
+			}
+			lastSave = curTime
+			fmt.Printf("%s: %v\n", prgOut, rate)
+		})
+	}
 	b.Run()
 	core.RunExitCalls()
 	return b.OutDir
@@ -118,7 +112,7 @@ func RunDownData(args *config.CmdArgs) *errs.Error {
 	}
 	startMs, endMs := config.TimeRange.StartMS, config.TimeRange.EndMS
 	for _, tf := range args.TimeFrames {
-		err = orm.BulkDownOHLCV(exg.Default, exsMap, tf, startMs, endMs, 0)
+		err = orm.BulkDownOHLCV(exg.Default, exsMap, tf, startMs, endMs, 0, nil)
 		if err != nil {
 			return err
 		}
@@ -132,7 +126,7 @@ func runExportData(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	return biz.ExportKlines(args)
+	return biz.ExportKlines(args, nil)
 }
 
 func runPurgeData(args *config.CmdArgs) *errs.Error {
@@ -150,7 +144,7 @@ func RunKlineCorrect(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	return orm.SyncKlineTFs(args)
+	return orm.SyncKlineTFs(args, nil)
 }
 
 func RunKlineAdjFactors(args *config.CmdArgs) *errs.Error {
@@ -215,11 +209,6 @@ func runInit(args *config.CmdArgs) *errs.Error {
 		return err
 	}
 	err = config.LoadConfig(args)
-	if err != nil {
-		return err
-	}
-	args.SetLog(true)
-	err = orm.Setup()
 	if err != nil {
 		return err
 	}

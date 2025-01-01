@@ -17,7 +17,7 @@ var (
 )
 
 // MergeYamlStr 合并多个yaml文件内容，保持键的顺序
-func MergeYamlStr(paths []string, skips map[string]bool) (string, error) {
+func MergeYamlStr(paths []string, skips ...string) (string, error) {
 	keys := make([]string, 0)
 	resMap := make(map[string]string)
 	lastIdx := -1
@@ -94,9 +94,13 @@ func MergeYamlStr(paths []string, skips map[string]bool) (string, error) {
 	}
 
 	// 生成最终的yaml字符串
+	skipMap := make(map[string]bool)
+	for _, k := range skips {
+		skipMap[k] = true
+	}
 	var result strings.Builder
 	for _, key := range keys {
-		if _, ok := skips[key]; ok {
+		if _, ok := skipMap[key]; ok {
 			continue
 		}
 		value := strings.TrimRight(resMap[key], "\n\r")

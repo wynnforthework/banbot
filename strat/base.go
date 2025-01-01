@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
@@ -76,6 +77,9 @@ func (s *StratJob) CanOpen(short bool) bool {
 	disable := false
 	if short {
 		disable = s.MaxOpenShort < 0 || s.MaxOpenShort > 0 && len(s.ShortOrders) >= s.MaxOpenShort
+		if core.Market == banexg.MarketSpot {
+			disable = true
+		}
 	} else {
 		disable = s.MaxOpenLong < 0 || s.MaxOpenLong > 0 && len(s.LongOrders) >= s.MaxOpenLong
 	}

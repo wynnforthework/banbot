@@ -33,6 +33,7 @@ type BackTest struct {
 	lastDumpMs int64 // The last time the backtest status was saved 上一次保存回测状态的时间
 	dp         *data.HistProvider
 	isOpt      bool // whether is hyper optimization
+	PBar       *utils.StagedPrg
 }
 
 var (
@@ -41,9 +42,12 @@ var (
 )
 
 func NewBackTest(isOpt bool, outDir string) *BackTest {
+	stages := []string{"init", "listMs", "loadPairs", "tfScores", "loadJobs", "warmJobs", "downKline", "runBT"}
+	stgWeis := []float64{1, 1, 2, 2, 1, 2, 10, 10}
 	p := &BackTest{
 		BTResult: NewBTResult(),
 		isOpt:    isOpt,
+		PBar:     utils.NewStagedPrg(stages, stgWeis),
 	}
 	if outDir == "" && !isOpt {
 		hash, err := config.Data.HashCode()
@@ -57,7 +61,7 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 	biz.InitFakeWallets()
 	wallets := biz.GetWallets(config.DefAcc)
 	p.TotalInvest = wallets.TotalLegal(nil, false)
-	p.dp = data.NewHistProvider(p.FeedKLine, p.OnEnvEnd, !isOpt)
+	p.dp = data.NewHistProvider(p.FeedKLine, p.OnEnvEnd, !isOpt, p.PBar)
 	biz.InitLocalOrderMgr(p.orderCB, !isOpt)
 	return p
 }
@@ -65,17 +69,13 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 func (b *BackTest) Init() *errs.Error {
 	btime.CurTimeMS = config.TimeRange.StartMS
 	b.MinReal = math.MaxFloat64
-	err := orm.InitListDates()
-	if err != nil {
-		return err
-	}
 	if b.OutDir != "" {
 		err_ := os.MkdirAll(b.OutDir, 0755)
 		if err_ != nil {
 			return errs.New(core.ErrIOWriteFail, err_)
 		}
 	}
-	err = ormo.InitTask(!b.isOpt, b.OutDir)
+	err := ormo.InitTask(!b.isOpt, b.OutDir)
 	if err != nil {
 		return err
 	}
@@ -83,8 +83,14 @@ func (b *BackTest) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
+	b.PBar.SetProgress("init", 1)
+	err = orm.InitListDates()
+	if err != nil {
+		return err
+	}
+	b.PBar.SetProgress("listMs", 1)
 	// 交易对初始化
-	err = biz.LoadRefreshPairs(b.dp, !b.isOpt)
+	err = biz.LoadRefreshPairs(b.dp, !b.isOpt, b.PBar)
 	biz.InitOdSubs()
 	return err
 }

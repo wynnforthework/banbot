@@ -65,7 +65,7 @@ Return the trading pairs with the smallest period change (new/old pairs new peri
 	items: pair[timeFrame]warmNum
 	返回最小周期变化的交易对(新增/旧对新周期)、预热任务
 */
-func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool) ([]IKlineFeeder, map[string]int64, []string, *errs.Error) {
+func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, delOther bool, pBar *utils.StagedPrg) ([]IKlineFeeder, map[string]int64, []string, *errs.Error) {
 	var newHolds []IKlineFeeder
 	var warmJobs []*WarmJob
 	var oldSince = make(map[string]int64)
@@ -108,14 +108,14 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 		}
 	}
 	// 加载数据预热
-	sinceMap, err := p.warmJobs(warmJobs)
+	sinceMap, err := p.warmJobs(warmJobs, pBar)
 	for key, since := range oldSince {
 		sinceMap[key] = since
 	}
 	return newHolds, sinceMap, delPairs, err
 }
 
-func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64, *errs.Error) {
+func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob, pb *utils.StagedPrg) (map[string]int64, *errs.Error) {
 	sinceMap := make(map[string]int64)
 	lockMap := sync.Mutex{}
 	jobNum := 0
@@ -128,6 +128,11 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 		log.Info(fmt.Sprintf("warmup for %d pairs, %v jobs", len(warmJobs), jobNum))
 		pBar = utils.NewPrgBar(jobNum*core.StepTotal, "warmup")
 		defer pBar.Close()
+		if pb != nil {
+			pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+				pb.SetProgress("warmJobs", float64(done)/float64(total))
+			})
+		}
 	}
 	startTime := btime.TimeMS()
 	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(_ int, job *WarmJob) *errs.Error {
@@ -143,9 +148,10 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob) (map[string]int64
 
 type HistProvider struct {
 	Provider[IHistKlineFeeder]
+	pBar *utils.StagedPrg
 }
 
-func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd, showLog bool) *HistProvider {
+func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd, showLog bool, pBar *utils.StagedPrg) *HistProvider {
 	return &HistProvider{
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
@@ -165,6 +171,7 @@ func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd, showLog bool) *His
 			dirtyVers: make(chan int, 5),
 			showLog:   showLog,
 		},
+		pBar: pBar,
 	}
 }
 
@@ -183,6 +190,9 @@ func (p *HistProvider) downIfNeed() *errs.Error {
 	if p.showLog {
 		pBar = utils.NewPrgBar(len(p.holders)*core.StepTotal, "DownHist")
 		defer pBar.Close()
+		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+			p.pBar.SetProgress("downKline", float64(done)/float64(total))
+		})
 	}
 	for _, h := range p.holders {
 		err = h.DownIfNeed(sess, exchange, pBar)
@@ -195,7 +205,7 @@ func (p *HistProvider) downIfNeed() *errs.Error {
 }
 
 func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
-	newHolds, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther)
+	newHolds, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther, p.pBar)
 	// Check whether the data needs to be downloaded during the backtest. If so, it will be downloaded automatically.
 	// 检查回测期间数据是否需要下载，如需要自动下载
 	err = p.downIfNeed()
@@ -253,7 +263,9 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	}
 	totalMS := (config.TimeRange.EndMS - config.TimeRange.StartMS) / 1000
 	var pBar = utils.NewPrgBar(int(totalMS), "RunHist")
-	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+		p.pBar.SetProgress("runBT", float64(done)/float64(total))
+	})
 	defer pBar.Close()
 	pBar.Last = config.TimeRange.StartMS
 	if p.showLog {
@@ -266,6 +278,7 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	}
 	err := RunHistFeeders(makeFeeders, p.dirtyVers, pBar)
 	core.StopAll = coreStop
+	p.pBar.SetProgress("runBT", 1)
 	return err
 }
 
@@ -405,7 +418,7 @@ func NewLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) (*LiveProvider, *e
 }
 
 func (p *LiveProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
-	newHolds, sinceMap, delPairs, err := p.Provider.SubWarmPairs(items, delOther)
+	newHolds, sinceMap, delPairs, err := p.Provider.SubWarmPairs(items, delOther, nil)
 	if err != nil {
 		return err
 	}

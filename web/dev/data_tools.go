@@ -27,6 +27,8 @@ type DataToolsManager struct {
 	runningMux sync.Mutex
 }
 
+type FnDataTool = func(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error
+
 type DataToolsArgs struct {
 	Action   string `json:"action" validate:"required"`
 	Folder   string `json:"folder"`
@@ -72,34 +74,35 @@ func (m *DataToolsManager) EndTask() {
 
 // RunDataTools 执行数据工具任务
 func RunDataTools(args *DataToolsArgs) *errs.Error {
-	key := fmt.Sprintf("dtt_%s", args.Action)
-	core.HeavyTriggers[key] = func(done int, total int) {
-		BroadcastWS("", map[string]interface{}{
-			"type":  "heavyPrg",
-			"name":  core.HeavyTask,
-			"done":  done,
-			"total": total,
-		})
-	}
-	defer func() {
-		delete(core.HeavyTriggers, key)
-	}()
 	switch args.Action {
 	case "download":
-		return runDownloadData(args)
+		return runDataTask(runDownloadData, args, []string{"downKline"}, []float64{1})
 	case "export":
-		return runExportData(args)
+		return runDataTask(runExportData, args, []string{"export"}, []float64{1})
 	case "purge":
-		return runPurgeData(args)
+		return runDataTask(runPurgeData, args, []string{"purge"}, []float64{1})
 	case "correct":
-		return runCorrectData(args)
+		return runDataTask(runCorrectData, args, []string{"fixKInfoZeros", "syncTfKinfo", "fillKHole"},
+			[]float64{1, 5, 5})
 	default:
 		return errs.NewMsg(errs.CodeParamInvalid, "invalid action")
 	}
 }
 
+func runDataTask(fn FnDataTool, args *DataToolsArgs, tasks []string, weights []float64) *errs.Error {
+	pBar := utils.NewStagedPrg(tasks, weights)
+	pBar.AddTrigger("", func(task string, progress float64) {
+		BroadcastWS("", map[string]interface{}{
+			"type":     "heavyPrg",
+			"name":     task,
+			"progress": progress,
+		})
+	})
+	return fn(args, pBar)
+}
+
 // runDownloadData 下载数据
-func runDownloadData(args *DataToolsArgs) *errs.Error {
+func runDownloadData(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error {
 	exsMap := make(map[int32]*orm.ExSymbol)
 	exchange, err := exg.GetWith(args.Exchange, args.Market, "")
 	if err != nil {
@@ -125,8 +128,11 @@ func runDownloadData(args *DataToolsArgs) *errs.Error {
 		zap.Int64("end", args.EndMs))
 
 	startMs, endMs := args.StartMs, args.EndMs
-	for _, tf := range args.Periods {
-		err = orm.BulkDownOHLCV(args.Exg, exsMap, tf, startMs, endMs, 0)
+	for i, tf := range args.Periods {
+		prgBase := float64(i) / float64(len(args.Periods))
+		err = orm.BulkDownOHLCV(args.Exg, exsMap, tf, startMs, endMs, 0, func(done int, total int) {
+			pBar.SetProgress("downKline", prgBase+float64(done)/float64(total))
+		})
 		if err != nil {
 			return err
 		}
@@ -137,7 +143,7 @@ func runDownloadData(args *DataToolsArgs) *errs.Error {
 }
 
 // runExportData 导出数据
-func runExportData(args *DataToolsArgs) *errs.Error {
+func runExportData(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error {
 	log.Info("start export data",
 		zap.String("exchange", args.Exchange),
 		zap.String("market", args.Market),
@@ -149,6 +155,9 @@ func runExportData(args *DataToolsArgs) *errs.Error {
 
 	backExg, backMarket := core.ExgName, core.Market
 	core.ExgName, core.Market = args.Exchange, args.Market
+	prg := func(done int, total int) {
+		pBar.SetProgress("export", float64(done)/float64(total))
+	}
 	err := biz.ExportKlines(&config.CmdArgs{
 		OutPath:    args.Folder,
 		ExgReal:    args.ExgReal,
@@ -156,7 +165,7 @@ func runExportData(args *DataToolsArgs) *errs.Error {
 		TimeFrames: args.Periods,
 		TimeRange:  fmt.Sprintf("%d-%d", args.StartMs, args.EndMs),
 		AdjType:    "none",
-	})
+	}, prg)
 	core.ExgName, core.Market = backExg, backMarket
 	if err != nil {
 		log.Error("export data failed", zap.Error(err))
@@ -168,7 +177,7 @@ func runExportData(args *DataToolsArgs) *errs.Error {
 }
 
 // runPurgeData 清理数据
-func runPurgeData(args *DataToolsArgs) *errs.Error {
+func runPurgeData(args *DataToolsArgs, pb *utils.StagedPrg) *errs.Error {
 	log.Info("start purge data",
 		zap.String("exchange", args.Exchange),
 		zap.String("market", args.Market),
@@ -183,9 +192,10 @@ func runPurgeData(args *DataToolsArgs) *errs.Error {
 	}
 	defer conn.Release()
 
-	pBar := utils.NewPrgBar(len(args.Pairs), "Export")
-	core.HeavyTask = "ExportKLine"
-	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	pBar := utils.NewPrgBar(len(args.Pairs), "Purge")
+	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+		pb.SetProgress("purge", float64(done)/float64(total))
+	})
 	defer pBar.Close()
 	exsMap := make(map[string]bool)
 	for _, pair := range args.Pairs {
@@ -210,7 +220,7 @@ func runPurgeData(args *DataToolsArgs) *errs.Error {
 }
 
 // runCorrectData 修正数据
-func runCorrectData(args *DataToolsArgs) *errs.Error {
+func runCorrectData(args *DataToolsArgs, pb *utils.StagedPrg) *errs.Error {
 	log.Info("start correct data",
 		zap.String("exchange", args.Exchange),
 		zap.String("market", args.Market),
@@ -219,7 +229,7 @@ func runCorrectData(args *DataToolsArgs) *errs.Error {
 	err := orm.SyncKlineTFs(&config.CmdArgs{
 		Pairs: args.Pairs,
 		Force: true,
-	})
+	}, pb)
 	if err != nil {
 		log.Error("correct data failed", zap.Error(err))
 		return err

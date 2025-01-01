@@ -113,9 +113,9 @@
       </div>
     </div>
 
-    {#if $site.heavyTotal > 0 && $site.heavyDone < $site.heavyTotal }
+    {#if $site.heavyProgress > 0 && $site.heavyProgress < 1 }
       <div class="absolute bottom-0 left-0 w-full">
-        <progress class="progress progress-info w-full h-[2px] opacity-80" value={$site.heavyDone} max={$site.heavyTotal}></progress>
+        <progress class="progress progress-info w-full h-[2px] opacity-80" value={$site.heavyProgress} max=1></progress>
       </div>
     {/if}
   </div>

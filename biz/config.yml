@@ -11,15 +11,15 @@ order_type: market
 stop_enter_bars: 20
 prefire: 0
 margin_add_rate: 0.66
-stake_amount: 30
+stake_amount: 200
 # stake_pct: 10
 max_stake_amt: 500
 min_open_rate: 0.5
 bt_net_cost: 15
 timerange: '20230701-20250101'
 wallet_amounts:
-  USDT: 10000
-stake_currency: [USDT, USDC]
+  USDT: 3000
+stake_currency: [USDT]
 fatal_stop:
   '1440': 0.1
   '180': 0.2

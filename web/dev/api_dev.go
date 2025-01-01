@@ -598,7 +598,8 @@ func getBtOptions(c *fiber.Ctx) error {
 }
 
 func getDefaultCfg(c *fiber.Ctx) error {
-	content, err := MergeConfig("")
+	skips := []string{"name", "env", "webhook", "rpc_channels", "api_server"}
+	content, err := MergeConfig("", skips...)
 	if err != nil {
 		return err
 	}
@@ -636,16 +637,14 @@ func handleRunBacktest(c *fiber.Ctx) error {
 
 	// 加载并验证配置
 	cfg, err2 := config.GetConfig(&config.CmdArgs{
-		Configs: []string{tmpPath},
+		Configs:   []string{tmpPath},
+		NoDefault: true,
 	}, false)
 	if err2 != nil {
 		return err2
 	}
 
 	// 检查必要的配置项
-	if len(cfg.Pairs) == 0 {
-		return errs.NewMsg(errs.CodeParamRequired, "pairs is required")
-	}
 	if len(cfg.RunPolicy) == 0 {
 		return errs.NewMsg(errs.CodeParamRequired, "run_policy is required")
 	}
@@ -655,8 +654,8 @@ func handleRunBacktest(c *fiber.Ctx) error {
 	if len(cfg.WalletAmounts) == 0 {
 		return errs.NewMsg(errs.CodeParamRequired, "wallet_amounts is required")
 	}
-	if cfg.StakeAmount == 0 {
-		return errs.NewMsg(errs.CodeParamRequired, "stake_amount is required")
+	if cfg.StakeAmount == 0 && cfg.StakePct == 0 {
+		return errs.NewMsg(errs.CodeParamRequired, "stake_amount or stake_pct is required")
 	}
 	if len(cfg.StakeCurrency) == 0 {
 		return errs.NewMsg(errs.CodeParamRequired, "stake_currency is required")
@@ -711,7 +710,8 @@ func handleRunBacktest(c *fiber.Ctx) error {
 			if old != nil {
 				backupPath = hashVal + "_" + strconv.FormatInt(old.ID, 10)
 			}
-			err = utils.CopyDir(absPath, backupPath)
+			realPath := config.ParsePath(fmt.Sprintf("$/backtest/%s", backupPath))
+			err = utils.CopyDir(absPath, realPath)
 			if err != nil {
 				return err
 			}

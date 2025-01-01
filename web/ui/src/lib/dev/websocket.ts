@@ -59,8 +59,7 @@ export function initWsConn(cb?: () => void) {
             }else if (result.type === 'heavyPrg'){
                 site.update(s => {
                     s.heavyName = result.name
-                    s.heavyDone = result.done
-                    s.heavyTotal = result.total
+                    s.heavyProgress = result.progress
                     return s;
                 });
             } else if (result.type === 'btPrg') {
@@ -87,8 +86,7 @@ export function initWsConn(cb?: () => void) {
                     }
                     site.update(s => {
                         s.heavyName = name;
-                        s.heavyDone = done;
-                        s.heavyTotal = total;
+                        s.heavyProgress = done/total;
                         return s;
                     });
                 }

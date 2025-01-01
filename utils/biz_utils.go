@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"fmt"
+	"github.com/banbox/banbot/btime"
+	"gonum.org/v1/gonum/floats"
 	"sync"
 
 	"github.com/banbox/banbot/core"
@@ -10,6 +13,7 @@ import (
 )
 
 type PrgCB = func(done int, total int)
+type FnTaskPrg = func(task string, rate float64)
 
 type PrgBar struct {
 	bar      *progressbar.ProgressBar
@@ -19,6 +23,24 @@ type PrgBar struct {
 	TotalNum int
 	Last     int64 // for outer usage
 	PrgCbs   []PrgCB
+}
+
+type StagedPrg struct {
+	taskMap      map[string]*PrgTask
+	tasks        []string
+	lock         sync.Mutex
+	triggers     map[string]FnTaskPrg
+	active       int     // index for tasks
+	minIntvMS    int64   // default 100
+	lastNotifyMS int64   // 13 digit timestamp
+	Progress     float64 // [0,1]
+}
+
+type PrgTask struct {
+	ID       int
+	Name     string
+	Progress float64
+	Weight   float64
 }
 
 func NewPrgBar(totalNum int, title string) *PrgBar {
@@ -104,4 +126,87 @@ func (j *PrgBarJob) Done() {
 		j.Add(core.StepTotal - j.jobPrgNum)
 		j.jobPrgNum = core.StepTotal
 	}
+}
+
+/*
+NewStagedPrg 创建多任务复合进度提示器
+tasks: 子任务代码列表，按执行顺序，不可重复
+weights: 各个子任务权重，>0，内部会自动归一化
+*/
+func NewStagedPrg(tasks []string, weights []float64) *StagedPrg {
+	res := &StagedPrg{
+		taskMap:   make(map[string]*PrgTask),
+		tasks:     tasks,
+		triggers:  make(map[string]FnTaskPrg),
+		minIntvMS: 100,
+	}
+	if len(tasks) != len(weights) {
+		panic(fmt.Sprintf("NewStagedPrg: tasks(%v) len differs from weights(%v)", len(tasks), len(weights)))
+	}
+	totalWei := floats.Sum(weights)
+	for i, task := range tasks {
+		wei := weights[i]
+		if wei <= 0 {
+			panic(fmt.Sprintf("NewStagedPrg: weight should > 0, task: %s ", task))
+		}
+		if _, ok := res.taskMap[task]; ok {
+			panic(fmt.Sprintf("NewStagedPrg: duplicate task: %s ", task))
+		}
+		res.taskMap[task] = &PrgTask{
+			ID:     i,
+			Name:   task,
+			Weight: wei / totalWei,
+		}
+	}
+	return res
+}
+
+func (p *StagedPrg) SetMinInterval(intvMSecs int) {
+	if intvMSecs > 0 {
+		p.minIntvMS = int64(intvMSecs)
+	}
+}
+
+func (p *StagedPrg) AddTrigger(name string, cb FnTaskPrg) {
+	p.lock.Lock()
+	if _, ok := p.triggers[name]; !ok {
+		p.triggers[name] = cb
+	}
+	p.lock.Unlock()
+}
+
+func (p *StagedPrg) DelTrigger(name string) {
+	p.lock.Lock()
+	if _, ok := p.triggers[name]; ok {
+		delete(p.triggers, name)
+	}
+	p.lock.Unlock()
+}
+
+func (p *StagedPrg) SetProgress(task string, progress float64) {
+	if progress < 0 || progress > 1 {
+		panic(fmt.Sprintf("progress shoud be in [0,1], task: %v", task))
+	}
+	p.lock.Lock()
+	t, ok := p.taskMap[task]
+	if !ok {
+		panic(fmt.Sprintf("task: %v not registered in StagedPrg", task))
+	}
+	if progress > t.Progress && p.active <= t.ID {
+		p.active = t.ID
+		t.Progress = progress
+		totalPrg := float64(0)
+		for i := 0; i < t.ID; i++ {
+			totalPrg += p.taskMap[p.tasks[i]].Weight
+		}
+		p.Progress = totalPrg + t.Progress*t.Weight
+		curTime := btime.UTCStamp()
+		if curTime-p.lastNotifyMS > p.minIntvMS {
+			p.lastNotifyMS = curTime
+			for _, cb := range p.triggers {
+				cb(task, p.Progress)
+			}
+		}
+	}
+	p.lock.Unlock()
 }

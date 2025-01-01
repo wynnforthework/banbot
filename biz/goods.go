@@ -18,7 +18,7 @@ import (
 
 // Calculate the K-line quality score of each dimension of the trading pair
 // 计算交易对各维度K线质量分数
-func calcPairTfScales(exchange banexg.BanExchange, pairs []string) (map[string]map[string]float64, *errs.Error) {
+func calcPairTfScores(exchange banexg.BanExchange, pairs []string) (map[string]map[string]float64, *errs.Error) {
 	pairTfScores := make(map[string]map[string]float64)
 	allowTfs := allAllowTFs()
 	if len(allowTfs) == 0 {

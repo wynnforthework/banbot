@@ -89,18 +89,6 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	return nil
 }
 
-func DownOHLCV2DB(exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS int64,
-	pBar *utils.PrgBar) (int, *errs.Error) {
-	sess, conn, err := Conn(nil)
-	if err != nil {
-		return 0, err
-	}
-	defer conn.Release()
-	oldStart, oldEnd := sess.GetKlineRange(exs.ID, timeFrame)
-	startMS = exs.GetValidStart(startMS)
-	return downOHLCV2DBRange(sess, exchange, exs, timeFrame, startMS, endMS, oldStart, oldEnd, 2, pBar)
-}
-
 /*
 DownOHLCV2DB
 Download K-line to database. This method should be called in a transaction, otherwise there will be errors in querying and updating related data.
@@ -608,7 +596,7 @@ BulkDownOHLCV
 Batch simultaneous download of K-line
 批量同时下载K线
 */
-func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, timeFrame string, startMS, endMS int64, limit int) *errs.Error {
+func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, timeFrame string, startMS, endMS int64, limit int, prg utils.PrgCB) *errs.Error {
 	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	startMS, endMS = parseDownArgs(tfMSecs, startMS, endMS, limit, false)
 	downTF, err := GetDownTF(timeFrame)
@@ -619,12 +607,13 @@ func BulkDownOHLCV(exchange banexg.BanExchange, exsList map[int32]*ExSymbol, tim
 	startText := btime.ToDateStr(startMS, "")
 	endText := btime.ToDateStr(endMS, "")
 	var pBar *utils.PrgBar
-	if barNum*len(exsList) > 99000 || len(exsList) > 10 {
+	if barNum*len(exsList) > 99000 || len(exsList) > 10 || prg != nil {
 		log.Info(fmt.Sprintf("bulk down %s %d pairs %s-%s, len:%d\n", timeFrame, len(exsList), startText, endText, barNum))
 		pBar = utils.NewPrgBar(len(exsList)*core.StepTotal, "BulkDown")
-		core.HeavyTask = "DownKline"
-		pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
 		defer pBar.Close()
+		if prg != nil {
+			pBar.PrgCbs = append(pBar.PrgCbs, prg)
+		}
 	}
 	sess, conn, err := Conn(nil)
 	if err != nil {
@@ -665,10 +654,19 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	if err != nil {
 		return err
 	}
+	sess, conn, err := Conn(nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	err = EnsureListDates(sess, exchange, exsMap, nil)
+	if err != nil {
+		return err
+	}
 	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	exInfo := exchange.Info()
 	if exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType) {
-		retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, limit)
+		retErr := BulkDownOHLCV(exchange, exsMap, timeFrame, startMS, endMS, limit, nil)
 		if retErr != nil {
 			return retErr
 		}
@@ -678,11 +676,6 @@ func FastBulkOHLCV(exchange banexg.BanExchange, symbols []string, timeFrame stri
 	}
 	sugStartMS, sugEndMS := parseDownArgs(tfMSecs, startMS, endMS, limit, false)
 	itemNum := (sugEndMS - sugStartMS) / tfMSecs
-	sess, conn, err := Conn(nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
 	leftArr := make([]int32, 0, len(exsMap))
 	if itemNum < int64(core.KBatchSize) {
 		sidArr := make([]int32, 0, len(exsMap))

@@ -309,7 +309,7 @@ var adjMap = map[string]int{
 	"":     0,
 }
 
-func ExportKlines(args *config.CmdArgs) *errs.Error {
+func ExportKlines(args *config.CmdArgs, prg utils.PrgCB) *errs.Error {
 	if args.OutPath == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
 	}
@@ -373,8 +373,9 @@ func ExportKlines(args *config.CmdArgs) *errs.Error {
 	}
 	tfNum := len(args.TimeFrames)
 	pBar := utils.NewPrgBar(len(args.Pairs)*tfNum, "Export")
-	core.HeavyTask = "ExportKLine"
-	pBar.PrgCbs = append(pBar.PrgCbs, core.SetHeavyProgress)
+	if prg != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, prg)
+	}
 	defer pBar.Close()
 	for _, symbol := range args.Pairs {
 		clean := strings.ReplaceAll(strings.ReplaceAll(symbol, "/", "_"), ":", "_")

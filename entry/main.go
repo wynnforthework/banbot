@@ -114,11 +114,12 @@ please run with a subcommand:
     backtest:   backtest with strategies and data
     spider:     start the spider
     optimize:   run hyper parameters optimization
+    init:       initialize config.yml/config.local.yml in BanDataDir
     bt_opt:     rolling backtest with hyperparameter optimization
     kline:      run kline commands
     tick:       run tick commands
     tool:       run tools
-    web:        run web dashboard
+    web:        run web ui
 `
 	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), core.Version))
 }

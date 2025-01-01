@@ -34,8 +34,10 @@ const (
 )
 
 const (
-	OdInfoLegalCost = "LegalCost"
-	OdInfoStopAfter = "StopAfter"
+	OdInfoLegalCost  = "LegalCost"
+	OdInfoStopAfter  = "StopAfter"
+	OdInfoStopLoss   = "StopLoss"
+	OdInfoTakeProfit = "TakeProfit"
 )
 
 const (

@@ -66,14 +66,7 @@ func (i *InOutOrder) loadInfo() {
 	if i.Info != nil {
 		return
 	}
-	i.Info = make(map[string]interface{})
-	if i.IOrder.Info == "" {
-		return
-	}
-	err_ := utils2.UnmarshalString(i.IOrder.Info, &i.Info, utils2.JsonNumAuto)
-	if err_ != nil {
-		log.Error("unmarshal ioder info fail", zap.String("info", i.IOrder.Info), zap.Error(err_))
-	}
+	i.Info = decodeIOrderInfo(i.IOrder.Info)
 }
 
 func (i *InOutOrder) GetInfoFloat64(key string) float64 {
@@ -510,7 +503,7 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 		return nil
 	}
 	var err *errs.Error
-	i.IOrder.Info, err = i.GetInfoText()
+	_, err = i.GetInfoText()
 	if err != nil {
 		return err
 	}
@@ -580,6 +573,7 @@ func (i *InOutOrder) GetInfoText() (string, *errs.Error) {
 		if err_ != nil {
 			return "", errs.New(errs.CodeUnmarshalFail, err_)
 		}
+		i.IOrder.Info = infoText
 		i.DirtyMain = true
 		return infoText, nil
 	}
@@ -612,11 +606,11 @@ func (i *InOutOrder) SetExitTrigger(key string, args *ExitTrigger) {
 }
 
 func (i *InOutOrder) SetStopLoss(args *ExitTrigger) {
-	i.SetExitTrigger("StopLoss", args)
+	i.SetExitTrigger(OdInfoStopLoss, args)
 }
 
 func (i *InOutOrder) SetTakeProfit(args *ExitTrigger) {
-	i.SetExitTrigger("TakeProfit", args)
+	i.SetExitTrigger(OdInfoTakeProfit, args)
 }
 
 func (i *InOutOrder) GetExitTrigger(key string) *TriggerState {
@@ -626,11 +620,11 @@ func (i *InOutOrder) GetExitTrigger(key string) *TriggerState {
 }
 
 func (i *InOutOrder) GetStopLoss() *TriggerState {
-	return i.GetExitTrigger("StopLoss")
+	return i.GetExitTrigger(OdInfoStopLoss)
 }
 
 func (i *InOutOrder) GetTakeProfit() *TriggerState {
-	return i.GetExitTrigger("TakeProfit")
+	return i.GetExitTrigger(OdInfoTakeProfit)
 }
 
 /*

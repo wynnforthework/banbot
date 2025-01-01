@@ -79,15 +79,21 @@ func SetupComsExg(args *config.CmdArgs) *errs.Error {
 	return orm.InitExg(exg.Default)
 }
 
-func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
+func LoadRefreshPairs(dp data.IProvider, showLog bool, pBar *utils.StagedPrg) *errs.Error {
 	goods.ShowLog = showLog
 	pairs, err := goods.RefreshPairList()
 	if err != nil {
 		return err
 	}
-	pairTfScores, err := calcPairTfScales(exg.Default, pairs)
+	if pBar != nil {
+		pBar.SetProgress("loadPairs", 1)
+	}
+	pairTfScores, err := calcPairTfScores(exg.Default, pairs)
 	if err != nil {
 		return err
+	}
+	if pBar != nil {
+		pBar.SetProgress("tfScores", 1)
 	}
 	warms, accOds, err := strat.LoadStratJobs(pairs, pairTfScores)
 	if err != nil {
@@ -116,11 +122,14 @@ func LoadRefreshPairs(dp data.IProvider, showLog bool) *errs.Error {
 	if showLog {
 		core.PrintStratGroups()
 	}
+	if pBar != nil {
+		pBar.SetProgress("loadJobs", 1)
+	}
 	return dp.SubWarmPairs(warms, true)
 }
 
 func AutoRefreshPairs(dp data.IProvider, showLog bool) {
-	err := LoadRefreshPairs(dp, showLog)
+	err := LoadRefreshPairs(dp, showLog, nil)
 	if err != nil {
 		log.Error("refresh pairs fail", zap.Error(err))
 	}

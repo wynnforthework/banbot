@@ -78,7 +78,7 @@ func TestBulkDownOHLCV(t *testing.T) {
 	}
 	exsMap := GetExSymbols(core.ExgName, core.Market)
 	startMS := int64(1696982400000)
-	err = BulkDownOHLCV(exchange, exsMap, "1d", startMS, 0, 1)
+	err = BulkDownOHLCV(exchange, exsMap, "1d", startMS, 0, 1, nil)
 	if err != nil {
 		panic(err)
 	}

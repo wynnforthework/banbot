@@ -41,31 +41,46 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 	dayMs := int64(utils2.TFToSecs("1d") * 1000)
 	result := make([]string, 0, len(symbols))
 	exsMap := orm.GetExSymbols(core.ExgName, core.Market)
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
 	pairMap := make(map[string]*orm.ExSymbol)
 	for _, exs := range exsMap {
 		pairMap[exs.Symbol] = exs
 	}
-	curMS := btime.TimeMS()
-	minStartMS := curMS - dayMs*int64(f.Min)
+	careMap := make(map[int32]*orm.ExSymbol)
 	for _, p := range symbols {
 		if exs, ok := pairMap[p]; ok {
-			if exs.ListMs > 0 {
-				days := int((curMS - exs.ListMs) / dayMs)
-				if f.Max > 0 && days > f.Max {
-					continue
-				} else if f.Min > 0 && days < f.Min {
-					if f.AllowEmpty {
-						core.BanPairsUntil[p] = minStartMS
-					} else {
-						continue
-					}
-				}
-				result = append(result, p)
-			}
-			// ListMs=0表示尚未开始交易
+			careMap[exs.ID] = exs
 		} else {
 			return nil, errs.NewMsg(errs.CodeNoMarketForPair, "unknown %v", p)
 		}
+	}
+	err = orm.EnsureListDates(sess, exg.Default, careMap, nil)
+	if err != nil {
+		return nil, err
+	}
+	curMS := btime.TimeMS()
+	minStartMS := curMS - dayMs*int64(f.Min)
+	for _, exs := range careMap {
+		if exs.ListMs > 0 {
+			days := int((curMS - exs.ListMs) / dayMs)
+			if f.Max > 0 && days > f.Max {
+				continue
+			} else if f.Min > 0 && days < f.Min {
+				if f.AllowEmpty {
+					core.BanPairsUntil[exs.Symbol] = minStartMS
+				} else {
+					continue
+				}
+			}
+			result = append(result, exs.Symbol)
+		} else {
+			log.Info("listMs is empty", zap.String("key", exs.Symbol))
+		}
+		// ListMs=0表示尚未开始交易
 	}
 	return result, nil
 }

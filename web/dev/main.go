@@ -24,14 +24,14 @@ import (
 func Run(args []string) error {
 	var ag = &CmdArgs{}
 	var f = flag.NewFlagSet("web", flag.ExitOnError)
-	f.IntVar(&ag.Port, "port", 8000, "port to listen, default: 8000")
-	f.StringVar(&ag.Host, "host", "0.0.0.0", "default: 0.0.0.0")
-	f.StringVar(&ag.LogLevel, "level", "info", "log level, default: info")
-	f.StringVar(&ag.TimeZone, "tz", "utc", "timezone, default: utc")
+	f.IntVar(&ag.Port, "port", 8000, "port to listen")
+	f.StringVar(&ag.Host, "host", "127.0.0.1", "bind host ip")
+	f.StringVar(&ag.LogLevel, "level", "info", "log level")
+	f.StringVar(&ag.TimeZone, "tz", "utc", "timezone")
 	f.StringVar(&ag.DataDir, "datadir", "", "Path to data dir.")
 	f.Var(&ag.Configs, "config", "config path to use, Multiple -config options may be used")
 	f.StringVar(&ag.LogFile, "logfile", "", "log file path, default: system temp dir")
-	f.StringVar(&ag.DBFile, "db", "dev.db", "db file path, default: dev.db")
+	f.StringVar(&ag.DBFile, "db", "dev.db", "db file path")
 	if args == nil {
 		args = os.Args[1:]
 	}

@@ -39,15 +39,11 @@ var (
 	ExitCalls []func()  // CALLBACK TO STOP EXECUTION 停止执行的回调
 	MemOut    io.Writer // Output memory profile 进行内存profile的输出
 
-	ConcurNum     = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version       = "0.1.19"
-	UIVersion     = "0.1.19"
-	LogFile       string
-	DevDbPath     string
-	HeavyTask     string  // 后台排他性耗时任务名称
-	HeavyProgress float64 // 后台排他性耗时任务进度
-	heavyLock     sync.Mutex
-	HeavyTriggers = make(map[string]PrgCB)
+	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
+	Version   = "0.1.21"
+	UIVersion = "0.1.21"
+	LogFile   string
+	DevDbPath string
 )
 
 type PrgCB func(done int, total int)

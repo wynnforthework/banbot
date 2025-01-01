@@ -435,9 +435,10 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 		return nil, nil
 	}
 
-	cfg, err2 := config.GetConfig(&config.CmdArgs{Configs: []string{
-		filepath.Join(btDir, "config.yml"),
-	}}, false)
+	cfg, err2 := config.GetConfig(&config.CmdArgs{
+		Configs:   []string{filepath.Join(btDir, "config.yml")},
+		NoDefault: true,
+	}, false)
 	if err2 != nil {
 		return nil, err2
 	}
@@ -478,7 +479,7 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 	}, nil
 }
 
-func MergeConfig(inText string) (string, error) {
+func MergeConfig(inText string, skips ...string) (string, error) {
 	dataDir := config.GetDataDir()
 	if dataDir == "" {
 		return "", errs.NewMsg(errs.CodeParamRequired, "-datadir is empty")
@@ -506,7 +507,7 @@ func MergeConfig(inText string) (string, error) {
 	var content string
 	var err error
 	if len(paths) > 1 {
-		content, err = utils2.MergeYamlStr(paths, make(map[string]bool))
+		content, err = utils2.MergeYamlStr(paths, skips...)
 		if err != nil {
 			return "", err
 		}
