@@ -7,9 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -270,4 +273,32 @@ func IsDocker() bool {
 	}
 
 	return false
+}
+
+func OpenBrowser(url string) error {
+	var cmd string
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		return exec.Command(cmd, "/c", "start", url).Start()
+	case "darwin":
+		cmd = "open"
+		return exec.Command(cmd, url).Start()
+	case "linux":
+		cmd = "xdg-open"
+		return exec.Command(cmd, url).Start()
+	default:
+		return fmt.Errorf("unsupported platform: " + runtime.GOOS)
+	}
+}
+
+func OpenBrowserDelay(url string, delayMS int) {
+	timer := time.NewTimer(time.Duration(delayMS) * time.Millisecond)
+	go func() {
+		<-timer.C
+		err_ := OpenBrowser(url)
+		if err_ != nil {
+			log.Warn("open browser fail", zap.Error(err_))
+		}
+	}()
 }

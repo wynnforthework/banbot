@@ -40,7 +40,7 @@ pairlists:
     min_value: 100000
     refresh_secs: 7200
     back_timeframe: 1d
-    back_period: 1
+    back_period: 7
   - name: PriceFilter
     max_unit_value: 100
     precision: 0.0015
@@ -53,22 +53,22 @@ pairlists:
     refresh_period: 1440
   - name: SpreadFilter
     max_ratio: 0.005
-  - name: CorrelationFilter
-    min: -1
-    max: 1
-    timeframe: 5m
-    back_num: 70
-    sort: asc
-    top_n: 50
+#  - name: CorrelationFilter
+#    min: -1
+#    max: 1
+#    timeframe: 5m
+#    back_num: 70
+#    sort: asc
+#    top_n: 50
   - name: VolatilityFilter
     back_days: 10
     max: 1
     min: 0.05
   - name: AgeFilter
-    min: 5
+    min: 180
   - name: OffsetFilter
     reverse: false
-    offset: 10
+    offset: 0
     rate: 0.5
     limit: 20
   - name: ShuffleFilter

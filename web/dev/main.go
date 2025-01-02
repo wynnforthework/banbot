@@ -3,6 +3,7 @@ package dev
 import (
 	"flag"
 	"fmt"
+	"github.com/banbox/banbot/utils"
 	"os"
 	"path/filepath"
 	"time"
@@ -96,5 +97,10 @@ func Run(args []string) error {
 	// 启动k线监听和websocket推送
 	go base.RunReceiver()
 
-	return app.Listen(fmt.Sprintf("%s:%v", ag.Host, ag.Port))
+	bindUrl := fmt.Sprintf("%s:%v", ag.Host, ag.Port)
+
+	// 延迟500ms打开浏览器
+	utils.OpenBrowserDelay("http://"+bindUrl, 500)
+
+	return app.Listen(bindUrl)
 }
