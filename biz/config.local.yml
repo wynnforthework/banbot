@@ -1,7 +1,7 @@
 timerange: "20230701-20250101"
 pairs: ['ETH/USDT']
 run_policy:
-  - name: demo:demo
+  - name: ma:demo
     run_timeframes: [15m]
     # pairs: [BTC/USDT:USDT]
     params: {atr: 15}

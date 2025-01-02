@@ -49,6 +49,7 @@ var (
 	PairFilters      []*CommonPairFilter
 	Exchange         *ExchangeConfig
 	DataDir          string
+	stratDir         string
 	Database         *DatabaseConfig
 	SpiderAddr       string
 	APIServer        *APIServerConfig

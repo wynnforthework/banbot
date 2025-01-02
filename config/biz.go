@@ -23,13 +23,24 @@ import (
 
 func GetDataDir() string {
 	if DataDir == "" {
-		DataDir = os.Getenv("BanDataDir")
+		DataDir = getEnvPath("BanDataDir")
 	}
 	return DataDir
 }
 
 func GetStratDir() string {
-	return os.Getenv("BanStratDir")
+	if stratDir == "" {
+		stratDir = getEnvPath("BanStratDir")
+	}
+	return stratDir
+}
+
+func getEnvPath(key string) string {
+	absPath, err := filepath.Abs(os.Getenv(key))
+	if err != nil {
+		panic(err)
+	}
+	return absPath
 }
 
 func LoadConfig(args *CmdArgs) *errs.Error {

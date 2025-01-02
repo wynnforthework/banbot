@@ -27,23 +27,27 @@ func getRootDir() (string, error) {
 		return stratDir, nil
 	}
 
-	// 获取可执行文件路径
-	execPath, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("get strategy root dir fail: %v", err)
+	// 获取工作目录
+	workDir, err := os.Getwd()
+	if workDir == "" || err != nil {
+		// 获取可执行文件路径
+		execPath, err := os.Executable()
+		if err != nil {
+			return "", fmt.Errorf("get strategy root dir fail: %v", err)
+		}
+		workDir = filepath.Dir(execPath)
 	}
-	baseDir := filepath.Dir(execPath)
 
 	// 检查 go.mod main.go 文件是否存在
-	_, err = os.Stat(filepath.Join(baseDir, "go.mod"))
+	_, err = os.Stat(filepath.Join(workDir, "go.mod"))
 	if err != nil && os.IsNotExist(err) {
 		return "", errBadRoot
 	}
-	_, err = os.Stat(filepath.Join(baseDir, "main.go"))
+	_, err = os.Stat(filepath.Join(workDir, "main.go"))
 	if err != nil && os.IsNotExist(err) {
 		return "", errBadRoot
 	}
-	return baseDir, nil
+	return workDir, nil
 }
 
 func makeNewStrat(folder, name string) error {
