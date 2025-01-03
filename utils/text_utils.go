@@ -143,3 +143,9 @@ func IsTextContent(data []byte) bool {
 
 	return true
 }
+
+func SplitLines(text string) []string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	return strings.Split(text, "\n")
+}

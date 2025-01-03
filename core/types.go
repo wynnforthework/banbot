@@ -41,3 +41,8 @@ type Param struct {
 	Rate  float64 // Valid for normal distribution, defaults to 1. The larger the value, the more the random values tend to be Mean. 正态分布时有效，默认1，值越大，随机值越趋向于Mean
 	edgeY float64 // Calculate cache of normal distribution edge y 计算正态分布边缘y的缓存
 }
+
+type FloatText struct {
+	Text string
+	Val  float64
+}

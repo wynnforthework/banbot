@@ -3,6 +3,18 @@ package opt
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
+	"math/rand"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/anyongjin/go-bayesopt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
@@ -18,16 +30,6 @@ import (
 	"github.com/c-bata/goptuna/cmaes"
 	"github.com/c-bata/goptuna/tpe"
 	"go.uber.org/zap"
-	"io/fs"
-	"math/rand"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"slices"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type FuncOptTask func(params map[string]float64) (float64, *errs.Error)
@@ -260,7 +262,7 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 	args.MemProfile = false
 	args.LogLevel = "warn"
 	core.SetRunMode(core.RunModeBackTest)
-	err := biz.SetupComs(args)
+	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
 	}
@@ -292,20 +294,22 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 		if err_ != nil {
 			return "", errs.New(errs.CodeIOWriteFail, err_)
 		}
-		defer file.Close()
 		for _, gp := range groups {
 			// Bayesian optimization is carried out separately for each strategy, long and short, to find the best parameters
 			// 针对每个策略、多空单独进行贝叶斯优化，寻找最佳参数
 			err = optAndPrint(gp.Clone(), args, allPairs, file)
 			if err != nil {
+				file.Close()
 				return "", err
 			}
 		}
+		file.Close()
+		sortOptLogs(args.OutPath)
 	} else {
 		// Multi-process execution to improve speed.
 		// 多进程执行，提高速度。
 		log.Warn("running optimize", zap.Int("num", len(groups)), zap.Int("rounds", args.OptRounds))
-		var cmds = []string{"optimize", "--nodb", "-opt-rounds"}
+		var cmds = []string{"optimize", "-opt-rounds"}
 		cmds = append(cmds, strconv.Itoa(args.OptRounds), "-sampler", args.Sampler)
 		if args.EachPairs {
 			cmds = append(cmds, "-each-pairs")
@@ -356,6 +360,55 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 		}
 	}
 	return collectOptLog(logOuts, minScore, args.Picker, args.PairPicker)
+}
+
+func sortOptLogs(path string) {
+	// 重新读取文件并对loss行排序
+	content, err_ := os.ReadFile(path)
+	if err_ != nil {
+		log.Warn("read output file fail", zap.Error(err_))
+		return
+	}
+	reg := regexp.MustCompile(`^loss:\s*(-?\d+\.\d+)`)
+	lines := utils.SplitLines(string(content))
+	lines = append(lines, "") // 确保末尾是loss行也能触发排序
+	var lossLines []*core.FloatText
+	inLossArea := false
+	var result = make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.HasPrefix(line, "loss: ") {
+			matches := reg.FindStringSubmatch(line)
+			if len(matches) > 1 {
+				lossVal, err_ := strconv.ParseFloat(matches[1], 64)
+				if err_ == nil {
+					lossLines = append(lossLines, &core.FloatText{
+						Text: line,
+						Val:  lossVal,
+					})
+					if !inLossArea {
+						inLossArea = true
+					}
+					continue
+				}
+			}
+		}
+		if inLossArea {
+			inLossArea = false
+			sort.SliceStable(lossLines, func(i, j int) bool {
+				return lossLines[i].Val < lossLines[j].Val
+			})
+			for _, it := range lossLines {
+				result = append(result, it.Text)
+			}
+			lossLines = nil
+		}
+		result = append(result, line)
+	}
+	// 这里不用再次检查inLossArea，因为前面已添加末尾空行
+	err_ = os.WriteFile(path, []byte(strings.Join(result, "\n")), 0644)
+	if err_ != nil {
+		log.Warn("write sorted file fail", zap.Error(err_))
+	}
 }
 
 /*
@@ -663,7 +716,7 @@ func CollectOptLog(args *config.CmdArgs) *errs.Error {
 		return nil
 	}
 	core.SetRunMode(core.RunModeBackTest)
-	err := biz.SetupComs(args)
+	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
 	}

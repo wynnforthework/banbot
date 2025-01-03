@@ -226,7 +226,7 @@ func parsePath(curPath string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		filepath.Join(baseDir, curPath)
+		curPath = filepath.Join(baseDir, curPath)
 	}
 	return curPath, nil
 }
