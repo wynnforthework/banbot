@@ -41,7 +41,7 @@
   function toggleInd(isMain: boolean, name: string, checked: boolean) {
     const paneId = isMain ? 'candle_pane' : 'pane_'+name;
     if (checked) {
-      createIndicator(name, undefined, false, {id: paneId})
+      createIndicator(name, undefined, isMain, {id: paneId})
     } else {
       delInd(paneId, name)
     }
@@ -91,7 +91,7 @@
   const cloudIndLoaded = derived(ctx, ($ctx) => $ctx.cloudIndLoaded);
   cloudIndLoaded.subscribe((new_val) => {
     Object.values($save.saveInds).forEach(o => {
-      createIndicator(o.name, o.params, true, {id: o.pane_id})
+      createIndicator(o.name, o.params, o.pane_id === 'candle_pane', {id: o.pane_id})
     })
   })
 
