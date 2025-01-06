@@ -56,6 +56,7 @@ type OptInfo struct {
 	ID     string
 	Score  float64
 	Params map[string]float64
+	Ints   map[string]bool
 	*BTResult
 }
 
@@ -224,7 +225,14 @@ func (o *OptInfo) ToLine() string {
 	var text string
 	if o.Params != nil && len(o.Params) > 0 {
 		var numLen int
-		text, numLen = utils.MapToStr(o.Params)
+		params := make(map[string]float64)
+		for k, v := range o.Params {
+			if isInt, ok := o.Ints[k]; ok && isInt {
+				v = math.Round(v)
+			}
+			params[k] = v
+		}
+		text, numLen = utils.MapToStr(params)
 		tabLack := (len(o.Params)*5 - numLen) / 4
 		if tabLack > 0 {
 			text += strings.Repeat("\t", tabLack)
@@ -279,6 +287,7 @@ func AvgGoodDesc(items []*OptInfo, startRate float64, endRate float64) *OptInfo 
 	}
 	return &OptInfo{
 		Params: res,
+		Ints:   make(map[string]bool),
 	}
 }
 

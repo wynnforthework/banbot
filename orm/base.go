@@ -87,6 +87,23 @@ func Setup() *errs.Error {
 		if err != nil {
 			return NewDbErr(core.ErrDbReadFail, err)
 		}
+	} else {
+		// 检查public.khole表是否存在no_data字段，如果不存在则插入此字段
+		row = pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM information_schema.columns 
+			WHERE table_name = 'khole' AND column_name = 'no_data'`)
+		var noDataExists int
+		err = row.Scan(&noDataExists)
+		if err != nil {
+			return NewDbErr(core.ErrDbReadFail, err)
+		}
+		if noDataExists == 0 {
+			_, err = pool.Exec(ctx, "ALTER TABLE public.khole ADD COLUMN no_data BOOLEAN DEFAULT FALSE")
+			if err != nil {
+				return NewDbErr(core.ErrDbReadFail, err)
+			}
+			log.Info("added no_data column to khole table")
+		}
 	}
 	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize))
 	err2 = LoadAllExSymbols()

@@ -11,3 +11,14 @@ ormo/ormu依赖orm，不可反向依赖，避免出现依赖环
 ```shell
 docker run --rm -v "E:/trade/go/banbot/orm:/src" -w /src sqlc/sqlc generate
 ```
+
+# 从proto生成go代码
+安装protoc:
+```shell
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+```
+生成：
+```shell
+protoc --go_out=. --go_opt=paths=source_relative kdata.proto
+```
+注意将生成后的`kdata.pb.go`中`package __`改为`package orm`

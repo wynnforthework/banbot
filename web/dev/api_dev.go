@@ -493,11 +493,7 @@ func getBtTasks(c *fiber.Ctx) error {
 
 	var startMS, endMS int64
 	if args.RangeStr != "" {
-		parts := strings.Split(args.RangeStr, "-")
-		if len(parts) == 2 {
-			startMS = btime.ParseTimeMS(parts[0])
-			endMS = btime.ParseTimeMS(parts[1])
-		}
+		startMS, endMS, _ = config.ParseTimeRange(args.RangeStr)
 	}
 
 	tasks, err := qu.FindTasks(context.Background(), ormu.FindTasksParams{

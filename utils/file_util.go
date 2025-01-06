@@ -500,3 +500,28 @@ func GetFilesWithPrefix(filePath string) ([]string, error) {
 
 	return files, nil
 }
+
+func CreateNumFile(outDir string, prefix string, ext string) (*os.File, error) {
+	files, err := filepath.Glob(filepath.Join(outDir, prefix+"*."+ext))
+	if err != nil {
+		return nil, err
+	}
+	fileCount := len(files)
+
+	var newFile *os.File
+	for {
+		fileCount++
+		newFileName := fmt.Sprintf("%s%d.%s", prefix, fileCount, ext)
+		newFilePath := filepath.Join(outDir, newFileName)
+
+		newFile, err = os.Create(newFilePath)
+		if err == nil {
+			break // 成功创建文件，退出循环
+		}
+		if !os.IsExist(err) {
+			return nil, err // 返回其他类型的错误
+		}
+	}
+
+	return newFile, nil
+}

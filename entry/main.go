@@ -25,7 +25,11 @@ type FuncGetEntry = func(name string) (FuncEntry, []string)
 func RunCmd() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Error("banbot panic", zap.Any("error", r))
+			if err, ok := r.(*errs.Error); ok {
+				log.Error("banbot panic", zap.Any("error", err))
+			} else {
+				log.Error("banbot panic", zap.Any("error", r), zap.Stack("stack"))
+			}
 			core.RunExitCalls()
 			os.Exit(1)
 		}
@@ -71,6 +75,8 @@ func RunCmd() {
 			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
 				"concur", "alpha", "pair_picker"}
 			entry = opt.RunBTOverOpt
+		case "data":
+			runDataCmds(args[1:])
 		case "kline":
 			runKlineCmds(args[1:])
 		case "tick":
@@ -116,12 +122,44 @@ please run with a subcommand:
     optimize:   run hyper parameters optimization
     init:       initialize config.yml/config.local.yml in BanDataDir
     bt_opt:     rolling backtest with hyperparameter optimization
+    data:       run data export/import
     kline:      run kline commands
     tick:       run tick commands
     tool:       run tools
     web:        run web ui
 `
 	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), core.Version))
+}
+
+func runDataCmds(args []string) {
+	runSubCmd(args, func(name string) (FuncEntry, []string) {
+		var options []string
+		var entry FuncEntry
+		switch name {
+		case "export":
+			options = []string{"out", "concur"}
+			entry = runDataExport
+		case "import":
+			options = []string{"in", "concur"}
+			entry = runDataImport
+		default:
+			return nil, nil
+		}
+		return entry, options
+	}, func(e error) {
+		if e != nil {
+			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
+			return
+		}
+		log.Warn("unknown subcommand: " + args[0])
+		tpl := `
+banbot data:
+    export:     export data to protobuf file from db
+    import:     import data from protobuf files to db
+please choose a valid action
+`
+		log.Warn(tpl)
+	})
 }
 
 func runKlineCmds(args []string) {

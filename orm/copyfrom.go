@@ -102,6 +102,7 @@ func (r iteratorForAddKHoles) Values() ([]interface{}, error) {
 		r.rows[0].Timeframe,
 		r.rows[0].Start,
 		r.rows[0].Stop,
+		r.rows[0].NoData,
 	}, nil
 }
 
@@ -110,7 +111,7 @@ func (r iteratorForAddKHoles) Err() error {
 }
 
 func (q *Queries) AddKHoles(ctx context.Context, arg []AddKHolesParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"khole"}, []string{"sid", "timeframe", "start", "stop"}, &iteratorForAddKHoles{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"khole"}, []string{"sid", "timeframe", "start", "stop", "no_data"}, &iteratorForAddKHoles{rows: arg})
 }
 
 // iteratorForAddSymbols implements pgx.CopyFromSource.

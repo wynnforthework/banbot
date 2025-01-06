@@ -34,7 +34,6 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 		}
 		args.OutPath = fmt.Sprintf("$/backtest/%s", hash)
 	}
-	args.OutPath = config.ParsePath(args.OutPath)
 	if args.Separate && len(config.RunPolicy) > 1 {
 		log.Info("run backtest separately for policies", zap.Int("num", len(config.RunPolicy)))
 		policyList := config.RunPolicy
@@ -214,4 +213,34 @@ func runInit(args *config.CmdArgs) *errs.Error {
 	}
 	log.Info("init done")
 	return nil
+}
+
+func runDataExport(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	if len(args.Configs) == 0 {
+		return errs.NewMsg(errs.CodeParamRequired, "-config is required")
+	}
+	cfgPath := args.Configs[len(args.Configs)-1]
+	args.Configs = args.Configs[:len(args.Configs)-1]
+	err := biz.SetupComsExg(args)
+	if err != nil {
+		return err
+	}
+	if args.OutPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "-out is required")
+	}
+	cfgPath = config.ParsePath(cfgPath)
+	return orm.ExportKData(cfgPath, args.OutPath, args.Concur)
+}
+
+func runDataImport(args *config.CmdArgs) *errs.Error {
+	core.SetRunMode(core.RunModeOther)
+	err := biz.SetupComsExg(args)
+	if err != nil {
+		return err
+	}
+	if args.InPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "-in is required")
+	}
+	return orm.ImportData(args.InPath, args.Concur)
 }

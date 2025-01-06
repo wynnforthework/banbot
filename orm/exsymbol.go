@@ -52,6 +52,20 @@ func GetExSymbols(exgName, market string) map[int32]*ExSymbol {
 	return res
 }
 
+func GetExSymbolMap(exgName, market string) map[string]*ExSymbol {
+	var res = make(map[string]*ExSymbol)
+	for _, exs := range keySymbolMap {
+		if exgName != "" && exs.Exchange != exgName {
+			continue
+		}
+		if market != "" && exs.Market != market {
+			continue
+		}
+		res[exs.Symbol] = exs
+	}
+	return res
+}
+
 func GetSymbolByID(id int32) *ExSymbol {
 	item, ok := idSymbolMap[id]
 	if !ok {
@@ -278,12 +292,8 @@ GetAllExSymbols
 Gets all the objects that have been loaded into the cache
 获取已加载到缓存的所有标的
 */
-func GetAllExSymbols() []*ExSymbol {
-	res := make([]*ExSymbol, 0, len(idSymbolMap))
-	for _, v := range idSymbolMap {
-		res = append(res, v)
-	}
-	return res
+func GetAllExSymbols() map[int32]*ExSymbol {
+	return idSymbolMap
 }
 
 func (s *ExSymbol) GetValidStart(startMS int64) int64 {

@@ -347,12 +347,10 @@ func ExportKlines(args *config.CmdArgs, prg utils.PrgCB) *errs.Error {
 	}
 	start, stop := config.TimeRange.StartMS, config.TimeRange.EndMS
 	if args.TimeRange != "" {
-		parts := strings.Split(args.TimeRange, "-")
-		if len(parts) != 2 {
+		start, stop, err_ = config.ParseTimeRange(args.TimeRange)
+		if err_ != nil {
 			return errs.NewMsg(errs.CodeParamInvalid, "invalid timeRange: %v", args.TimeRange)
 		}
-		start = btime.ParseTimeMS(parts[0])
-		stop = btime.ParseTimeMS(parts[1])
 	}
 	loc, err := args.ParseTimeZone()
 	if err != nil {

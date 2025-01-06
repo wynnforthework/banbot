@@ -16,6 +16,15 @@ func (a *CmdArgs) Init() {
 	a.TimeFrames = utils.SplitSolid(a.RawTimeFrames, ",")
 	a.Pairs = utils.SplitSolid(a.RawPairs, ",")
 	a.Tables = utils.SplitSolid(a.RawTables, ",")
+	if a.DataDir != "" {
+		DataDir = a.DataDir
+	}
+	if a.InPath != "" {
+		a.InPath = ParsePath(a.InPath)
+	}
+	if a.OutPath != "" {
+		a.OutPath = ParsePath(a.OutPath)
+	}
 }
 
 func (a *CmdArgs) ParseTimeZone() (*time.Location, *errs.Error) {

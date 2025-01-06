@@ -51,6 +51,7 @@ type AddKHolesParams struct {
 	Timeframe string `json:"timeframe"`
 	Start     int64  `json:"start"`
 	Stop      int64  `json:"stop"`
+	NoData    bool   `json:"no_data"`
 }
 
 const addKInfo = `-- name: AddKInfo :one
@@ -244,17 +245,24 @@ func (q *Queries) GetInsKline(ctx context.Context, sid int32) (*InsKline, error)
 }
 
 const getKHoles = `-- name: GetKHoles :many
-select id, sid, timeframe, start, stop from khole
-where sid = $1 and timeframe = $2
+select id, sid, timeframe, start, stop, no_data from khole
+where sid = $1 and timeframe = $2 and start >= $3 and stop <= $4
 `
 
 type GetKHolesParams struct {
 	Sid       int32  `json:"sid"`
 	Timeframe string `json:"timeframe"`
+	Start     int64  `json:"start"`
+	Stop      int64  `json:"stop"`
 }
 
 func (q *Queries) GetKHoles(ctx context.Context, arg GetKHolesParams) ([]*KHole, error) {
-	rows, err := q.db.Query(ctx, getKHoles, arg.Sid, arg.Timeframe)
+	rows, err := q.db.Query(ctx, getKHoles,
+		arg.Sid,
+		arg.Timeframe,
+		arg.Start,
+		arg.Stop,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -268,6 +276,7 @@ func (q *Queries) GetKHoles(ctx context.Context, arg GetKHolesParams) ([]*KHole,
 			&i.Timeframe,
 			&i.Start,
 			&i.Stop,
+			&i.NoData,
 		); err != nil {
 			return nil, err
 		}
@@ -304,7 +313,7 @@ func (q *Queries) ListExchanges(ctx context.Context) ([]string, error) {
 }
 
 const listKHoles = `-- name: ListKHoles :many
-select id, sid, timeframe, start, stop from khole
+select id, sid, timeframe, start, stop, no_data from khole
 WHERE sid = ANY($1::int[])
 `
 
@@ -323,6 +332,7 @@ func (q *Queries) ListKHoles(ctx context.Context, dollar_1 []int32) ([]*KHole, e
 			&i.Timeframe,
 			&i.Start,
 			&i.Stop,
+			&i.NoData,
 		); err != nil {
 			return nil, err
 		}
@@ -399,18 +409,24 @@ func (q *Queries) ListSymbols(ctx context.Context, exchange string) ([]*ExSymbol
 }
 
 const setKHole = `-- name: SetKHole :exec
-update khole set start = $2, stop = $3
+update khole set start = $2, stop = $3, no_data = $4
 where id = $1
 `
 
 type SetKHoleParams struct {
-	ID    int64 `json:"id"`
-	Start int64 `json:"start"`
-	Stop  int64 `json:"stop"`
+	ID     int64 `json:"id"`
+	Start  int64 `json:"start"`
+	Stop   int64 `json:"stop"`
+	NoData bool  `json:"no_data"`
 }
 
 func (q *Queries) SetKHole(ctx context.Context, arg SetKHoleParams) error {
-	_, err := q.db.Exec(ctx, setKHole, arg.ID, arg.Start, arg.Stop)
+	_, err := q.db.Exec(ctx, setKHole,
+		arg.ID,
+		arg.Start,
+		arg.Stop,
+		arg.NoData,
+	)
 	return err
 }
 

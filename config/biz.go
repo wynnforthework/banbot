@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -133,11 +134,8 @@ func (c *Config) Apply(args *CmdArgs) {
 	if args.MaxPoolSize > 0 {
 		c.Database.MaxPoolSize = args.MaxPoolSize
 	}
-	cutLen := len(c.TimeRangeRaw) / 2
-	c.TimeRange = &TimeTuple{
-		btime.ParseTimeMS(c.TimeRangeRaw[:cutLen]),
-		btime.ParseTimeMS(c.TimeRangeRaw[cutLen+1:]),
-	}
+	start, stop, _ := ParseTimeRange(c.TimeRangeRaw)
+	c.TimeRange = &TimeTuple{start, stop}
 	if args.StakeAmount > 0 {
 		c.StakeAmount = args.StakeAmount
 	}
@@ -580,6 +578,35 @@ func (c *RunPolicyConfig) Def(k string, dv float64, p *core.Param) float64 {
 	return val
 }
 
+func (c *RunPolicyConfig) DefInt(k string, dv int, p *core.Param) int {
+	val := c.Param(k, float64(dv))
+	if p.Mean == 0 {
+		p.Mean = float64(dv)
+	}
+	// 确保每个整数命中概率基本一致
+	p.Min = math.Round(p.Min) - 0.49
+	p.Max = math.Round(p.Max) + 0.49
+	p.IsInt = true
+	if p.VType == core.VTypeNorm && p.Rate == 0 {
+		p.Rate = 1
+	}
+	if p.Name == "" {
+		p.Name = k
+	}
+	if c.defs == nil {
+		c.defs = make(map[string]*core.Param)
+	}
+	c.defs[k] = p
+	return int(math.Round(val))
+}
+
+func (c *RunPolicyConfig) IsInt(k string) bool {
+	if p, ok := c.defs[k]; ok {
+		return p.IsInt
+	}
+	return false
+}
+
 func (c *RunPolicyConfig) HyperParams() []*core.Param {
 	res := make([]*core.Param, 0, len(c.defs))
 	for _, p := range c.defs {
@@ -722,4 +749,28 @@ func LoadPerfs(inDir string) {
 		}
 	}
 	log.Info("load strat_perfs ok", zap.String("path", inPath))
+}
+
+// ParseTimeRange parses time range string in format "YYYYMMDD-YYYYMMDD"
+func ParseTimeRange(timeRange string) (int64, int64, error) {
+	parts := strings.Split(timeRange, "-")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("invalid time range format: %s", timeRange)
+	}
+	startMS := btime.ParseTimeMS(parts[0])
+	stopMS := btime.ParseTimeMS(parts[1])
+	return startMS, stopMS, nil
+}
+
+func GetExportConfig(path string) (*ExportConfig, *errs.Error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errs.New(errs.CodeIOReadFail, err)
+	}
+
+	var cfg ExportConfig
+	if err = yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, errs.New(core.ErrBadConfig, err)
+	}
+	return &cfg, nil
 }

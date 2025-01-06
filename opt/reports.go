@@ -838,7 +838,7 @@ func (r *BTResult) Score() float64 {
 		// 盈利时返回无回撤收益率
 		score = r.TotProfitPct * math.Pow(1-r.MaxDrawDownPct/100, 1.5)
 	}
-	return score
+	return utils.NanInfTo(score, 0)
 }
 
 func (r *BTResult) dumpDetail(outPath string) {

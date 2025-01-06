@@ -2,7 +2,9 @@ package utils
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/md5"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -301,4 +303,14 @@ func OpenBrowserDelay(url string, delayMS int) {
 			log.Warn("open browser fail", zap.Error(err_))
 		}
 	}()
+}
+
+// IntToBytes convert uint32 to [4]byte
+func IntToBytes(n uint32) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	err := binary.Write(buf, binary.LittleEndian, n)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

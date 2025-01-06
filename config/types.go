@@ -232,3 +232,27 @@ type TimeTuple struct {
 	StartMS int64
 	EndMS   int64
 }
+
+type MarketRange struct {
+	Exchange  string `yaml:"exchange"`
+	ExgReal   string `yaml:"exg_real"`
+	Market    string `yaml:"market"`
+	TimeRange string `yaml:"time_range"`
+}
+
+type MarketSymbolsRange struct {
+	*MarketRange `yaml:",inline"`
+	Symbols      []string `yaml:"symbols"`
+}
+
+type MarketTFSymbolsRange struct {
+	*MarketSymbolsRange `yaml:",inline"`
+	TimeFrames          []string `yaml:"timeframes"`
+}
+
+// ExportConfig represents the export configuration
+type ExportConfig struct {
+	Klines     []*MarketTFSymbolsRange `yaml:"klines"`
+	AdjFactors []*MarketSymbolsRange   `yaml:"adj_factors"`
+	Calendars  []*MarketRange          `yaml:"calendars"`
+}

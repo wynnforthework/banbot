@@ -44,6 +44,7 @@ type KHole struct {
 	Timeframe string `json:"timeframe"`
 	Start     int64  `json:"start"`
 	Stop      int64  `json:"stop"`
+	NoData    bool   `json:"no_data"`
 }
 
 type KInfo struct {

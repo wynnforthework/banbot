@@ -44,10 +44,10 @@ WHERE sid = ANY($1::int[]);
 
 -- name: GetKHoles :many
 select * from khole
-where sid = $1 and timeframe = $2;
+where sid = $1 and timeframe = $2 and start >= $3 and stop <= $4;
 
 -- name: SetKHole :exec
-update khole set start = $2, stop = $3
+update khole set start = $2, stop = $3, no_data = $4
 where id = $1;
 
 -- name: DelKHoleRange :exec
@@ -56,8 +56,8 @@ where sid = $1 and timeframe=$2 and start >= $3 and stop <= $4;
 
 -- name: AddKHoles :copyfrom
 insert into khole
-("sid", "timeframe", "start", "stop")
-values ($1, $2, $3, $4);
+("sid", "timeframe", "start", "stop", "no_data")
+values ($1, $2, $3, $4, $5);
 
 
 

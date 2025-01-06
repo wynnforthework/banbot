@@ -830,7 +830,7 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	// Query the recorded kholes and merge them
 	// 查询已记录的khole，进行合并
 	ctx := context.Background()
-	resHoles, err_ := q.GetKHoles(ctx, GetKHolesParams{Sid: sid, Timeframe: timeFrame})
+	resHoles, err_ := q.GetKHoles(ctx, GetKHolesParams{Sid: sid, Timeframe: timeFrame, Start: startMS, Stop: endMS})
 	if err_ != nil {
 		return NewDbErr(core.ErrDbReadFail, err_)
 	}
@@ -999,6 +999,15 @@ insert into %s (sid, time, open, high, low, close, volume, info)
 func NewKlineAgg(TimeFrame, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention string) *KlineAgg {
 	msecs := int64(utils2.TFToSecs(TimeFrame) * 1000)
 	return &KlineAgg{TimeFrame, msecs, Table, AggFrom, AggStart, AggEnd, AggEvery, CpsBefore, Retention}
+}
+
+func (q *Queries) GetKlineNum(sid int32, timeFrame string, start, end int64) int {
+	sql := fmt.Sprintf("select count(0) from kline_%s where sid=%v and time>=%v and time<%v",
+		timeFrame, sid, start, end)
+	row := q.db.QueryRow(context.Background(), sql)
+	var num int
+	_ = row.Scan(&num)
+	return num
 }
 
 /*

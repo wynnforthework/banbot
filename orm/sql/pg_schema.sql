@@ -10,7 +10,8 @@ CREATE TABLE "public"."khole"
     "sid"       int4       not null,
     "timeframe" varchar(5) not null,
     "start"     int8       not null,
-    "stop"      int8       not null
+    "stop"      int8       not null,
+    "no_data"   boolean    not null DEFAULT FALSE
 );
 CREATE INDEX "idx_khole_sid_tf" ON "public"."khole" USING btree ("sid", "timeframe");
 ALTER TABLE "public"."khole"

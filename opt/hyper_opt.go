@@ -565,11 +565,13 @@ func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, f
 	var resList = make([]*OptInfo, 0, rounds)
 	runOptJob := func(data map[string]float64) (float64, *errs.Error) {
 		jobId := utils.RandomStr(6)
+		ints := make(map[string]bool)
 		for k, v := range data {
 			pol.Params[k] = v
+			ints[k] = pol.IsInt(k)
 		}
 		bt, loss := runBTOnce()
-		o := &OptInfo{Score: -loss, Params: data, BTResult: bt.BTResult, ID: jobId}
+		o := &OptInfo{Score: -loss, Params: data, Ints: ints, BTResult: bt.BTResult, ID: jobId}
 		line := o.ToLine()
 		flog.WriteString(line + "\n")
 		log.Warn(line)
@@ -713,6 +715,14 @@ Sorts all policy tasks in reverse score order of output.
 func CollectOptLog(args *config.CmdArgs) *errs.Error {
 	if args.InPath == "" {
 		log.Warn("-in is required")
+		return nil
+	}
+	info, err_ := os.Stat(args.InPath)
+	if err_ != nil {
+		return errs.New(errs.CodeIOReadFail, err_)
+	}
+	if !info.IsDir() {
+		sortOptLogs(args.InPath)
 		return nil
 	}
 	core.SetRunMode(core.RunModeBackTest)
@@ -1013,7 +1023,7 @@ func parseOptLine(line string) *OptInfo {
 	if paraEnd < 0 {
 		paraEnd = len(line)
 	}
-	res := &OptInfo{Params: make(map[string]float64), BTResult: &BTResult{}}
+	res := &OptInfo{Params: make(map[string]float64), Ints: make(map[string]bool), BTResult: &BTResult{}}
 	loss, _ := strconv.ParseFloat(strings.TrimSpace(line[5:paraStart]), 64)
 	res.Score = -loss
 	paraArr := strings.Split(strings.TrimSpace(line[paraStart:paraEnd]), ",")
