@@ -37,12 +37,12 @@ type ExportTask struct {
 
 const maxOutFSize = 1024 * 1024 * 1024
 
-func ExportKData(configFile string, outputDir string, numWorkers int) *errs.Error {
+func ExportKData(configFile string, outputDir string, numWorkers int, pb *utils2.StagedPrg) *errs.Error {
 	cfg, err := config.GetExportConfig(configFile)
 	if err != nil {
 		return err
 	}
-	task, err := genExportTask(cfg)
+	task, err := genExportTask(cfg, pb)
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func ExportKData(configFile string, outputDir string, numWorkers int) *errs.Erro
 	}
 	log.Info("export basic info ok")
 
-	return runExportKlines(task.jobs, outputDir, numWorkers)
+	return runExportKlines(task.jobs, outputDir, numWorkers, pb)
 }
 
 func genExpAdjFactors(sess *Queries, items []*config.MarketSymbolsRange) ([]*AdjFactorBlock, *errs.Error) {
@@ -161,7 +161,7 @@ func genExpCalendars(sess *Queries, items []*config.MarketRange) ([]*CalendarBlo
 	return calendars, nil
 }
 
-func genExportTask(cfg *config.ExportConfig) (*ExportTask, *errs.Error) {
+func genExportTask(cfg *config.ExportConfig, pb *utils2.StagedPrg) (*ExportTask, *errs.Error) {
 	sess, conn, err := Conn(nil)
 	if err != nil {
 		return nil, err
@@ -197,7 +197,7 @@ func genExportTask(cfg *config.ExportConfig) (*ExportTask, *errs.Error) {
 	}
 
 	// Generate kHoles for each ExSymbol+TimeFrame combination
-	kHoles, err := genExpKHoles(sess, jobs)
+	kHoles, err := genExpKHoles(sess, jobs, pb)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +290,7 @@ func genExportKlines(items []*config.MarketTFSymbolsRange, adjs []*AdjFactorBloc
 	return tasks, exsResMap, nil
 }
 
-func genExpKHoles(sess *Queries, jobs []*ExportKlineJob) ([]*KHoleBlock, *errs.Error) {
+func genExpKHoles(sess *Queries, jobs []*ExportKlineJob, pb *utils2.StagedPrg) ([]*KHoleBlock, *errs.Error) {
 	rangeMap := make(map[string]*config.TimeTuple)
 	var kHoles []*KHoleBlock
 
@@ -311,6 +311,11 @@ func genExpKHoles(sess *Queries, jobs []*ExportKlineJob) ([]*KHoleBlock, *errs.E
 	}
 
 	pBar := utils2.NewPrgBar(len(jobs), "kHoles")
+	if pb != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+			pb.SetProgress("holes", float64(done)/float64(total))
+		})
+	}
 	defer pBar.Close()
 
 	// Query kHoles for each ExSymbol+TimeFrame
@@ -544,16 +549,21 @@ func dumpProto(b proto.Message, file *os.File) *errs.Error {
 	return err2
 }
 
-func runExportKlines(jobs []*ExportKlineJob, outputDir string, numWorkers int) *errs.Error {
+func runExportKlines(jobs []*ExportKlineJob, outputDir string, numWorkers int, pb *utils2.StagedPrg) *errs.Error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	numWorkers = max(1, numWorkers)
+	numWorkers = min(len(jobs), max(1, numWorkers))
 
 	// Create worker pool
 	var wg sync.WaitGroup
 	jobCh := make(chan *ExportKlineJob)
 	errCh := make(chan error, numWorkers+2)
 	pBar := utils2.NewPrgBar(len(jobs)*core.StepTotal, "kline")
+	if pb != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+			pb.SetProgress("kline", float64(done)/float64(total))
+		})
+	}
 	defer pBar.Close()
 
 	for i := 0; i < numWorkers; i++ {
@@ -609,7 +619,7 @@ func runExportKlines(jobs []*ExportKlineJob, outputDir string, numWorkers int) *
 	}
 }
 
-func ImportData(dataDir string, numWorkers int) *errs.Error {
+func ImportData(dataDir string, numWorkers int, pb *utils2.StagedPrg) *errs.Error {
 	// 首先读取并处理exInfo文件
 	exInfoPath := filepath.Join(dataDir, "exInfo1.dat")
 	exInfoFile, err_ := os.Open(exInfoPath)
@@ -660,6 +670,11 @@ func ImportData(dataDir string, numWorkers int) *errs.Error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pBar := utils2.NewPrgBar(len(files)*core.StepTotal, "kLine")
+	if pb != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+			pb.SetProgress("kline", float64(done)/float64(total))
+		})
+	}
 	defer pBar.Close()
 
 	updateRange := func(sid int32, tf string, start, end int64) {
@@ -761,6 +776,11 @@ func ImportData(dataDir string, numWorkers int) *errs.Error {
 		}
 	}
 	pBar2 := utils2.NewPrgBar(itemNum, "kRange")
+	if pb != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+			pb.SetProgress("range", float64(done)/float64(total))
+		})
+	}
 	defer pBar2.Close()
 	for sid, tfMap := range insRanges {
 		for tf, tup := range tfMap {

@@ -8,6 +8,9 @@
   import {modals} from '$lib/stores/modals';
   import * as m from '$lib/paraglide/messages.js';
   import {site} from "$lib/stores/site";
+  import CodeMirror from './CodeMirror.svelte';
+  import { oneDark } from '@codemirror/theme-one-dark';
+  import type { Extension } from '@codemirror/state';
 
   let {
     show=$bindable(false),
@@ -15,6 +18,8 @@
     show: boolean
   } = $props();
   
+  let theme: Extension | null = $state(oneDark);
+  let editor: CodeMirror | null = $state(null);
   let activeTab = $state('download');
   let symbols = $state<string[]>([]);
 
@@ -27,8 +32,39 @@
     symbols: [] as string[],
     periods: [] as string[],
     startTime: '',
-    endTime: ''
+    endTime: '',
+    concurrency: 4,
+    importDir: '',
+    yamlConfig: `klines:
+  - exchange: 'binance'
+    exg_real: ''
+    market: 'spot'
+    timeframes: ['1m', '5m', '15m', '1h', '1d']
+    time_range: '20240101-20250101'
+    symbols: []
+#adj_factors:
+#  - exchange: ''
+#    exg_real: ''
+#    market: ''
+#    time_range: '20210101-20250101'
+#    symbols: []
+#calendars:
+#  - exchange: ''
+#    exg_real: ''
+#    market: ''
+#    time_range: '20210101-20250101'`
   });
+
+  function setActiveTab(tab: string){
+    activeTab = tab;
+    if (tab === 'export'){
+      setTimeout(() => {
+        if(editor){
+          editor.setValue('tmp.yml', form.yamlConfig);
+        }
+      }, 500)
+    }
+  }
 
   $effect(() => {
     const exchange = form.exchange;
@@ -67,15 +103,20 @@
     // 构建请求参数
     let params: Record<string, any> = {
       action: activeTab,
-      folder: form.exportDir,
+      folder: activeTab === 'export' ? form.exportDir : form.importDir,
       exchange: form.exchange,
       exgReal: form.exgReal,
       market: form.market,
       pairs: form.symbols,
       periods: form.periods,
       startMs: form.startTime ? toUTCStamp(form.startTime) : 0,
-      endMs: form.endTime ? toUTCStamp(form.endTime) : 0
+      endMs: form.endTime ? toUTCStamp(form.endTime) : 0,
+      concurrency: form.concurrency
     };
+
+    if (activeTab === 'export') {
+      params.config = form.yamlConfig;
+    }
 
     // 发送请求
     let rsp = await postApi('/dev/data_tools', params);
@@ -119,16 +160,19 @@
       <div role="tablist" class="tabs tabs-boxed mb-4">
         <a role="tab" 
            class="tab {activeTab === 'download' ? 'tab-active' : ''}"
-           onclick={() => activeTab = 'download'}>{m.download()}</a>
+           onclick={() => setActiveTab('download')}>{m.download()}</a>
         <a role="tab" 
            class="tab {activeTab === 'export' ? 'tab-active' : ''}"
-           onclick={() => activeTab = 'export'}>{m.export_()}</a>
+           onclick={() => setActiveTab('export')}>{m.export_()}</a>
+        <a role="tab"
+           class="tab {activeTab === 'import' ? 'tab-active' : ''}"
+           onclick={() => setActiveTab('import')}>{m.import_()}</a>
         <a role="tab" 
            class="tab {activeTab === 'purge' ? 'tab-active' : ''}"
-           onclick={() => activeTab = 'purge'}>{m.purge()}</a>
+           onclick={() => setActiveTab('purge')}>{m.purge()}</a>
         <a role="tab" 
            class="tab {activeTab === 'correct' ? 'tab-active' : ''}"
-           onclick={() => activeTab = 'correct'}>{m.correct()}</a>
+           onclick={() => setActiveTab('correct')}>{m.correct()}</a>
       </div>
 
       <div class="form-control gap-4">
@@ -139,9 +183,38 @@
             </label>
             <input type="text" class="input input-bordered" bind:value={form.exportDir} />
           </div>
+
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">{m.concurrency()}</span>
+            </label>
+            <input type="number" class="input input-bordered" bind:value={form.concurrency} min="1" max="30"/>
+          </div>
+
+          <div class="form-control">
+            <div class="h-[400px]">
+              <CodeMirror bind:this={editor} change={(v) => form.yamlConfig = v} {theme}/>
+            </div>
+          </div>
         {/if}
 
-        {#if ['download', 'export', 'purge', 'correct'].includes(activeTab)}
+        {#if activeTab === 'import'}
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">{m.import_dir()}</span>
+            </label>
+            <input type="text" class="input input-bordered" bind:value={form.importDir} />
+          </div>
+
+          <div class="form-control">
+            <label class="label">
+              <span class="label-text">{m.concurrency()}</span>
+            </label>
+            <input type="number" class="input input-bordered" bind:value={form.concurrency} min="1" max="30"/>
+          </div>
+        {/if}
+
+        {#if ['download', 'purge', 'correct'].includes(activeTab)}
           <div class="flex gap-4">
             <div class="form-control flex-1">
               <label class="label">
@@ -184,7 +257,7 @@
           </div>
         {/if}
 
-        {#if ['download', 'export', 'purge'].includes(activeTab)}
+        {#if ['download', 'purge'].includes(activeTab)}
           <div class="form-control">
             <label class="label">
               <span class="label-text">{m.periods()}</span>
@@ -205,7 +278,7 @@
           </div>
         {/if}
 
-        {#if ['download', 'export', 'purge'].includes(activeTab)}
+        {#if ['download', 'purge'].includes(activeTab)}
           <div class="form-control">
             <label class="label">
               <span class="label-text">{m.time_range()}</span>

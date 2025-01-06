@@ -446,6 +446,7 @@
     "data_tools": "Data Tools",
     "download": "Download",
     "export_": "Export",
+    "import_": "Import",
     "purge": "Purge",
     "correct": "Correct",
     "export_dir": "Export Dir",
@@ -493,6 +494,8 @@
     "heavy_task_busy": "Please wait for the existing task to complete before retrying",
     "already_saved": "Auto saved successfully",
     "code_modified_need_build": "Code modified, please build before backtesting",
+    "import_dir": "Import Dir",
+    "concurrency": "Concurrency",
 
     "cfg_name": "Bot name, used to distinguish different bots in message notifications",
     "cfg_env": "Running environment, prod represents production network, test represents test network (Binance testnet), dry_run represents simulation",

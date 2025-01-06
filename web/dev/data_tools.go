@@ -2,13 +2,14 @@ package dev
 
 import (
 	"fmt"
-	"github.com/banbox/banbot/btime"
+	"os"
 	"sync"
+
+	"github.com/banbox/banbot/btime"
 
 	"github.com/banbox/banbot/utils"
 	utils2 "github.com/banbox/banexg/utils"
 
-	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
@@ -30,17 +31,19 @@ type DataToolsManager struct {
 type FnDataTool = func(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error
 
 type DataToolsArgs struct {
-	Action   string `json:"action" validate:"required"`
-	Folder   string `json:"folder"`
-	Exchange string `json:"exchange" validate:"required"`
-	ExgReal  string `json:"exgReal"`
-	Market   string `json:"market" validate:"required"`
-	Exg      banexg.BanExchange
-	Pairs    []string `json:"pairs"`
-	Periods  []string `json:"periods"`
-	StartMs  int64    `json:"startMs"`
-	EndMs    int64    `json:"endMs"`
-	Force    bool     `json:"force"`
+	Action      string `json:"action" validate:"required"`
+	Folder      string `json:"folder"`
+	Exchange    string `json:"exchange"`
+	ExgReal     string `json:"exgReal"`
+	Market      string `json:"market"`
+	Exg         banexg.BanExchange
+	Pairs       []string `json:"pairs"`
+	Periods     []string `json:"periods"`
+	StartMs     int64    `json:"startMs"`
+	EndMs       int64    `json:"endMs"`
+	Force       bool     `json:"force"`
+	Concurrency int      `json:"concurrency"`
+	Config      string   `json:"config"`
 }
 
 var (
@@ -48,6 +51,7 @@ var (
 	validActions = map[string]bool{
 		"download": true,
 		"export":   true,
+		"import":   true,
 		"purge":    true,
 		"correct":  true,
 	}
@@ -78,7 +82,9 @@ func RunDataTools(args *DataToolsArgs) *errs.Error {
 	case "download":
 		return runDataTask(runDownloadData, args, []string{"downKline"}, []float64{1})
 	case "export":
-		return runDataTask(runExportData, args, []string{"export"}, []float64{1})
+		return runDataTask(runExportData, args, []string{"holes", "kline"}, []float64{1, 5})
+	case "import":
+		return runDataTask(runImportData, args, []string{"kline", "range"}, []float64{3, 1})
 	case "purge":
 		return runDataTask(runPurgeData, args, []string{"purge"}, []float64{1})
 	case "correct":
@@ -145,34 +151,46 @@ func runDownloadData(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error {
 // runExportData 导出数据
 func runExportData(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error {
 	log.Info("start export data",
-		zap.String("exchange", args.Exchange),
-		zap.String("market", args.Market),
 		zap.String("folder", args.Folder),
-		zap.Strings("pairs", args.Pairs),
-		zap.Strings("timeframes", args.Periods),
-		zap.Int64("start", args.StartMs),
-		zap.Int64("end", args.EndMs))
+		zap.Int("concurrency", args.Concurrency))
 
-	backExg, backMarket := core.ExgName, core.Market
-	core.ExgName, core.Market = args.Exchange, args.Market
-	prg := func(done int, total int) {
-		pBar.SetProgress("export", float64(done)/float64(total))
-	}
-	err := biz.ExportKlines(&config.CmdArgs{
-		OutPath:    args.Folder,
-		ExgReal:    args.ExgReal,
-		Pairs:      args.Pairs,
-		TimeFrames: args.Periods,
-		TimeRange:  fmt.Sprintf("%d-%d", args.StartMs, args.EndMs),
-		AdjType:    "none",
-	}, prg)
-	core.ExgName, core.Market = backExg, backMarket
+	// 创建临时配置文件
+	tmpFile, err := os.CreateTemp("", "export_config_*.yml")
 	if err != nil {
-		log.Error("export data failed", zap.Error(err))
-		return err
+		return errs.New(errs.CodeIOWriteFail, err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// 写入配置内容
+	if _, err := tmpFile.WriteString(args.Config); err != nil {
+		tmpFile.Close()
+		return errs.New(errs.CodeIOWriteFail, err)
+	}
+	tmpFile.Close()
+
+	// 调用 orm.ExportKData
+	err2 := orm.ExportKData(tmpFile.Name(), args.Folder, args.Concurrency, pBar)
+	if err2 != nil {
+		return err2
 	}
 
 	log.Info("export data completed")
+	return nil
+}
+
+// runImportData 导入数据
+func runImportData(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error {
+	log.Info("start import data",
+		zap.String("folder", args.Folder),
+		zap.Int("concurrency", args.Concurrency))
+
+	// 调用 orm.ImportData
+	err2 := orm.ImportData(args.Folder, args.Concurrency, pBar)
+	if err2 != nil {
+		return err2
+	}
+
+	log.Info("import data completed")
 	return nil
 }
 
@@ -257,15 +275,23 @@ func handleDataTools(c *fiber.Ctx) error {
 		args.EndMs = btime.UTCStamp()
 	}
 	var errMsg string
-	if args.Action != "correct" {
-		if args.StartMs == 0 {
-			errMsg = "startTime is required"
-		} else if len(args.Periods) == 0 {
-			errMsg = "periods is required"
+	mustMarket := false
+	if args.Action == "export" || args.Action == "import" {
+		if args.Folder == "" {
+			errMsg = "folder is required"
 		}
-	}
-	if args.Action == "export" && args.Folder == "" {
-		errMsg = "folder is required"
+	} else {
+		mustMarket = true
+		if args.Exchange == "" || args.Market == "" {
+			errMsg = "exchange & market is required"
+		}
+		if args.Action != "correct" {
+			if args.StartMs == 0 {
+				errMsg = "startTime is required"
+			} else if len(args.Periods) == 0 {
+				errMsg = "periods is required"
+			}
+		}
 	}
 	if errMsg != "" {
 		return c.Status(400).JSON(fiber.Map{
@@ -273,21 +299,23 @@ func handleDataTools(c *fiber.Ctx) error {
 		})
 	}
 
-	exchange, err2 := exg.GetWith(args.Exchange, args.Market, banexg.MarketSwap)
-	if err2 != nil {
-		return err2
-	}
+	if mustMarket {
+		exchange, err2 := exg.GetWith(args.Exchange, args.Market, banexg.MarketSwap)
+		if err2 != nil {
+			return err2
+		}
 
-	err2 = orm.InitExg(exchange)
-	if err2 != nil {
-		return err2
-	}
-	args.Exg = exchange
+		err2 = orm.InitExg(exchange)
+		if err2 != nil {
+			return err2
+		}
+		args.Exg = exchange
 
-	if len(args.Pairs) == 0 {
-		exsMap := orm.GetExSymbols(args.Exchange, args.Market)
-		for _, exs := range exsMap {
-			args.Pairs = append(args.Pairs, exs.Symbol)
+		if len(args.Pairs) == 0 {
+			exsMap := orm.GetExSymbols(args.Exchange, args.Market)
+			for _, exs := range exsMap {
+				args.Pairs = append(args.Pairs, exs.Symbol)
+			}
 		}
 	}
 
@@ -304,6 +332,8 @@ func handleDataTools(c *fiber.Ctx) error {
 			}
 			totalMins := barNum/core.ConcurNum/core.DownKNumMin + 1
 			msg += fmt.Sprintf("Cost Time: %d Hours %d Minutes", totalMins/60, totalMins%60)
+		} else if !mustMarket {
+			msg = fmt.Sprintf("\nFolder: %s", args.Folder)
 		}
 		return c.JSON(fiber.Map{
 			"code": 401,

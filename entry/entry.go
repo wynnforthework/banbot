@@ -230,7 +230,7 @@ func runDataExport(args *config.CmdArgs) *errs.Error {
 		return errs.NewMsg(errs.CodeParamRequired, "-out is required")
 	}
 	cfgPath = config.ParsePath(cfgPath)
-	return orm.ExportKData(cfgPath, args.OutPath, args.Concur)
+	return orm.ExportKData(cfgPath, args.OutPath, args.Concur, nil)
 }
 
 func runDataImport(args *config.CmdArgs) *errs.Error {
@@ -242,5 +242,5 @@ func runDataImport(args *config.CmdArgs) *errs.Error {
 	if args.InPath == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "-in is required")
 	}
-	return orm.ImportData(args.InPath, args.Concur)
+	return orm.ImportData(args.InPath, args.Concur, nil)
 }

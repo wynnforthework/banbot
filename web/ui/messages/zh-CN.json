@@ -446,6 +446,7 @@
   "data_tools": "数据工具",
   "download": "下载",
   "export_": "导出",
+  "import_": "导入",
   "purge": "删除",
   "correct": "纠正",
   "export_dir": "导出目录",
@@ -493,6 +494,8 @@
   "heavy_task_busy": "请等待已有任务完成后再试",
   "already_saved": "已自动保存成功",
   "code_modified_need_build": "代码已修改，请编译后回测",
+  "import_dir": "导入目录",
+  "concurrency": "并发数量",
 
   "cfg_name": "机器人名称，用于在消息通知中区分不同的机器人",
   "cfg_env": "运行环境，prod代表生产网络，test代表测试网络（币安测试网），dry_run代表模拟环境",
