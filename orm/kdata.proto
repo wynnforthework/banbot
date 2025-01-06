@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package orm;
+
+option go_package = ".";
+
+// KlineBlock represents a block of k-line data
+message KlineBlock {
+  int64 start = 1;  // start timestamp in milliseconds
+  int64 end = 2;    // end timestamp in milliseconds
+  int32 exs_id = 3; // exchange symbol id
+  string timeframe = 4; // timeframe like "1m", "5m", etc.
+  repeated double open = 5;   // open prices
+  repeated double high = 6;   // high prices
+  repeated double low = 7;    // low prices
+  repeated double close = 8;  // close prices
+  repeated double volume = 9; // volumes
+  repeated double info = 10;  // additional info (used for china market)
+}
+
+// AdjFactorBlock represents adjustment factors data
+message AdjFactorBlock {
+  int32 sid = 1;      // symbol id
+  int32 sub_id = 2;   // sub symbol id
+  int64 start_ms = 3; // start timestamp in milliseconds
+  double factor = 4;  // adjustment factor
+}
+
+// CalendarBlock represents calendar data
+message CalendarBlock {
+  string name = 1;     // calendar name
+  repeated int64 times = 2;
+}
+
+message ExSymbolBlock{
+  int32 id = 1;
+  string exchange = 2;
+  string exg_real = 3;
+  string market = 4;
+  string symbol = 5;
+  int64 list_ms = 6;
+  int64 delist_ms = 7;
+}
+
+message KHoleBlock{
+  int32 sid = 1;
+  string timeframe = 2;
+  repeated int64 holes = 3;
+}
+
+message EXInfo{
+  repeated ExSymbolBlock symbols = 1;
+  repeated KHoleBlock kHoles = 2;
+  repeated AdjFactorBlock adjFactors = 3;
+  repeated CalendarBlock calendars = 4;
+}
