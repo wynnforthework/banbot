@@ -496,6 +496,9 @@
   "code_modified_need_build": "代码已修改，请编译后回测",
   "import_dir": "导入目录",
   "concurrency": "并发数量",
+  "export_desc": "将导出为protobuf格式，也可在终端执行`bot data export`导出；如果您需要csv格式，请从终端执行`bot kline export`",
+  "import_desc": "将protobuf格式数据导入，也可在终端执行`bot data import`导出；如需导入`csv.zip`数据，请执行`bot kline load`",
+  "language": "语言",
 
   "cfg_name": "机器人名称，用于在消息通知中区分不同的机器人",
   "cfg_env": "运行环境，prod代表生产网络，test代表测试网络（币安测试网），dry_run代表模拟环境",

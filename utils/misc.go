@@ -25,6 +25,7 @@ import (
 var (
 	regHolds, _  = regexp.Compile("[{]([^}]+)[}]")
 	dockerStatus = 0
+	langCache    = ""
 )
 
 /*
@@ -313,4 +314,111 @@ func IntToBytes(n uint32) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+/*
+GetSystemLanguage returns the current system language code.
+Possible return values (ISO 639-1 with optional ISO 3166-1 country code):
+- en-US: English
+- zh-CN: Chinese (Simplified)
+...
+*/
+func GetSystemLanguage() string {
+	if langCache != "" {
+		return langCache
+	}
+	langCache = normalizeLanguageCode(detectLangCode())
+	return langCache
+}
+
+func detectLangCode() string {
+	if lang := os.Getenv("LANG"); lang != "" {
+		return lang
+	}
+	switch runtime.GOOS {
+	case "windows":
+		cmd := exec.Command("powershell", "-Command", "Get-Culture | select -exp Name")
+		output, err := cmd.Output()
+		if err == nil {
+			lang := strings.TrimSpace(string(output))
+			return strings.Replace(strings.ToLower(lang), "_", "-", -1)
+		}
+	case "darwin":
+		cmd := exec.Command("defaults", "read", ".GlobalPreferences", "AppleLanguages")
+		output, err := cmd.Output()
+		if err == nil {
+			// 解析输出的第一个语言
+			lines := strings.Split(string(output), "\n")
+			if len(lines) > 1 {
+				// 提取第一个语言代码
+				lang := strings.Trim(lines[1], " \t(\")")
+				return strings.Replace(strings.ToLower(lang), "_", "-", -1)
+			}
+		}
+	case "linux":
+		// 尝试从环境变量获取
+		for _, envVar := range []string{"LANGUAGE", "LC_ALL", "LC_MESSAGES"} {
+			if lang := os.Getenv(envVar); lang != "" {
+				// 提取语言代码部分
+				parts := strings.Split(lang, ".")
+				if len(parts) > 0 {
+					return strings.Replace(strings.ToLower(parts[0]), "_", "-", -1)
+				}
+			}
+		}
+	}
+
+	return "en-US"
+}
+
+func normalizeLanguageCode(code string) string {
+	// 处理形如 "zh_CN.UTF-8" 的格式
+	code = strings.Split(code, ".")[0]
+	code = strings.Replace(code, "_", "-", -1)
+
+	// 标准化语言代码
+	switch strings.ToLower(code) {
+	case "zh-cn", "zh-hans", "zh-hans-cn":
+		return "zh-CN"
+	case "zh-tw", "zh-hant", "zh-hant-tw":
+		return "zh-TW"
+	case "zh-hk", "zh-hant-hk":
+		return "zh-HK"
+	case "en", "en-us":
+		return "en-US"
+	case "en-gb":
+		return "en-GB"
+	case "ja", "ja-jp":
+		return "ja-JP"
+	case "ko", "ko-kr":
+		return "ko-KR"
+	case "fr", "fr-fr":
+		return "fr-FR"
+	case "de", "de-de":
+		return "de-DE"
+	case "es", "es-es":
+		return "es-ES"
+	case "it", "it-it":
+		return "it-IT"
+	case "ru", "ru-ru":
+		return "ru-RU"
+	case "pt-br":
+		return "pt-BR"
+	case "pt", "pt-pt":
+		return "pt-PT"
+	case "nl", "nl-nl":
+		return "nl-NL"
+	case "pl", "pl-pl":
+		return "pl-PL"
+	case "tr", "tr-tr":
+		return "tr-TR"
+	case "ar", "ar-sa":
+		return "ar-SA"
+	case "th", "th-th":
+		return "th-TH"
+	case "vi", "vi-vn":
+		return "vi-VN"
+	default:
+		return "en-US" // 未知语言代码返回美式英语
+	}
 }

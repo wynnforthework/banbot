@@ -9,6 +9,7 @@ class SiteState {
   apiReadyCbs: (() => void)[] = []
   heavyName: string = ''
   heavyProgress: number = 0
+  path: string = ''
 }
 
 export const site = writable(new SiteState())

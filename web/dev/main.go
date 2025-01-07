@@ -3,10 +3,11 @@ package dev
 import (
 	"flag"
 	"fmt"
-	"github.com/banbox/banbot/utils"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/banbox/banbot/utils"
 
 	"github.com/banbox/banbot/web/ui"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -98,9 +99,14 @@ func Run(args []string) error {
 	go base.RunReceiver()
 
 	bindUrl := fmt.Sprintf("%s:%v", ag.Host, ag.Port)
+	lang := utils.GetSystemLanguage()
+	openUrl := bindUrl
+	if lang == "zh-CN" {
+		openUrl += "/zh-CN"
+	}
 
 	// 延迟500ms打开浏览器
-	utils.OpenBrowserDelay("http://"+bindUrl, 500)
+	utils.OpenBrowserDelay("http://"+openUrl, 500)
 
 	return app.Listen(bindUrl)
 }

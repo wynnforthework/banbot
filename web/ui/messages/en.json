@@ -496,6 +496,9 @@
     "code_modified_need_build": "Code modified, please build before backtesting",
     "import_dir": "Import Dir",
     "concurrency": "Concurrency",
+    "export_desc": "Export to protobuf format here. or execute `bot data export` in the terminal to export. If you need csv format, execute `bot kline export` from the terminal.",
+    "import_desc": "Import protobuf format data here, or execute `bot data import` in the terminal to export. If you need to import `csv.zip` data, please execute `bot kline load`",
+    "language": "Language",
 
     "cfg_name": "Bot name, used to distinguish different bots in message notifications",
     "cfg_env": "Running environment, prod represents production network, test represents test network (Binance testnet), dry_run represents simulation",

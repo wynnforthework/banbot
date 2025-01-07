@@ -6,10 +6,21 @@
 	import Modal from '$lib/kline/Modal.svelte';
 	import { modals } from '$lib/stores/modals';
 	import { setTimezone } from '$lib/dateutil';
+	import {site} from '@/lib/stores/site';
+	import { page } from '$app/stores'
+	import { derived } from 'svelte/store';
 
 	let { children } = $props();
 	setTimezone('UTC')
   import "tailwindcss/tailwind.css";
+
+	const path = derived(page, ($page) => $page.url.pathname);
+	path.subscribe((new_val) => {
+		site.update((s) => {
+			s.path = i18n.route(new_val);
+			return s;
+		});
+	});
 </script>
 
 <ParaglideJS {i18n}>

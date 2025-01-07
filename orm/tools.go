@@ -802,7 +802,7 @@ func ImportData(dataDir string, numWorkers int, pb *utils2.StagedPrg) *errs.Erro
 				// 如果有旧数据，需要处理区间关系
 				if newEnd < oldStart || newStart > oldEnd {
 					// 新区间与旧区间不重合，需要添加khole
-					err := sess.updateKHoles(sid, tf, min(newStart, oldStart), max(newEnd, oldEnd))
+					err := sess.updateKHoles(sid, tf, min(newStart, oldStart), max(newEnd, oldEnd), false)
 					if err != nil {
 						return err
 					}
@@ -815,7 +815,7 @@ func ImportData(dataDir string, numWorkers int, pb *utils2.StagedPrg) *errs.Erro
 					return errs.New(core.ErrDbExecFail, err_)
 				}
 			}
-			err := sess.updateKHoles(sid, tf, newStart, newEnd)
+			err := sess.updateKHoles(sid, tf, newStart, newEnd, false)
 			if err != nil {
 				return err
 			}

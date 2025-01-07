@@ -10,6 +10,9 @@
   import {site} from '$lib/stores/site';
   import {page} from '$app/stores';
   import {modals} from '$lib/stores/modals';
+  import { availableLanguageTags, languageTag } from "$lib/paraglide/runtime.js"
+  import { i18n } from '$lib/i18n.js'
+  import { goto } from '$app/navigation'
 
   let activeTab = $state('config.local.yml');
   let theme: Extension | null = $state(oneDark);
@@ -25,6 +28,7 @@
   let selectedArch = $state('');
   let isBuilding = $state(false);
   let buildOk = $state(false);
+  let selectedLang = $state<string>(languageTag());
 
   onMount(() => {
     const tab = $page.url.searchParams.get('tab');
@@ -147,6 +151,13 @@
       setTimeout(loadConfig, 0)
     }
   });
+
+  async function switchLanguage(lang: string) {
+    if (lang === selectedLang) return;
+    selectedLang = lang;
+    const path = $site.path || '/';
+    await goto(i18n.resolveRoute(path, lang as any));
+  }
 </script>
 
 <div class="container mx-auto max-w-[1500px] px-4 py-6">
@@ -170,6 +181,12 @@
           <button class:active={activePage === 'build'}
             onclick={() => activePage = 'build'}>
             <Icon name="play" />{m.build()}
+          </button>
+        </li>
+        <li>
+          <button class:active={activePage === 'language'}
+            onclick={() => activePage = 'language'}>
+            <Icon name="language" />{m.language()}
           </button>
         </li>
       </ul>
@@ -211,7 +228,7 @@
             <CodeMirror bind:this={editor} change={onTextChange} {theme} class="flex-1 h-full"/>
           </div>
         </div>
-      {:else}
+      {:else if activePage === 'build'}
         <!-- 构建页面内容 -->
         <div class="space-y-6">
           <div class="alert">
@@ -282,6 +299,31 @@
               </div>
             </div>
           {/if}
+        </div>
+      {:else}
+        <!-- 语言设置页面 -->
+        <div class="space-y-6">
+          <!-- 语言选择 -->
+          <div class="flex">
+            <div class="w-[10rem]">
+              <label class="label">
+                <span class="label-text">{m.language()}</span>
+              </label>
+            </div>
+            <div class="flex-1">
+              <div class="flex flex-wrap gap-2">
+                {#each availableLanguageTags as lang}
+                  <label class="label cursor-pointer">
+                    <input type="radio" name="lang" class="radio radio-primary"
+                      checked={selectedLang === lang}
+                      onchange={() => switchLanguage(lang)}
+                    />
+                    <span class="label-text ml-2">{lang}</span>
+                  </label>
+                {/each}
+              </div>
+            </div>
+          </div>
         </div>
       {/if}
     </div>

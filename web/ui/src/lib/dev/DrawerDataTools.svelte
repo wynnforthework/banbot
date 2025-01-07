@@ -11,6 +11,7 @@
   import CodeMirror from './CodeMirror.svelte';
   import { oneDark } from '@codemirror/theme-one-dark';
   import type { Extension } from '@codemirror/state';
+  import Icon from "$lib/Icon.svelte";
 
   let {
     show=$bindable(false),
@@ -193,8 +194,13 @@
 
           <div class="form-control">
             <div class="h-[400px]">
-              <CodeMirror bind:this={editor} change={(v) => form.yamlConfig = v} {theme}/>
+              <CodeMirror bind:this={editor} change={(v: string) => form.yamlConfig = v} {theme}/>
             </div>
+          </div>
+
+          <div role="alert" class="alert">
+            <Icon name="info"/>
+            <span>{m.export_desc()}</span>
           </div>
         {/if}
 
@@ -211,6 +217,11 @@
               <span class="label-text">{m.concurrency()}</span>
             </label>
             <input type="number" class="input input-bordered" bind:value={form.concurrency} min="1" max="30"/>
+          </div>
+
+          <div role="alert" class="alert">
+            <Icon name="info"/>
+            <span>{m.import_desc()}</span>
           </div>
         {/if}
 

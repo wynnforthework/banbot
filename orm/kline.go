@@ -592,7 +592,7 @@ func (q *Queries) UpdateKRange(sid int32, timeFrame string, startMS, endMS int64
 	}
 	// Search for holes, update khole
 	// 搜索空洞，更新khole
-	err = q.updateKHoles(sid, timeFrame, startMS, endMS)
+	err = q.updateKHoles(sid, timeFrame, startMS, endMS, true)
 	if err != nil {
 		return err
 	}
@@ -724,7 +724,7 @@ func (q *Queries) updateKLineRange(sid int32, timeFrame string, startMS, endMS i
 	return nil
 }
 
-func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64) *errs.Error {
+func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64, isCont bool) *errs.Error {
 	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	barTimes, err := q.getKLineTimes(sid, timeFrame, startMS, endMS)
 	if err != nil {
@@ -835,16 +835,27 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 		return NewDbErr(core.ErrDbReadFail, err_)
 	}
 	for _, h := range holes {
-		resHoles = append(resHoles, &KHole{Sid: sid, Timeframe: timeFrame, Start: h[0], Stop: h[1]})
+		resHoles = append(resHoles, &KHole{Sid: sid, Timeframe: timeFrame, Start: h[0], Stop: h[1], NoData: isCont})
 	}
 	slices.SortFunc(resHoles, func(a, b *KHole) int {
-		return int((a.Start - b.Start) / 1000)
+		if a.Start != b.Start {
+			return int((a.Start - b.Start) / 1000)
+		}
+		if a.NoData == b.NoData {
+			return 0
+		}
+		if a.NoData {
+			// 优先将NoData的放在前面
+			return -1
+		} else {
+			return 1
+		}
 	})
 	merged := make([]*KHole, 0)
 	delIDs := make([]int64, 0)
 	var prev *KHole
 	for _, h := range resHoles {
-		if h.Start == h.Stop {
+		if h.Start >= h.Stop {
 			if h.ID > 0 {
 				delIDs = append(delIDs, h.ID)
 			}
@@ -855,11 +866,18 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 			merged = append(merged, h)
 			prev = h
 		} else {
-			if h.Stop > prev.Stop {
-				prev.Stop = h.Stop
-			}
-			if h.ID > 0 {
-				delIDs = append(delIDs, h.ID)
+			// 与前一个洞连续，可能重合
+			if prev.NoData == h.NoData || prev.Stop >= h.Stop {
+				// 当与前一个洞NoData一致，或者完全被前一个包含
+				if h.Stop > prev.Stop {
+					prev.Stop = h.Stop
+				}
+				if h.ID > 0 {
+					delIDs = append(delIDs, h.ID)
+				}
+			} else {
+				// NoData不一致(前true后false)，且当前有超出
+				h.Start = prev.Stop
 			}
 		}
 	}
@@ -872,9 +890,9 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 	var adds []AddKHolesParams
 	for _, h := range merged {
 		if h.ID == 0 {
-			adds = append(adds, AddKHolesParams{Sid: h.Sid, Timeframe: h.Timeframe, Start: h.Start, Stop: h.Stop})
+			adds = append(adds, AddKHolesParams{Sid: h.Sid, Timeframe: h.Timeframe, Start: h.Start, Stop: h.Stop, NoData: h.NoData})
 		} else {
-			err_ = q.SetKHole(ctx, SetKHoleParams{ID: h.ID, Start: h.Start, Stop: h.Stop})
+			err_ = q.SetKHole(ctx, SetKHoleParams{ID: h.ID, Start: h.Start, Stop: h.Stop, NoData: h.NoData})
 			if err_ != nil {
 				return NewDbErr(core.ErrDbExecFail, err_)
 			}
@@ -936,7 +954,7 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 	}
 	if len(aggJobs) > 0 {
 		for _, item := range aggJobs {
-			err := q.refreshAgg(item, sid, startMS, endMS, "")
+			err := q.refreshAgg(item, sid, startMS, endMS, "", true)
 			if err != nil {
 				return err
 			}
@@ -945,7 +963,7 @@ func (q *Queries) updateBigHyper(sid int32, timeFrame string, startMS, endMS int
 	return nil
 }
 
-func (q *Queries) refreshAgg(item *KlineAgg, sid int32, orgStartMS, orgEndMS int64, aggFrom string) *errs.Error {
+func (q *Queries) refreshAgg(item *KlineAgg, sid int32, orgStartMS, orgEndMS int64, aggFrom string, isCont bool) *errs.Error {
 	tfMSecs := item.MSecs
 	startMS := utils2.AlignTfMSecs(orgStartMS, tfMSecs)
 	endMS := utils2.AlignTfMSecs(orgEndMS, tfMSecs)
@@ -989,7 +1007,7 @@ insert into %s (sid, time, open, high, low, close, volume, info)
 	}
 	// Search for holes, update khole
 	// 搜索空洞，更新khole
-	err = q.updateKHoles(sid, item.TimeFrame, startMS, endMS)
+	err = q.updateKHoles(sid, item.TimeFrame, startMS, endMS, isCont)
 	if err != nil {
 		return err
 	}
@@ -1444,6 +1462,7 @@ func tryFillHoles(sess *Queries, sids map[int32]bool, prg utils.PrgCB) *errs.Err
 				Timeframe: utils2.SecsToTF(int(h[1] / 1000)),
 				Start:     h[2],
 				Stop:      h[3],
+				NoData:    true,
 			}
 		}
 		_, err_ = sess.AddKHoles(ctx, items)
@@ -1569,7 +1588,7 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 			}
 			// Update KHoles to avoid holes that are not recorded
 			// 更新KHoles，避免有空洞但未记录
-			err = q.updateKHoles(sid, agg.TimeFrame, newStart, newEnd)
+			err = q.updateKHoles(sid, agg.TimeFrame, newStart, newEnd, false)
 			if err != nil {
 				return err
 			}
@@ -1601,13 +1620,13 @@ func (q *Queries) syncKlineSid(sid int32, tfMap map[string]*KInfoExt, calcs map[
 		subAlignStart := utils2.AlignTfMSecs(subStart, tfMSecs)
 		subAlignEnd := utils2.AlignTfMSecs(subEnd, tfMSecs)
 		if subAlignStart < curStart {
-			err = q.refreshAgg(agg, sid, subStart, min(subEnd, curStart), "")
+			err = q.refreshAgg(agg, sid, subStart, min(subEnd, curStart), "", false)
 			if err != nil {
 				return err
 			}
 		}
 		if subAlignEnd > curEnd {
-			err = q.refreshAgg(agg, sid, max(curEnd, subStart), subEnd, "")
+			err = q.refreshAgg(agg, sid, max(curEnd, subStart), subEnd, "", false)
 			if err != nil {
 				return err
 			}
@@ -1633,7 +1652,11 @@ func (q *Queries) UpdatePendingIns() *errs.Error {
 	log.Info("Updating pending insert jobs", zap.Int("num", len(items)))
 	for _, i := range items {
 		if i.StartMs > 0 && i.StopMs > 0 {
-			err := q.UpdateKRange(i.Sid, i.Timeframe, i.StartMs, i.StopMs, nil, true)
+			start, end, err := q.CalcKLineRange(i.Sid, i.Timeframe, i.StartMs, i.StopMs)
+			if err != nil {
+				return err
+			}
+			err = q.UpdateKRange(i.Sid, i.Timeframe, start, end, nil, true)
 			if err != nil {
 				return err
 			}
