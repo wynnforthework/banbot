@@ -846,6 +846,10 @@ func (w *BanWallets) TryUpdateStakePctAmt() {
 		acc, ok := config.Accounts[w.Account]
 		if ok {
 			legalValue := w.TotalLegal(nil, true)
+			if banexg.IsContract(core.Market) && config.Leverage > 1 {
+				// 对于合约市场，百分比开单应基于带杠杆的名义资产价值
+				legalValue *= config.Leverage
+			}
 			// Round to the nearest tenth place
 			// 四舍五入到十位
 			pctAmt := math.Round(legalValue*config.StakePct/1000) * 10
