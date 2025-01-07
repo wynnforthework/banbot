@@ -56,7 +56,7 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 		}
 		outDir = fmt.Sprintf("%s/backtest/%s", config.GetDataDir(), hash)
 	}
-	p.OutDir = outDir
+	p.OutDir = config.ParsePath(outDir)
 	config.LoadPerfs(config.GetDataDir())
 	biz.InitFakeWallets()
 	wallets := biz.GetWallets(config.DefAcc)
