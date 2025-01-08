@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/orm/ormo"
 	"math"
-	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -40,7 +39,6 @@ func regApiBiz(api fiber.Router) {
 	api.Post("/close_pos", postClosePos)
 	api.Post("/delay_entry", postDelayEntry)
 	api.Get("/config", getConfig)
-	api.Post("/config", postConfig)
 	api.Get("/stg_jobs", getStratJobs)
 	api.Get("/performance", getPerformance)
 	api.Get("/log", getLog)
@@ -537,39 +535,12 @@ func postDelayEntry(c *fiber.Ctx) error {
 }
 
 func getConfig(c *fiber.Ctx) error {
-	data, err := config.DumpYaml()
+	// 因在线更新配置有很多限制，大多数配置无法即刻生效，故暂不提供在线修改
+	data, err := config.DumpYaml(true)
 	if err != nil {
 		return err
 	}
 	return c.SendString(string(data))
-}
-
-func postConfig(c *fiber.Ctx) error {
-	type PostArgs struct {
-		Data string `json:"data" validate:"required"`
-	}
-	var data = new(PostArgs)
-	if err_ := base.VerifyArg(c, data, base.ArgBody); err_ != nil {
-		return err_
-	}
-	tempFile, err_ := os.CreateTemp("", "ban_web-*.yml")
-	if err_ != nil {
-		return err_
-	}
-	defer os.Remove(tempFile.Name())
-	if _, err_ = tempFile.Write([]byte("Hello, world!")); err_ != nil {
-		return err_
-	}
-	if err_ = tempFile.Close(); err_ != nil {
-		return err_
-	}
-	args := config.Args
-	args.Configs = []string{tempFile.Name()}
-	err := config.LoadConfig(args)
-	if err != nil {
-		return err
-	}
-	return c.JSON(fiber.Map{"status": 200})
 }
 
 func getStratJobs(c *fiber.Ctx) error {

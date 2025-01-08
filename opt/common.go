@@ -187,7 +187,7 @@ func (t *rollBtOpt) next(pairPicker string) (string, *errs.Error) {
 }
 
 func (t *rollBtOpt) dumpConfig() *errs.Error {
-	data, err := config.DumpYaml()
+	data, err := config.DumpYaml(true)
 	if err != nil {
 		return err
 	}

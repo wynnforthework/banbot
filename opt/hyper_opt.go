@@ -194,7 +194,7 @@ func btOptHash(args *config.CmdArgs) string {
 		strconv.FormatBool(args.EachPairs),
 		strconv.Itoa(args.OptRounds),
 	}
-	ymlData, err := config.DumpYaml()
+	ymlData, err := config.DumpYaml(true)
 	if ymlData != nil {
 		raws = append(raws, string(ymlData))
 	} else {

@@ -677,15 +677,13 @@ func calcExOrder(od *ormo.ExOrder) (string, string, string, string) {
 }
 
 func (r *BTResult) dumpConfig() {
-	data, err := config.DumpYaml()
+	data, err := config.DumpYaml(true)
 	if err != nil {
 		log.Error("marshal config as yaml fail", zap.Error(err))
 		return
 	}
 	outName := fmt.Sprintf("%s/config.yml", r.OutDir)
-	if _, err := os.Stat(outName); err == nil {
-		return
-	}
+	// 这里不检查是否存在，直接覆盖，因webUI创建的带有敏感信息
 	err_ := os.WriteFile(outName, data, 0644)
 	if err_ != nil {
 		log.Error("save yaml to file fail", zap.Error(err_))

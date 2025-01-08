@@ -61,7 +61,6 @@ GetConfig get config from args
 args: NoDefault, Configs, TimeRange, MaxPoolSize, StakeAmount, StakePct, TimeFrames, Pairs
 */
 func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
-	yamlData = nil
 	var paths []string
 	var res Config
 	if !args.NoDefault {
@@ -510,15 +509,159 @@ func (c *Config) ShowPairs() string {
 	return showPairs
 }
 
-func DumpYaml() ([]byte, *errs.Error) {
-	if yamlData != nil {
-		return yamlData, nil
+func (c *Config) Clone() *Config {
+	return &Config{
+		Name:            c.Name,
+		Env:             c.Env,
+		Leverage:        c.Leverage,
+		LimitVolSecs:    c.LimitVolSecs,
+		PutLimitSecs:    c.PutLimitSecs,
+		MarketType:      c.MarketType,
+		ContractType:    c.ContractType,
+		OdBookTtl:       c.OdBookTtl,
+		StopEnterBars:   c.StopEnterBars,
+		ConcurNum:       c.ConcurNum,
+		OrderType:       c.OrderType,
+		PreFire:         c.PreFire,
+		MarginAddRate:   c.MarginAddRate,
+		ChargeOnBomb:    c.ChargeOnBomb,
+		TakeOverStgy:    c.TakeOverStgy,
+		StakeAmount:     c.StakeAmount,
+		StakePct:        c.StakePct,
+		MaxStakeAmt:     c.MaxStakeAmt,
+		OpenVolRate:     c.OpenVolRate,
+		MinOpenRate:     c.MinOpenRate,
+		BTNetCost:       c.BTNetCost,
+		MaxOpenOrders:   c.MaxOpenOrders,
+		MaxSimulOpen:    c.MaxSimulOpen,
+		WalletAmounts:   c.WalletAmounts,
+		DrawBalanceOver: c.DrawBalanceOver,
+		StakeCurrency:   c.StakeCurrency,
+		FatalStop:       c.FatalStop,
+		FatalStopHours:  c.FatalStopHours,
+		TimeRangeRaw:    c.TimeRangeRaw,
+		TimeRange:       c.TimeRange,
+		RunTimeframes:   c.RunTimeframes,
+		KlineSource:     c.KlineSource,
+		WatchJobs:       c.WatchJobs,
+		RunPolicy:       c.RunPolicy,
+		StratPerf:       c.StratPerf,
+		Pairs:           c.Pairs,
+		PairMgr:         c.PairMgr,
+		PairFilters:     c.PairFilters,
+		SpiderAddr:      c.SpiderAddr,
+		Webhook:         c.Webhook,
 	}
-	data, err := Data.DumpYaml()
+}
+
+/*
+Desensitize
+屏蔽配置对象中的敏感信息
+database.url
+exchange.account_*.*.(api_key|api_secret)
+rpc_channels.*.*secret
+api_server.jwt_secret_key
+api_server.users[*].pwd
+*/
+func (c *Config) Desensitize() *Config {
+	var res = c.Clone()
+
+	// 处理数据库配置
+	if c.Database != nil {
+		res.Database = &DatabaseConfig{
+			Url:         "fake://postgres:123@[127.0.0.1]:5432/ban",
+			Retention:   c.Database.Retention,
+			MaxPoolSize: c.Database.MaxPoolSize,
+			AutoCreate:  c.Database.AutoCreate,
+		}
+	}
+
+	// 处理交易所配置
+	if c.Exchange != nil {
+		res.Exchange = &ExchangeConfig{
+			Name:  c.Exchange.Name,
+			Items: make(map[string]*ExgItemConfig),
+		}
+		for exgName, exgItem := range c.Exchange.Items {
+			resItem := &ExgItemConfig{
+				Options: exgItem.Options,
+			}
+			// 处理生产账户
+			if exgItem.AccountProds != nil {
+				resItem.AccountProds = make(map[string]*AccountConfig)
+				for accName, acc := range exgItem.AccountProds {
+					resItem.AccountProds[accName] = acc.Desensitize()
+				}
+			}
+			// 处理测试账户
+			if exgItem.AccountTests != nil {
+				resItem.AccountTests = make(map[string]*AccountConfig)
+				for accName, acc := range exgItem.AccountTests {
+					resItem.AccountTests[accName] = acc.Desensitize()
+				}
+			}
+			res.Exchange.Items[exgName] = resItem
+		}
+	}
+
+	// 处理RPC通道配置
+	if c.RPCChannels != nil {
+		res.RPCChannels = make(map[string]map[string]interface{})
+		for channelName, channelConfig := range c.RPCChannels {
+			chlType := utils.GetMapVal(channelConfig, "type", "")
+			resChannel := make(map[string]interface{})
+			for k, v := range channelConfig {
+				if strings.Contains(strings.ToLower(k), "secret") {
+					resChannel[k] = "fake_" + k
+				} else {
+					resChannel[k] = v
+				}
+			}
+			if chlType == "wework" {
+				corpID := utils.GetMapVal(channelConfig, "corp_id", "")
+				if corpID != "" {
+					resChannel["corp_id"] = "fake_corp_id"
+				}
+			}
+			res.RPCChannels[channelName] = resChannel
+		}
+	}
+
+	// 处理API服务器配置
+	if c.APIServer != nil {
+		res.APIServer = &APIServerConfig{
+			Enable:       c.APIServer.Enable,
+			BindIPAddr:   c.APIServer.BindIPAddr,
+			Port:         c.APIServer.Port,
+			Verbosity:    c.APIServer.Verbosity,
+			JWTSecretKey: "fake_jwt_secret_key",
+			CORSOrigins:  c.APIServer.CORSOrigins,
+		}
+		if c.APIServer.Users != nil {
+			res.APIServer.Users = make([]*UserConfig, len(c.APIServer.Users))
+			for i, user := range c.APIServer.Users {
+				res.APIServer.Users[i] = &UserConfig{
+					Username:    user.Username,
+					Password:    "fake_pwd",
+					AccRoles:    user.AccRoles,
+					ExpireHours: user.ExpireHours,
+				}
+			}
+		}
+	}
+
+	return res
+}
+
+func DumpYaml(desensitize bool) ([]byte, *errs.Error) {
+	c := &Data
+	if desensitize {
+		c = c.Desensitize()
+	}
+	data, err := c.DumpYaml()
 	if err != nil {
 		return nil, err
 	}
-	yamlData = data
 	return data, nil
 }
 
@@ -697,6 +840,18 @@ func (c *RunPolicyConfig) PairDup(pair string) (*RunPolicyConfig, bool) {
 	res := c.Clone()
 	res.Params = params
 	return res, isDiff
+}
+
+func (a *AccountConfig) Desensitize() *AccountConfig {
+	return &AccountConfig{
+		APIKey:      "fake_api_key",
+		APISecret:   "fake_api_secret",
+		NoTrade:     a.NoTrade,
+		MaxStakeAmt: a.MaxStakeAmt,
+		StakeRate:   a.StakeRate,
+		StakePctAmt: a.StakePctAmt,
+		Leverage:    a.Leverage,
+	}
 }
 
 func LoadPerfs(inDir string) {

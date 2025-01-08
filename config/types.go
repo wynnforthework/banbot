@@ -10,7 +10,6 @@ var (
 	Accounts    map[string]*AccountConfig // Exchange tradable account 交易所可交易账户
 	BakAccounts map[string]*AccountConfig // Exchange account, not tradable 交易所账户，不可交易
 	DefAcc      = "default"               // For non-real trading, the default key of the account (backtesting, simulated trading) 非实盘交易时，账户默认的key（回测、模拟交易）
-	yamlData    []byte
 
 	Name             string
 	Loaded           bool
@@ -207,7 +206,7 @@ type CommonPairFilter struct {
 // ExchangeConfig Represents the configuration information of the exchange 表示交易所的配置信息
 type ExchangeConfig struct {
 	Name  string                    `yaml:"name" mapstructure:"name"`
-	Items map[string]*ExgItemConfig `mapstructure:",remain"`
+	Items map[string]*ExgItemConfig `yaml:",inline" mapstructure:",remain"`
 }
 
 // Configuration of specific exchanges 具体交易所的配置
