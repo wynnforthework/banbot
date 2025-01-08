@@ -43,6 +43,8 @@ run_policy:  # ${m.cfg_run_policy()}
       limit: 30
     max_pair: 999  # ${m.cfg_run_policy_max_pair()}
     max_open: 10  # ${m.cfg_run_policy_max_open()}
+    max_simul_open: 0 # ${m.cfg_run_policy_max_simul_open()}
+    stake_rate: 1  # ${m.cfg_run_policy_stake_rate()}
     dirt: any  # ${m.cfg_run_policy_dirt()}
     pairs: [BTC/USDT:USDT]
     params: {atr: 15}

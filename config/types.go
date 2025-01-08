@@ -121,6 +121,7 @@ type RunPolicyConfig struct {
 	MaxPair       int                           `yaml:"max_pair" mapstructure:"max_pair"`
 	MaxOpen       int                           `yaml:"max_open" mapstructure:"max_open"`
 	MaxSimulOpen  int                           `yaml:"max_simul_open" mapstructure:"max_simul_open"`
+	StakeRate     float64                       `yaml:"stake_rate" mapstructure:"stake_rate"`
 	Dirt          string                        `yaml:"dirt" mapstructure:"dirt"`
 	StratPerf     *StratPerfConfig              `yaml:"strat_perf" mapstructure:"strat_perf"`
 	Pairs         []string                      `yaml:"pairs" mapstructure:"pairs"`

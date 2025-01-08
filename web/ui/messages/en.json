@@ -534,6 +534,8 @@
     "cfg_run_policy_filters": "All filters from pairlists can be used",
     "cfg_run_policy_max_pair": "Maximum number of symbols allowed for this strategy",
     "cfg_run_policy_max_open": "Maximum number of open orders for this strategy",
+    "cfg_run_policy_max_simul_open": "Maximum number of orders opened simultaneously on a candlestick",
+    "cfg_run_policy_stake_rate": "stake amount multiplier for this strategy",
     "cfg_run_policy_dirt": "any/long/short, default: any",
     "cfg_strat_perf_enable": "Whether to enable strategy symbol performance tracking, automatically reduces order size for symbols with significant losses",
     "cfg_strat_perf_min_od_num": "Minimum of 5 orders, default is 5; performance will not be calculated if fewer than 5",

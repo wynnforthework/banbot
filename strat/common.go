@@ -37,6 +37,9 @@ func New(pol *config.RunPolicyConfig) *TradeStrat {
 		stgy.MinTfScore = 0.75
 	}
 	stgy.Policy = pol
+	if pol.StakeRate > 0 {
+		stgy.StakeRate = pol.StakeRate
+	}
 	return stgy
 }
 

@@ -534,6 +534,8 @@
   "cfg_run_policy_filters": "可以使用pairlists中的所有过滤器",
   "cfg_run_policy_max_pair": "此策略允许的最大币种数量",
   "cfg_run_policy_max_open": "此策略的最大开单数量",
+  "cfg_run_policy_max_simul_open": "在一个bar上，最大同时打开订单数量",
+  "cfg_run_policy_stake_rate": "此策略任务的开单金额倍率",
   "cfg_run_policy_dirt": "any/long/short，默认：any",
   "cfg_strat_perf_enable": "是否启用策略币种绩效跟踪，自动减少亏损严重币种的下单量",
   "cfg_strat_perf_min_od_num": "最少5笔订单，默认为5，少于5笔不计算绩效",
