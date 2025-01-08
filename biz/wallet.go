@@ -2,6 +2,7 @@ package biz
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"math"
 	"slices"
 	"strings"
@@ -858,6 +859,9 @@ func (w *BanWallets) TryUpdateStakePctAmt() {
 			} else if math.Abs(pctAmt/acc.StakePctAmt-1) >= 0.2 {
 				// Update only if total assets change by more than 20%
 				// 总资产变化超过20%才更新
+				date := btime.ToDateStr(btime.TimeMS(), core.DefaultDateFmt)
+				log.Debug("stake amount changed by stake_pct", zap.String("d", date),
+					zap.Float64("old", acc.StakePctAmt), zap.Float64("new", pctAmt))
 				acc.StakePctAmt = pctAmt
 			}
 		}

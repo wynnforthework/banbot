@@ -128,7 +128,10 @@ func pgConnPool() (*pgxpool.Pool, *errs.Error) {
 		return nil, errs.New(core.ErrBadConfig, err_)
 	}
 	if dbCfg.MaxPoolSize == 0 {
-		dbCfg.MaxPoolSize = max(4, runtime.NumCPU())
+		dbCfg.MaxPoolSize = max(40, runtime.NumCPU()*4)
+	} else if dbCfg.MaxPoolSize < 30 {
+		log.Warn("max_pool_size < 30 may cause connection exhaustion and hang during batch downloads",
+			zap.Int("cur", dbCfg.MaxPoolSize))
 	}
 	poolCfg.MaxConns = int32(dbCfg.MaxPoolSize)
 	//poolCfg.BeforeAcquire = func(ctx context.Context, conn *pgx.Conn) bool {

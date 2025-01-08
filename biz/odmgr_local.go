@@ -409,6 +409,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 	wallets.ExitOd(od, od.Exit.Amount)
 	_ = o.finishOrder(od, nil)
 	wallets.ConfirmOdExit(od, od.Exit.Price)
+	o.callBack(od, false)
 	strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 	return err
 }

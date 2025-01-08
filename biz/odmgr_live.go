@@ -1484,6 +1484,7 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *ormo.InOutOrder, isEnter bool, res *
 		}
 		if od.Status == ormo.InOutStatusFullExit {
 			err := o.finishOrder(od, nil)
+			o.callBack(od, false)
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			if err != nil {
 				return err
