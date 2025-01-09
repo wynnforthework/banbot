@@ -1,8 +1,10 @@
 import type {IndicatorTemplate} from 'klinecharts';
 import {postApi} from "../../netio";
 import {drawCloudInd} from "./common";
+import {IndFieldsMap} from "../coms"
+import * as m from "$lib/paraglide/messages";
 
-
+const param = m.param();
 /**
  * 按传入的参数生成云端指标。
  * 支持自定义图形：
@@ -11,21 +13,27 @@ import {drawCloudInd} from "./common";
  */
 export const makeCloudInds = (params: Record<string, any>[]): IndicatorTemplate[] => {
   return params.map((args): IndicatorTemplate => {
+    const name = args['name']
     const figures = args['figures'] ?? []
-    if (args['figure_tpl'] && args['calcParams']) {
-      for (let period of args['calcParams']) {
-        const key = args['figure_tpl'].replace(/\{period\}/g, period)
-        var plot_type = args['figure_type']
-        if (!plot_type){
-          plot_type = 'line'
+    const calcParams = args['calcParams'] ?? [];
+    const figureTpl = args['figure_tpl'];
+    if (calcParams.length > 0){
+      let fields: Array<any> = []
+      calcParams.forEach((v: any, i: number) => {
+        if (figureTpl){
+          let key = figureTpl.replace(/\{i\}/, i+1)
+          let plot_type = args['figure_type'];
+          if (!plot_type){
+            plot_type = 'line'
+          }
+          figures.push({key, title: `${key.toUpperCase()}: `, type: plot_type})
         }
-        figures.push({key, title: `${key.toUpperCase()}: `, type: plot_type})
-      }
+        fields.push({ title: param + (i+1), precision: 0, min: 1, styleKey: `lines[${i}].color`, default: v })
+      })
+      IndFieldsMap[name] = fields
     }
     return {
-      ...args,
-      name: args['name'],
-      figures,
+      ...args, name, figures,
       calc: async (dataList, ind) => {
         const name = ind.name;
         const params = ind.calcParams;

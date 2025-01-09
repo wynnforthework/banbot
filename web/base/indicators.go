@@ -39,7 +39,7 @@ var (
 			Title:      "RMA",
 			IsMain:     true,
 			CalcParams: []float64{5, 10, 30},
-			FigureTpl:  "rma{period}",
+			FigureTpl:  "{i}",
 			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
@@ -48,16 +48,67 @@ var (
 				return res
 			},
 		},
+		"WMA": {
+			Title:      "WMA",
+			IsMain:     true,
+			CalcParams: []float64{10, 30},
+			FigureTpl:  "{i}",
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
+				res := make([]float64, len(params))
+				for i, p := range params {
+					res[i] = ta.WMA(e.Close, int(p)).Get(0)
+				}
+				return res
+			},
+		},
 		"VWMA": {
 			Title:      "VWMA",
 			IsMain:     true,
 			CalcParams: []float64{10, 30},
-			FigureTpl:  "vwma{period}",
+			FigureTpl:  "{i}",
 			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
 					res[i] = ta.VWMA(e.Close, e.Volume, int(p)).Get(0)
 				}
+				return res
+			},
+		},
+		"HMA": {
+			Title:      "HMA",
+			IsMain:     true,
+			CalcParams: []float64{10, 30},
+			FigureTpl:  "{i}",
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
+				res := make([]float64, len(params))
+				for i, p := range params {
+					res[i] = ta.HMA(e.Close, int(p)).Get(0)
+				}
+				return res
+			},
+		},
+		"KAMA": {
+			Title:      "KAMA",
+			IsMain:     true,
+			CalcParams: []float64{10, 30},
+			FigureTpl:  "{i}",
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
+				res := make([]float64, len(params))
+				for i, p := range params {
+					res[i] = ta.KAMA(e.Close, int(p)).Get(0)
+				}
+				return res
+			},
+		},
+		"ALMA": {
+			Title:      "ALMA",
+			IsMain:     true,
+			CalcParams: []float64{10, 6, 0.85},
+			Figures: []*Figure{
+				{"alma", "ALMA: ", "line", 0},
+			},
+			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
+				res := []float64{ta.ALMA(e.Close, int(params[0]), params[1], params[2]).Get(0)}
 				return res
 			},
 		},
@@ -74,7 +125,7 @@ var (
 		"ATR": {
 			Title:      "ATR 平均真实振幅",
 			CalcParams: []float64{14, 30},
-			FigureTpl:  "atr{period}",
+			FigureTpl:  "{i}",
 			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
@@ -86,7 +137,7 @@ var (
 		"StdDev": {
 			Title:      "StdDev 标准差",
 			CalcParams: []float64{7},
-			FigureTpl:  "sdev{period}",
+			FigureTpl:  "{i}",
 			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
@@ -108,7 +159,7 @@ var (
 		"ADX": {
 			Title:      "ADX",
 			CalcParams: []float64{14, 30},
-			FigureTpl:  "adx{period}",
+			FigureTpl:  "{i}",
 			doCalc: func(e *ta.BarEnv, params []float64) []float64 {
 				res := make([]float64, len(params))
 				for i, p := range params {
@@ -200,9 +251,9 @@ func (d *DrawInd) Calc(kline [][]float64, params []float64) []map[string]float64
 	}
 	figures := d.Figures
 	if d.FigureTpl != "" {
-		if strings.Contains(d.FigureTpl, "{period}") {
-			for _, p := range params {
-				key := strings.Replace(d.FigureTpl, "{period}", strconv.Itoa(int(p)), 1)
+		if strings.Contains(d.FigureTpl, "{i}") {
+			for i := range params {
+				key := strings.Replace(d.FigureTpl, "{i}", strconv.Itoa(i+1), 1)
 				figures = append(figures, &Figure{Key: key})
 			}
 		} else {
