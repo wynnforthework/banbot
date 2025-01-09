@@ -7,6 +7,7 @@
   import { alerts } from '$lib/stores/alerts';
   import { modals } from '$lib/stores/modals';
   import { ctx, save, loadBotAccounts, loadAccounts } from '$lib/dash/store';
+  import { i18n } from '$lib/i18n.js';
 
   let showAdd = false;
   let activeTab = 'accounts';
@@ -35,7 +36,7 @@
 
   function viewAccount(account: BotAccount) {
     $save.current = `${account.url}_${account.account}`;
-    goto('/dash/board');
+    goto(i18n.resolveRoute('/dash/board'));
   }
 
   onMount(async () => {

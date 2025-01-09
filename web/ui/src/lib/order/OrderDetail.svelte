@@ -40,6 +40,7 @@
     <div class="border rounded-lg p-5">
       <h3 class="text-lg font-bold mb-4">{m.enter_order()}</h3>
       <div class="grid grid-cols-3 gap-x-3 gap-y-1">
+        <FormField label={m.enter_time()} value={order.enter_at} />
         <FormField label={m.enter_time()} value={getDateStr(order.enter_at)} />
         <FormField label={m.update_time()} value={getDateStr(order.enter?.update_at)} />
         <FormField label={m.enter_tag()} bind:value={order.enter_tag} />
@@ -65,6 +66,7 @@
       <div class="border rounded-lg p-5">
         <h3 class="text-lg font-bold mb-4">{m.exit_order()}</h3>
         <div class="grid grid-cols-3 gap-x-3 gap-y-1">
+          <FormField label={m.exit_time()} value={order.exit_at} />
           <FormField label={m.exit_time()} value={getDateStr(order.exit_at)} />
           <FormField label={m.update_time()} value={getDateStr(order.exit.update_at)} />
           <FormField label={m.exit_tag()} bind:value={order.exit_tag} {editable} />
@@ -87,10 +89,10 @@
     <div class="border rounded-lg p-5">
       <h3 class="text-lg font-bold mb-4">{m.performance()}</h3>
       <div class="grid grid-cols-3 gap-x-3 gap-y-1">
-        <FormField label={m.max_pft_rate()} value={`${order.max_pft_rate?.toFixed(2)}%`} />
+        <FormField label={m.max_pft_rate()} value={`${(order.max_pft_rate * 100)?.toFixed(2)}%`} />
         <FormField label={m.max_draw_down()} value={`${order.max_draw_down?.toFixed(2)}%`} />
         <FormField label={m.profit()} value={order.profit?.toFixed(5)} />
-        <FormField label={m.profit_rate()} value={`${order.profit_rate?.toFixed(2)}%`} />
+        <FormField label={m.profit_rate()} value={`${(order.profit_rate * 100)?.toFixed(2)}%`} />
         {#if order.status < 4}
           <FormField label={m.cur_price()} value={order.curPrice?.toFixed(7) ?? '-'} />
         {/if}

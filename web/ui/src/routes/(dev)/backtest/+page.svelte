@@ -8,6 +8,7 @@
   import { showPairs } from '$lib/dev/common';
   import { getDateStr } from '$lib/dateutil';
   import {addListener} from '$lib/dev/websocket';
+  import { i18n } from '$lib/i18n.js';
 
   let tasks = $state<BtTask[]>([]);
   let strats = $state<string[]>([]);
@@ -134,7 +135,7 @@ Error: ${task.info}`
 
   function clickTask(task: BtTask) {
     if(task.path) {
-      goto(`/backtest/item?id=${task.id}`);
+      goto(i18n.resolveRoute(`/backtest/item?id=${task.id}`));
     }else{
       alerts.addAlert('warning', m.bt_result_not_exist());
     }

@@ -5,11 +5,12 @@
   import type { Extension } from '@codemirror/state';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-	import { getApi, postApi } from '@/lib/netio';
+  import { getApi, postApi } from '@/lib/netio';
   import {alerts} from "$lib/stores/alerts"
   import AllConfig from '@/lib/dev/AllConfig.svelte';
   import {modals} from '$lib/stores/modals';
   import Modal from '@/lib/kline/Modal.svelte';
+  import { i18n } from '$lib/i18n.js';
 
   let separateStrat = $state(false);
   let theme: Extension | null = $state(oneDark);
@@ -55,7 +56,7 @@
 
     if (rsp.code === 200) {
       alerts.addAlert("success", m.add_bt_ok());
-      goto('/backtest');
+      goto(i18n.resolveRoute('/backtest'));
     } else {
       console.error('run backtest fail', rsp);
       alerts.addAlert("error", rsp.msg || "run backtest fail");
@@ -81,7 +82,7 @@
   }
 
   function goBack() {
-    goto('/backtest');
+    goto(i18n.resolveRoute('/backtest'));
   }
 </script>
 
