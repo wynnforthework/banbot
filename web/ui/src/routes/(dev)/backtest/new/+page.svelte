@@ -10,7 +10,7 @@
   import AllConfig from '@/lib/dev/AllConfig.svelte';
   import {modals} from '$lib/stores/modals';
   import Modal from '@/lib/kline/Modal.svelte';
-  import { i18n } from '$lib/i18n.js';
+  import { i18n } from '$lib/i18n';
 
   let separateStrat = $state(false);
   let theme: Extension | null = $state(oneDark);
@@ -81,9 +81,6 @@
     startBacktest();
   }
 
-  function goBack() {
-    goto(i18n.resolveRoute('/backtest'));
-  }
 </script>
 
 <Modal title={m.duplicate_backtest()} buttons={['backup_start', 'overwrite_start', 'cancel']} show={showDuplicate} 
@@ -97,7 +94,7 @@ click={clickDuplicate} center={true} width={600}>
     <div class="container mx-auto max-w-[1200px] px-4 py-6">
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold">{m.run_backtest()}</h2>
-        <button class="btn btn-outline" onclick={goBack}>{m.back()}</button>
+        <a class="btn btn-outline" href="/backtest">{m.back()}</a>
       </div>
 
       <!-- <div class="form-control mb-6">
@@ -120,7 +117,7 @@ click={clickDuplicate} center={true} width={600}>
 
       <div class="flex gap-4">
         <button class="btn btn-primary flex-1" onclick={clickBacktest}>{m.start_backtest()}</button>
-        <button class="btn btn-outline flex-1" onclick={goBack}>{m.back()}</button>
+        <a class="btn btn-outline flex-1" href="/backtest">{m.back()}</a>
       </div>
     </div>
   </div>

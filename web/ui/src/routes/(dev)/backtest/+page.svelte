@@ -8,7 +8,7 @@
   import { showPairs } from '$lib/dev/common';
   import { getDateStr } from '$lib/dateutil';
   import {addListener} from '$lib/dev/websocket';
-  import { i18n } from '$lib/i18n.js';
+  import { i18n } from '$lib/i18n';
 
   let tasks = $state<BtTask[]>([]);
   let strats = $state<string[]>([]);
@@ -134,10 +134,10 @@ Error: ${task.info}`
   });
 
   function clickTask(task: BtTask) {
-    if(task.path) {
-      goto(i18n.resolveRoute(`/backtest/item?id=${task.id}`));
-    }else{
+    if(!task.path) {
       alerts.addAlert('warning', m.bt_result_not_exist());
+    }else{
+      goto(i18n.resolveRoute(`/backtest/item?id=${task.id}`))
     }
   }
 </script>
@@ -202,7 +202,7 @@ Error: ${task.info}`
   <!-- 结果列表 -->
   <div class="grid grid-cols-3 gap-6 mb-6">
     {#each tasks as task, tidx}
-      <div class="card bg-base-100 shadow hover:shadow-lg transition-shadow duration-200 cursor-pointer relative" 
+      <div class="card bg-base-100 shadow hover:shadow-lg transition-shadow duration-200 cursor-pointer relative"
            onclick={() => clickTask(task)} onmouseenter={() => hoveredCard = tidx}
            onmouseleave={() => hoveredCard = null}>
         {#if hoveredCard === tidx}

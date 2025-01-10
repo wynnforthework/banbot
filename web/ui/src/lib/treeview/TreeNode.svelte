@@ -102,7 +102,7 @@
 	}
 </script>
 
-<svelte:window on:click={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} />
 
 <div class={nodeClz} onclick={handleClick} oncontextmenu={handleContextMenu}>
 	<div class="tree-view_content" class:active={node.id == active}>

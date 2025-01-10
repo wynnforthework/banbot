@@ -1,13 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import * as m from '$lib/paraglide/messages.js'
   import type { BotTicket, BotAccount } from '$lib/dash/types';
   import AddBot from '$lib/dash/AddBot.svelte';
   import { alerts } from '$lib/stores/alerts';
   import { modals } from '$lib/stores/modals';
   import { ctx, save, loadBotAccounts, loadAccounts } from '$lib/dash/store';
-  import { i18n } from '$lib/i18n.js';
 
   let showAdd = false;
   let activeTab = 'accounts';
@@ -36,7 +34,6 @@
 
   function viewAccount(account: BotAccount) {
     $save.current = `${account.url}_${account.account}`;
-    goto(i18n.resolveRoute('/dash/board'));
   }
 
   onMount(async () => {
@@ -64,12 +61,12 @@
         <div role="tablist" class="tabs tabs-boxed mb-4">
           <a role="tab" 
              class="tab {activeTab === 'accounts' ? 'tab-active' : ''}"
-             on:click={() => activeTab = 'accounts'}>
+             onclick={() => activeTab = 'accounts'}>
             {m.trading_accounts()}
           </a>
           <a role="tab" 
              class="tab {activeTab === 'tickets' ? 'tab-active' : ''}"
-             on:click={() => activeTab = 'tickets'}>
+             onclick={() => activeTab = 'tickets'}>
             {m.login_credentials()}
           </a>
         </div>
@@ -104,10 +101,9 @@
                     <td>{acc.dayOpenNum}</td>
                     <td>{acc.dayOpenPft?.toFixed(2)}</td>
                     <td>
-                      <button class="btn btn-sm btn-primary"
-                              on:click={() => viewAccount(acc)}>
+                      <a class="btn btn-sm btn-primary" href="/dash/board" onclick={() => viewAccount(acc)}>
                         {m.view()}
-                      </button>
+                      </a>
                     </td>
                   </tr>
                 {/each}
@@ -144,10 +140,10 @@
                       {/if}
                     </td>
                     <td class="flex gap-2">
-                      <button class="btn btn-sm btn-error" on:click={() => delTicket(ticket)}>
+                      <button class="btn btn-sm btn-error" onclick={() => delTicket(ticket)}>
                         {m.remove()}
                       </button>
-                      <button class="btn btn-sm btn-primary" on:click={() => showAdd = true}>
+                      <button class="btn btn-sm btn-primary" onclick={() => showAdd = true}>
                         {m.edit()}
                       </button>
                     </td>
@@ -163,8 +159,7 @@
 
     <div class="text-center mt-8">
       {#if !showAdd}
-        <button class="btn btn-primary btn-wide gap-2" 
-                on:click={() => showAdd = true}>
+        <button class="btn btn-primary btn-wide gap-2" onclick={() => showAdd = true}>
           <i class="fas fa-plus"></i>
           {m.login_bot()}
         </button>

@@ -11,7 +11,7 @@
   import {page} from '$app/stores';
   import {modals} from '$lib/stores/modals';
   import { availableLanguageTags, languageTag } from "$lib/paraglide/runtime.js"
-  import { i18n } from '$lib/i18n.js'
+  import { i18n } from '$lib/i18n';
   import { goto } from '$app/navigation'
 
   let activeTab = $state('config.local.yml');

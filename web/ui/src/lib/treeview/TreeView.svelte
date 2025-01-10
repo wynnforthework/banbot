@@ -90,7 +90,7 @@
 	}
 </script>
 
-<svelte:window on:click={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} />
 
 <div 
 	class={'tree-view flex-1 ' + treeClass} 
