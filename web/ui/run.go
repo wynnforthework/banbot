@@ -22,9 +22,24 @@ const downUrlTpl = "https://github.com/banbox/banbot/releases/download/v{tag}/di
 func ServeStatic(app *fiber.App) error {
 	uiDistDir := filepath.Join(config.GetDataDir(), "uidist")
 	indexPath := filepath.Join(uiDistDir, "index.html")
+	verPath := filepath.Join(uiDistDir, "version.txt")
+	oldVer, err2 := utils.ReadTextFile(verPath)
+	reDown := 0
+	errMsg := ""
 	if !utils.Exists(indexPath) {
+		reDown = 1
+		errMsg = "$/uidist/index.html not exists"
+	} else if err2 != nil || oldVer != core.UIVersion {
+		reDown = 2
+		errMsg = "uidist is too old"
+		err := os.RemoveAll(uiDistDir)
+		if err != nil {
+			log.Warn("del old uidist fail", zap.Error(err))
+		}
+	}
+	if reDown > 0 {
 		downUrl := strings.Replace(downUrlTpl, "{tag}", core.UIVersion, 1)
-		log.Info("$/uidist/index.html not exists, downloading", zap.String("url", downUrl))
+		log.Info(errMsg+", downloading", zap.String("url", downUrl))
 
 		// 创建临时目录
 		tmpDir := filepath.Join(config.GetDataDir(), "tmp")
@@ -113,6 +128,12 @@ func ServeStatic(app *fiber.App) error {
 				return err
 			}
 		}
+		verFile, err := os.Create(verPath)
+		if err != nil {
+			return err
+		}
+		verFile.WriteString(core.UIVersion)
+		verFile.Close()
 		log.Info("uidist init successfully")
 	}
 	app.Static("/", uiDistDir)
