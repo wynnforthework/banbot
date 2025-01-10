@@ -854,6 +854,19 @@ func (r *BTResult) dumpDetail(outPath string) {
 	}
 }
 
+/*
+DelBigObjects 删除大对象引用，避免内存泄露
+*/
+func (r *BTResult) DelBigObjects() {
+	grpList := [][]*RowItem{r.PairGrps, r.DateGrps, r.EnterGrps, r.ExitGrps, r.ProfitGrps}
+	for _, gp := range grpList {
+		for _, p := range gp {
+			p.Orders = nil
+			p.Durations = nil
+		}
+	}
+}
+
 func selectPairs(r *BTResult, name string) []string {
 	fn, ok := PairPickers[name]
 	if !ok {

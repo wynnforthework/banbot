@@ -3,6 +3,8 @@ package entry
 import (
 	"flag"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
@@ -62,7 +64,7 @@ func RunCmd() {
 			options = []string{"stake_amount", "pairs", "with_spider", "task_hash", "task_id"}
 			entry = RunTrade
 		case "backtest":
-			options = []string{"out", "timerange", "stake_amount", "pairs", "prg", "separate", "cpu_profile", "mem_profile"}
+			options = []string{"out", "timerange", "stake_amount", "pairs", "prg", "separate"}
 			entry = RunBackTest
 		case "spider":
 			entry = RunSpider
@@ -171,7 +173,7 @@ func runKlineCmds(args []string) {
 			options = []string{"timerange", "pairs", "timeframes", "medium"}
 			entry = RunDownData
 		case "load":
-			options = []string{"in", "cpu_profile", "mem_profile"}
+			options = []string{"in"}
 			entry = LoadKLinesToDB
 		case "export":
 			options = []string{"out", "pairs", "timeframes", "adj", "tz"}
@@ -219,10 +221,10 @@ func runTickCmds(args []string) {
 		var entry FuncEntry
 		switch name {
 		case "convert":
-			options = []string{"in", "out", "cpu_profile", "mem_profile"}
+			options = []string{"in", "out"}
 			entry = data.RunFormatTick
 		case "to_kline":
-			options = []string{"in", "out", "cpu_profile", "mem_profile"}
+			options = []string{"in", "out"}
 			entry = data.Build1mWithTicks
 		default:
 			return nil, nil
@@ -263,7 +265,6 @@ func runToolCmds(args []string) {
 			opt.CompareExgBTOrders(args[1:])
 			os.Exit(0)
 		case "data_server":
-			options = []string{"mem_profile"}
 			entry = biz.RunDataServer
 		case "calc_perfs":
 			options = []string{"in", "in_type", "out"}
@@ -310,6 +311,15 @@ func runSubCmd(sysArgs []string, getEnt FuncGetEntry, fallback func(e error)) {
 		return
 	}
 	args.Init()
+	if args.MemProfile {
+		go func() {
+			log.Info("mem profile serve http at :8080 ...")
+			err_ := http.ListenAndServe(":8080", nil)
+			if err_ != nil {
+				log.Error("run mem profile http fail", zap.Error(err_))
+			}
+		}()
+	}
 	err := entry(&args)
 	if err != nil {
 		panic(err)
@@ -325,6 +335,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 	cmd.BoolVar(&args.NoCompress, "no-compress", false, "disable compress for hyper table")
 	cmd.BoolVar(&args.NoDefault, "no-default", false, "ignore default: config.yml, config.local.yml")
 	cmd.IntVar(&args.MaxPoolSize, "max-pool-size", 0, "max pool size for db")
+	cmd.BoolVar(&args.CPUProfile, "cpu-profile", false, "enable cpu profile")
+	cmd.BoolVar(&args.MemProfile, "mem-profile", false, "enable memory profile")
 
 	for _, key := range opts {
 		switch key {
@@ -348,10 +360,6 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.BoolVar(&args.Force, "force", false, "skip confirm")
 		case "task_hash":
 			cmd.StringVar(&args.TaskHash, "task-hash", "", "hash code to use")
-		case "cpu_profile":
-			cmd.BoolVar(&args.CPUProfile, "cpu-profile", false, "enable cpu profile")
-		case "mem_profile":
-			cmd.BoolVar(&args.MemProfile, "mem-profile", false, "enable memory profile")
 		case "task_id":
 			cmd.IntVar(&args.TaskId, "task-id", 0, "task")
 		case "prg":

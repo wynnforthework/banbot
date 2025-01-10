@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/utils"
 	"net"
-	"net/http"
-	_ "net/http/pprof"
 	"sync"
 
 	"github.com/banbox/banbot/config"
@@ -25,15 +23,6 @@ var (
 )
 
 func RunDataServer(args *config.CmdArgs) *errs.Error {
-	if args.MemProfile {
-		go func() {
-			log.Info("mem profile serve http at :8080 ...")
-			err_ := http.ListenAndServe(":8080", nil)
-			if err_ != nil {
-				log.Error("run mem profile http fail", zap.Error(err_))
-			}
-		}()
-	}
 	core.SetRunMode(core.RunModeOther)
 	err := SetupComsExg(args)
 	if err != nil {

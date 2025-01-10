@@ -7,6 +7,27 @@
 ```shell
 go tool pprof -http :8080 cpu.profile
 ```
+### 如何分析内存泄露？(初级)
+命令行启动添加`-mem-profile`参数，将会在8080端口提供pprof分析接口。执行下面命令查看当前内存占用最多：
+```shell
+go tool pprof http://localhost:8080/debug/pprof/heap
+> top
+```
+然后执行`list [method]`即可显示具体某个方法的内存行热点。
+
+上面`go tool pprof`命令同时会生成一个heap文件，等待一段时间再次执行得到新heap文件。
+
+然后执行`go tool pprof -base old_path new_path`可分析两个heap文件差异，使用`top`和`list`继续分析即可。
+
+### 复杂项目分析内存泄露？
+上面的方法只能显示申请内存最多的位置，但复杂项目中泄露对象可能被非常多位置跟踪，任意一处保留引用即导致内存泄露，可使用[goref](https://github.com/cloudwego/goref)排查未释放的引用。
+
+先启动进程，查询进程ID，然后执行：
+```shell
+grf attach [PID]
+go tool pprof -http=:5079 ./grf.out
+```
+
 ### 如何发布go模块新版本？
 ```shell
 git tag v1.0.0

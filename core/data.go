@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"io"
 	"sync"
 
 	"github.com/banbox/banexg"
@@ -36,8 +35,7 @@ var (
 	NumTaCache    = 1500                               // The number of historical values cached during indicator calculation, default 1500 指标计算时缓存的历史值数量，默认1500
 	Cron          = cron.New(cron.WithSeconds())       // Use cron to run tasks regularly 使用cron定时运行任务
 
-	ExitCalls []func()  // CALLBACK TO STOP EXECUTION 停止执行的回调
-	MemOut    io.Writer // Output memory profile 进行内存profile的输出
+	ExitCalls []func() // CALLBACK TO STOP EXECUTION 停止执行的回调
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
 	Version   = "0.1.28"

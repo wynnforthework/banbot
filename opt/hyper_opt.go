@@ -258,8 +258,6 @@ func RunOptimize(args *config.CmdArgs) *errs.Error {
 		log.Warn("-out is required")
 		return nil
 	}
-	args.CPUProfile = false
-	args.MemProfile = false
 	args.LogLevel = "warn"
 	core.SetRunMode(core.RunModeBackTest)
 	err := biz.SetupComsExg(args)
@@ -576,6 +574,7 @@ func optForPol(pol *config.RunPolicyConfig, method, picker string, rounds int, f
 		flog.WriteString(line + "\n")
 		log.Warn(line)
 		bt.dumpDetail(filepath.Join(detailDir, jobId+".json"))
+		o.BTResult.DelBigObjects()
 		resList = append(resList, o)
 		return loss, nil
 	}

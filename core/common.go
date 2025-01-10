@@ -10,7 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 	"math"
 	"os"
-	"runtime/pprof"
 	"strings"
 )
 
@@ -39,17 +38,6 @@ func GetCacheVal[T any](key string, defVal T) T {
 		}
 	}
 	return defVal
-}
-
-func SnapMem(name string) {
-	if MemOut == nil {
-		log.Warn("core.MemOut is nil, skip memory snapshot")
-		return
-	}
-	err := pprof.Lookup(name).WriteTo(MemOut, 0)
-	if err != nil {
-		log.Warn("save mem snapshot fail", zap.Error(err))
-	}
 }
 
 func RunExitCalls() {

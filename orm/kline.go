@@ -1656,9 +1656,11 @@ func (q *Queries) UpdatePendingIns() *errs.Error {
 			if err != nil {
 				return err
 			}
-			err = q.UpdateKRange(i.Sid, i.Timeframe, start, end, nil, true)
-			if err != nil {
-				return err
+			if start > 0 && end > 0 {
+				err = q.UpdateKRange(i.Sid, i.Timeframe, start, end, nil, true)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		err_ = q.DelInsKline(ctx, i.ID)

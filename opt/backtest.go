@@ -221,20 +221,6 @@ func (b *BackTest) initTaskOut() *errs.Error {
 			})
 		}
 	}
-	if config.Args.MemProfile {
-		f, err_ := os.OpenFile(b.OutDir+"/mem.profile", os.O_CREATE|os.O_RDWR, 0644)
-		if err_ != nil {
-			log.Error("write to mem.profile fail", zap.Error(err_))
-		} else {
-			core.MemOut = f
-			core.ExitCalls = append(core.ExitCalls, func() {
-				err_ = f.Close()
-				if err_ != nil {
-					log.Error("save mem.profile fail", zap.Error(err_))
-				}
-			})
-		}
-	}
 	_, ok := config.Accounts[config.DefAcc]
 	if !ok {
 		panic("default Account invalid!")
