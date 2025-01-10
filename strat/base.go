@@ -109,6 +109,11 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 		}
 		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
 	}
+	if math.IsNaN(req.Limit+req.Amount+req.Leverage+req.CostRate+req.LegalCost) ||
+		math.IsNaN(req.StopLoss+req.StopLossVal+req.StopLossLimit+req.StopLossRate) ||
+		math.IsNaN(req.TakeProfit+req.TakeProfitVal+req.TakeProfitLimit+req.TakeProfitRate) {
+		return errs.NewMsg(errs.CodeParamInvalid, "nan in EnterReq")
+	}
 	// 检查价格是否有效
 	dirFlag := 1.0
 	if req.Short {
