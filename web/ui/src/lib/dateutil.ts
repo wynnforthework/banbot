@@ -5,7 +5,6 @@ import {type Period} from "./kline/types";
 import * as kc from 'klinecharts';
 const FormatDateType = kc.FormatDateType
 export const formatDate = kc.utils.formatDate
-let tz_applied = false;
 let cur_tz: string = 'UTC'
 dayjs.extend(timezone)
 dayjs.extend(utc)
@@ -36,6 +35,10 @@ const timezone_map: Record<string, string> = {
   'Australia/Sydney': 'sydney',
   'Pacific/Guadalcanal': 'guadalcanal',
   'Pacific/Auckland': 'auckland',
+}
+
+export function curTZ(){
+  return cur_tz
 }
 
 export function getUTCStamp(): number{
@@ -88,14 +91,11 @@ export function toUTCStamp(date_str: string): number{
       'YYYY-MM-DD', 'YYYY-MM-DD HH:mm', 'YYYY-MM-DD HH:mm:ss'], true)
   }
   if(!result)return 0
-  if(!tz_applied){
-    console.error('local timezone not applied')
-  }
   result = result.tz(cur_tz, true)
   return result.valueOf()
 }
 
-export function getDateStr(date_ts: number, template: string = 'YYYY-MM-DD HH:mm:ss',
+export function fmtDateStr(date_ts: number, template: string = 'YYYY-MM-DD HH:mm:ss',
                            tz: string | undefined = undefined): string {
   if (!date_ts) return '--'
   let result: dayjs.Dayjs | null = null
@@ -104,11 +104,13 @@ export function getDateStr(date_ts: number, template: string = 'YYYY-MM-DD HH:mm
   } else {
     result = dayjs.unix(date_ts)
   }
-  result = result.tz(tz || cur_tz, true)
-  if (!tz_applied) {
-    console.error('local timezone not applied')
-  }
+  result = result.tz(tz || cur_tz)
   return result.format(template)
+}
+
+export function fmtDateStrTZ(date_ts: number, template: string = 'YYYY-MM-DD HH:mm:ssZZ',
+                           tz: string | undefined = undefined): string {
+  return fmtDateStr(date_ts, template, tz)
 }
 
 export function fmtDuration(cost_secs: number){
@@ -303,15 +305,6 @@ export async function setTimezone(timezone: string) {
   }
   dayjs.tz.setDefault(timezone)
   cur_tz = timezone
-  tz_applied = true
-}
-
-/**
- * 此函数只返回用户本地时区，并不是返回当前设置的时区。
- * 故使用setTimezone设置默认时区后，调用此方法依然返回的是本地时区
- */
-export function getTZ(){
-  return dayjs.tz.guess()
 }
 
 export function translateTimezone (timezone: string): string {

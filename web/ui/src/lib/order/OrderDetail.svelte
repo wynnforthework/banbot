@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { getDateStr } from '$lib/dateutil';
+  import { fmtDateStrTZ } from '$lib/dateutil';
   import * as m from '$lib/paraglide/messages';
   import type { InOutOrder } from '$lib/order/types';
   import Modal from '../kline/Modal.svelte';
@@ -41,8 +41,8 @@
       <h3 class="text-lg font-bold mb-4">{m.enter_order()}</h3>
       <div class="grid grid-cols-3 gap-x-3 gap-y-1">
         <FormField label={m.enter_time()} value={order.enter_at} />
-        <FormField label={m.enter_time()} value={getDateStr(order.enter_at)} />
-        <FormField label={m.update_time()} value={getDateStr(order.enter?.update_at)} />
+        <FormField label={m.enter_time()} value={fmtDateStrTZ(order.enter_at)} />
+        <FormField label={m.update_time()} value={fmtDateStrTZ(order.enter?.update_at)} />
         <FormField label={m.enter_tag()} bind:value={order.enter_tag} />
         <FormField label={m.order_type()} bind:value={order.enter.order_type} />
         <FormField label={m.side()} bind:value={order.enter.side} {editable} />
@@ -67,8 +67,8 @@
         <h3 class="text-lg font-bold mb-4">{m.exit_order()}</h3>
         <div class="grid grid-cols-3 gap-x-3 gap-y-1">
           <FormField label={m.exit_time()} value={order.exit_at} />
-          <FormField label={m.exit_time()} value={getDateStr(order.exit_at)} />
-          <FormField label={m.update_time()} value={getDateStr(order.exit.update_at)} />
+          <FormField label={m.exit_time()} value={fmtDateStrTZ(order.exit_at)} />
+          <FormField label={m.update_time()} value={fmtDateStrTZ(order.exit.update_at)} />
           <FormField label={m.exit_tag()} bind:value={order.exit_tag} {editable} />
           <FormField label={m.order_type()} bind:value={order.exit.order_type} {editable} />
           <FormField label={m.side()} bind:value={order.exit.side} {editable} />

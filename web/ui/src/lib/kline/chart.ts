@@ -1,4 +1,4 @@
-import { getUTCStamp, getDateStr } from "../dateutil";
+import { getUTCStamp, fmtDateStr } from "../dateutil";
 import type { Period, SymbolInfo, BanInd } from "./types";
 import * as m from '$lib/paraglide/messages.js'
 
@@ -96,9 +96,9 @@ export class ChartSave {
     this.period = {multiplier: 1, timespan: 'day', timeframe: '1d', secs: 86400}
     
     const timeEnd = getUTCStamp()
-    this.dateEnd = getDateStr(timeEnd, 'YYYYMMDD')
+    this.dateEnd = fmtDateStr(timeEnd, 'YYYYMMDD')
     const timeStart = timeEnd - this.period.secs * 1000 * 500
-    this.dateStart = getDateStr(timeStart, 'YYYYMMDD')
+    this.dateStart = fmtDateStr(timeStart, 'YYYYMMDD')
     this.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
     this.curSymbols = []

@@ -218,7 +218,7 @@ func (r *BTResult) BriefLine() string {
 		return ""
 	}
 	return fmt.Sprintf("odNum: %v, profit: %.1f%%, drawDown: %.1f%%, sharpe: %.2f",
-		r.OrderNum, r.TotProfitPct, r.MaxDrawDownPct, r.SharpeRatio)
+		r.OrderNum, r.TotProfitPct, r.ShowDrawDownPct, r.SharpeRatio)
 }
 
 func (o *OptInfo) ToLine() string {

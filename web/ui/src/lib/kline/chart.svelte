@@ -17,7 +17,7 @@
   import {makeCloudInds} from './indicators/cloudInds';
   import {browser} from '$app/environment';
   import {getThemeStyles,GetNumberDotOffset, build_ohlcvs} from './coms';
-  import {TFToSecs, toUTCStamp, getDateStr} from '../dateutil';
+  import {TFToSecs, toUTCStamp, fmtDateStr} from '../dateutil';
   import { createAlertStore } from '../stores/alerts';
 	import Alert from '../Alert.svelte';
   import { derived, writable } from 'svelte/store';
@@ -221,7 +221,7 @@
     const totalNum = (stop_ms - start_ms) / tf_msecs;
     if(totalNum > maxBarNum){
       stop_ms = start_ms + tf_msecs * maxBarNum;
-      const stop_str = getDateStr(stop_ms)
+      const stop_str = fmtDateStr(stop_ms)
       alerts.addAlert('warning', `too long:${totalNum}, cut ${maxBarNum} to ${stop_str}`)
     }
     await loadKlineRange($save.symbol, $save.period, start_ms, stop_ms, false)

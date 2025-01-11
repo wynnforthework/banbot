@@ -19,7 +19,7 @@
   import { persisted } from 'svelte-persisted-store';
   import { makePeriod } from '$lib/kline/coms';
   import { derived } from 'svelte/store';
-  import { getDateStr, fmtDuration } from '$lib/dateutil';
+  import { fmtDateStr, fmtDuration, curTZ } from '$lib/dateutil';
   import type { OverlayCreate } from 'klinecharts';
   import type { TradeInfo } from '$lib/kline/types';
 
@@ -247,8 +247,8 @@
     kcSave.update(c => {
       c.symbol = { market: exs.market, exchange: exs.exchange, ticker: order.symbol, name: order.symbol, shortName: order.symbol };
       c.period = period;
-      c.dateStart = getDateStr(showStartMS, 'YYYYMMDD');
-      c.dateEnd = getDateStr(showEndMS + dayMs, 'YYYYMMDD');
+      c.dateStart = fmtDateStr(showStartMS, 'YYYYMMDD');
+      c.dateEnd = fmtDateStr(showEndMS + dayMs, 'YYYYMMDD');
       return c;
     });
     kcCtx.update(c => {
@@ -311,8 +311,8 @@
 
     const inText = `${inAction} ${td.enter_tag} ${td.leverage}x
 ${td.strategy}
-${m.order()}: ${getDateStr(td.enter_at)}
-${m.entry()}: ${getDateStr(td.enter!.create_at)}
+${m.order()}: ${td.enter?.order_id}
+${m.entry()}: ${fmtDateStr(td.enter!.create_at)}
 ${m.price()}: ${td.enter?.average?.toFixed(5)}
 ${m.amount()}: ${td.enter?.amount.toFixed(6)}
 ${m.cost()}: ${td.quote_cost?.toFixed(2)}`;
@@ -325,8 +325,8 @@ ${m.cost()}: ${td.quote_cost?.toFixed(2)}`;
     if (td.exit && td.exit.filled) {
       const outText = `${outAction} ${td.exit_tag} ${td.leverage}x
 ${td.strategy}
-${m.order()}: ${getDateStr(td.exit_at)}
-${m.exit()}: ${getDateStr(td.exit?.create_at)}
+${m.order()}: ${td.exit?.order_id}
+${m.exit()}: ${fmtDateStr(td.exit?.create_at)}
 ${m.price()}: ${td.exit?.average?.toFixed(5)}
 ${m.amount()}: ${td.exit?.amount?.toFixed(6)}
 ${m.profit()}: ${(td.profit_rate * 100).toFixed(1)}% ${td.profit.toFixed(5)}
@@ -485,8 +485,8 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
           {@render statCard(
             m.init_amount(),
             'text-success',
-            formatNumber(task?.walletAmount || 0, 2),
-            `${m.leverage()} ${task?.leverage}x${task?.stakeAmount ? ` · ${m.stake_amt()} ${formatNumber(task.stakeAmount, 2)}` : ''}`
+            formatNumber(task?.walletAmount || 0, 0),
+            `${m.leverage()} ${task?.leverage}x${task?.stakeAmount ? ` · ${m.stake_amt()} ${formatNumber(task.stakeAmount, 0)}` : ''}`
           )}
 
           {@render statCard(
@@ -525,7 +525,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
 
         <!-- 次要统计信息 -->
         <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {@render infoCard(m.bt_range(), `${getDateStr(detail.startMS)} ~ ${getDateStr(detail.endMS)}`)}
+          {@render infoCard(m.bt_range() + ` (${curTZ()})`, `${fmtDateStr(detail.startMS)} ~ ${fmtDateStr(detail.endMS)}`)}
           {@render infoCard(
             `${m.total_invest()}/${m.final_balance()}`,
             `${task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest)} / ${formatNumber(detail.maxReal)}`
@@ -748,11 +748,11 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
                   <th>{m.symbol()}</th>
                   <th>{m.direction()}</th>
                   <th>{m.leverage()}</th>
-                  <th>{m.enter_at()}</th>
+                  <th>{m.enter_at()}({curTZ()})</th>
                   <th>{m.enter_tag()}</th>
                   <th>{m.enter_price()}</th>
                   <th>{m.enter_amount()}</th>
-                  <th>{m.exit_at()}</th>
+                  <th>{m.exit_at()}({curTZ()})</th>
                   <th>{m.exit_tag()}</th>
                   <th>{m.exit_price()}</th>
                   <th>{m.exit_amount()}</th>
@@ -765,11 +765,11 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
                     <td>{order.symbol}</td>
                     <td>{order.short ? m.short() : m.long()}</td>
                     <td>{order.leverage}x</td>
-                    <td>{getDateStr(order.enter_at)}</td>
+                    <td>{fmtDateStr(order.enter_at)}</td>
                     <td>{order.enter_tag}</td>
                     <td>{formatNumber(order.enter?.average||order.enter?.price || 0, 8)}</td>
                     <td>{formatNumber(order.enter?.filled ||order.enter?.amount || 0, 8)}</td>
-                    <td>{getDateStr(order.exit_at)}</td>
+                    <td>{fmtDateStr(order.exit_at)}</td>
                     <td>{order.exit_tag}</td>
                     <td>{formatNumber(order.exit?.average||order.exit?.price || 0, 8)}</td>
                     <td>{formatNumber(order.exit?.filled ||order.exit?.amount || 0, 8)}</td>
@@ -919,7 +919,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
 
       <div class="flex justify-between text-xs text-base-content/60">
         <div class="tooltip" data-tip={m.exit_time()}>
-          {getDateStr(order.exit_at)}
+          {fmtDateStr(order.exit_at)}
         </div>
         <div class="tooltip" data-tip={m.strategy()}>
           {order.strategy}

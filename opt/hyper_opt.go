@@ -1041,7 +1041,7 @@ func parseOptLine(line string) *OptInfo {
 			} else if key == "profit" {
 				res.TotProfitPct, _ = strconv.ParseFloat(val[:len(val)-1], 64)
 			} else if key == "drawDown" {
-				res.MaxDrawDownPct, _ = strconv.ParseFloat(val[:len(val)-1], 64)
+				res.ShowDrawDownPct, _ = strconv.ParseFloat(val[:len(val)-1], 64)
 			} else if key == "sharpe" {
 				res.SharpeRatio, _ = strconv.ParseFloat(val, 64)
 			} else if key == "id" {

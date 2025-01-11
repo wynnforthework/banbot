@@ -5,7 +5,7 @@
   import { getAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import type { OverlayCreate } from 'klinecharts';
-  import { fmtDuration, getDateStr } from '$lib/dateutil';
+  import { fmtDuration, fmtDateStr } from '$lib/dateutil';
   import * as m from '$lib/paraglide/messages';
   import { derived } from 'svelte/store';
   import { ChartCtx, ChartSave } from '$lib/kline/chart';
@@ -98,8 +98,8 @@
 
       const inText = `${inAction} ${td.enter_tag} ${td.leverage}${m.times()}
 ${td.strategy}
-${m.order()}: ${getDateStr(td.enter_at)}
-${m.entry()}: ${getDateStr(td.enter_create_at)}
+${m.order()}: ${fmtDateStr(td.enter_at)}
+${m.entry()}: ${fmtDateStr(td.enter_create_at)}
 ${m.price()}: ${td.enter_average?.toFixed(5)}
 ${m.amount()}: ${td.enter_amount.toFixed(6)}
 ${m.cost()}: ${td.enter_cost?.toFixed(2)}`;
@@ -112,8 +112,8 @@ ${m.cost()}: ${td.enter_cost?.toFixed(2)}`;
       if (td.exit_filled) {
         const outText = `${outAction} ${td.exit_tag} ${td.leverage}${m.times()}
 ${td.strategy}
-${m.order()}: ${getDateStr(td.exit_at)}
-${m.exit()}: ${getDateStr(td.exit_create_at ?? 0)}
+${m.order()}: ${fmtDateStr(td.exit_at)}
+${m.exit()}: ${fmtDateStr(td.exit_create_at ?? 0)}
 ${m.price()}: ${td.exit_average?.toFixed(5)}
 ${m.amount()}: ${td.exit_amount?.toFixed(6)}
 ${m.profit()}: ${(td.profit_rate * 100).toFixed(1)}% ${td.profit.toFixed(5)}

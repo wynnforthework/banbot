@@ -5,7 +5,7 @@
   import { alerts } from '$lib/stores/alerts';
   import {modals} from '$lib/stores/modals';
   import Modal from '$lib/kline/Modal.svelte';
-  import { getDateStr, toUTCStamp } from '$lib/dateutil';
+  import { fmtDateStr, toUTCStamp, curTZ } from '$lib/dateutil';
   import { OrderDetail, type InOutOrder } from '$lib/order';
 
   let tabName = $state('bot'); // bot/exchange/position
@@ -321,10 +321,10 @@
               <th>ID</th>
               <th>{m.pair()}</th>
               <th>{m.timeframe()}/{m.side()}/{m.leverage()}</th>
-              <th>{m.enter_time()}</th>
+              <th>{m.enter_time()}({curTZ()})</th>
               <th>{m.enter_tag()}</th>
               <th>{m.enter_price()}</th>
-              <th>{m.exit_time()}</th>
+              <th>{m.exit_time()}({curTZ()})</th>
               <th>{m.exit_tag()}</th>
               <th>{m.profit_rate()}</th>
               <th>{m.profit()}</th>
@@ -337,10 +337,10 @@
                 <td>{order.id}</td>
                 <td>{order.symbol}</td>
                 <td>{order.timeframe}/{order.short ? m.short() : m.long()}/{order.leverage}</td>
-                <td>{getDateStr(order.enter_at)}</td>
+                <td>{fmtDateStr(order.enter_at)}</td>
                 <td>{order.enter_tag}</td>
                 <td>{(order.enter_average ?? order.enter_price ?? order.init_price).toFixed(7)}</td>
-                <td>{getDateStr(order.exit_at)}</td>
+                <td>{fmtDateStr(order.exit_at)}</td>
                 <td>{order.exit_tag}</td>
                 <td>{(order.profit_rate * 100).toFixed(1)}%</td>
                 <td>{order.profit.toFixed(5)}</td>
@@ -367,7 +367,7 @@
               <th>{m.order_id()}</th>
               <th>{m.client_id()}</th>
               <th>{m.pair()}</th>
-              <th>{m.time()}</th>
+              <th>{m.time()}({curTZ()})</th>
               <th>{m.side()}</th>
               <th>{m.position_type()}</th>
               <th>{m.price()}</th>
@@ -382,7 +382,7 @@
                 <td>{order.id}</td>
                 <td>{order.clientOrderId}</td>
                 <td>{order.symbol}</td>
-                <td>{getDateStr(order.timestamp)}</td>
+                <td>{fmtDateStr(order.timestamp)}</td>
                 <td>{order.side.toLowerCase() === 'buy' ? m.long() : m.short()}</td>
                 <td>{order.reduceOnly ? m.close_position() : m.open_position()}</td>
                 <td>{order.average || order.price || '-'}</td>
@@ -403,7 +403,7 @@
           <thead>
             <tr>
               <th>{m.pair()}</th>
-              <th>{m.time()}</th>
+              <th>{m.time()}({curTZ()})</th>
               <th>{m.side()}</th>
               <th>{m.entry_price()}</th>
               <th>{m.mark_price()}</th>
@@ -418,7 +418,7 @@
             {#each exgposList as pos, i}
               <tr>
                 <td>{pos.symbol}</td>
-                <td>{getDateStr(pos.timestamp)}</td>
+                <td>{fmtDateStr(pos.timestamp)}</td>
                 <td>{pos.side === 'long' ? m.long() : m.short()}</td>
                 <td>{pos.entryPrice?.toFixed(4)}</td>
                 <td>{pos.markPrice?.toFixed(4)}</td>

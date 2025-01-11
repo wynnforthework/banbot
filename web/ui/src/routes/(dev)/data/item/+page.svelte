@@ -5,7 +5,7 @@
   import type { ExSymbol } from '$lib/dev/common';
   import * as m from '$lib/paraglide/messages.js';
   import { alerts } from "$lib/stores/alerts";
-  import { fmtDurationDays, getDateStr, TFToSecs, toUTCStamp } from '$lib/dateutil';
+  import { fmtDurationDays, fmtDateStr, TFToSecs, toUTCStamp, curTZ } from '$lib/dateutil';
   import { makePeriod } from '$lib/kline/coms';
   import Icon from '$lib/Icon.svelte';
   import Icon2 from '$lib/kline/Icon.svelte';
@@ -211,8 +211,8 @@
             <thead>
               <tr>
                 <th>{m.timeframe()}</th>
-                <th>{m.start_time()}</th>
-                <th>{m.end_time()}</th>
+                <th>{m.start_time()}({curTZ()})</th>
+                <th>{m.end_time()}({curTZ()})</th>
                 <th>{m.duration()}</th>
               </tr>
             </thead>
@@ -220,8 +220,8 @@
               {#each kinfos as info}
                 <tr>
                   <td>{info.timeframe}</td>
-                  <td>{getDateStr(info.start)}</td>
-                  <td>{getDateStr(info.stop)}</td>
+                  <td>{fmtDateStr(info.start)}</td>
+                  <td>{fmtDateStr(info.stop)}</td>
                   <td>{fmtDurationDays((info.stop - info.start)/1000)}</td>
                 </tr>
               {/each}
@@ -241,14 +241,14 @@
           <table class="table">
             <thead>
               <tr>
-                <th>{m.time()}</th>
+                <th>{m.time()}({curTZ()})</th>
                 <th>{m.adj_factor()}</th>
               </tr>
             </thead>
             <tbody>
               {#each filterAdjFactors() as adj}
                 <tr>
-                  <td>{getDateStr(adj.time)}</td>
+                  <td>{fmtDateStr(adj.time)}</td>
                   <td>{adj.factor}</td>
                 </tr>
               {/each}
@@ -282,11 +282,11 @@
               <tr>
                 {#if activeTab === 'gaps'}
                   <th>{m.timeframe()}</th>
-                  <th>{m.start_time()}</th>
-                  <th>{m.end_time()}</th>
+                  <th>{m.start_time()}({curTZ()})</th>
+                  <th>{m.end_time()}({curTZ()})</th>
                   <th>Number</th>
                 {:else}
-                  <th>{m.time()}</th>
+                  <th>{m.time()}({curTZ()})</th>
                   <th>{m.time()}</th>
                   <th>{m.kopen()}</th>
                   <th>{m.khigh()}</th>
@@ -301,11 +301,11 @@
                 <tr>
                   {#if activeTab === 'gaps'}
                     <td>{item.timeframe}</td>
-                    <td>{getDateStr(item.start)}</td>
-                    <td>{getDateStr(item.stop)}</td>
+                    <td>{fmtDateStr(item.start)}</td>
+                    <td>{fmtDateStr(item.stop)}</td>
                     <td>{Math.round((item.stop - item.start)/1000/TFToSecs(item.timeframe))}</td>
                   {:else}
-                    <td>{getDateStr(item[0])}</td>
+                    <td>{fmtDateStr(item[0])}</td>
                     <td>{item[0]}</td>
                     <td>{item[1]}</td>
                     <td>{item[2]}</td>

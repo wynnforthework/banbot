@@ -4,7 +4,7 @@
   import { getAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import { acc, loadAccounts } from '$lib/dash/store';
-  import { getDateStr, getUTCStamp } from '@/lib/dateutil';
+  import { fmtDateStr, fmtDateStrTZ, getUTCStamp } from '@/lib/dateutil';
 
   let data = $state({
     cpuPct: 0,
@@ -88,7 +88,7 @@
     if(data.allowTradeAt <= curMs) {
       entryStatus = m.allow_entry();
     }else{
-      const dateStr = getDateStr(data.allowTradeAt, 'MM-DD HH:mm');
+      const dateStr = fmtDateStr(data.allowTradeAt, 'MM-DD HH:mm');
       entryStatus = m.no_entry_until({date: dateStr});
     }
   });
@@ -129,8 +129,8 @@
         <div>RAM: {data.ramPct.toFixed(1)}%</div>
         <div>{m.market()}: {data.exchange}.{data.market}</div>
         <div>{m.timeframes()}: {data.runTfs.join(', ')}</div>
-        <div>{m.start_time()}: {getDateStr(data.botStartMs)}</div>
-        <div>{m.last_active()}: {getDateStr(data.lastProcess)}</div>
+        <div>{m.start_time()}: {fmtDateStrTZ(data.botStartMs)}</div>
+        <div>{m.last_active()}: {fmtDateStrTZ(data.lastProcess)}</div>
       </div>
     </div>
   </div>

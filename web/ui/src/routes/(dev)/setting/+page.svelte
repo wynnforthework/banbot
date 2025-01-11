@@ -13,6 +13,7 @@
   import { availableLanguageTags, languageTag } from "$lib/paraglide/runtime.js"
   import { i18n } from '$lib/i18n';
   import { goto } from '$app/navigation'
+  import { getTimezoneSelectOptions, setTimezone, curTZ } from '@/lib/dateutil';
 
   let activeTab = $state('config.local.yml');
   let theme: Extension | null = $state(oneDark);
@@ -29,6 +30,10 @@
   let isBuilding = $state(false);
   let buildOk = $state(false);
   let selectedLang = $state<string>(languageTag());
+
+  // 时区相关状态
+  let timezoneOptions = getTimezoneSelectOptions();
+  let selectedTimezone = $state(curTZ().toLowerCase());
 
   onMount(() => {
     const tab = $page.url.searchParams.get('tab');
@@ -148,15 +153,29 @@
 
   $effect(() => {
     if(activeTab){
-      setTimeout(loadConfig, 0)
+      setTimeout(loadConfig, 100)
     }
   });
+
+  function setActivePage(page: string) {
+    activePage = page;
+    if (page === 'config') {
+      activeTab = 'config.local.yml';
+      loadConfig();
+    }
+  }
 
   async function switchLanguage(lang: string) {
     if (lang === selectedLang) return;
     selectedLang = lang;
     const path = $site.path || '/';
     await goto(i18n.resolveRoute(path, lang as any));
+  }
+
+  async function handleTimezoneChange(timezone: string) {
+    selectedTimezone = timezone;
+    await setTimezone(timezone);
+    alerts.addAlert("success", m.save_success());
   }
 </script>
 
@@ -173,20 +192,26 @@
       <ul class="menu bg-base-200 rounded-box">
         <li>
           <button class:active={activePage === 'config'} 
-            onclick={() => activePage = 'config'}>
+            onclick={() => setActivePage('config')}>
             <Icon name="config" />{m.global_config()}
           </button>
         </li>
         <li>
           <button class:active={activePage === 'build'}
-            onclick={() => activePage = 'build'}>
+            onclick={() => setActivePage('build')}>
             <Icon name="play" />{m.build()}
           </button>
         </li>
         <li>
           <button class:active={activePage === 'language'}
-            onclick={() => activePage = 'language'}>
+            onclick={() => setActivePage('language')}>
             <Icon name="language" />{m.language()}
+          </button>
+        </li>
+        <li>
+          <button class:active={activePage === 'timezone'}
+            onclick={() => setActivePage('timezone')}>
+            <Icon name="clock" />{m.timezone()}
           </button>
         </li>
       </ul>
@@ -300,7 +325,7 @@
             </div>
           {/if}
         </div>
-      {:else}
+      {:else if activePage === 'language'}
         <!-- 语言设置页面 -->
         <div class="space-y-6">
           <!-- 语言选择 -->
@@ -319,6 +344,30 @@
                       onchange={() => switchLanguage(lang)}
                     />
                     <span class="label-text ml-2">{lang}</span>
+                  </label>
+                {/each}
+              </div>
+            </div>
+          </div>
+        </div>
+      {:else}
+        <div class="space-y-6">
+          <!-- 时区设置 -->
+          <div class="flex">
+            <div class="w-[10rem]">
+              <label class="label">
+                <span class="label-text">{m.timezone()}</span>
+              </label>
+            </div>
+            <div class="flex-1">
+              <div class="grid grid-cols-4 gap-2">
+                {#each timezoneOptions as option}
+                  <label class="label cursor-pointer min-w-[200px] justify-start">
+                    <input type="radio" name="timezone" class="radio radio-primary"
+                      checked={selectedTimezone === option.key}
+                      onchange={() => handleTimezoneChange(option.key)}
+                    />
+                    <span class="label-text ml-2">{m[option.text]()}</span>
                   </label>
                 {/each}
               </div>

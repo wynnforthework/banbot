@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages';
   import { getAccApi } from '$lib/netio';
-  import { getDateStr } from '$lib/dateutil';
+  import { fmtDateStr, curTZ } from '$lib/dateutil';
 
   interface Income {
     tranId: string;
@@ -75,8 +75,8 @@
     stats.assets = '';
 
     if (res.length) {
-      stats.startDate = getDateStr(res[0].time);
-      stats.stopDate = getDateStr(res[res.length - 1].time);
+      stats.startDate = fmtDateStr(res[0].time);
+      stats.stopDate = fmtDateStr(res[res.length - 1].time);
     }
 
     if (searchData.account) {
@@ -85,8 +85,8 @@
 
     stats.num = `${res.length} (原始: ${orgNum})`;
     if (res.length) {
-      stats.startDate = getDateStr(res[0].time);
-      stats.stopDate = getDateStr(res[res.length - 1].time);
+      stats.startDate = fmtDateStr(res[0].time);
+      stats.stopDate = fmtDateStr(res[res.length - 1].time);
       stats.assets = calcAssets(res);
     }
 
@@ -204,7 +204,7 @@
           <th>{m.amount()}</th>
           <th>{m.asset()}</th>
           <th>{m.timestamp()}</th>
-          <th>{m.time()}</th>
+          <th>{m.time()}({curTZ()})</th>
           <th>{m.account()}</th>
           <th>{m.trade_id()}</th>
         </tr>
@@ -217,7 +217,7 @@
             <td>{item.income}</td>
             <td>{item.asset}</td>
             <td>{item.time}</td>
-            <td>{getDateStr(item.time)}</td>
+            <td>{fmtDateStr(item.time)}</td>
             <td>{item.info}</td>
             <td>{item.tradeId}</td>
           </tr>

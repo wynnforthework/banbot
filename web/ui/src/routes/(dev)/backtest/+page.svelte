@@ -6,7 +6,7 @@
   import * as m from '$lib/paraglide/messages.js'
   import { goto } from '$app/navigation';
   import { showPairs } from '$lib/dev/common';
-  import { getDateStr } from '$lib/dateutil';
+  import { fmtDateStr } from '$lib/dateutil';
   import {addListener} from '$lib/dev/websocket';
   import { i18n } from '$lib/i18n';
 
@@ -215,7 +215,7 @@ Error: ${task.info}`
               <h2 class="text-lg font-bold" title={task.strats}>
                 {showStrats(task.strats)}
               </h2>
-              <div class="text-sm opacity-60">{task.periods} · {showPairs(task.pairs)}</div>
+              <div class="text-sm opacity-60">{task.periods}</div>
             </div>
             {#if task.status === 3}
               <div class="text-2xl font-bold">{task.profitRate.toFixed(1)}%</div>
@@ -237,8 +237,9 @@ Error: ${task.info}`
           <!-- 第二行 -->
           <div class="flex justify-between items-center mb-5">
             <div class="text-sm opacity-60">
-              {getDateStr(task.startAt, 'YYYYMMDD HH:mm')} - {getDateStr(task.stopAt, 'YYYYMMDD HH:mm')}
+              {fmtDateStr(task.startAt, 'YYYYMMDD')} - {fmtDateStr(task.stopAt, 'YYYYMMDD')}
             </div>
+            <div class="text-sm opacity-60">{showPairs(task.pairs)}</div>
             {#if task.status === 3}
               <div class="text-sm opacity-80">{m.max_drawdown()}: {task.maxDrawdown.toFixed(1)}%</div>
             {:else if task.status === 4}

@@ -5,7 +5,7 @@
   import * as m from '$lib/paraglide/messages.js';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
   import { exchanges, markets } from '$lib/common';
-  import {getDateStr} from '$lib/dateutil'
+  import {curTZ, fmtDateStr} from '$lib/dateutil'
 
   // 状态变量
   let symbols: ExSymbol[] = $state([]);
@@ -114,8 +114,8 @@
                     <th>{m.market()}</th>
                     <th>{m.symbol()}</th>
                     <th>{m.combined()}</th>
-                    <th>{m.list_time()}</th>
-                    <th>{m.delist_time()}</th>
+                    <th>{m.list_time()}({curTZ()})</th>
+                    <th>{m.delist_time()}({curTZ()})</th>
                     <th>-</th>
                 </tr>
             </thead>
@@ -128,8 +128,8 @@
                         <td>{symbol.market}</td>
                         <td>{symbol.symbol}</td>
                         <td>{symbol.combined ? m.yes() : ''}</td>
-                        <td>{getDateStr(symbol.list_ms)}</td>
-                        <td>{getDateStr(symbol.delist_ms)}</td>
+                        <td>{fmtDateStr(symbol.list_ms)}</td>
+                        <td>{fmtDateStr(symbol.delist_ms)}</td>
                         <td>
                             <a href={`/data/item?id=${symbol.id}`} class="btn btn-xs btn-info btn-outline">{m.details()}</a>
                         </td>
