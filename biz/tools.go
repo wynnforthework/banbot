@@ -766,6 +766,8 @@ func RunHistKline(args *RunHistArgs) *errs.Error {
 		}
 	}
 	var holds = make([]data.IHistKlineFeeder, 0, len(args.ExsList))
+	var skipWarms = make(map[string][2]int)
+	var skips map[string][2]int
 	for i, exs := range args.ExsList {
 		tfList := make([]*tfFuts, 0, len(tfItems))
 		for _, it := range tfItems {
@@ -796,14 +798,20 @@ func RunHistKline(args *RunHistArgs) *errs.Error {
 		if err != nil {
 			log.Error("down kline fail", zap.String("code", exs.Symbol), zap.Error(err))
 		}
-		_, err = feeder.WarmTfs(args.Start, args.TfWarms, nil)
+		_, skips, err = feeder.WarmTfs(args.Start, args.TfWarms, nil)
 		if err != nil {
 			return err
+		}
+		for k, v := range skips {
+			skipWarms[k] = v
 		}
 		feeder.SetSeek(args.Start)
 		if i%10 == 0 {
 			log.Info("warm done", zap.Int("total", len(args.ExsList)), zap.Int("cur", i+1))
 		}
+	}
+	if len(skipWarms) > 0 {
+		log.Warn("warm lacks", zap.String("items", data.StrWarmLacks(skipWarms)))
 	}
 	makeFeeders := func() []data.IHistKlineFeeder {
 		return holds

@@ -607,10 +607,6 @@ func (o *OrderMgr) finishOrder(od *ormo.InOutOrder, sess *ormo.Queries) *errs.Er
 				zap.Strings("job", []string{od.Symbol, od.Timeframe, od.Strategy}))
 		}
 	}
-	tipAmtLock.Lock()
-	// Order opened successfully, prompt allowed
-	delete(tipAmtZeros, od.Symbol) // 开单成功，允许提示
-	tipAmtLock.Unlock()
 	return err
 }
 

@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -270,7 +271,7 @@ type IKlineFeeder interface {
 	/*
 		WarmTfs The preheating time period gives the number of K lines to the specified time. 预热时间周期给定K线数量到指定时间
 	*/
-	WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error)
+	WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, map[string][2]int, *errs.Error)
 	onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *errs.Error)
 	getStates() []*PairTFCache
 }
@@ -326,16 +327,17 @@ func NewKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline, showLog bool) (*Kli
 	}, nil
 }
 
-func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error) {
+func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, map[string][2]int, *errs.Error) {
 	if len(tfNums) == 0 {
 		tfNums = f.warmNums
 		if len(tfNums) == 0 {
-			return 0, nil
+			return 0, nil, nil
 		}
 	} else {
 		f.warmNums = tfNums
 	}
 	maxEndMs := int64(0)
+	skips := make(map[string][2]int)
 	for tf, warmNum := range tfNums {
 		tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 		if tfMSecs < int64(60000) || warmNum <= 0 {
@@ -344,24 +346,19 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 		endMS := utils2.AlignTfMSecs(curMS, tfMSecs)
 		bars, err := f.getTfKlines(tf, endMS, warmNum, pBar)
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if len(bars) == 0 && f.showLog {
-			log.Info("skip warm as empty", zap.String("pair", f.Symbol), zap.String("tf", tf),
-				zap.Int("want", warmNum), zap.Int64("end", endMS))
+			skips[fmt.Sprintf("%s_%s", f.Symbol, tf)] = [2]int{warmNum, 0}
 			continue
 		}
 		if warmNum != len(bars) && f.showLog {
-			barEndMs := bars[len(bars)-1].Time + tfMSecs
-			barStartMs := bars[0].Time
-			lackNum := warmNum - len(bars)
-			log.Info(fmt.Sprintf("warm %s/%s lack %v bars, expect: %v, range:%v-%v", f.Symbol,
-				tf, lackNum, warmNum, barStartMs, barEndMs))
+			skips[fmt.Sprintf("%s_%s", f.Symbol, tf)] = [2]int{warmNum, len(bars)}
 		}
 		curEnd := f.warmTf(tf, bars)
 		maxEndMs = max(maxEndMs, curEnd)
 	}
-	return maxEndMs, nil
+	return maxEndMs, skips, nil
 }
 
 /*
@@ -566,14 +563,14 @@ func (f *HistKLineFeeder) CallNext() {
 	f.setNext()
 }
 
-func (f *HistKLineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, *errs.Error) {
-	endMs, err := f.KlineFeeder.WarmTfs(curMS, tfNums, pBar)
+func (f *HistKLineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, map[string][2]int, *errs.Error) {
+	endMs, skips, err := f.KlineFeeder.WarmTfs(curMS, tfNums, pBar)
 	if err == nil && f.minGapMs != int64(f.States[0].TFSecs*1000) {
 		f.rowIdx = 0
 		f.nextMS = 0
 		f.caches = nil
 	}
-	return endMs, err
+	return endMs, skips, err
 }
 
 /*
@@ -685,9 +682,11 @@ func makeSetNext(f *DBKlineFeeder) func() {
 				}, f.adj)
 				// Warm up again
 				// 重新复权预热
-				_, err := f.WarmTfs(nextStartMS, nil, nil)
+				_, skips, err := f.WarmTfs(nextStartMS, nil, nil)
 				if err != nil {
 					log.Error("next warm tf fail", zap.Error(err))
+				} else if len(skips) > 0 {
+					log.Warn("warm lacks", zap.String("items", StrWarmLacks(skips)))
 				}
 				f.setAdjIdx()
 			}
@@ -728,4 +727,20 @@ func makeSetNext(f *DBKlineFeeder) func() {
 		f.setAdjIdx()
 		f.minGapMs = tfMSecs
 	}
+}
+
+func StrWarmLacks(skips map[string][2]int) string {
+	if len(skips) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for k, arr := range skips {
+		b.WriteString(k)
+		b.WriteString(": ")
+		lackPct := float64(arr[0]-arr[1]) * 100 / float64(arr[0])
+		b.WriteString(strconv.FormatFloat(lackPct, 'f', 0, 64))
+		b.WriteString("%, ")
+	}
+	var res = b.String()
+	return res[:len(res)-2]
 }

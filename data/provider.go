@@ -134,15 +134,22 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob, pb *utils.StagedP
 			})
 		}
 	}
+	skipWarms := make(map[string][2]int)
 	startTime := btime.TimeMS()
 	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(_ int, job *WarmJob) *errs.Error {
 		hold := job.hold
-		since, err := hold.WarmTfs(startTime, job.tfWarms, pBar)
+		since, skips, err := hold.WarmTfs(startTime, job.tfWarms, pBar)
 		lockMap.Lock()
 		sinceMap[hold.getSymbol()] = since
+		for k, v := range skips {
+			skipWarms[k] = v
+		}
 		lockMap.Unlock()
 		return err
 	})
+	if len(skipWarms) > 0 {
+		log.Warn("warm lacks", zap.String("items", StrWarmLacks(skipWarms)))
+	}
 	return sinceMap, retErr
 }
 

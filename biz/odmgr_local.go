@@ -1,9 +1,6 @@
 package biz
 
 import (
-	"strings"
-	"sync"
-
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -17,17 +14,14 @@ import (
 	"github.com/banbox/banexg/utils"
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
+	"strings"
 )
 
 type LocalOrderMgr struct {
 	OrderMgr
-	showLog bool
+	showLog  bool
+	zeroAmts map[string]int
 }
-
-var (
-	tipAmtZeros = map[string]bool{} // symbols which has been prompted that the quantity is too small to open an order. 已提示数量太小无法开单的标的
-	tipAmtLock  sync.Mutex
-)
 
 func InitLocalOrderMgr(callBack func(od *ormo.InOutOrder, isEnter bool), showLog bool) {
 	for account := range config.Accounts {
@@ -38,7 +32,8 @@ func InitLocalOrderMgr(callBack func(od *ormo.InOutOrder, isEnter bool), showLog
 					callBack: callBack,
 					Account:  account,
 				},
-				showLog: showLog,
+				showLog:  showLog,
+				zeroAmts: make(map[string]int),
 			}
 			accOdMgrs[account] = mgr
 		}
@@ -228,14 +223,8 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 						zap.Float64("amt", entAmount), zap.Error(err))
 				}
 			} else {
-				tipAmtLock.Lock()
-				if _, ok := tipAmtZeros[od.Symbol]; !ok {
-					if o.showLog {
-						log.Info("prec enter amount zero", zap.String("symbol", od.Symbol))
-					}
-					tipAmtZeros[od.Symbol] = true
-				}
-				tipAmtLock.Unlock()
+				num, _ := o.zeroAmts[od.Symbol]
+				o.zeroAmts[od.Symbol] = num + 1
 			}
 			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)
@@ -463,6 +452,9 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 	}, nil)
 	if err != nil {
 		return err
+	}
+	if len(o.zeroAmts) > 0 {
+		log.Warn("prec amount to zero", zap.Any("times", o.zeroAmts))
 	}
 	// Reset Unrealized P&L
 	// 重置未实现盈亏
