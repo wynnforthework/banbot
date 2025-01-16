@@ -96,6 +96,7 @@ pairlists:  # ${m.cfg_pairlists()}
     max: 1  # ${m.cfg_correlation_val()}
     timeframe: 5m  # ${m.cfg_correlation_tf()}
     back_num: 70  # ${m.cfg_correlation_back()}
+    sort: asc  # asc/desc/""
     top_n: 50  # ${m.cfg_correlation_topn()}
   - name: VolatilityFilter  # ${m.cfg_volatility()}
     back_days: 10  # ${m.cfg_back_days()}
@@ -104,7 +105,9 @@ pairlists:  # ${m.cfg_pairlists()}
   - name: AgeFilter  # ${m.cfg_pairlists_age()}
     min: 5
   - name: OffsetFilter  # ${m.cfg_pairlists_offset()}
+    reverse: false  # reverse array
     offset: 10
+    rate: 0.5  # 50% of array
     limit: 30
   - name: ShuffleFilter  # ${m.cfg_pairlists_shuffle()}
     seed: 42
