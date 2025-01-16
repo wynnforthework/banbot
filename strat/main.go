@@ -31,7 +31,7 @@ strat.PairStrats
 strat.AccJobs
 strat.AccInfoJobs
 
-	返回对应关系：[(pair, timeframe, 预热数量, 策略列表), ...]
+	return：pair:timeframe:warmNum, acc:exit orders, error
 */
 func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[string]map[string]int, map[string][]*ormo.InOutOrder, *errs.Error) {
 	if len(pairs) == 0 || len(tfScores) == 0 {
@@ -81,6 +81,13 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 				failTfScores[exs.Symbol] = scores
 				continue
 			}
+			jobType := JobForbidType(exs.Symbol, tf, polID)
+			if jobType > 0 {
+				if jobType > 1 {
+					holdNum += 1
+				}
+				continue
+			}
 			items, ok := PairStrats[exs.Symbol]
 			if !ok {
 				items = make(map[string]*TradeStrat)
@@ -112,29 +119,35 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	}
 	var envKeys = make(map[string]bool)
 	// 对AccJobs中，当前禁止开单的job，如果无入场订单，则删除job
-	exitOds := make([]*ormo.InOutOrder, 0, 8)
+	accExitOds := make(map[string][]*ormo.InOutOrder)
 	exitJobs := make(map[*StratJob]bool)
-	oldPairs := make(map[string]bool)
-	newPairs := make(map[string]bool)
-	for _, jobs := range AccJobs {
+	exitPairs := make(map[string]bool) // 不再监听的品种
+	newPairs := make(map[string]bool)  // 继续监听的品种
+	holdPosition := config.PairMgr.PosOnRotation != "close"
+	for acc, jobs := range AccJobs {
+		exitOds := make([]*ormo.InOutOrder, 0, 4)
 		for envKey, envJobs := range jobs {
 			resJobs := make(map[string]*StratJob)
 			for name, job := range envJobs {
 				if job.MaxOpenLong == -1 && job.MaxOpenShort == -1 {
 					// disable open order
-					if job.EnteredNum == 0 {
+					if job.EnteredNum > 0 && holdPosition {
+						// 有未平仓订单，继续跟踪
+						resJobs[name] = job
+					} else {
+						// 立刻平仓
 						if job.Strat.OnShutDown != nil {
 							job.Strat.OnShutDown(job)
 						}
 						exitJobs[job] = true
-					} else {
-						// 有未平仓订单，继续跟踪
-						resJobs[name] = job
-						oldPairs[job.Symbol.Symbol] = true
+						exitPairs[job.Symbol.Symbol] = true
+						if job.EnteredNum > 0 {
+							exitOds = append(exitOds, job.LongOrders...)
+							exitOds = append(exitOds, job.ShortOrders...)
+						}
 					}
-					exitOds = append(exitOds, job.LongOrders...)
-					exitOds = append(exitOds, job.ShortOrders...)
 				} else {
+					// 可以继续开单
 					resJobs[name] = job
 					newPairs[job.Symbol.Symbol] = true
 				}
@@ -162,17 +175,22 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 				delete(jobs, envKey)
 			}
 		}
-	}
-	dupPairs := make([]string, 0, 6)
-	for p := range oldPairs {
-		if _, ok := newPairs[p]; ok {
-			dupPairs = append(dupPairs, p)
+		if len(exitOds) > 0 {
+			accExitOds[acc] = exitOds
 		}
 	}
-	if len(oldPairs) > 0 {
-		keys := utils2.KeysOfMap(oldPairs)
-		log.Info("disable open pairs", zap.Int("num", len(keys)), zap.Strings("arr", keys),
-			zap.Strings("dup", dupPairs))
+	for p := range exitPairs {
+		if _, ok := newPairs[p]; ok {
+			delete(exitPairs, p)
+		}
+	}
+	if len(exitPairs) > 0 {
+		keys := utils2.KeysOfMap(exitPairs)
+		log.Info("exit pairs", zap.Int("num", len(keys)), zap.Strings("arr", keys))
+	}
+	for k := range core.PairsMap {
+		_, ok := newPairs[k]
+		core.PairsMap[k] = ok
 	}
 	// 从AccInfoJobs中移除已取消的项
 	lockInfoJobs.Lock()
@@ -226,7 +244,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			delete(Envs, envKey)
 		}
 	}
-	return pairTfWarms, getUnfillOrders(exitOds), nil
+	return pairTfWarms, accExitOds, nil
 }
 
 func ExitStratJobs() {
@@ -239,19 +257,6 @@ func ExitStratJobs() {
 			}
 		}
 	}
-}
-
-func getUnfillOrders(ods []*ormo.InOutOrder) map[string][]*ormo.InOutOrder {
-	var res = make(map[string][]*ormo.InOutOrder)
-	for _, od := range ods {
-		if od.Status != ormo.InOutStatusInit {
-			continue
-		}
-		acc := ormo.GetTaskAcc(od.TaskID)
-		odList, _ := res[acc]
-		res[acc] = append(odList, od)
-	}
-	return res
 }
 
 func printFailTfScores(stratName string, pairTfScores map[string]map[string]float64) {

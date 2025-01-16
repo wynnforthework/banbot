@@ -14,6 +14,7 @@ import (
 	"github.com/banbox/banexg/utils"
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -27,10 +28,12 @@ var (
 type IOrderMgr interface {
 	ProcessOrders(sess *ormo.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
 		exits []*strat.ExitReq, edits []*ormo.InOutEdit) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error)
+	RelayOrders(sess *ormo.Queries, orders []*ormo.InOutOrder) *errs.Error
 	EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*ormo.InOutOrder, *errs.Error)
 	ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.ExitReq) ([]*ormo.InOutOrder, *errs.Error)
 	ExitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat.ExitReq) (*ormo.InOutOrder, *errs.Error)
 	UpdateByBar(allOpens []*ormo.InOutOrder, bar *orm.InfoKline) *errs.Error
+	ExitAndFill(sess *ormo.Queries, orders []*ormo.InOutOrder, req *strat.ExitReq) *errs.Error
 	OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error
 	CleanUp() *errs.Error
 }
@@ -236,6 +239,71 @@ func (o *OrderMgr) ProcessOrders(sess *ormo.Queries, env *banta.BarEnv, enters [
 		}
 	}
 	return entOrders, extOrders, nil
+}
+
+func (o *OrderMgr) RelayOrders(sess *ormo.Queries, orders []*ormo.InOutOrder) *errs.Error {
+	symbolMap := orm.GetExSymbolMap(core.ExgName, core.Market)
+	taskId := ormo.GetTaskID(o.Account)
+	for _, odr := range orders {
+		exs, ok := symbolMap[odr.Symbol]
+		if !ok {
+			return errs.NewMsg(errs.CodeNoMarketForPair, "%s not found", odr.Symbol)
+		}
+		price := core.GetPrice(odr.Symbol)
+		od := &ormo.InOutOrder{
+			IOrder: &ormo.IOrder{
+				TaskID:    taskId,
+				Symbol:    odr.Symbol,
+				Sid:       int64(exs.ID),
+				Timeframe: odr.Timeframe,
+				Short:     odr.Short,
+				Status:    odr.Status,
+				EnterTag:  odr.EnterTag,
+				InitPrice: odr.InitPrice,
+				QuoteCost: odr.QuoteCost,
+				ExitTag:   odr.ExitTag,
+				Leverage:  odr.Leverage,
+				EnterAt:   odr.EnterAt,
+				ExitAt:    odr.ExitAt,
+				Strategy:  odr.Strategy,
+				StgVer:    odr.StgVer,
+				Info:      odr.IOrder.Info,
+				// ignore: MaxPftRate,MaxDrawDown,Profit,ProfitRate
+			},
+			Enter: &ormo.ExOrder{
+				TaskID:    taskId,
+				Symbol:    odr.Symbol,
+				Enter:     true,
+				OrderType: odr.Enter.OrderType,
+				//OrderID:   odr.Enter.OrderID,
+				Side:     odr.Enter.Side,
+				CreateAt: btime.TimeMS(),
+				Price:    price,
+				Amount:   odr.Enter.Amount,
+				Status:   ormo.OdStatusInit,
+			},
+			Info:       make(map[string]interface{}),
+			DirtyMain:  true,
+			DirtyEnter: true,
+		}
+		if odr.Exit != nil && odr.Exit.Filled > 0 {
+			od.Enter.Amount -= odr.Exit.Filled
+			od.QuoteCost = od.Enter.Price * od.Enter.Amount
+		}
+		if len(odr.Info) > 0 {
+			maps.Copy(od.Info, odr.Info)
+		}
+		err := od.Save(sess)
+		if err == nil {
+			if o.afterEnter != nil {
+				err = o.afterEnter(od)
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.EnterReq, doCheck bool) (*ormo.InOutOrder, *errs.Error) {

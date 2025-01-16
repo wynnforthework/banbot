@@ -4,14 +4,15 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
@@ -79,44 +80,45 @@ func SetupComsExg(args *config.CmdArgs) *errs.Error {
 	return orm.InitExg(exg.Default)
 }
 
-func LoadRefreshPairs(dp data.IProvider, showLog bool, pBar *utils.StagedPrg) *errs.Error {
+func RefreshPairs(showLog bool, pBar *utils.StagedPrg) ([]string, map[string]map[string]float64, *errs.Error) {
 	goods.ShowLog = showLog
 	pairs, err := goods.RefreshPairList()
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if pBar != nil {
 		pBar.SetProgress("loadPairs", 1)
 	}
-	pairTfScores, err := calcPairTfScores(exg.Default, pairs)
+	pairTfScores, err := strat.CalcPairTfScores(exg.Default, pairs)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if pBar != nil {
 		pBar.SetProgress("tfScores", 1)
 	}
+	return pairs, pairTfScores, nil
+}
+
+func RefreshJobs(pairs []string, pairTfScores map[string]map[string]float64, showLog bool, pBar *utils.StagedPrg) (map[string]map[string]int, *errs.Error) {
 	warms, accOds, err := strat.LoadStratJobs(pairs, pairTfScores)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(accOds) > 0 {
-		// exit unfill orders
 		var sess *ormo.Queries
 		if core.LiveMode {
 			sess, err = ormo.Conn(orm.DbTrades, true)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 		for acc, odList := range accOds {
 			odMgr := GetOdMgr(acc)
-			for _, od := range odList {
-				req := &strat.ExitReq{Tag: core.ExitTagPairDel, OrderID: od.ID, ExitRate: 1}
-				_, err = odMgr.ExitOrder(sess, od, req)
-				if err != nil {
-					return err
-				}
+			err = odMgr.ExitAndFill(sess, odList, &strat.ExitReq{Tag: core.ExitTagPairDel})
+			if err != nil {
+				return nil, err
 			}
+			log.Info("exit old orders as pair rotation", zap.Int("num", len(odList)))
 		}
 	}
 	if showLog {
@@ -125,16 +127,14 @@ func LoadRefreshPairs(dp data.IProvider, showLog bool, pBar *utils.StagedPrg) *e
 	if pBar != nil {
 		pBar.SetProgress("loadJobs", 1)
 	}
-	return dp.SubWarmPairs(warms, true)
+	return warms, nil
 }
 
-func AutoRefreshPairs(dp data.IProvider, showLog bool) {
-	err := LoadRefreshPairs(dp, showLog, nil)
-	if err != nil {
-		log.Error("refresh pairs fail", zap.Error(err))
-	}
-}
+/*
+InitOdSubs 为所有策略OnOrderChange注册订单事件监听。
 
+只需在LoadStratJobs后调用一次，交易的Accounts不变就始终生效
+*/
 func InitOdSubs() {
 	var subStgys = map[string]*strat.TradeStrat{}
 	for _, items := range strat.PairStrats {
@@ -209,7 +209,7 @@ func TryFireBatches(currMS int64) int {
 	defer lockBatch.Unlock()
 	var sess *ormo.Queries
 	var err *errs.Error
-	if core.EnvReal {
+	if core.LiveMode {
 		// In real-time mode, the order is saved to the database. In non-real-time mode, the order is temporarily saved to the memory without the need for a database.
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
 		sess, err = ormo.Conn(orm.DbTrades, true)
@@ -287,14 +287,87 @@ func ResetVars() {
 	core.LastBarMs = 0
 	core.OdBooks = make(map[string]*banexg.OrderBook)
 	ormo.HistODs = make([]*ormo.InOutOrder, 0)
-	//orm.FakeOdId = 1
 	ormo.ResetVars()
 	strat.Envs = make(map[string]*ta.BarEnv)
 	strat.AccJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.PairStrats = make(map[string]map[string]*strat.TradeStrat)
 	strat.BatchTasks = make(map[string]*strat.BatchMap)
+	strat.ForbidJobs = make(map[string]map[string]bool)
 	strat.LastBatchMS = 0
+}
+
+type VarsBackup struct {
+	Pairs         []string
+	PairMap       map[string]bool
+	NoEnterUntil  map[string]int64
+	PairCopiedMs  map[string][2]int64
+	TfPairHits    map[string]map[string]int
+	AccLiveOdMgrs map[string]*LiveOrderMgr
+	AccOdMgrs     map[string]IOrderMgr
+	AccWallets    map[string]*BanWallets
+	LastBarMs     int64
+	OdBooks       map[string]*banexg.OrderBook
+	HistODs       []*ormo.InOutOrder
+	Envs          map[string]*ta.BarEnv
+	AccJobs       map[string]map[string]map[string]*strat.StratJob
+	AccInfoJobs   map[string]map[string]map[string]*strat.StratJob
+	PairStrats    map[string]map[string]*strat.TradeStrat
+	BatchTasks    map[string]*strat.BatchMap
+	ForbidJobs    map[string]map[string]bool
+	LastBatchMS   int64
+	OrmoBackup    *ormo.VarsBackup
+}
+
+// BackupVars 备份所有全局变量
+func BackupVars() *VarsBackup {
+	return &VarsBackup{
+		Pairs:         slices.Clone(core.Pairs),
+		PairMap:       maps.Clone(core.PairsMap),
+		NoEnterUntil:  core.NoEnterUntil,
+		PairCopiedMs:  core.PairCopiedMs,
+		TfPairHits:    core.TfPairHits,
+		AccLiveOdMgrs: accLiveOdMgrs,
+		AccOdMgrs:     accOdMgrs,
+		AccWallets:    accWallets,
+		LastBarMs:     core.LastBarMs,
+		OdBooks:       core.OdBooks,
+		HistODs:       ormo.HistODs,
+		Envs:          strat.Envs,
+		AccJobs:       strat.AccJobs,
+		AccInfoJobs:   strat.AccInfoJobs,
+		PairStrats:    strat.PairStrats,
+		BatchTasks:    strat.BatchTasks,
+		ForbidJobs:    strat.ForbidJobs,
+		LastBatchMS:   strat.LastBatchMS,
+		OrmoBackup:    ormo.BackupVars(),
+	}
+}
+
+// RestoreVars 从备份中恢复所有全局变量
+func RestoreVars(backup *VarsBackup) {
+	if backup == nil {
+		return
+	}
+	core.Pairs = backup.Pairs
+	core.PairsMap = backup.PairMap
+	core.NoEnterUntil = backup.NoEnterUntil
+	core.PairCopiedMs = backup.PairCopiedMs
+	core.TfPairHits = backup.TfPairHits
+	accLiveOdMgrs = backup.AccLiveOdMgrs
+	accOdMgrs = backup.AccOdMgrs
+	accWallets = backup.AccWallets
+	core.LastBarMs = backup.LastBarMs
+	core.OdBooks = backup.OdBooks
+	ormo.HistODs = backup.HistODs
+	strat.Envs = backup.Envs
+	strat.AccJobs = backup.AccJobs
+	strat.AccInfoJobs = backup.AccInfoJobs
+	strat.PairStrats = backup.PairStrats
+	strat.BatchTasks = backup.BatchTasks
+	strat.ForbidJobs = backup.ForbidJobs
+	strat.LastBatchMS = backup.LastBatchMS
+	ormo.RestoreVars(backup.OrmoBackup)
 }
 
 func replaceDockerHosts(data []byte) []byte {

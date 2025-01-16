@@ -126,17 +126,30 @@ func (i *InOutOrder) HoldAmount() float64 {
 	return entAmt
 }
 
-func (i *InOutOrder) Key() string {
-	if i.idKey != "" {
-		return i.idKey
-	}
+func (i *InOutOrder) key(stamp int64) string {
 	side := "long"
 	if i.Short {
 		side = "short"
 	}
-	enterAt := strconv.FormatInt(i.EnterAt, 10)
-	i.idKey = strings.Join([]string{i.Symbol, i.Strategy, side, i.EnterTag, enterAt}, "|")
+	enterAt := strconv.FormatInt(stamp, 10)
+	return strings.Join([]string{i.Symbol, i.Strategy, side, i.EnterTag, enterAt}, "|")
+}
+
+func (i *InOutOrder) Key() string {
+	if i.idKey != "" {
+		return i.idKey
+	}
+	i.idKey = i.key(i.EnterAt)
 	return i.idKey
+}
+
+/*
+KeyAlign 开单时间戳按时间周期对齐，方便回测和实盘订单对比
+*/
+func (i *InOutOrder) KeyAlign() string {
+	tfMSecs := int64(utils2.TFToSecs(i.Timeframe) * 1000)
+	timeMS := int64(math.Round(float64(i.EnterAt)/float64(tfMSecs))) * tfMSecs
+	return i.key(timeMS)
 }
 
 func (i *InOutOrder) SetEnterLimit(price float64) *errs.Error {
@@ -200,9 +213,6 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 		entPrice = i.Enter.Price
 	}
 	entQuoteVal := entPrice * i.Enter.Filled
-	if i.Leverage > 0 {
-		entQuoteVal /= i.Leverage
-	}
 	i.ProfitRate = i.Profit / entQuoteVal
 	if i.ProfitRate > i.MaxPftRate {
 		i.MaxPftRate = i.ProfitRate

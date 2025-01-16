@@ -29,6 +29,8 @@ var (
 	OpenVolRate      float64 // When opening an order without specifying a quantity, the multiple of the maximum allowed order quantity/average candle trading volume, defaults to 1 未指定数量开单时，最大允许开单数量/平均蜡烛成交量的倍数，默认1
 	MinOpenRate      float64 // When the wallet balance is less than the single amount, orders are allowed to be issued when it reaches this ratio of the single amount. 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
 	BTNetCost        float64 // Order placement delay during backtesting, simulated slippage, unit seconds 回测时下单延迟，模拟滑点，单位秒
+	RelaySimUnFinish bool    // 交易新品种时(回测/实盘)，是否从开始时间未平仓订单接力开始交易
+	OrderBarMax      int     // 查找开始时间未平仓订单向前模拟最大bar数量
 	MaxOpenOrders    int
 	MaxSimulOpen     int
 	WalletAmounts    map[string]float64
@@ -56,6 +58,10 @@ var (
 	Webhook          map[string]map[string]string
 )
 
+const (
+	MinPairCronGapMS = 1800000 // 交易对刷新最小间隔半小时
+)
+
 var (
 	noExtends = map[string]bool{
 		"run_policy":     true,
@@ -67,50 +73,52 @@ var (
 
 // Config Is the root configuration structure 是根配置结构体
 type Config struct {
-	Name            string                            `yaml:"name" mapstructure:"name"`
-	Env             string                            `yaml:"env" mapstructure:"env"`
-	Leverage        float64                           `yaml:"leverage" mapstructure:"leverage"`
-	LimitVolSecs    int                               `yaml:"limit_vol_secs" mapstructure:"limit_vol_secs"`
-	PutLimitSecs    int                               `yaml:"put_limit_secs" mapstructure:"put_limit_secs"`
-	MarketType      string                            `yaml:"market_type" mapstructure:"market_type"`
-	ContractType    string                            `yaml:"contract_type" mapstructure:"contract_type"`
-	OdBookTtl       int64                             `yaml:"odbook_ttl" mapstructure:"odbook_ttl"`
-	StopEnterBars   int                               `json:"stop_enter_bars" mapstructure:"stop_enter_bars"`
-	ConcurNum       int                               `json:"concur_num" mapstructure:"concur_num"`
-	OrderType       string                            `yaml:"order_type" mapstructure:"order_type"`
-	PreFire         float64                           `yaml:"prefire" mapstructure:"prefire"`
-	MarginAddRate   float64                           `yaml:"margin_add_rate" mapstructure:"margin_add_rate"`
-	ChargeOnBomb    bool                              `yaml:"charge_on_bomb" mapstructure:"charge_on_bomb"`
-	TakeOverStgy    string                            `yaml:"take_over_stgy" mapstructure:"take_over_stgy"`
-	StakeAmount     float64                           `yaml:"stake_amount" mapstructure:"stake_amount"`
-	StakePct        float64                           `yaml:"stake_pct" mapstructure:"stake_pct"`
-	MaxStakeAmt     float64                           `yaml:"max_stake_amt" mapstructure:"max_stake_amt"`
-	OpenVolRate     float64                           `yaml:"open_vol_rate" mapstructure:"open_vol_rate"`
-	MinOpenRate     float64                           `yaml:"min_open_rate" mapstructure:"min_open_rate"`
-	BTNetCost       float64                           `yaml:"bt_net_cost" mapstructure:"bt_net_cost"`
-	MaxOpenOrders   int                               `yaml:"max_open_orders" mapstructure:"max_open_orders"`
-	MaxSimulOpen    int                               `yaml:"max_simul_open" mapstructure:"max_simul_open"`
-	WalletAmounts   map[string]float64                `yaml:"wallet_amounts" mapstructure:"wallet_amounts"`
-	DrawBalanceOver float64                           `yaml:"draw_balance_over" mapstructure:"draw_balance_over"`
-	StakeCurrency   []string                          `yaml:"stake_currency" mapstructure:"stake_currency"`
-	FatalStop       map[string]float64                `yaml:"fatal_stop" mapstructure:"fatal_stop"`
-	FatalStopHours  int                               `yaml:"fatal_stop_hours" mapstructure:"fatal_stop_hours"`
-	TimeRangeRaw    string                            `yaml:"timerange" mapstructure:"timerange"`
-	TimeRange       *TimeTuple                        `json:"-" mapstructure:"-"`
-	RunTimeframes   []string                          `yaml:"run_timeframes" mapstructure:"run_timeframes"`
-	KlineSource     string                            `yaml:"kline_source" mapstructure:"kline_source"`
-	WatchJobs       map[string][]string               `yaml:"watch_jobs" mapstructure:"watch_jobs"`
-	RunPolicy       []*RunPolicyConfig                `yaml:"run_policy" mapstructure:"run_policy"`
-	StratPerf       *StratPerfConfig                  `yaml:"strat_perf" mapstructure:"strat_perf"`
-	Pairs           []string                          `yaml:"pairs" mapstructure:"pairs"`
-	PairMgr         *PairMgrConfig                    `yaml:"pairmgr" mapstructure:"pairmgr"`
-	PairFilters     []*CommonPairFilter               `yaml:"pairlists" mapstructure:"pairlists"`
-	Exchange        *ExchangeConfig                   `yaml:"exchange" mapstructure:"exchange"`
-	Database        *DatabaseConfig                   `yaml:"database" mapstructure:"database"`
-	SpiderAddr      string                            `yaml:"spider_addr" mapstructure:"spider_addr"`
-	APIServer       *APIServerConfig                  `yaml:"api_server" mapstructure:"api_server"`
-	RPCChannels     map[string]map[string]interface{} `yaml:"rpc_channels" mapstructure:"rpc_channels"`
-	Webhook         map[string]map[string]string      `yaml:"webhook" mapstructure:"webhook"`
+	Name             string                            `yaml:"name" mapstructure:"name"`
+	Env              string                            `yaml:"env" mapstructure:"env"`
+	Leverage         float64                           `yaml:"leverage" mapstructure:"leverage"`
+	LimitVolSecs     int                               `yaml:"limit_vol_secs" mapstructure:"limit_vol_secs"`
+	PutLimitSecs     int                               `yaml:"put_limit_secs" mapstructure:"put_limit_secs"`
+	MarketType       string                            `yaml:"market_type" mapstructure:"market_type"`
+	ContractType     string                            `yaml:"contract_type" mapstructure:"contract_type"`
+	OdBookTtl        int64                             `yaml:"odbook_ttl" mapstructure:"odbook_ttl"`
+	StopEnterBars    int                               `json:"stop_enter_bars" mapstructure:"stop_enter_bars"`
+	ConcurNum        int                               `json:"concur_num" mapstructure:"concur_num"`
+	OrderType        string                            `yaml:"order_type" mapstructure:"order_type"`
+	PreFire          float64                           `yaml:"prefire" mapstructure:"prefire"`
+	MarginAddRate    float64                           `yaml:"margin_add_rate" mapstructure:"margin_add_rate"`
+	ChargeOnBomb     bool                              `yaml:"charge_on_bomb" mapstructure:"charge_on_bomb"`
+	TakeOverStgy     string                            `yaml:"take_over_stgy" mapstructure:"take_over_stgy"`
+	StakeAmount      float64                           `yaml:"stake_amount" mapstructure:"stake_amount"`
+	StakePct         float64                           `yaml:"stake_pct" mapstructure:"stake_pct"`
+	MaxStakeAmt      float64                           `yaml:"max_stake_amt" mapstructure:"max_stake_amt"`
+	OpenVolRate      float64                           `yaml:"open_vol_rate" mapstructure:"open_vol_rate"`
+	MinOpenRate      float64                           `yaml:"min_open_rate" mapstructure:"min_open_rate"`
+	BTNetCost        float64                           `yaml:"bt_net_cost" mapstructure:"bt_net_cost"`
+	RelaySimUnFinish bool                              `yaml:"relay_sim_unfinish" mapstructure:"relay_sim_unfinish"`
+	OrderBarMax      int                               `yaml:"order_bar_max" mapstructure:"order_bar_max"`
+	MaxOpenOrders    int                               `yaml:"max_open_orders" mapstructure:"max_open_orders"`
+	MaxSimulOpen     int                               `yaml:"max_simul_open" mapstructure:"max_simul_open"`
+	WalletAmounts    map[string]float64                `yaml:"wallet_amounts" mapstructure:"wallet_amounts"`
+	DrawBalanceOver  float64                           `yaml:"draw_balance_over" mapstructure:"draw_balance_over"`
+	StakeCurrency    []string                          `yaml:"stake_currency" mapstructure:"stake_currency"`
+	FatalStop        map[string]float64                `yaml:"fatal_stop" mapstructure:"fatal_stop"`
+	FatalStopHours   int                               `yaml:"fatal_stop_hours" mapstructure:"fatal_stop_hours"`
+	TimeRangeRaw     string                            `yaml:"timerange" mapstructure:"timerange"`
+	TimeRange        *TimeTuple                        `json:"-" mapstructure:"-"`
+	RunTimeframes    []string                          `yaml:"run_timeframes" mapstructure:"run_timeframes"`
+	KlineSource      string                            `yaml:"kline_source" mapstructure:"kline_source"`
+	WatchJobs        map[string][]string               `yaml:"watch_jobs" mapstructure:"watch_jobs"`
+	RunPolicy        []*RunPolicyConfig                `yaml:"run_policy" mapstructure:"run_policy"`
+	StratPerf        *StratPerfConfig                  `yaml:"strat_perf" mapstructure:"strat_perf"`
+	Pairs            []string                          `yaml:"pairs" mapstructure:"pairs"`
+	PairMgr          *PairMgrConfig                    `yaml:"pairmgr" mapstructure:"pairmgr"`
+	PairFilters      []*CommonPairFilter               `yaml:"pairlists" mapstructure:"pairlists"`
+	Exchange         *ExchangeConfig                   `yaml:"exchange" mapstructure:"exchange"`
+	Database         *DatabaseConfig                   `yaml:"database" mapstructure:"database"`
+	SpiderAddr       string                            `yaml:"spider_addr" mapstructure:"spider_addr"`
+	APIServer        *APIServerConfig                  `yaml:"api_server" mapstructure:"api_server"`
+	RPCChannels      map[string]map[string]interface{} `yaml:"rpc_channels" mapstructure:"rpc_channels"`
+	Webhook          map[string]map[string]string      `yaml:"webhook" mapstructure:"webhook"`
 }
 
 // The strategy to run, multiple strategies can be run at the same time 运行的策略，可以多个策略同时运行
@@ -121,6 +129,7 @@ type RunPolicyConfig struct {
 	MaxPair       int                           `yaml:"max_pair" mapstructure:"max_pair"`
 	MaxOpen       int                           `yaml:"max_open" mapstructure:"max_open"`
 	MaxSimulOpen  int                           `yaml:"max_simul_open" mapstructure:"max_simul_open"`
+	OrderBarMax   int                           `yaml:"order_bar_max" mapstructure:"order_bar_max"`
 	StakeRate     float64                       `yaml:"stake_rate" mapstructure:"stake_rate"`
 	Dirt          string                        `yaml:"dirt" mapstructure:"dirt"`
 	StratPerf     *StratPerfConfig              `yaml:"strat_perf" mapstructure:"strat_perf"`
@@ -194,6 +203,8 @@ type PairMgrConfig struct {
 	Limit int `yaml:"limit" mapstructure:"limit,omitempty"`
 	// apply filters to static pairs force
 	ForceFilters bool `yaml:"force_filters" mapstructure:"force_filters,omitempty"`
+	// hole/close 品种切换时保留还是退出仓位
+	PosOnRotation string `yaml:"pos_on_rotation" mapstructure:"pos_on_rotation"`
 }
 
 // UNIVERSAL FILTER 通用的过滤器

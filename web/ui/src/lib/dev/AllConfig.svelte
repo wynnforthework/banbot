@@ -24,6 +24,8 @@ max_stake_amt: 5000  # ${m.cfg_max_stake_amount()}
 open_vol_rate: 1  # ${m.cfg_open_vol_rate()}
 min_open_rate: 0.5  # ${m.cfg_min_open_rate()}
 bt_net_cost: 15  # ${m.cfg_bt_net_cost()}
+relay_sim_unfinish: false  # ${m.cfg_relay_sim_unfinish()}
+order_bar_max: 500  # ${m.cfg_order_bar_max()}
 wallet_amounts:  # ${m.cfg_wallet_amounts()}
   USDT: 10000
 stake_currency: [USDT, TUSD]  # ${m.cfg_stake_currency()}
@@ -44,6 +46,7 @@ run_policy:  # ${m.cfg_run_policy()}
     max_pair: 999  # ${m.cfg_run_policy_max_pair()}
     max_open: 10  # ${m.cfg_run_policy_max_open()}
     max_simul_open: 0 # ${m.cfg_run_policy_max_simul_open()}
+    order_bar_max: 0  # ${m.cfg_run_policy_order_bar_max()}
     stake_rate: 1  # ${m.cfg_run_policy_stake_rate()}
     dirt: any  # ${m.cfg_run_policy_dirt()}
     pairs: [BTC/USDT:USDT]
@@ -68,6 +71,7 @@ pairmgr:
   offset: 0  # ${m.cfg_pairmgr_offset()}
   limit: 999  # ${m.cfg_pairmgr_limit()}
   force_filters: false # ${m.cfg_pairmgr_force_filters()}
+  pos_on_rotation: hold  # ${m.cfg_pairmgr_pos_on_rotation()}
 pairlists:  # ${m.cfg_pairlists()}
   - name: VolumePairList  # ${m.cfg_pairlists_vol()}
     limit: 100  # ${m.cfg_pairlists_limit100()}
@@ -124,7 +128,7 @@ exchange:
     options:  # ${m.cfg_exg_options()}
 database:
   retention: all
-  max_pool_size: 10
+  max_pool_size: 50
   auto_create: true  # ${m.cfg_db_auto_create()}
   url: postgresql://postgres:123@[127.0.0.1]:5432/ban
 spider_addr: 127.0.0.1:6789  # ${m.cfg_spider()}
@@ -140,7 +144,7 @@ rpc_channels:  # ${m.cfg_rpc_channels()}
     keywords: []  # ${m.cfg_rpc_keyword()}
     retry_num: 0
     retry_delay: 1000
-    disable: false
+    disable: true
 webhook:  # ${m.cfg_webhook()}
   entry:
     content: "{name} {action}\\nSymbol: {pair} {timeframe}\\nTag: {strategy}  {enter_tag}\\nPrice: {price:.5f}\\nCost: {value:.2f}"

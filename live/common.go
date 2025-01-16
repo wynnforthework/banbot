@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/data"
 	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/rpc"
 	"github.com/banbox/banbot/utils"
@@ -17,10 +18,23 @@ import (
 	"strconv"
 )
 
+var (
+	lastNotifyDelay = int64(0)
+	lastRefreshMS   = int64(0)
+)
+
 func CronRefreshPairs(dp data.IProvider) {
 	if config.PairMgr.Cron != "" {
 		_, err_ := core.Cron.AddFunc(config.PairMgr.Cron, func() {
-			biz.AutoRefreshPairs(dp, true)
+			curMS := btime.TimeMS()
+			if curMS-lastRefreshMS < config.MinPairCronGapMS {
+				return
+			}
+			lastRefreshMS = curMS
+			err := opt.RefreshPairJobs(dp, true, false, nil)
+			if err != nil {
+				log.Error("RefreshPairJobs fail", zap.Error(err))
+			}
 		})
 		if err_ != nil {
 			log.Error("add RefreshPairList fail", zap.Error(err_))
@@ -55,8 +69,6 @@ func CronFatalLossCheck() {
 		log.Error("add CronFatalLossCheck fail", zap.Error(err))
 	}
 }
-
-var lastNotifyDelay = int64(0)
 
 func CronKlineDelays() {
 	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {

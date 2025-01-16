@@ -64,6 +64,7 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 	}
 	curMS := btime.TimeMS()
 	minStartMS := curMS - dayMs*int64(f.Min)
+	valids := make(map[string]bool)
 	for _, exs := range careMap {
 		if exs.ListMs > 0 {
 			days := int((curMS - exs.ListMs) / dayMs)
@@ -76,11 +77,16 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 					continue
 				}
 			}
-			result = append(result, exs.Symbol)
+			valids[exs.Symbol] = true
 		} else {
 			log.Info("listMs is empty", zap.String("key", exs.Symbol))
 		}
 		// ListMs=0表示尚未开始交易
+	}
+	for _, p := range symbols {
+		if _, ok := valids[p]; ok {
+			result = append(result, p)
+		}
 	}
 	return result, nil
 }

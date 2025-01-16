@@ -23,7 +23,9 @@ type LocalOrderMgr struct {
 	zeroAmts map[string]int
 }
 
-func InitLocalOrderMgr(callBack func(od *ormo.InOutOrder, isEnter bool), showLog bool) {
+type FnOdCb = func(od *ormo.InOutOrder, isEnter bool)
+
+func InitLocalOrderMgr(callBack FnOdCb, showLog bool) {
 	for account := range config.Accounts {
 		mgr, ok := accOdMgrs[account]
 		if !ok {
@@ -438,6 +440,24 @@ func (o *LocalOrderMgr) exitAndFill(sess *ormo.Queries, req *strat.ExitReq, bar 
 	}
 	if len(orders) > 0 {
 		_, err = o.fillPendingOrders(orders, bar)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *LocalOrderMgr) ExitAndFill(sess *ormo.Queries, orders []*ormo.InOutOrder, req *strat.ExitReq) *errs.Error {
+	for _, od := range orders {
+		_, err := o.exitOrder(sess, od, req)
+		if err != nil {
+			return err
+		}
+	}
+	timeMS := btime.TimeMS()
+	for _, od := range orders {
+		price := core.GetPrice(od.Symbol)
+		err := o.fillPendingExit(od, price, timeMS)
 		if err != nil {
 			return err
 		}

@@ -207,6 +207,11 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	if BTNetCost == 0 {
 		BTNetCost = 15
 	}
+	RelaySimUnFinish = c.RelaySimUnFinish
+	OrderBarMax = c.OrderBarMax
+	if OrderBarMax == 0 {
+		OrderBarMax = 500
+	}
 	MaxOpenOrders = c.MaxOpenOrders
 	MaxSimulOpen = c.MaxSimulOpen
 	WalletAmounts = c.WalletAmounts

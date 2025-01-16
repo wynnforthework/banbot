@@ -16,6 +16,8 @@ stake_amount: 200
 max_stake_amt: 500
 min_open_rate: 0.5
 bt_net_cost: 15
+relay_sim_unfinish: false
+order_bar_max: 500
 timerange: '20230701-20250101'
 wallet_amounts:
   USDT: 3000
@@ -33,6 +35,7 @@ run_policy: []
 #  offset: 0
 #  limit: 999
 #  force_filters: false
+#  pos_on_rotation: hold
 pairlists:
   - name: VolumePairList
     limit: 100
@@ -114,7 +117,7 @@ rpc_channels:
     keywords: []
     retry_num: 0
     retry_delay: 1000
-    disable: false
+    disable: true
 webhook:
   entry:
     content: "{name} {action}\nSymbol: {pair} {timeframe}\nTag: {strategy}  {enter_tag}\nPrice: {price:.5f}\nCost: {value:.2f}"

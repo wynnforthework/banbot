@@ -40,6 +40,9 @@ func New(pol *config.RunPolicyConfig) *TradeStrat {
 	if pol.StakeRate > 0 {
 		stgy.StakeRate = pol.StakeRate
 	}
+	if pol.OrderBarMax > 0 {
+		stgy.OdBarMax = pol.OrderBarMax
+	}
 	return stgy
 }
 
@@ -273,7 +276,7 @@ func (s *StratJob) checkOrderExit(od *ormo.InOutOrder) (*ormo.InOutEdit, *ormo.I
 }
 
 /*
-GetJobs 返回：pair_tf: [stratName]StratJob
+GetJobs 返回：pair_tf: [stratID]StratJob
 */
 func GetJobs(account string) map[string]map[string]*StratJob {
 	if !core.EnvReal {
@@ -304,7 +307,7 @@ func GetInfoJobs(account string) map[string]map[string]*StratJob {
 func CalcJobScores(pair, tf, stgy string) *errs.Error {
 	var orders []*ormo.InOutOrder
 	cfg := GetStratPerf(pair, stgy)
-	if core.EnvReal {
+	if core.LiveMode {
 		// Retrieve recent orders from the database
 		// 从数据库查询最近订单
 		sess, err := ormo.Conn(orm.DbTrades, false)
@@ -500,4 +503,35 @@ func (w Warms) Update(pair, tf string, num int) {
 	} else {
 		w[pair] = map[string]int{tf: num}
 	}
+}
+
+/*
+JobForbidType 0 allow; 1 forbid; 2 forbid & occupy a slot
+*/
+func JobForbidType(pair, tf, stratName string) int {
+	if jobs, ok := ForbidJobs[fmt.Sprintf("%s_%s", pair, tf)]; ok {
+		hold, ok2 := jobs[stratName]
+		if ok2 {
+			if hold {
+				return 2
+			}
+			return 1
+		}
+	}
+	return 0
+}
+
+func GetJobKeys() map[string]map[string]bool {
+	jobs := make(map[string]map[string]bool)
+	for _, jobsMap := range AccJobs {
+		for pairTF, stgMap := range jobsMap {
+			idMap := make(map[string]bool)
+			for polID := range stgMap {
+				idMap[polID] = true
+			}
+			jobs[pairTF] = idMap
+		}
+		break
+	}
+	return jobs
 }

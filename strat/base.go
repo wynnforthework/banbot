@@ -70,6 +70,13 @@ func (s *TradeStrat) pickTimeFrame(symbol string, tfScores map[string]float64) s
 	return ""
 }
 
+func (s *TradeStrat) orderBarMax() int {
+	if s.OdBarMax > 0 {
+		return s.OdBarMax
+	}
+	return config.OrderBarMax
+}
+
 /*
 *****************************  StagyJob的成员方法   ****************************************
  */
@@ -147,9 +154,12 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	}
 	if curSLPrice == 0 {
 		if req.StopLossVal > 0 {
-			curSLPrice = max(enterPrice-req.StopLossVal*dirFlag, core.AmtDust)
+			curSLPrice = enterPrice - req.StopLossVal*dirFlag
 		} else if req.StopLoss != 0 {
-			curSLPrice = max(req.StopLoss, core.AmtDust)
+			curSLPrice = req.StopLoss
+		}
+		if curSLPrice < 0 {
+			curSLPrice = enterPrice * 0.001
 		}
 	}
 	req.StopLossVal = 0
@@ -181,6 +191,9 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 			curTPPrice = enterPrice + req.TakeProfitVal*dirFlag
 		} else {
 			curTPPrice = req.TakeProfit
+		}
+		if curTPPrice < 0 {
+			curTPPrice = enterPrice * 0.001
 		}
 	}
 	req.TakeProfitVal = 0

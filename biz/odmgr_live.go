@@ -2153,6 +2153,16 @@ func (o *LiveOrderMgr) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs
 	return err
 }
 
+func (o *LiveOrderMgr) ExitAndFill(sess *ormo.Queries, orders []*ormo.InOutOrder, req *strat.ExitReq) *errs.Error {
+	for _, od := range orders {
+		_, err := o.exitOrder(sess, od, req)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (o *LiveOrderMgr) CleanUp() *errs.Error {
 	return nil
 }

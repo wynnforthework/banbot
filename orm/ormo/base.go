@@ -158,3 +158,32 @@ func ResetVars() {
 	accTasks = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
 }
+
+// VarsBackup 存储 ormo 包相关全局变量的备份
+type VarsBackup struct {
+	AccOpenODs    map[string]map[int64]*InOutOrder
+	AccTriggerODs map[string]map[string]map[int64]*InOutOrder
+	AccTasks      map[string]*BotTask
+	TaskIdAccMap  map[int64]string
+}
+
+// BackupVars 备份所有全局变量
+func BackupVars() *VarsBackup {
+	return &VarsBackup{
+		AccOpenODs:    accOpenODs,
+		AccTriggerODs: accTriggerODs,
+		AccTasks:      accTasks,
+		TaskIdAccMap:  taskIdAccMap,
+	}
+}
+
+// RestoreVars 从备份中恢复所有全局变量
+func RestoreVars(backup *VarsBackup) {
+	if backup == nil {
+		return
+	}
+	accOpenODs = backup.AccOpenODs
+	accTriggerODs = backup.AccTriggerODs
+	accTasks = backup.AccTasks
+	taskIdAccMap = backup.TaskIdAccMap
+}

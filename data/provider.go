@@ -51,6 +51,7 @@ func (p *Provider[IKlineFeeder]) SetDirty() {
 
 type WarmJob struct {
 	hold    IKlineFeeder
+	timeMS  int64
 	tfWarms map[string]int
 }
 
@@ -138,7 +139,10 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob, pb *utils.StagedP
 	startTime := btime.TimeMS()
 	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(_ int, job *WarmJob) *errs.Error {
 		hold := job.hold
-		since, skips, err := hold.WarmTfs(startTime, job.tfWarms, pBar)
+		if job.timeMS == 0 {
+			job.timeMS = startTime
+		}
+		since, skips, err := hold.WarmTfs(job.timeMS, job.tfWarms, pBar)
 		lockMap.Lock()
 		sinceMap[hold.getSymbol()] = since
 		for k, v := range skips {
@@ -270,9 +274,11 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	}
 	totalMS := (config.TimeRange.EndMS - config.TimeRange.StartMS) / 1000
 	var pBar = utils.NewPrgBar(int(totalMS), "RunHist")
-	pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
-		p.pBar.SetProgress("runBT", float64(done)/float64(total))
-	})
+	if p.pBar != nil {
+		pBar.PrgCbs = append(pBar.PrgCbs, func(done int, total int) {
+			p.pBar.SetProgress("runBT", float64(done)/float64(total))
+		})
+	}
 	defer pBar.Close()
 	pBar.Last = config.TimeRange.StartMS
 	if p.showLog {
@@ -285,7 +291,9 @@ func (p *HistProvider) LoopMain() *errs.Error {
 	}
 	err := RunHistFeeders(makeFeeders, p.dirtyVers, pBar)
 	core.StopAll = coreStop
-	p.pBar.SetProgress("runBT", 1)
+	if p.pBar != nil {
+		p.pBar.SetProgress("runBT", 1)
+	}
 	return err
 }
 

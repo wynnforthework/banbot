@@ -613,7 +613,16 @@ func (r *BTResult) dumpOrders(orders []*ormo.InOutOrder) {
 		if a.EnterAt != b.EnterAt {
 			return a.EnterAt < b.EnterAt
 		}
-		return a.Symbol < b.Symbol
+		if a.Symbol != b.Symbol {
+			return a.Symbol < b.Symbol
+		}
+		if a.Strategy != b.Strategy {
+			return a.Strategy < b.Strategy
+		}
+		if a.EnterTag != b.EnterTag {
+			return a.EnterTag < b.EnterTag
+		}
+		return a.Enter.Amount < b.Enter.Amount
 	})
 	file, err_ := os.Create(fmt.Sprintf("%s/orders.csv", r.OutDir))
 	if err_ != nil {

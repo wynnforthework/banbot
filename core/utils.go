@@ -48,16 +48,26 @@ print strategy+timeframe from `core.StgPairTfs`
 从core.StgPairTfs输出策略+时间周期的币种信息到控制台
 */
 func PrintStratGroups() {
-	groups := make(map[string][]string)
+	allows := make(map[string][]string)
+	disables := make(map[string][]string)
 	for stagy, pairMap := range StgPairTfs {
 		for pair, tf := range pairMap {
 			key := fmt.Sprintf("%s_%s", stagy, tf)
-			arr, _ := groups[key]
-			groups[key] = append(arr, pair)
+			if ok, _ := PairsMap[pair]; ok {
+				arr, _ := allows[key]
+				allows[key] = append(arr, pair)
+			} else {
+				arr, _ := disables[key]
+				disables[key] = append(arr, pair)
+			}
 		}
 	}
-	text := GroupByPairQuotes(groups)
+	text := GroupByPairQuotes(allows)
 	log.Info("group pairs by strat_tf:\n" + text)
+	if len(disables) > 0 {
+		text = GroupByPairQuotes(disables)
+		log.Info("group disable pairs by strat_tf:\n" + text)
+	}
 }
 
 var (

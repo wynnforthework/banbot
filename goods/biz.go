@@ -88,6 +88,11 @@ func GetPairFilters(items []*config.CommonPairFilter, withInvalid bool) ([]IFilt
 	return fts, nil
 }
 
+/*
+RefreshPairList
+
+更新core.Pairs和core.PairsMap
+*/
 func RefreshPairList() ([]string, *errs.Error) {
 	var pairs []string
 	var allowFilter = false

@@ -2,6 +2,7 @@ package live
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/orm/ormo"
 	"time"
 
@@ -60,8 +61,8 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = biz.LoadRefreshPairs(dp, true, nil)
-	biz.InitOdSubs()
+	err = opt.RefreshPairJobs(dp, true, true, nil)
+	lastRefreshMS = btime.TimeMS()
 	// add exit callback
 	core.ExitCalls = append(core.ExitCalls, exitCleanUp)
 	return err

@@ -22,7 +22,7 @@ var (
 	ContractType  string                               // current contract type. 当前合约类型
 	StgPairTfs    = make(map[string]map[string]string) // strategy:symbols:timeframe 策略: 标的: 周期
 	Pairs         []string                             // All global symbols, in the order after the targets are refreshed 全局所有的标的，按标的刷新后的顺序
-	PairsMap      = make(map[string]bool)              // All global symbols 全局所有的标的
+	PairsMap      = make(map[string]bool)              // All global symbols(bool value means whether allow open order) 全局所有的标的(值表示是否允许开单)
 	BanPairsUntil = make(map[string]int64)             // symbols not allowed for trading before the specified timestamp 在指定时间戳前禁止交易的品种
 	NoEnterUntil  = make(map[string]int64)             // account: The 13-digit timestamp before the account is allowed to trade 禁止开单的截止13位时间戳
 	BookPairs     = make(map[string]bool)              // Monitor the currency of the trading pair 监听交易对的币种
@@ -101,7 +101,8 @@ const (
 	ExitTagDataStuck   = "data_stuck"
 	ExitTagLiquidation = "liquidation"
 	ExitTagEnvEnd      = "env_end"
-	ExitTagEntExp      = "ent_exp" // enter limit expired
+	ExitTagEntExp      = "ent_expire" // enter limit expired
+	ExitTagExitDelay   = "exit_delay"
 )
 
 var (

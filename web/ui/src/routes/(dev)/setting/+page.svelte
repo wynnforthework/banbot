@@ -119,8 +119,7 @@
   let downloadUrl = $derived.by(() => {
     if (!selectedOS || !selectedArch) return;
     const path = `$/bot_${selectedOS}_${selectedArch}`;
-    const url = `${$site.apiHost}/api/dev/download?path=${path}`;
-    return url;
+    return `${$site.apiHost}/api/dev/download?path=${path}`;
   })
 
   async function loadConfig() {
@@ -317,7 +316,7 @@
                   {isBuilding ? m.compiling() : m.compile()}
                 </button>
                 {#if buildOk}
-                  <a href={downloadUrl} class="btn btn-primary btn-outline" target="_blank">
+                  <a href={downloadUrl} class="btn btn-primary btn-outline" target="_blank" data-no-translate>
                     {m.download()}
                   </a>
                 {/if}

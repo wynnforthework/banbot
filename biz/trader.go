@@ -154,7 +154,7 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StratJob, en
 	}
 	var sess *ormo.Queries
 	var err *errs.Error
-	if core.EnvReal {
+	if core.LiveMode {
 		// Live mode is saved to the database. Non-real-time mode, orders are temporarily saved in memory, no database required
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
 		sess, err = ormo.Conn(orm.DbTrades, true)

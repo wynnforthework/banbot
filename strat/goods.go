@@ -1,10 +1,11 @@
-package biz
+package strat
 
 import (
+	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
@@ -16,9 +17,100 @@ import (
 	"slices"
 )
 
-// Calculate the K-line quality score of each dimension of the trading pair
+type PolicyGroup struct {
+	Policies []*config.RunPolicyConfig
+	StartMS  int64
+}
+
+/*
+RelayPolicyGroups 获取需要接力开单的策略分组
+
+将策略按最小周期划分为多个组。组内多个策略的最小周期最大差距不能超过5倍。
+用于对不同起止时间且不同周期的策略，划分不同组，提高整体效率
+*/
+func RelayPolicyGroups() []*PolicyGroup {
+	tfScores := make(map[string]float64)
+	allowTfs := allAllowTFs()
+	for _, tf := range allowTfs {
+		tfScores[tf] = 1
+	}
+	// 记录每个策略的最小使用周期
+	polTFs := make(map[string]int)
+	for _, pol := range config.RunPolicy {
+		stgy := New(pol)
+		tf := stgy.pickTimeFrame("", tfScores)
+		if tf == "" {
+			continue
+		}
+		key := fmt.Sprintf("%s:%s", pol.ID(), tf)
+		if _, ok := polTFs[key]; ok {
+			continue
+		}
+		minTfSecs := utils2.TFToSecs(tf)
+		if stgy.OnPairInfos != nil {
+			job := &StratJob{
+				Strat:     stgy,
+				TimeFrame: tf,
+			}
+			infos := stgy.OnPairInfos(job)
+			for _, it := range infos {
+				curSecs := utils2.TFToSecs(it.TimeFrame)
+				if curSecs < minTfSecs {
+					minTfSecs = curSecs
+				}
+			}
+		}
+		polTFs[key] = minTfSecs
+	}
+	if len(polTFs) == 0 {
+		return nil
+	}
+	// 按周期从小到大排序
+	items := make([]*core.StrInt64, 0, len(polTFs))
+	for name, secs := range polTFs {
+		items = append(items, &core.StrInt64{
+			Str: name,
+			Int: int64(secs),
+		})
+	}
+	slices.SortFunc(items, func(a, b *core.StrInt64) int {
+		return int(a.Int - b.Int)
+	})
+	// 当某个周期与组内最小周期倍率超过5倍，则归为新的组
+	curGpId := 0
+	gp := make(map[string]int)
+	lastTfSecs := items[0].Int
+	for _, it := range items {
+		if it.Int > lastTfSecs*5 {
+			curGpId += 1
+			lastTfSecs = it.Int
+		}
+		gp[it.Str] = curGpId
+	}
+	// 计算每个分组开始时间
+	curTime := btime.TimeMS()
+	polGroups := make([]*PolicyGroup, 0, curGpId+1)
+	for i := 0; i <= curGpId; i++ {
+		polGroups = append(polGroups, &PolicyGroup{StartMS: math.MaxInt64})
+	}
+	for _, pol := range config.RunPolicy {
+		stgy := New(pol)
+		tf := stgy.pickTimeFrame("", tfScores)
+		if tf == "" {
+			continue
+		}
+		idx := gp[fmt.Sprintf("%s:%s", pol.ID(), tf)]
+		g := polGroups[idx]
+		tfSecs := int64(utils2.TFToSecs(tf) * 1000)
+		g.StartMS = min(g.StartMS, curTime-tfSecs*int64(stgy.orderBarMax()))
+		g.Policies = append(g.Policies, pol)
+	}
+	return polGroups
+}
+
+// CalcPairTfScores Calculate the K-line quality score of each dimension of the trading pair
 // 计算交易对各维度K线质量分数
-func calcPairTfScores(exchange banexg.BanExchange, pairs []string) (map[string]map[string]float64, *errs.Error) {
+func CalcPairTfScores(exchange banexg.BanExchange, pairs []string) (map[string]map[string]float64, *errs.Error) {
 	pairTfScores := make(map[string]map[string]float64)
 	allowTfs := allAllowTFs()
 	if len(allowTfs) == 0 {
@@ -139,7 +231,7 @@ func allAllowTFs() []string {
 		if pol.Dirt == "any" {
 			pol.Dirt = ""
 		}
-		stagy := strat.New(pol)
+		stagy := New(pol)
 		if stagy == nil {
 			continue
 		}
