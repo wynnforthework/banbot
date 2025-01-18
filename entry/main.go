@@ -42,8 +42,7 @@ func RunCmd() {
 	// 在goroutine中等待信号
 	go func() {
 		<-sigChan
-		if core.Ctx != nil {
-			core.Ctx.Done()
+		if core.StopAll != nil {
 			core.StopAll()
 		}
 		core.RunExitCalls()
