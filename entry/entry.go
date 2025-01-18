@@ -68,7 +68,6 @@ func runBackTest(outDir string, prgOut string) string {
 		})
 	}
 	b.Run()
-	core.RunExitCalls()
 	return b.OutDir
 }
 
@@ -81,9 +80,7 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 	core.BotRunning = true
 	core.StartAt = btime.UTCStamp()
 	t := live.NewCryptoTrader()
-	err = t.Run()
-	core.RunExitCalls()
-	return err
+	return t.Run()
 }
 
 func RunDownData(args *config.CmdArgs) *errs.Error {
@@ -161,9 +158,7 @@ func RunSpider(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	err = data.RunSpider(config.SpiderAddr)
-	core.RunExitCalls()
-	return err
+	return data.RunSpider(config.SpiderAddr)
 }
 
 func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {

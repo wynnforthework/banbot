@@ -18,7 +18,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime/pprof"
 	"slices"
 	"time"
 )
@@ -255,34 +254,6 @@ func (b *BackTest) initTaskOut() *errs.Error {
 		}
 	}
 	config.Args.SetLog(!b.isOpt)
-	// 检查是否profile
-	if config.Args.CPUProfile {
-		outPath := b.OutDir + "/cpu.profile"
-		if _, err_ := os.Stat(outPath); err_ == nil {
-			err_ = os.Remove(outPath)
-			if err_ != nil {
-				log.Error("del old cpu.profile fail", zap.Error(err_))
-			}
-		}
-		f, err_ := os.OpenFile(outPath, os.O_CREATE|os.O_RDWR, 0644)
-		if err_ != nil {
-			log.Error("write to cpu.profile fail", zap.Error(err_))
-		} else {
-			err_ = pprof.StartCPUProfile(f)
-			if err_ != nil {
-				log.Error("start cpu profile fail", zap.Error(err_))
-			} else {
-				log.Info("start profile cpu", zap.String("path", f.Name()))
-			}
-			core.ExitCalls = append(core.ExitCalls, func() {
-				pprof.StopCPUProfile()
-				err_ = f.Close()
-				if err_ != nil {
-					log.Error("save cpu.profile fail", zap.Error(err_))
-				}
-			})
-		}
-	}
 	_, ok := config.Accounts[config.DefAcc]
 	if !ok {
 		panic("default Account invalid!")

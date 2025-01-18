@@ -18,7 +18,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime/pprof"
 	"slices"
 	"sort"
 	"strconv"
@@ -265,24 +264,6 @@ func RunFormatTick(args *config.CmdArgs) *errs.Error {
 }
 
 func Build1mWithTicks(args *config.CmdArgs) *errs.Error {
-	if args.CPUProfile {
-		outPath := filepath.Join(args.OutPath, "cpu.profile")
-		f, err_ := os.OpenFile(outPath, os.O_CREATE|os.O_RDWR, 0644)
-		if err_ != nil {
-			return errs.New(errs.CodeIOWriteFail, err_)
-		}
-		err_ = pprof.StartCPUProfile(f)
-		if err_ != nil {
-			return errs.New(errs.CodeRunTime, err_)
-		}
-		defer func() {
-			pprof.StopCPUProfile()
-			err_ = f.Close()
-			if err_ != nil {
-				log.Error("save cpu.profile fail", zap.Error(err_))
-			}
-		}()
-	}
 	return build1mWithTicks(args)
 }
 

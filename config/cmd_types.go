@@ -30,8 +30,6 @@ type CmdArgs struct {
 	Force         bool
 	WithSpider    bool
 	Medium        string
-	TaskHash      string
-	TaskId        int
 	MaxPoolSize   int
 	CPUProfile    bool
 	MemProfile    bool

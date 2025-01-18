@@ -8,10 +8,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/banbox/banbot/core"
 	"os"
 	"os/exec"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -421,4 +423,30 @@ func normalizeLanguageCode(code string) string {
 	default:
 		return "en-US" // 未知语言代码返回美式英语
 	}
+}
+
+func StartCpuProfile(path string) *errs.Error {
+	if _, err_ := os.Stat(path); err_ == nil {
+		err_ = os.Remove(path)
+		if err_ != nil {
+			return errs.New(errs.CodeIOWriteFail, err_)
+		}
+	}
+	f, err_ := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	} else {
+		err_ = pprof.StartCPUProfile(f)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		core.ExitCalls = append(core.ExitCalls, func() {
+			pprof.StopCPUProfile()
+			err_ = f.Close()
+			if err_ != nil {
+				log.Error("save cpu.profile fail", zap.Error(err_))
+			}
+		})
+	}
+	return nil
 }

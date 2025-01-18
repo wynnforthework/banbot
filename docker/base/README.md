@@ -6,7 +6,7 @@ The base image only needs to be built once, and you can directly execute step 2 
 
 基础镜像只需构建一次，后续每次直接执行步骤2即可。
 ```shell
-docker build -f base.Dockerfile -t banbase .
+docker build -f base.Dockerfile --no-cache -t banbase .
 ```
 
 ## 2. Build the latest image (构建最新镜像)

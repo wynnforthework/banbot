@@ -450,7 +450,6 @@ func optAndPrint(pol *config.RunPolicyConfig, args *config.CmdArgs, allPairs []s
 			file.WriteString(p.ToYaml())
 		}
 	}
-	core.RunExitCalls()
 	return nil
 }
 

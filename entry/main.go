@@ -1,28 +1,25 @@
 package entry
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/banbox/banbot/utils"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
-	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/data"
-	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/web"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 )
-
-type FuncEntry = func(args *config.CmdArgs) *errs.Error
-type FuncGetEntry = func(name string) (FuncEntry, []string)
 
 func RunCmd() {
 	defer func() {
@@ -34,6 +31,8 @@ func RunCmd() {
 			}
 			core.RunExitCalls()
 			os.Exit(1)
+		} else {
+			core.RunExitCalls()
 		}
 	}()
 
@@ -56,53 +55,94 @@ func RunCmd() {
 		runWeb(args)
 		return
 	}
-	runSubCmd(args, func(name string) (FuncEntry, []string) {
-		var options []string
-		var entry FuncEntry
-		switch name {
-		case "trade":
-			options = []string{"stake_amount", "pairs", "with_spider", "task_hash", "task_id"}
-			entry = RunTrade
-		case "backtest":
-			options = []string{"out", "timerange", "stake_amount", "pairs", "prg", "separate"}
-			entry = RunBackTest
-		case "spider":
-			entry = RunSpider
-		case "optimize":
-			options = []string{"out", "opt_rounds", "sampler", "picker", "each_pairs", "concur"}
-			entry = opt.RunOptimize
-		case "init":
-			entry = runInit
-		case "bt_opt":
-			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "picker", "each_pairs",
-				"concur", "alpha", "pair_picker"}
-			entry = opt.RunBTOverOpt
-		case "data":
-			runDataCmds(args[1:])
-		case "kline":
-			runKlineCmds(args[1:])
-		case "tick":
-			runTickCmds(args[1:])
-		case "tool":
-			runToolCmds(args[1:])
-		case "web":
-			runWeb(args[1:])
-		default:
-			return nil, nil
+
+	name := args[0]
+	if strings.HasPrefix(name, "-") {
+		if name == "-h" || name == "--help" {
+			printMainHelp()
+		} else {
+			runWeb(args)
 		}
-		return entry, options
-	}, func(e error) {
-		if e == nil {
-			if strings.HasPrefix(args[0], "-") {
-				runWeb(args)
+		return
+	}
+
+	// 检查是否是子命令组
+	if group := GetGroup(name); group != nil {
+		if len(args) < 2 {
+			printGroupHelp(name)
+			return
+		}
+		// 处理子命令
+		subName := args[1]
+		if job := GetCmdJob(subName, name); job != nil {
+			runJobCmd(args[1:], job, func(e error) {
+				if e != nil {
+					log.Error("parse command args fail", zap.String("cmd", args[1]), zap.Error(e))
+				} else {
+					log.Warn("unknown subcommand: " + args[1])
+					printGroupHelp(name)
+				}
+			})
+			return
+		}
+		printGroupHelp(name)
+		return
+	}
+
+	// 处理根命令
+	if job := GetCmdJob(name, ""); job != nil {
+		runJobCmd(args, job, func(e error) {
+			if e != nil {
+				log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
 			} else {
-				log.Warn("unknown subcommand: " + args[0])
+				log.Warn("unknown command: " + args[0])
 				printMainHelp()
 			}
-		} else {
-			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
+		})
+		return
+	}
+
+	printMainHelp()
+}
+
+func printMainHelp() {
+	tpl := `
+args: %s
+banbot %v
+please run command:
+`
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf(tpl, strings.Join(os.Args, " "), core.Version))
+
+	if group := GetGroup(""); group != nil {
+		for name, job := range group.Jobs {
+			b.WriteString(fmt.Sprintf("    %-12s%s\n", name+":", job.Help))
 		}
-	})
+	}
+
+	b.WriteString("\nor choose a subcommand:\n")
+	for key, gp := range groupMap {
+		if key == "" {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("    %-12s%s\n", gp.Name+":", gp.Help))
+	}
+	log.Warn(b.String())
+}
+
+func printGroupHelp(groupName string) {
+	group := GetGroup(groupName)
+	if group == nil {
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("\nbanbot %s:\n", groupName))
+	for name, job := range group.Jobs {
+		b.WriteString(fmt.Sprintf("    %-12s%s\n", name+":", job.Help))
+	}
+	b.WriteString("please choose a valid action")
+	log.Warn(b.String())
 }
 
 func runWeb(args []string) {
@@ -110,202 +150,23 @@ func runWeb(args []string) {
 	if err_ != nil {
 		panic(err_)
 	}
-	os.Exit(0)
 }
 
-func printMainHelp() {
-	tpl := `
-args: %s
-banbot %v
-please run with a subcommand:
-    trade:      live trade
-    backtest:   backtest with strategies and data
-    spider:     start the spider
-    optimize:   run hyper parameters optimization
-    init:       initialize config.yml/config.local.yml in BanDataDir
-    bt_opt:     rolling backtest with hyperparameter optimization
-    data:       run data export/import
-    kline:      run kline commands
-    tick:       run tick commands
-    tool:       run tools
-    web:        run web ui
-`
-	log.Warn(fmt.Sprintf(tpl, strings.Join(os.Args, " "), core.Version))
-}
-
-func runDataCmds(args []string) {
-	runSubCmd(args, func(name string) (FuncEntry, []string) {
-		var options []string
-		var entry FuncEntry
-		switch name {
-		case "export":
-			options = []string{"out", "concur"}
-			entry = runDataExport
-		case "import":
-			options = []string{"in", "concur"}
-			entry = runDataImport
-		default:
-			return nil, nil
+func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
+	if job.RunRaw != nil {
+		err_ := job.RunRaw(sysArgs)
+		if err_ != nil {
+			panic(err_)
 		}
-		return entry, options
-	}, func(e error) {
-		if e != nil {
-			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
-			return
-		}
-		log.Warn("unknown subcommand: " + args[0])
-		tpl := `
-banbot data:
-    export:     export data to protobuf file from db
-    import:     import data from protobuf files to db
-please choose a valid action
-`
-		log.Warn(tpl)
-	})
-}
-
-func runKlineCmds(args []string) {
-	runSubCmd(args, func(name string) (FuncEntry, []string) {
-		var options []string
-		var entry FuncEntry
-		switch name {
-		case "down":
-			options = []string{"timerange", "pairs", "timeframes", "medium"}
-			entry = RunDownData
-		case "load":
-			options = []string{"in"}
-			entry = LoadKLinesToDB
-		case "export":
-			options = []string{"out", "pairs", "timeframes", "adj", "tz"}
-			entry = runExportData
-		case "purge":
-			options = []string{"exg_real", "pairs", "timeframes"}
-			entry = runPurgeData
-		case "correct":
-			options = []string{"pairs"}
-			entry = RunKlineCorrect
-		case "adj_calc":
-			options = []string{"out"}
-			entry = RunKlineAdjFactors
-		case "adj_export":
-			options = []string{"out", "pairs", "tz"}
-			entry = biz.ExportAdjFactors
-		default:
-			return nil, nil
-		}
-		return entry, options
-	}, func(e error) {
-		if e != nil {
-			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
-			return
-		}
-		log.Warn("unknown subcommand: " + args[0])
-		tpl := `
-banbot kline:
-    down:       download kline data from exchange
-    load:       load kline data from zip/csv files
-    export:     export kline to csv files from db
-    purge:      purge/delete kline data with args
-    correct:    sync klines between timeframes
-    adj_calc:   recalculate adjust factors
-    adj_export: export adjust factors to csv
-please choose a valid action
-`
-		log.Warn(tpl)
-	})
-}
-
-func runTickCmds(args []string) {
-	runSubCmd(args, func(name string) (FuncEntry, []string) {
-		var options []string
-		var entry FuncEntry
-		switch name {
-		case "convert":
-			options = []string{"in", "out"}
-			entry = data.RunFormatTick
-		case "to_kline":
-			options = []string{"in", "out"}
-			entry = data.Build1mWithTicks
-		default:
-			return nil, nil
-		}
-		return entry, options
-	}, func(e error) {
-		if e != nil {
-			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
-			return
-		}
-		log.Warn("unknown subcommand: " + args[0])
-		tpl := `
-banbot tick:
-    convert:     convert tick data format
-    to_kline:    build kline from ticks
-please choose a valid action
-`
-		log.Warn(tpl)
-	})
-}
-
-func runToolCmds(args []string) {
-	runSubCmd(args, func(name string) (FuncEntry, []string) {
-		var options []string
-		var entry FuncEntry
-		switch name {
-		case "collect_opt":
-			options = []string{"in", "picker"}
-			entry = opt.CollectOptLog
-		case "test_pickers":
-			options = []string{"review_period", "run_period", "opt_rounds", "sampler", "each_pairs", "concur",
-				"picker", "pair_picker"}
-			entry = opt.RunRollBTPicker
-		case "load_cal":
-			options = []string{"in"}
-			entry = biz.LoadCalendars
-		case "cmp_orders":
-			opt.CompareExgBTOrders(args[1:])
-			os.Exit(0)
-		case "data_server":
-			entry = biz.RunDataServer
-		case "calc_perfs":
-			options = []string{"in", "in_type", "out"}
-			entry = data.CalcFilePerfs
-		case "corr":
-			options = []string{"out", "out_type", "timeframes", "batch_size", "run_every"}
-			entry = biz.CalcCorrelation
-		default:
-			return nil, nil
-		}
-		return entry, options
-	}, func(e error) {
-		if e != nil {
-			log.Error("parse command args fail", zap.String("cmd", args[0]), zap.Error(e))
-			return
-		}
-		log.Warn("unknown subcommand: " + args[0])
-		log.Warn(`
-banbot tool:
-    collect_opt:     collect result of optimize, and print in order
-    test_pickers:    test pickers in roll backtest
-    load_cal:        load calenders
-    cmp_orders:      compare backTest orders with exchange orders
-    data_server:     serve a grpc server as data feeder
-    calc_perfs:      calculate sharpe/sortino ratio for input data
-    corr:            calculate correlation matrix for symbols 
-`)
-	})
-}
-
-func runSubCmd(sysArgs []string, getEnt FuncGetEntry, fallback func(e error)) {
-	name, subArgs := sysArgs[0], sysArgs[1:]
-	entry, options := getEnt(name)
-	if entry == nil {
-		fallback(nil)
 		return
 	}
+	name, subArgs := sysArgs[0], sysArgs[1:]
 	var args config.CmdArgs
 	var sub = flag.NewFlagSet(name, flag.ExitOnError)
-	bindSubFlags(&args, sub, options...)
-	err_ := sub.Parse(subArgs)
+	err_ := bindSubFlags(&args, sub, job.Options...)
+	if err_ == nil {
+		err_ = sub.Parse(subArgs)
+	}
 	if err_ != nil {
 		fallback(err_)
 		return
@@ -314,20 +175,31 @@ func runSubCmd(sysArgs []string, getEnt FuncGetEntry, fallback func(e error)) {
 	if args.MemProfile {
 		go func() {
 			log.Info("mem profile serve http at :8080 ...")
-			err_ := http.ListenAndServe(":8080", nil)
+			err_ = http.ListenAndServe(":8080", nil)
 			if err_ != nil {
 				log.Error("run mem profile http fail", zap.Error(err_))
 			}
 		}()
 	}
-	err := entry(&args)
+	if args.CPUProfile {
+		wd, err_ := os.Getwd()
+		if err_ != nil {
+			panic(err_)
+		}
+		outPath := filepath.Join(wd, "cpu.profile")
+		err := utils.StartCpuProfile(outPath)
+		if err != nil {
+			panic(err)
+		}
+		log.Info("start cpu profile", zap.String("to", outPath))
+	}
+	err := job.Run(&args)
 	if err != nil {
 		panic(err)
 	}
-	os.Exit(0)
 }
 
-func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
+func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) error {
 	cmd.Var(&args.Configs, "config", "config path to use, Multiple -config options may be used")
 	cmd.StringVar(&args.Logfile, "logfile", "", "Log to the file specified")
 	cmd.StringVar(&args.DataDir, "datadir", "", "Path to data dir.")
@@ -358,10 +230,6 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 			cmd.StringVar(&args.RawTables, "tables", "", "db tables, comma-separated")
 		case "force":
 			cmd.BoolVar(&args.Force, "force", false, "skip confirm")
-		case "task_hash":
-			cmd.StringVar(&args.TaskHash, "task-hash", "", "hash code to use")
-		case "task_id":
-			cmd.IntVar(&args.TaskId, "task-id", 0, "task")
 		case "prg":
 			cmd.StringVar(&args.PrgOut, "prg", "", "prefix for progress in stdout")
 		case "in":
@@ -403,8 +271,8 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) {
 		case "separate":
 			cmd.BoolVar(&args.Separate, "separate", false, "run policy separately for backtest")
 		default:
-			log.Warn(fmt.Sprintf("undefined argument: %s", key))
-			os.Exit(1)
+			return errors.New(fmt.Sprintf("unknown argument: %s", key))
 		}
 	}
+	return nil
 }
