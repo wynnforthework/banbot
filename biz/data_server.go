@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/banbox/banbot/config"
-	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg/errs"
@@ -23,7 +22,6 @@ var (
 )
 
 func RunDataServer(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := SetupComsExg(args)
 	if err != nil {
 		return err

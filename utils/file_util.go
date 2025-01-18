@@ -3,6 +3,7 @@ package utils
 import (
 	"archive/zip"
 	"encoding/csv"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"os"
@@ -524,4 +525,34 @@ func CreateNumFile(outDir string, prefix string, ext string) (*os.File, error) {
 	}
 
 	return newFile, nil
+}
+
+func EncodeGob(path string, data any) *errs.Error {
+	file, err := os.Create(path)
+	if err != nil {
+		return errs.New(errs.CodeIOWriteFail, err)
+	}
+	defer file.Close()
+
+	encoder := gob.NewEncoder(file)
+	err = encoder.Encode(data)
+	if err != nil {
+		return errs.New(errs.CodeIOWriteFail, err)
+	}
+	return nil
+}
+
+func DecodeGobFile(path string, data any) *errs.Error {
+	file, err := os.Open(path)
+	if err != nil {
+		return errs.New(errs.CodeIOReadFail, err)
+	}
+	defer file.Close()
+
+	decoder := gob.NewDecoder(file)
+	err = decoder.Decode(data)
+	if err != nil {
+		return errs.New(errs.CodeIOReadFail, err)
+	}
+	return nil
 }

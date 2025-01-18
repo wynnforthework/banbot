@@ -152,6 +152,7 @@ func runWeb(args []string) {
 }
 
 func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
+	core.SetRunMode(core.RunModeOther)
 	if job.RunRaw != nil {
 		err_ := job.RunRaw(sysArgs)
 		if err_ != nil {

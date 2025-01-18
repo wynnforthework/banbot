@@ -450,7 +450,7 @@ func groupItems(orders []*ormo.InOutOrder, measure bool, getTag func(od *ormo.In
 	if measure {
 		// 分30份采样计算指标，太大的话会导致指标偏小
 		for _, gp := range groups {
-			sharpe, sortino, err := measurePerformance(gp.Orders, 30)
+			sharpe, sortino, err := measurePerformance(gp.Orders)
 			if err != nil {
 				log.Warn("calc measure fail", zap.Error(err))
 			} else {
@@ -504,49 +504,33 @@ func printGroups(groups []*RowItem, title string, measure bool, extHeads []strin
 	return b.String()
 }
 
-func measurePerformance(ods []*ormo.InOutOrder, num int) (float64, float64, *errs.Error) {
+func measurePerformance(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) {
 	if len(ods) == 0 {
 		return 0, 0, nil
 	}
 	sort.Slice(ods, func(i, j int) bool {
 		return ods[i].ExitAt < ods[j].ExitAt
 	})
-	var startMs = ods[0].EnterAt
-	var stopMs = ods[len(ods)-1].ExitAt
-	stepMs := (stopMs - startMs) / int64(num)
-	curEnd := startMs + stepMs
-	profit, cost := float64(0), float64(0)
-	allProfit, allCost := float64(0), float64(0)
-	returns := make([]float64, 0)
-	for _, od := range ods {
-		for od.ExitAt > curEnd {
-			if cost > 0 {
-				returns = append(returns, profit/cost)
-			}
-			profit, cost = 0, 0
-			curEnd += stepMs
-		}
-		curCost := od.EnterCost() / od.Leverage
-		cost += curCost
-		profit += od.Profit
-		allCost += curCost
-		allProfit += od.Profit
+	initStake := float64(0)
+	for key, val := range config.WalletAmounts {
+		initStake += val * core.GetPriceSafe(key)
 	}
-	if cost > 0 {
-		returns = append(returns, profit/cost)
-	}
+	dayTfMsecs := int64(utils2.TFToSecs("1d") * 1000)
+	startMS := utils2.AlignTfMSecs(ods[0].EnterAt, dayTfMsecs)
+	endMS := utils2.AlignTfMSecs(ods[len(ods)-1].EnterAt, dayTfMsecs) + dayTfMsecs
+	returns, _, _ := ormo.CalcUnitReturns(ods, nil, startMS, endMS, dayTfMsecs, initStake)
 	if len(returns) <= 2 {
 		return 0, 0, nil
 	}
-	return calcMeasures(returns)
+	return calcMeasures(returns, 365)
 }
 
-func calcMeasures(returns []float64) (float64, float64, *errs.Error) {
-	sharpeFlt, err := utils.SharpeRatio(returns, 0)
+func calcMeasures(returns []float64, periods int) (float64, float64, *errs.Error) {
+	sharpeFlt, err := utils.SharpeRatioBy(returns, 0.02, periods, true)
 	if err != nil {
 		return 0, 0, errs.New(errs.CodeRunTime, err)
 	}
-	sortineFlt, err := utils.SortinoRatio(returns, 0)
+	sortineFlt, err := utils.SortinoRatioBy(returns, 0.02, periods, true)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoNegativeResults) {
 			return sharpeFlt, 0, errs.New(errs.CodeRunTime, err)
@@ -824,7 +808,11 @@ func (r *BTResult) calcMeasures(num int) *errs.Error {
 		last := p.Real[len(p.Real)-1]
 		inReturns = append(inReturns, (last-prevVal)/prevVal)
 	}
-	sharpe, sortino, err := calcMeasures(inReturns)
+	dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
+	// 计算一年包含交易单位数量：365 / 单个交易单位包含天数
+	// 单个交易单位包含天数 = 总交易天数 / 交易单位总数
+	periods := len(p.Real) * 365 / int((r.EndMS-r.StartMS)/dayMSecs)
+	sharpe, sortino, err := calcMeasures(inReturns, periods)
 	if err != nil {
 		return err
 	}

@@ -1,49 +1,26 @@
 package ormo
 
 import (
-	"encoding/gob"
+	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"math"
-	"os"
-
-	"github.com/banbox/banexg/errs"
 )
 
 func DumpOrdersGob(path string) *errs.Error {
-	file, err := os.Create(path)
-	if err != nil {
-		return errs.New(errs.CodeIOWriteFail, err)
-	}
-	defer file.Close()
-
 	for _, od := range HistODs {
 		_, _ = od.GetInfoText()
 		od.Info = nil
 	}
-	encoder := gob.NewEncoder(file)
-	err = encoder.Encode(HistODs)
-	if err != nil {
-		return errs.New(errs.CodeIOWriteFail, err)
-	}
-	return nil
+	return utils.EncodeGob(path, HistODs)
 }
 
 func LoadOrdersGob(path string) ([]*InOutOrder, *errs.Error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, errs.New(errs.CodeIOReadFail, err)
-	}
-	defer file.Close()
-
 	var data []*InOutOrder
-	decoder := gob.NewDecoder(file)
-	err = decoder.Decode(&data)
-	if err != nil {
-		return nil, errs.New(errs.CodeIOReadFail, err)
-	}
-	return data, nil
+	err := utils.DecodeGobFile(path, &data)
+	return data, err
 }
 
 func decodeIOrderInfo(text string) map[string]interface{} {

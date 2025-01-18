@@ -1238,3 +1238,77 @@ func LegalDoneProfits(off int) float64 {
 	}
 	return total
 }
+
+/*
+CalcUnitReturns 计算单位每日回报率
+
+odList 订单列表，可无序
+closes 对应tfMSecs的每个单位收盘价，可为空
+startMS 区间开始时间，13位时间戳
+endMS 区间结束时间，13位时间戳
+tfMSecs 单位的毫秒间隔
+*/
+func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfMSecs int64, initStake float64) ([]float64, int, int) {
+	for _, od := range odList {
+		startMS = min(startMS, od.Enter.CreateAt)
+		endMS = max(endMS, od.Exit.CreateAt)
+	}
+	arrLen := int((endMS - startMS) / tfMSecs)
+	returns := make([]float64, arrLen)
+	dayOff, dayEnd := 0, 0
+	for i, od := range odList {
+		entryAlignMS := utils2.AlignTfMSecs(od.Enter.CreateAt, tfMSecs)
+		offset := int((entryAlignMS - startMS) / tfMSecs)
+		dirt := float64(1)
+		if od.Short {
+			dirt = -1
+		}
+		if i == 0 {
+			dayOff = offset
+		}
+		entryPrice := od.Enter.Average
+		exitPrice := od.Exit.Average
+		exitMS := od.Exit.CreateAt
+		priceStep := (exitPrice - entryPrice) / float64((exitMS-entryAlignMS)/tfMSecs+1)
+		posPrice := entryPrice + priceStep // 模拟每个单位的收盘价
+		enterCost := od.EnterCost()
+		stakeRate := enterCost / initStake
+
+		bCode, qCode, _, _ := core.SplitSymbol(od.Symbol)
+		if offset < len(returns) && od.Enter != nil {
+			if od.Enter.FeeType == qCode {
+				returns[offset] -= od.Enter.Fee / enterCost
+			} else if od.Enter.FeeType == bCode {
+				returns[offset] -= od.Enter.Fee / od.Enter.Amount
+			}
+		}
+
+		for entryAlignMS < exitMS {
+			closePrice := exitPrice
+			if exitMS > entryAlignMS+tfMSecs {
+				if offset < len(closes) {
+					closePrice = closes[offset]
+				} else {
+					closePrice = posPrice
+				}
+			}
+			ret := (closePrice/entryPrice - 1) * dirt * od.Leverage * stakeRate
+			if offset < len(returns) {
+				returns[offset] += ret
+			}
+			offset += 1
+			entryAlignMS += tfMSecs
+			entryPrice = closePrice
+			posPrice += priceStep
+		}
+		if offset-1 < len(returns) && od.Exit != nil {
+			if od.Exit.FeeType == qCode {
+				returns[offset-1] -= od.Exit.Fee / enterCost
+			} else if od.Exit.FeeType == bCode {
+				returns[offset-1] -= od.Exit.Fee / od.Exit.Amount
+			}
+		}
+		dayEnd = offset
+	}
+	return returns, dayOff, dayEnd
+}

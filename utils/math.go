@@ -168,6 +168,14 @@ func SharpeRatioSmart(moReturns []float64, riskFree float64, periods int, annual
 	return SharpeRatioAdv(moReturns, riskFree, periods, annualize, true)
 }
 
+/*
+SharpeRatioAdv 计算夏普比率
+
+moReturns 固定周期的收益率，一般用日收益率
+riskFree 年华无风险收益率，不为0时periods必填
+periods 一年中moReturns所用的周期总数量，对日收益率，股票市场一般252
+smart true时启用相关性惩罚
+*/
 func SharpeRatioAdv(moReturns []float64, riskFree float64, periods int, annualize, smart bool) (float64, error) {
 	res, err := DecSharpeRatioAdv(FloatsToDecArr(moReturns), decimal.NewFromFloat(riskFree), periods, annualize, smart)
 	flt, _ := res.Float64()
@@ -187,6 +195,14 @@ func DecSharpeRatioSmart(moReturns []decimal.Decimal, riskFree decimal.Decimal, 
 	return DecSharpeRatioAdv(moReturns, riskFree, periods, annualize, true)
 }
 
+/*
+DecSharpeRatioAdv 计算夏普比率
+
+moReturns 固定周期的收益率，一般用日收益率
+riskFree 年华无风险收益率，不为0时periods必填
+periods 一年中moReturns所用的周期总数量，对日收益率，股票市场一般252
+smart true时启用相关性惩罚
+*/
 func DecSharpeRatioAdv(moReturns []decimal.Decimal, riskFree decimal.Decimal, periods int, annualize, smart bool) (decimal.Decimal, error) {
 	totalIntervals := decimal.NewFromInt(int64(len(moReturns)))
 	if totalIntervals.IsZero() {

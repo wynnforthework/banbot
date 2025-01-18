@@ -84,7 +84,6 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 }
 
 func RunDownData(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
@@ -117,7 +116,6 @@ func RunDownData(args *config.CmdArgs) *errs.Error {
 }
 
 func runExportData(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
@@ -126,7 +124,6 @@ func runExportData(args *config.CmdArgs) *errs.Error {
 }
 
 func runPurgeData(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
@@ -135,7 +132,6 @@ func runPurgeData(args *config.CmdArgs) *errs.Error {
 }
 
 func RunKlineCorrect(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err
@@ -144,7 +140,6 @@ func RunKlineCorrect(args *config.CmdArgs) *errs.Error {
 }
 
 func RunKlineAdjFactors(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err
@@ -162,7 +157,6 @@ func RunSpider(args *config.CmdArgs) *errs.Error {
 }
 
 func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
@@ -191,7 +185,6 @@ func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
 }
 
 func runInit(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	errs.PrintErr = utils.PrintErr
 	err := biz.InitDataDir()
 	if err != nil {
@@ -206,7 +199,6 @@ func runInit(args *config.CmdArgs) *errs.Error {
 }
 
 func runDataExport(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	if len(args.Configs) == 0 {
 		return errs.NewMsg(errs.CodeParamRequired, "-config is required")
 	}
@@ -224,7 +216,6 @@ func runDataExport(args *config.CmdArgs) *errs.Error {
 }
 
 func runDataImport(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err

@@ -2,9 +2,11 @@ package utils
 
 import (
 	"fmt"
-	"github.com/banbox/banbot/btime"
-	"gonum.org/v1/gonum/floats"
 	"sync"
+
+	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banexg"
+	"gonum.org/v1/gonum/floats"
 
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/log"
@@ -209,4 +211,77 @@ func (p *StagedPrg) SetProgress(task string, progress float64) {
 		}
 	}
 	p.lock.Unlock()
+}
+
+func FillOHLCVLacks(bars []*banexg.Kline, startMS, endMS, tfMSecs int64) ([]*banexg.Kline, int) {
+	if len(bars) == 0 || startMS >= endMS || tfMSecs <= 0 {
+		return nil, 0
+	}
+	addNum := 0
+	arrLen := int((endMS - startMS) / tfMSecs)
+	if bars[0].Time > startMS {
+		preLack := int((bars[0].Time - startMS) / tfMSecs)
+		if preLack > 0 {
+			// 补全头部缺失的k线
+			firstOpen := bars[0].Open
+			preKs := make([]*banexg.Kline, preLack)
+			for i := 0; i < preLack; i++ {
+				preKs[i] = &banexg.Kline{
+					Time:   startMS + int64(i)*tfMSecs,
+					Open:   firstOpen,
+					High:   firstOpen,
+					Low:    firstOpen,
+					Close:  firstOpen,
+					Volume: 0,
+				}
+			}
+			addNum += preLack
+			bars = append(preKs, bars...)
+		}
+	}
+
+	// 检查并补全中间缺失的k线
+	fullBars := make([]*banexg.Kline, 0, arrLen)
+	fullBars = append(fullBars, bars[0])
+
+	for i := 1; i < len(bars); i++ {
+		prev := fullBars[len(fullBars)-1]
+		expectedTime := prev.Time + tfMSecs
+		if bars[i].Time == expectedTime {
+			fullBars = append(fullBars, bars[i])
+		} else if bars[i].Time > expectedTime {
+			// 有缺失，需要补全
+			lastClose := prev.Close
+			for t := expectedTime; t < bars[i].Time; t += tfMSecs {
+				addNum += 1
+				fullBars = append(fullBars, &banexg.Kline{
+					Time:   t,
+					Open:   lastClose,
+					High:   lastClose,
+					Low:    lastClose,
+					Close:  lastClose,
+					Volume: 0,
+				})
+			}
+			fullBars = append(fullBars, bars[i])
+		}
+		// 如果bars[i].Time < expectedTime，忽略这个bar
+	}
+
+	// 补全尾部缺失的K线
+	curMS := fullBars[len(fullBars)-1].Time + tfMSecs
+	lastClose := fullBars[len(fullBars)-1].Close
+	for curMS < endMS {
+		addNum += 1
+		fullBars = append(fullBars, &banexg.Kline{
+			Time:   curMS,
+			Open:   lastClose,
+			High:   lastClose,
+			Low:    lastClose,
+			Close:  lastClose,
+			Volume: 0,
+		})
+		curMS += tfMSecs
+	}
+	return fullBars, addNum
 }

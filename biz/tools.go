@@ -253,7 +253,6 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 }
 
 func LoadCalendars(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := SetupComs(args)
 	if err != nil {
 		return err
@@ -484,7 +483,6 @@ func PurgeKlines(args *config.CmdArgs) *errs.Error {
 }
 
 func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := SetupComsExg(args)
 	if err != nil {
 		return err
@@ -552,7 +550,6 @@ func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 CalcCorrelation calculate correlation for pairs; generate csv or images
 */
 func CalcCorrelation(args *config.CmdArgs) *errs.Error {
-	core.SetRunMode(core.RunModeOther)
 	err := SetupComsExg(args)
 	if err != nil {
 		return err
