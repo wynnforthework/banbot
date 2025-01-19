@@ -416,10 +416,10 @@ func postForceExit(c *fiber.Ctx) error {
 		var errMsg strings.Builder
 		for _, od := range targetOrders {
 			_, err2 := odMgr.ExitOrder(sess, od, &strat.ExitReq{
-				Tag:      core.ExitTagUserExit,
-				StgyName: od.Strategy,
-				OrderID:  od.ID,
-				Force:    true,
+				Tag:       core.ExitTagUserExit,
+				StratName: od.Strategy,
+				OrderID:   od.ID,
+				Force:     true,
 			})
 			if err2 != nil {
 				failNum += 1

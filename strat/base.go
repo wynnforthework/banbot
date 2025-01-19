@@ -78,7 +78,7 @@ func (s *TradeStrat) orderBarMax() int {
 }
 
 /*
-*****************************  StagyJob的成员方法   ****************************************
+*****************************  StratJob的成员方法   ****************************************
  */
 func (s *StratJob) CanOpen(short bool) bool {
 	disable := false
@@ -97,8 +97,8 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Tag == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is Required")
 	}
-	if req.StgyName == "" {
-		req.StgyName = s.Strat.Name
+	if req.StratName == "" {
+		req.StratName = s.Strat.Name
 	}
 	isLiveMode := core.LiveMode
 	symbol := s.Symbol.Symbol
@@ -234,8 +234,8 @@ func (s *StratJob) CloseOrders(req *ExitReq) *errs.Error {
 	if req.Tag == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is required")
 	}
-	if req.StgyName == "" {
-		req.StgyName = s.Strat.Name
+	if req.StratName == "" {
+		req.StratName = s.Strat.Name
 	}
 	dirtBoth := req.Dirt == core.OdDirtBoth
 	if !s.CloseShort && (dirtBoth || req.Dirt == core.OdDirtShort) || !s.CloseLong && (dirtBoth || req.Dirt == core.OdDirtLong) {

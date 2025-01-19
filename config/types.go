@@ -22,7 +22,7 @@ var (
 	PreFire          float64
 	MarginAddRate    float64 // When trading contracts, if a loss occurs and the loss reaches this value of the initial margin ratio, additional margin will be required to avoid forced liquidation. 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
 	ChargeOnBomb     bool
-	TakeOverStgy     string
+	TakeOverStrat    string
 	StakeAmount      float64 // The amount of a single order, the priority is lower than StakePct 单笔开单金额，优先级低于StakePct
 	StakePct         float64 // Percentage of single bill amount 单笔开单金额百分比
 	MaxStakeAmt      float64 // Maximum bill amount for a single transaction 单笔最大开单金额
@@ -87,7 +87,7 @@ type Config struct {
 	PreFire          float64                           `yaml:"prefire" mapstructure:"prefire"`
 	MarginAddRate    float64                           `yaml:"margin_add_rate" mapstructure:"margin_add_rate"`
 	ChargeOnBomb     bool                              `yaml:"charge_on_bomb" mapstructure:"charge_on_bomb"`
-	TakeOverStgy     string                            `yaml:"take_over_stgy" mapstructure:"take_over_stgy"`
+	TakeOverStrat    string                            `yaml:"take_over_strat" mapstructure:"take_over_strat"`
 	StakeAmount      float64                           `yaml:"stake_amount" mapstructure:"stake_amount"`
 	StakePct         float64                           `yaml:"stake_pct" mapstructure:"stake_pct"`
 	MaxStakeAmt      float64                           `yaml:"max_stake_amt" mapstructure:"max_stake_amt"`

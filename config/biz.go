@@ -191,7 +191,7 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 		MarginAddRate = 0.66
 	}
 	ChargeOnBomb = c.ChargeOnBomb
-	TakeOverStgy = c.TakeOverStgy
+	TakeOverStrat = c.TakeOverStrat
 	StakeAmount = c.StakeAmount
 	StakePct = c.StakePct
 	MaxStakeAmt = c.MaxStakeAmt
@@ -312,7 +312,7 @@ func GetExgConfig() *ExgItemConfig {
 }
 
 func GetTakeOverTF(pair, defTF string) string {
-	if pairMap, ok := core.StgPairTfs[TakeOverStgy]; ok {
+	if pairMap, ok := core.StgPairTfs[TakeOverStrat]; ok {
 		if tf, ok := pairMap[pair]; ok {
 			return tf
 		}
@@ -530,7 +530,7 @@ func (c *Config) Clone() *Config {
 		PreFire:         c.PreFire,
 		MarginAddRate:   c.MarginAddRate,
 		ChargeOnBomb:    c.ChargeOnBomb,
-		TakeOverStgy:    c.TakeOverStgy,
+		TakeOverStrat:   c.TakeOverStrat,
 		StakeAmount:     c.StakeAmount,
 		StakePct:        c.StakePct,
 		MaxStakeAmt:     c.MaxStakeAmt,

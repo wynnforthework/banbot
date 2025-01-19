@@ -159,8 +159,8 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 	// Query the most recent usage time period of a task
 	// 查询任务的最近使用时间周期
 	var pairLastTfs = make(map[string]string)
-	if config.TakeOverStgy != "" {
-		pairLastTfs, err = sess.GetHistOrderTfs(task.ID, config.TakeOverStgy)
+	if config.TakeOverStrat != "" {
+		pairLastTfs, err = sess.GetHistOrderTfs(task.ID, config.TakeOverStrat)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -449,7 +449,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			shortPos.Contracts = shortPosAmt
 		}
 	}
-	if config.TakeOverStgy == "" {
+	if config.TakeOverStrat == "" {
 		return openOds, nil
 	}
 	if longPos != nil && longPos.Contracts > AmtDust {
@@ -509,7 +509,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 	if isShort == isSell {
 		// Open long or short 开多或开空
 		if defTF == "" {
-			log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("strat", config.TakeOverStgy))
+			log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("strat", config.TakeOverStrat))
 			return ods, nil
 		}
 		tag := "[LONG]"
@@ -558,7 +558,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 		if !od.ReduceOnly && amount > AmtDust {
 			// Remaining quantity, create opposite order 剩余数量，创建相反订单
 			if defTF == "" {
-				log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("stagy", config.TakeOverStgy))
+				log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("stagy", config.TakeOverStrat))
 				return ods, nil
 			}
 			tag := "[long]"
@@ -590,7 +590,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 	if entStatus == ormo.OdStatusClosed {
 		status = ormo.InOutStatusFullEnter
 	}
-	stgVer, _ := strat.Versions[config.TakeOverStgy]
+	stgVer, _ := strat.Versions[config.TakeOverStrat]
 	entSide := banexg.OdSideBuy
 	if short {
 		entSide = banexg.OdSideSell
@@ -609,7 +609,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 			QuoteCost: notional * leverage,
 			Leverage:  leverage,
 			EnterAt:   enterAt,
-			Strategy:  config.TakeOverStgy,
+			Strategy:  config.TakeOverStrat,
 			StgVer:    int64(stgVer),
 		},
 		Enter: &ormo.ExOrder{
@@ -642,7 +642,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 
 func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*ormo.InOutOrder, *errs.Error) {
 	if defTF == "" {
-		msg := fmt.Sprintf("take over job not found, %s %s", pos.Symbol, config.TakeOverStgy)
+		msg := fmt.Sprintf("take over job not found, %s %s", pos.Symbol, config.TakeOverStrat)
 		return nil, errs.NewMsg(core.ErrBadConfig, msg)
 	}
 	exs, err := orm.GetExSymbolCur(pos.Symbol)
@@ -1045,7 +1045,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 				}
 			}
 			unHandleNum := 0
-			allowTakeOver := config.TakeOverStgy != ""
+			allowTakeOver := config.TakeOverStrat != ""
 			// Traverse third-party orders to check whether they are closed or tracked
 			// 遍历第三方订单，检查是否平仓或跟踪
 			for _, trades := range pairTrades {

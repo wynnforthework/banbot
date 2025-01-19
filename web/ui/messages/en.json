@@ -516,6 +516,8 @@
     "cfg_stake_amount": "Default amount per order, lower priority than stake_pct",
     "cfg_stake_pct": "Percentage of account to use for each order, based on the nominal value",
     "cfg_max_stake_amount": "Max order amount of 5k, valid only if stake_pct is specified",
+    "cfg_charge_on_bomb": "Automatically recharge to continue backtesting when backtesting liquidation occurs",
+    "cfg_take_over_strat": "The strategy for taking over user orders during real trading, empty by default",
     "cfg_open_vol_rate": "Maximum allowed open order quantity / average candle volume ratio when not specifying order quantity, default is 1",
     "cfg_min_open_rate": "Minimum open order ratio, allows order if balance / per order amount exceeds this ratio when balance is insufficient, default is 0.5 (50%)",
     "cfg_bt_net_cost": "Order delay in backtest, can be used to simulate slippage, in seconds, default is 15",

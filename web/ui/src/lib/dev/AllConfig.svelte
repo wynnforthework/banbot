@@ -21,6 +21,8 @@ margin_add_rate: 0.66  # ${m.cfg_margin_add_rate()}
 stake_amount: 15  # ${m.cfg_stake_amount()}
 stake_pct: 50  # ${m.cfg_stake_pct()}
 max_stake_amt: 5000  # ${m.cfg_max_stake_amount()}
+charge_on_bomb: false # ${m.cfg_charge_on_bomb()}
+take_over_strat: ma:demo # ${m.cfg_take_over_strat()}
 open_vol_rate: 1  # ${m.cfg_open_vol_rate()}
 min_open_rate: 0.5  # ${m.cfg_min_open_rate()}
 bt_net_cost: 15  # ${m.cfg_bt_net_cost()}

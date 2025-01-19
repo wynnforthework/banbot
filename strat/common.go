@@ -132,7 +132,7 @@ func GetStratPerf(pair, strat string) *config.StratPerfConfig {
 func (q *ExitReq) Clone() *ExitReq {
 	res := &ExitReq{
 		Tag:        q.Tag,
-		StgyName:   q.StgyName,
+		StratName:  q.StratName,
 		EnterTag:   q.EnterTag,
 		Dirt:       q.Dirt,
 		OrderType:  q.OrderType,

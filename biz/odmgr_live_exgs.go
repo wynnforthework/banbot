@@ -53,7 +53,7 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			}
 		}
 		// 检查是否有剩余数量，创建相反订单 Check if there is a remaining quantity and create an opposite order
-		createInv := !od.ReduceOnly && filled > AmtDust && config.TakeOverStgy != ""
+		createInv := !od.ReduceOnly && filled > AmtDust && config.TakeOverStrat != ""
 		if len(doneParts) == 0 && !createInv {
 			return true
 		}

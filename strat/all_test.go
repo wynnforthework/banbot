@@ -16,7 +16,7 @@ var env = &ta.BarEnv{
 	MarketType: "future",
 }
 
-func TestStagyJob_DrawDownExit(t *testing.T) {
+func TestStratJob_DrawDownExit(t *testing.T) {
 	job := &StratJob{
 		Env: env,
 		Strat: &TradeStrat{
@@ -71,7 +71,7 @@ func TestStagyJob_DrawDownExit(t *testing.T) {
 	})
 }
 
-//func TestStagyLoad(t *testing.T) {
+//func TestStratLoad(t *testing.T) {
 //	stgy := loadNative("hammer")
 //	if stgy == nil {
 //		return

@@ -166,9 +166,9 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 	}
 	res := make([]*strat.EnterReq, 0, len(enters))
 	for _, req := range enters {
-		num, _ := stratOdNum[req.StgyName]
-		simulNum, _ := o.simulOpenSt[req.StgyName]
-		pol := strat.Get(env.Symbol, req.StgyName).Policy
+		num, _ := stratOdNum[req.StratName]
+		simulNum, _ := o.simulOpenSt[req.StratName]
+		pol := strat.Get(env.Symbol, req.StratName).Policy
 		if pol != nil {
 			if pol.MaxOpen > 0 && num >= pol.MaxOpen {
 				continue
@@ -177,8 +177,8 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 				continue
 			}
 		}
-		stratOdNum[req.StgyName] = num + 1
-		o.simulOpenSt[req.StgyName] = simulNum + 1
+		stratOdNum[req.StratName] = num + 1
+		o.simulOpenSt[req.StratName] = simulNum + 1
 		o.simulOpen += 1
 		res = append(res, req)
 	}
@@ -329,7 +329,7 @@ func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.
 			}
 		}
 	}
-	stgVer, _ := strat.Versions[req.StgyName]
+	stgVer, _ := strat.Versions[req.StratName]
 	odSide := banexg.OdSideBuy
 	if req.Short {
 		odSide = banexg.OdSideSell
@@ -347,7 +347,7 @@ func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.
 			InitPrice: core.GetPrice(env.Symbol),
 			Leverage:  req.Leverage,
 			EnterAt:   btime.TimeMS(),
-			Strategy:  req.StgyName,
+			Strategy:  req.StratName,
 			StgVer:    int64(stgVer),
 		},
 		Enter: &ormo.ExOrder{
@@ -430,7 +430,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.E
 		isShort := req.Dirt == core.OdDirtShort
 		lock.Lock()
 		for _, od := range openOds {
-			if req.StgyName != "" && od.Strategy != req.StgyName {
+			if req.StratName != "" && od.Strategy != req.StratName {
 				continue
 			}
 			if len(pairMap) > 0 {

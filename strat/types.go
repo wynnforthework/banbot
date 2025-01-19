@@ -116,7 +116,7 @@ EnterReq
 */
 type EnterReq struct {
 	Tag             string  // Entry signal 入场信号
-	StgyName        string  // Strategy Name 策略名称
+	StratName       string  // Strategy Name 策略名称
 	Short           bool    // Whether to short sell or not 是否做空
 	OrderType       int     // 订单类型, core.OrderType*
 	Limit           float64 // The entry price of a limit order will be submitted as a limit order when specified 限价单入场价格，指定时订单将作为限价单提交
@@ -143,7 +143,7 @@ ExitReq
 */
 type ExitReq struct {
 	Tag        string  // Exit signal 退出信号
-	StgyName   string  // Strategy Name 策略名称
+	StratName  string  // Strategy Name 策略名称
 	EnterTag   string  // Only exit orders with EnterTag as the entry signal 只退出入场信号为EnterTag的订单
 	Dirt       int     // core.OdDirt* long/short/both
 	OrderType  int     // 订单类型, core.OrderType*

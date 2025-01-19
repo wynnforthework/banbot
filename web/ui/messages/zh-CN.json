@@ -516,6 +516,8 @@
   "cfg_stake_amount": "每笔订单的默认金额，优先级低于stake_pct",
   "cfg_stake_pct": "每笔订单使用账户的百分比，基于名义价值",
   "cfg_max_stake_amount": "最大订单金额5k，仅在指定stake_pct时有效",
+  "cfg_charge_on_bomb": "回测爆仓时自动充值继续回测",
+  "cfg_take_over_strat": "实盘时接管用户开单的策略，默认为空",
   "cfg_open_vol_rate": "未指定订单数量时允许的最大开单数量/K线平均成交量比例，默认为1",
   "cfg_min_open_rate": "最小开单比例，余额不足时允许余额/每单金额超过此比例时下单，默认为0.5（50%）",
   "cfg_bt_net_cost": "回测中的订单延迟，可用于模拟滑点，单位为秒，默认为15",

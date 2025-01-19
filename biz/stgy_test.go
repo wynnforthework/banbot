@@ -30,7 +30,7 @@ func initApp() *errs.Error {
 	return orm.Setup()
 }
 
-func TestStagyRun(t *testing.T) {
+func TestStratRun(t *testing.T) {
 	err := initApp()
 	if err != nil {
 		panic(err)
