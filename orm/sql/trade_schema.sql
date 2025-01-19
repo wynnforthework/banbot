@@ -60,7 +60,7 @@ CREATE TABLE iorder
     quote_cost  REAL    NOT NULL,
     exit_tag    TEXT    NOT NULL,
     leverage    REAL    NOT NULL,
-    enter_at    INTEGER NOT NULL,
+    enter_at    INTEGER NOT NULL, -- Think carefully before updating this, as it would change the Key
     exit_at     INTEGER NOT NULL,
     strategy    TEXT    NOT NULL,
     stg_ver     INTEGER NOT NULL,

@@ -1122,9 +1122,8 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 	if state == banexg.OdStatusFilled || state == banexg.OdStatusPartFilled {
 		odStatus := ormo.OdStatusPartOK
 		if subOd.Filled == 0 {
-			if subOd.Enter {
-				od.EnterAt = trade.Timestamp
-			} else {
+			// don't update EnterAt, it would affect Key of order
+			if !subOd.Enter {
 				od.ExitAt = trade.Timestamp
 			}
 			od.DirtyMain = true
@@ -1445,9 +1444,8 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *ormo.InOutOrder, isEnter bool, res *
 			}
 			subOd.Average = fillPrice
 			if subOd.Filled == 0 {
-				if isEnter {
-					od.EnterAt = res.Timestamp
-				} else {
+				// don't update EnterAt, it would affect Key of Order
+				if !isEnter {
 					od.ExitAt = res.Timestamp
 				}
 				od.DirtyMain = true

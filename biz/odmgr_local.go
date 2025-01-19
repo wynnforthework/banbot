@@ -249,8 +249,8 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 	}
 	if exOrder.Filled == 0 {
 		// 将EnterAt更新为实际入场时间
-		// Update EnterAt to the actual entry time
-		od.EnterAt = updateTime
+		// Update Enter.UpdateAt to the actual entry time
+		od.Enter.UpdateAt = updateTime
 	}
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = entPrice
