@@ -1073,6 +1073,9 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 }
 
 func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrade) *errs.Error {
+	if trade.State == banexg.OdStatusOpen {
+		return nil
+	}
 	sl := od.GetStopLoss()
 	tp := od.GetTakeProfit()
 	isSell := trade.Side == banexg.OdSideSell
@@ -1096,19 +1099,18 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 		} else if isTakeProfit {
 			od.SetExit(core.ExitTagTakeProfit, banexg.OdTypeTakeProfit, 0)
 		} else {
-			if trade.State != banexg.OdStatusOpen {
-				log.Error(fmt.Sprintf("%s subOd %s nil, trade state: %s", od.Key(), dirtTag, trade.State))
-			}
+			// TODO: 检查是否是用户主动平仓，用户可能一次性平仓多个，需要更新相关订单状态
+			log.Error(fmt.Sprintf("%s subOd %s nil, trade state: %s", od.Key(), dirtTag, trade.State))
 			return nil
 		}
 		subOd = od.Exit
 	}
-	if subOd.Status == ormo.OdStatusClosed {
-		log.Debug(fmt.Sprintf("%s %s complete, skip trade: %v", od.Key(), dirtTag, trade.ID))
+	if trade.Timestamp < subOd.UpdateAt {
+		// 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
 		return nil
 	}
-	if trade.State == banexg.OdStatusOpen || trade.Timestamp < subOd.UpdateAt {
-		// 收到的订单更新不一定按服务器端顺序。故早于已处理的时间戳的跳过
+	if subOd.Status == ormo.OdStatusClosed {
+		log.Debug(fmt.Sprintf("%s %s complete, skip trade: %v", od.Key(), dirtTag, trade.ID))
 		return nil
 	}
 	if subOd.Enter {
@@ -1517,6 +1519,9 @@ func (o *LiveOrderMgr) hasNewTrades(res *banexg.Order) bool {
 	return false
 }
 
+/*
+从缓存的unMatchTrades中查找和subOd.OrderID匹配的交易，用于更新此订单
+*/
 func (o *LiveOrderMgr) consumeUnMatches(od *ormo.InOutOrder, subOd *ormo.ExOrder) *errs.Error {
 	data := make(map[string]*banexg.MyTrade)
 	o.lockUnMatches.Lock()
