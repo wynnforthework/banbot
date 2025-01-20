@@ -46,6 +46,17 @@ func SplitSolid(text string, sep string) []string {
 	return result
 }
 
+func SplitToMap(text string, sep string) map[string]bool {
+	arr := strings.Split(text, sep)
+	var result = make(map[string]bool)
+	for _, str := range arr {
+		if str != "" {
+			result[str] = true
+		}
+	}
+	return result
+}
+
 func KeysOfMap[M ~map[K]V, K comparable, V any](m M) []K {
 	r := make([]K, 0, len(m))
 	for k := range m {

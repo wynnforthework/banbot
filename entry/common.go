@@ -2,6 +2,7 @@ package entry
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/live"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
@@ -60,6 +61,7 @@ func init() {
 	AddGroup("kline", "run kline commands")
 	AddGroup("tick", "run tick commands")
 	AddGroup("tool", "run tools commands")
+	AddGroup("live", "run live order manager commands")
 
 	// Root command group
 	AddCmdJob(&CmdJob{
@@ -230,6 +232,13 @@ func init() {
 		Run:     biz.CalcCorrelation,
 		Options: []string{"out", "out_type", "timeframes", "batch_size", "run_every"},
 		Help:    "calculate correlation matrix for symbols",
+	})
+
+	AddCmdJob(&CmdJob{
+		Name:   "close_order",
+		Parent: "live",
+		RunRaw: live.RunTradeClose,
+		Help:   "close orders with account/pair/strategy",
 	})
 }
 

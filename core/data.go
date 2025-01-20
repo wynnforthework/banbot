@@ -92,6 +92,7 @@ const (
 	ExitTagForceExit   = "force_exit"
 	ExitTagUserExit    = "user_exit"
 	ExitTagThird       = "third"
+	ExitTagCli         = "cli"
 	ExitTagFatalErr    = "fatal_err"
 	ExitTagPairDel     = "pair_del"
 	ExitTagStopLoss    = "stop_loss"

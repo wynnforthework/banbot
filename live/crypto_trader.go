@@ -128,46 +128,7 @@ func delayExecBatch() {
 }
 
 func (t *CryptoTrader) orderCB(od *ormo.InOutOrder, isEnter bool) {
-	msgType := rpc.MsgTypeExit
-	subOd := od.Exit
-	action := "Close Long"
-	if od.Short {
-		action = "Close Short"
-	}
-	if isEnter {
-		msgType = rpc.MsgTypeEntry
-		subOd = od.Enter
-		action = "Open Long"
-		if od.Short {
-			action = "Open Short"
-		}
-	}
-	filled, price := subOd.Filled, subOd.Average
-	if subOd.Status != ormo.OdStatusClosed || filled == 0 {
-		return
-	}
-	account := ormo.GetTaskAcc(od.TaskID)
-	rpc.SendMsg(map[string]interface{}{
-		"type":          msgType,
-		"account":       account,
-		"action":        action,
-		"enter_tag":     od.EnterTag,
-		"exit_tag":      od.ExitTag,
-		"side":          subOd.Side,
-		"short":         od.Short,
-		"leverage":      od.Leverage,
-		"amount":        filled,
-		"price":         price,
-		"value":         filled * price,
-		"cost":          filled * price / od.Leverage,
-		"strategy":      od.Strategy,
-		"pair":          od.Symbol,
-		"timeframe":     od.Timeframe,
-		"profit":        od.Profit,
-		"profit_rate":   od.ProfitRate,
-		"max_pft_rate":  od.MaxPftRate,
-		"max_draw_down": od.MaxDrawDown,
-	})
+	sendOrderMsg(od, isEnter)
 }
 
 func (t *CryptoTrader) startJobs() {
