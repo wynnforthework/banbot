@@ -374,11 +374,17 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, adj int, cb fu
 }
 
 func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	if f.Timeframe == "" || f.BackNum == 0 || f.Max == 0 && f.TopN == 0 {
+	if f.Timeframe == "" || f.BackNum == 0 || f.Max == 0 && f.TopN == 0 && f.TopRate == 0 {
 		return symbols, nil
 	}
 	if f.BackNum < 10 {
 		return nil, errs.NewMsg(errs.CodeParamInvalid, "`CorrelationFilter.back_num` should >= 10, cur: %v", f.BackNum)
+	}
+	if f.TopRate > 0 {
+		rateNum := int(math.Round(float64(len(symbols)) * f.TopRate))
+		if f.TopN == 0 || f.TopN > rateNum {
+			f.TopN = rateNum
+		}
 	}
 	var skips []string
 	var names = make([]string, 0, len(symbols))

@@ -49,25 +49,35 @@ func PadCenter(s string, width int, padText string) string {
 	return left + s + right
 }
 
-func MapToStr(m map[string]float64) (string, int) {
+func MapToStr[T any](m map[string]T, value bool, precFlt int) string {
 	var b strings.Builder
-	arr := make([]*core.StrVal, 0, len(m))
+	arr := make([]*core.StrAny, 0, len(m))
 	for k, v := range m {
-		arr = append(arr, &core.StrVal{Str: k, Val: v})
+		arr = append(arr, &core.StrAny{Str: k, Any: v})
 	}
 	sort.Slice(arr, func(i, j int) bool {
 		return arr[i].Str < arr[j].Str
 	})
-	numLen := 0
 	for i, p := range arr {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		valStr := strconv.FormatFloat(p.Val, 'f', 2, 64)
-		b.WriteString(fmt.Sprintf("%s: %s", p.Str, valStr))
-		numLen += len(valStr)
+		if value {
+			var valStr string
+			if fltVal, ok := p.Any.(float64); ok {
+				valStr = strconv.FormatFloat(fltVal, 'f', precFlt, 64)
+			} else if flt32Val, ok := p.Any.(float32); ok {
+				valStr = strconv.FormatFloat(float64(flt32Val), 'f', precFlt, 64)
+			} else {
+				valStr = fmt.Sprintf("%v", p.Any)
+			}
+			item := fmt.Sprintf("%s: %v", p.Str, valStr)
+			b.WriteString(item)
+		} else {
+			b.WriteString(p.Str)
+		}
 	}
-	return b.String(), numLen
+	return b.String()
 }
 
 func UniqueItems[T comparable](arr []T) ([]T, []T) {

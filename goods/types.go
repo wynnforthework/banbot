@@ -72,6 +72,7 @@ type CorrelationFilter struct {
 	Timeframe string  `yaml:"timeframe" mapstructure:"timeframe,omitempty"`
 	BackNum   int     `yaml:"back_num" mapstructure:"back_num,omitempty"`
 	TopN      int     `yaml:"top_n" mapstructure:"top_n"`
+	TopRate   float64 `yaml:"top_rate" mapstructure:"top_rate"`
 	Sort      string  `yaml:"sort" mapstructure:"sort"`
 }
 

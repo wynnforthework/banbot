@@ -980,7 +980,7 @@ func collectOptLog(paths []string, minScore float64, picker, pairSel string) (st
 			if p.Dirt != "" {
 				b.WriteString(fmt.Sprintf("    dirt: %s\n", p.Dirt))
 			}
-			paramStr, _ := utils.MapToStr(p.Params)
+			paramStr := utils.MapToStr(p.Params, true, 2)
 			b.WriteString(fmt.Sprintf("    params: {%s}\n", paramStr))
 		}
 	}

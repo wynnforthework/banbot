@@ -32,6 +32,11 @@ type StrVal struct {
 	Val float64
 }
 
+type StrAny struct {
+	Str string
+	Any any
+}
+
 type StrInt64 struct {
 	Str string
 	Int int64

@@ -13,9 +13,9 @@ import (
 )
 
 func (a *CmdArgs) Init() {
-	a.TimeFrames = utils.SplitSolid(a.RawTimeFrames, ",")
-	a.Pairs = utils.SplitSolid(a.RawPairs, ",")
-	a.Tables = utils.SplitSolid(a.RawTables, ",")
+	a.TimeFrames = utils.SplitSolid(a.RawTimeFrames, ",", true)
+	a.Pairs = utils.SplitSolid(a.RawPairs, ",", true)
+	a.Tables = utils.SplitSolid(a.RawTables, ",", true)
 	if a.DataDir != "" {
 		DataDir = a.DataDir
 	}

@@ -224,7 +224,6 @@ func (r *BTResult) BriefLine() string {
 func (o *OptInfo) ToLine() string {
 	var text string
 	if o.Params != nil && len(o.Params) > 0 {
-		var numLen int
 		params := make(map[string]float64)
 		for k, v := range o.Params {
 			if isInt, ok := o.Ints[k]; ok && isInt {
@@ -232,11 +231,8 @@ func (o *OptInfo) ToLine() string {
 			}
 			params[k] = v
 		}
-		text, numLen = utils.MapToStr(params)
-		tabLack := (len(o.Params)*5 - numLen) / 4
-		if tabLack > 0 {
-			text += strings.Repeat("\t", tabLack)
-		}
+		text = utils.MapToStr(params, true, 2)
+		text += "\t"
 	}
 	return fmt.Sprintf("loss: %7.2f \t%s \t%s, id: %v", -o.Score, text, o.BriefLine(), o.ID)
 }

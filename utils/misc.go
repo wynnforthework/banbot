@@ -35,12 +35,20 @@ SplitSolid
 String segmentation, ignore empty strings in the return result
 字符串分割，忽略返回结果中的空字符串
 */
-func SplitSolid(text string, sep string) []string {
+func SplitSolid(text string, sep string, unique bool) []string {
 	arr := strings.Split(text, sep)
 	var result []string
+	var hit = make(map[string]bool)
 	for _, str := range arr {
 		if str != "" {
-			result = append(result, str)
+			if unique {
+				if _, ok := hit[str]; !ok {
+					hit[str] = true
+					result = append(result, str)
+				}
+			} else {
+				result = append(result, str)
+			}
 		}
 	}
 	return result

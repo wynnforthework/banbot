@@ -788,7 +788,7 @@ func (c *RunPolicyConfig) ToYaml() string {
 	if len(c.Pairs) > 0 {
 		b.WriteString(fmt.Sprintf("    pairs: [ %s ]\n", strings.Join(c.Pairs, ", ")))
 	}
-	argText, _ := utils2.MapToStr(c.Params)
+	argText := utils2.MapToStr(c.Params, true, 2)
 	if len(c.Pairs) == 1 {
 		b.WriteString("    pair_params:\n")
 		b.WriteString(fmt.Sprintf("      %s: {%s}\n", c.Pairs[0], argText))
