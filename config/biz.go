@@ -203,6 +203,12 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	if MinOpenRate == 0 {
 		MinOpenRate = 0.5
 	}
+	if c.LowCostAction != "" {
+		if _, ok := core.LowCostVals[c.LowCostAction]; !ok {
+			return errs.NewMsg(core.ErrBadConfig, "invalid low_cost_action: %s", c.LowCostAction)
+		}
+	}
+	LowCostAction = c.LowCostAction
 	BTNetCost = c.BTNetCost
 	if BTNetCost == 0 {
 		BTNetCost = 15
@@ -543,6 +549,7 @@ func (c *Config) Clone() *Config {
 		MaxStakeAmt:      c.MaxStakeAmt,
 		OpenVolRate:      c.OpenVolRate,
 		MinOpenRate:      c.MinOpenRate,
+		LowCostAction:    c.LowCostAction,
 		BTNetCost:        c.BTNetCost,
 		RelaySimUnFinish: c.RelaySimUnFinish,
 		OrderBarMax:      c.OrderBarMax,

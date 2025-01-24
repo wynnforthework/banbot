@@ -65,7 +65,7 @@
 </script>
 
 <div class="flex flex-col min-h-screen">
-  <div class="navbar bg-base-100 shadow-md py-0">
+  <div class="navbar bg-base-100 shadow-md py-0 relative">
     <div class="navbar-start">
       <a href="/" class="btn btn-ghost text-xl">Banbot</a>
     </div>

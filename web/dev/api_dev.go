@@ -974,6 +974,12 @@ func getBtLogs(c *fiber.Ctx) error {
 
 	// 读取out.log
 	logPath := filepath.Join(btPath, "out.log")
+	if !utils.Exists(logPath) {
+		return c.JSON(fiber.Map{
+			"data":  "no logs",
+			"start": 0,
+		})
+	}
 	file, err := os.Open(logPath)
 	if err != nil {
 		return fmt.Errorf("open log file failed: %v", err)

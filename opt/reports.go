@@ -435,6 +435,7 @@ func groupItems(orders []*ormo.InOutOrder, measure bool, getTag func(od *ormo.In
 			sta = &RowItem{
 				Title: tag,
 				RowPart: RowPart{
+					OrderNum:     1,
 					ProfitSum:    od.Profit,
 					ProfitPctSum: od.ProfitRate,
 					CostSum:      od.EnterCost() / od.Leverage,
@@ -451,6 +452,7 @@ func groupItems(orders []*ormo.InOutOrder, measure bool, getTag func(od *ormo.In
 			if isWin {
 				sta.WinCount += 1
 			}
+			sta.OrderNum += 1
 			sta.ProfitSum += od.Profit
 			sta.ProfitPctSum += od.ProfitRate
 			sta.CostSum += od.EnterCost() / od.Leverage

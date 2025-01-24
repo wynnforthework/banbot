@@ -53,7 +53,7 @@
           <h3 class="step-title text-xl font-bold w-[13rem]">{m.edit_config()}</h3>
           <div class="content-block flex-1 p-6 bg-base-200 rounded-lg">
             <p>{m.trade_edit_config_desc()}</p>
-            <a href="https://www.banbot.site/en/configuration.html" class="btn btn-primary mt-2 btn-outline btn-sm">{m.document()}</a>
+            <a href="https://www.banbot.site/en-US/guide/configuration.html" target="_blank" class="btn btn-primary mt-2 btn-outline btn-sm">{m.document()}</a>
           </div>
         </div>
       </div>

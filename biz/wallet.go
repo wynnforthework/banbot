@@ -446,8 +446,7 @@ func (w *BanWallets) EnterOd(od *ormo.InOutOrder) (float64, *errs.Error) {
 		// Futures contract, spot long order lock quote
 		// 期货合约，现货多单锁定quote
 		if legalCost < core.MinStakeAmount {
-			errMsg := fmt.Sprintf("margin cost must >= %v, cur: %.2f", core.MinStakeAmount, legalCost)
-			return 0, errs.NewMsg(core.ErrInvalidCost, errMsg)
+			log.Warn(fmt.Sprintf("cost should >= %v, cur: %.2f, order: %v", core.MinStakeAmount, legalCost, od.Key()))
 		}
 
 		if isFuture {

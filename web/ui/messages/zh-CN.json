@@ -520,6 +520,7 @@
   "cfg_take_over_strat": "实盘时接管用户开单的策略，默认为空",
   "cfg_open_vol_rate": "未指定订单数量时允许的最大开单数量/K线平均成交量比例，默认为1",
   "cfg_min_open_rate": "最小开单比例，余额不足时允许余额/每单金额超过此比例时下单，默认为0.5（50%）",
+  "cfg_low_cost_action": "开单金额不足最小金额时的动作：ignore/keepBig/keepAll",
   "cfg_bt_net_cost": "回测中的订单延迟，可用于模拟滑点，单位为秒，默认为15",
   "cfg_relay_sim_unfinish": "交易新品种时(回测/实盘)，是否从开始时间未平仓订单接力开始交易",
   "cfg_order_bar_max": "查找开始时间未平仓订单向前模拟最大bar数量",

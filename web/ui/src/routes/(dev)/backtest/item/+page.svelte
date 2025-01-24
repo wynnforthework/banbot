@@ -106,6 +106,7 @@
       odNums = detail.plots.odNum;
     }else{
       odNums = [];
+      activeTab = 'logs';
     }
   }
 
@@ -405,41 +406,45 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
     <div class="w-[13%] flex-shrink-0">
       <ul class="menu bg-base-200 rounded-box">
         {#if task?.status == 3}
-        <li>
-          <button class:active={activeTab === 'overview'} onclick={() => activeTab = 'overview'}>
-            {m.overview()}
-          </button>
-        </li>
-        <li>
-          <button class:active={activeTab === 'assets'} onclick={() => activeTab = 'assets'}>
-            {m.bt_assets()}
-          </button>
-        </li>
-        <li>
-          <button class:active={activeTab === 'enters'} onclick={() => activeTab = 'enters'}>
-            {m.bt_enters()}
-          </button>
-        </li>
-        <li>
-          <button class:active={activeTab === 'config'} onclick={() => activeTab = 'config'}>
-            {m.configuration()}
-          </button>
-        </li>
-        <li>
-          <button class:active={activeTab === 'orders'} onclick={() => activeTab = 'orders'}>
-            {m.orders()}
-          </button>
-        </li>
-        <li>
-          <button class:active={activeTab === 'analysis'} onclick={() => activeTab = 'analysis'}>
-            {m.bt_analysis()}
-          </button>
-        </li>
-        <li>
-          <button class:active={activeTab === 'strat_code'} onclick={() => activeTab = 'strat_code'}>
-            {m.bt_strat_code()}
-          </button>
-        </li>
+          {#if detail}
+          <li>
+            <button class:active={activeTab === 'overview'} onclick={() => activeTab = 'overview'}>
+              {m.overview()}
+            </button>
+          </li>
+          <li>
+            <button class:active={activeTab === 'assets'} onclick={() => activeTab = 'assets'}>
+              {m.bt_assets()}
+            </button>
+          </li>
+          <li>
+            <button class:active={activeTab === 'enters'} onclick={() => activeTab = 'enters'}>
+              {m.bt_enters()}
+            </button>
+          </li>
+          {/if}
+          <li>
+            <button class:active={activeTab === 'config'} onclick={() => activeTab = 'config'}>
+              {m.configuration()}
+            </button>
+          </li>
+          {#if detail}
+          <li>
+            <button class:active={activeTab === 'orders'} onclick={() => activeTab = 'orders'}>
+              {m.orders()}
+            </button>
+          </li>
+          <li>
+            <button class:active={activeTab === 'analysis'} onclick={() => activeTab = 'analysis'}>
+              {m.bt_analysis()}
+            </button>
+          </li>
+          <li>
+            <button class:active={activeTab === 'strat_code'} onclick={() => activeTab = 'strat_code'}>
+              {m.bt_strat_code()}
+            </button>
+          </li>
+          {/if}
         {/if}
         <li>
           <button class:active={activeTab === 'logs'} onclick={() => activeTab = 'logs'}>

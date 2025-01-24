@@ -25,6 +25,7 @@ charge_on_bomb: false # ${m.cfg_charge_on_bomb()}
 take_over_strat: ma:demo # ${m.cfg_take_over_strat()}
 open_vol_rate: 1  # ${m.cfg_open_vol_rate()}
 min_open_rate: 0.5  # ${m.cfg_min_open_rate()}
+low_cost_action: ignore  # ${m.cfg_low_cost_action()}
 bt_net_cost: 15  # ${m.cfg_bt_net_cost()}
 relay_sim_unfinish: false  # ${m.cfg_relay_sim_unfinish()}
 order_bar_max: 500  # ${m.cfg_order_bar_max()}

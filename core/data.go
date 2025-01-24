@@ -38,8 +38,8 @@ var (
 	ExitCalls []func() // CALLBACK TO STOP EXECUTION 停止执行的回调
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "0.1.32"
-	UIVersion = "0.1.32"
+	Version   = "0.1.33"
+	UIVersion = "0.1.33"
 	LogFile   string
 	DevDbPath string
 )
@@ -139,3 +139,15 @@ const (
 	VTypeUniform = iota // UNIFORM LINEAR DISTRIBUTION 均匀线性分布
 	VTypeNorm           // Normal distribution, specifying mean and standard deviation 正态分布，指定均值和标准差
 )
+
+const (
+	LowCostIgnore  = "ignore"
+	LowCostKeepBig = "keepBig"
+	LowCostKeepAll = "keepAll"
+)
+
+var LowCostVals = map[string]int{
+	LowCostIgnore:  0,
+	LowCostKeepBig: 1,
+	LowCostKeepAll: 2,
+}

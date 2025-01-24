@@ -28,6 +28,7 @@ var (
 	MaxStakeAmt      float64 // Maximum bill amount for a single transaction 单笔最大开单金额
 	OpenVolRate      float64 // When opening an order without specifying a quantity, the multiple of the maximum allowed order quantity/average candle trading volume, defaults to 1 未指定数量开单时，最大允许开单数量/平均蜡烛成交量的倍数，默认1
 	MinOpenRate      float64 // When the wallet balance is less than the single amount, orders are allowed to be issued when it reaches this ratio of the single amount. 钱包余额不足单笔金额时，达到单笔金额的此比例则允许开单
+	LowCostAction    string  // Actions taken when stake amount less than the minimum amount 花费不足最小金额时的动作：ignore, keep
 	BTNetCost        float64 // Order placement delay during backtesting, simulated slippage, unit seconds 回测时下单延迟，模拟滑点，单位秒
 	RelaySimUnFinish bool    // 交易新品种时(回测/实盘)，是否从开始时间未平仓订单接力开始交易
 	OrderBarMax      int     // 查找开始时间未平仓订单向前模拟最大bar数量
@@ -93,6 +94,7 @@ type Config struct {
 	MaxStakeAmt      float64                           `yaml:"max_stake_amt" mapstructure:"max_stake_amt"`
 	OpenVolRate      float64                           `yaml:"open_vol_rate" mapstructure:"open_vol_rate"`
 	MinOpenRate      float64                           `yaml:"min_open_rate" mapstructure:"min_open_rate"`
+	LowCostAction    string                            `yaml:"low_cost_action" mapstructure:"low_cost_action"`
 	BTNetCost        float64                           `yaml:"bt_net_cost" mapstructure:"bt_net_cost"`
 	RelaySimUnFinish bool                              `yaml:"relay_sim_unfinish" mapstructure:"relay_sim_unfinish"`
 	OrderBarMax      int                               `yaml:"order_bar_max" mapstructure:"order_bar_max"`
@@ -210,7 +212,7 @@ type PairMgrConfig struct {
 // UNIVERSAL FILTER 通用的过滤器
 type CommonPairFilter struct {
 	Name  string                 `yaml:"name" mapstructure:"name"`
-	Items map[string]interface{} `mapstructure:",remain"`
+	Items map[string]interface{} `yaml:",inline" mapstructure:",remain"`
 }
 
 /** ********************************** Exchange part configuration 交易所部分配置 ******************************** */

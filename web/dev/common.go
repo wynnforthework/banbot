@@ -194,6 +194,11 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 
 	// 等待命令执行完成
 	err = cmd.Wait()
+	BroadcastWS("", map[string]interface{}{
+		"type":     "btPrg",
+		"taskId":   task.ID,
+		"progress": 1,
+	})
 	if err != nil {
 		log.Error("run backtest failed", zap.Int64("task", task.ID), zap.String("args", task.Args),
 			zap.String("path", task.Path), zap.String("output", b.String()), zap.Error(err))

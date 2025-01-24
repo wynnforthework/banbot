@@ -359,15 +359,15 @@ func CalcJobScores(pair, tf, stgy string) *errs.Error {
 	} else {
 		perf.Num = len(orders)
 	}
+	// collect all trade jobs for this strategy & calculate stake rate
+	// 收集此策略所有任务，计算开单倍率
 	var prefs []*core.JobPerf
 	for key, p := range core.JobPerfs {
 		if strings.HasPrefix(key, stgy) {
 			prefs = append(prefs, p)
 		}
 	}
-	// Calculate billing ratio
-	// 计算开单倍率
-	perf.Score = defaultCalcJobScore(cfg, stgy, perf, prefs)
+	perf.Score = defaultCalcJobScore(cfg, sta, perf, prefs)
 	if core.LiveMode {
 		// Real disk mode, immediately save to data directory
 		// 实盘模式，立刻保存到数据目录
@@ -376,12 +376,11 @@ func CalcJobScores(pair, tf, stgy string) *errs.Error {
 	return nil
 }
 
-func defaultCalcJobScore(cfg *config.StratPerfConfig, stagy string, p *core.JobPerf, perfs []*core.JobPerf) float64 {
+func defaultCalcJobScore(cfg *config.StratPerfConfig, sta *core.PerfSta, p *core.JobPerf, perfs []*core.JobPerf) float64 {
 	if len(perfs) < cfg.MinJobNum {
 		return 1
 	}
 	// 按Job总利润分组5档
-	sta := core.GetPerfSta(stagy)
 	if sta.Splits == nil || sta.OdNum-sta.LastGpAt >= len(perfs) {
 		// 按总收益率KMeans分组
 		perfs = append(perfs, p)
@@ -534,4 +533,34 @@ func GetJobKeys() map[string]map[string]bool {
 		break
 	}
 	return jobs
+}
+
+func AddAccFailOpen(acc, tag string) {
+	lockAccFailOpen.Lock()
+	tagMap, ok1 := accFailOpens[acc]
+	if !ok1 {
+		tagMap = make(map[string]int)
+		accFailOpens[acc] = tagMap
+	}
+	count, _ := tagMap[tag]
+	tagMap[tag] = count + 1
+	lockAccFailOpen.Unlock()
+}
+
+func DumpAccFailOpens() string {
+	lockAccFailOpen.Lock()
+	var b strings.Builder
+	isFirst := true
+	for k, v := range accFailOpens {
+		if isFirst {
+			isFirst = false
+		} else {
+			b.WriteString("\n")
+		}
+		b.WriteString(k)
+		b.WriteString(": ")
+		b.WriteString(utils.MapToStr(v, true, 0))
+	}
+	lockAccFailOpen.Unlock()
+	return b.String()
 }

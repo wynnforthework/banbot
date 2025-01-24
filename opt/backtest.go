@@ -234,6 +234,10 @@ func (b *BackTest) Run() {
 	b.logPlot(biz.GetWallets(config.DefAcc), btime.TimeMS(), -1, -1)
 	if !b.isOpt {
 		log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
+		failOpens := strat.DumpAccFailOpens()
+		if failOpens != "" {
+			log.Info("fail open tag nums:\n" + failOpens)
+		}
 		b.printBtResult()
 	} else {
 		b.Collect()
@@ -457,6 +461,10 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		warms, _, err := strat.LoadStratJobs(core.Pairs, pairTfScores)
 		if err != nil {
 			return err
+		}
+		if len(warms) == 0 {
+			// 没有需要预回测的任务
+			continue
 		}
 		err = lite.dp.SubWarmPairs(warms, true)
 		if err != nil {

@@ -24,4 +24,15 @@ var (
 
 	accOdSubs = map[string][]FnOdChange{} // acc: listeners List of subscription order status change events 订阅订单状态变化事件列表
 	lockOdSub sync.Mutex
+
+	accFailOpens    = make(map[string]map[string]int) // Statistics of reasons for failed entry for accounts 各个账号开单失败原因统计
+	lockAccFailOpen sync.Mutex
+)
+
+var (
+	FailOpenCostTooLess    = "CostTooLess"
+	FailOpenBadDirtOrLimit = "BadDirtOrLimit"
+	FailOpenNanNum         = "NanNum"
+	FailOpenBadStopLoss    = "BadStopLoss"
+	FailOpenBadTakeProfit  = "BadTakeProfit"
 )

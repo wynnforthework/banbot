@@ -114,11 +114,13 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 				zap.String("tag", req.Tag),
 				zap.Int("dir", dirType))
 		}
+		AddAccFailOpen(s.Account, FailOpenBadDirtOrLimit)
 		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
 	}
 	if math.IsNaN(req.Limit+req.Amount+req.Leverage+req.CostRate+req.LegalCost) ||
 		math.IsNaN(req.StopLoss+req.StopLossVal+req.StopLossLimit+req.StopLossRate) ||
 		math.IsNaN(req.TakeProfit+req.TakeProfitVal+req.TakeProfitLimit+req.TakeProfitRate) {
+		AddAccFailOpen(s.Account, FailOpenNanNum)
 		return errs.NewMsg(errs.CodeParamInvalid, "nan in EnterReq")
 	}
 	// 检查价格是否有效
@@ -146,6 +148,16 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 					symbol, reqAmt/avgVol, config.OpenVolRate, req.LegalCost))
 			}
 		}
+		minCost := float64(core.MinStakeAmount)
+		if req.LegalCost < minCost {
+			rate := req.LegalCost / minCost
+			if config.LowCostAction == core.LowCostKeepBig && rate > 0.4 || config.LowCostAction == core.LowCostKeepAll {
+				req.LegalCost = minCost * 1.1
+			} else {
+				AddAccFailOpen(s.Account, FailOpenCostTooLess)
+				return errs.NewMsg(errs.CodeParamInvalid, "legal cost must >= %d", minCost)
+			}
+		}
 	}
 	// 检查止损
 	curSLPrice := s.LongSLPrice
@@ -171,6 +183,7 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 				if req.Short {
 					rel = ">"
 				}
+				AddAccFailOpen(s.Account, FailOpenBadStopLoss)
 				return errs.NewMsg(errs.CodeParamInvalid, "%s stopLoss %f must %s %f for %v order",
 					symbol, curSLPrice, rel, enterPrice, dirType)
 			}
@@ -205,6 +218,7 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 				if req.Short {
 					rel = "<"
 				}
+				AddAccFailOpen(s.Account, FailOpenBadTakeProfit)
 				return errs.NewMsg(errs.CodeParamInvalid, "%s takeProfit %f must %s %f for %v order",
 					symbol, curTPPrice, rel, enterPrice, dirType)
 			}

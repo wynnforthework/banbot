@@ -520,6 +520,7 @@
     "cfg_take_over_strat": "The strategy for taking over user orders during real trading, empty by default",
     "cfg_open_vol_rate": "Maximum allowed open order quantity / average candle volume ratio when not specifying order quantity, default is 1",
     "cfg_min_open_rate": "Minimum open order ratio, allows order if balance / per order amount exceeds this ratio when balance is insufficient, default is 0.5 (50%)",
+    "cfg_low_cost_action": "Action when stake amount < the minimum amount: ignore/keepBig/keepAll",
     "cfg_bt_net_cost": "Order delay in backtest, can be used to simulate slippage, in seconds, default is 15",
     "cfg_relay_sim_unfinish": "When trading a new symbol (backtesting/live trading), whether to trading from the open order relay at the beginning time",
     "cfg_order_bar_max": "Find the maximum number of bars for forward simulation from the open orders at the start time.",

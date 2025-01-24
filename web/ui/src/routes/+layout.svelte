@@ -12,7 +12,7 @@
 
 	let { children } = $props();
 	setTimezone('UTC')
-  import "tailwindcss/tailwind.css";
+    import "tailwindcss/tailwind.css";
 
 	const path = derived(page, ($page) => $page.url.pathname);
 	path.subscribe((new_val) => {

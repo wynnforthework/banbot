@@ -281,6 +281,8 @@ func ResetVars() {
 	core.NoEnterUntil = make(map[string]int64)
 	core.PairCopiedMs = make(map[string][2]int64)
 	core.TfPairHits = make(map[string]map[string]int)
+	core.JobPerfs = make(map[string]*core.JobPerf)
+	core.StratPerfSta = make(map[string]*core.PerfSta)
 	accLiveOdMgrs = make(map[string]*LiveOrderMgr)
 	accOdMgrs = make(map[string]IOrderMgr)
 	accWallets = make(map[string]*BanWallets)
@@ -303,6 +305,8 @@ type VarsBackup struct {
 	NoEnterUntil  map[string]int64
 	PairCopiedMs  map[string][2]int64
 	TfPairHits    map[string]map[string]int
+	JobPerfs      map[string]*core.JobPerf
+	StratPerfSta  map[string]*core.PerfSta
 	AccLiveOdMgrs map[string]*LiveOrderMgr
 	AccOdMgrs     map[string]IOrderMgr
 	AccWallets    map[string]*BanWallets
@@ -327,6 +331,8 @@ func BackupVars() *VarsBackup {
 		NoEnterUntil:  core.NoEnterUntil,
 		PairCopiedMs:  core.PairCopiedMs,
 		TfPairHits:    core.TfPairHits,
+		JobPerfs:      core.JobPerfs,
+		StratPerfSta:  core.StratPerfSta,
 		AccLiveOdMgrs: accLiveOdMgrs,
 		AccOdMgrs:     accOdMgrs,
 		AccWallets:    accWallets,
@@ -354,6 +360,8 @@ func RestoreVars(backup *VarsBackup) {
 	core.NoEnterUntil = backup.NoEnterUntil
 	core.PairCopiedMs = backup.PairCopiedMs
 	core.TfPairHits = backup.TfPairHits
+	core.JobPerfs = backup.JobPerfs
+	core.StratPerfSta = backup.StratPerfSta
 	accLiveOdMgrs = backup.AccLiveOdMgrs
 	accOdMgrs = backup.AccOdMgrs
 	accWallets = backup.AccWallets
