@@ -1240,7 +1240,7 @@ func LegalDoneProfits(off int) float64 {
 }
 
 /*
-CalcUnitReturns 计算单位每日回报率
+CalcUnitReturns 计算单位每日回报金额
 
 odList 订单列表，可无序
 closes 对应tfMSecs的每个单位收盘价，可为空
@@ -1248,7 +1248,7 @@ startMS 区间开始时间，13位时间戳
 endMS 区间结束时间，13位时间戳
 tfMSecs 单位的毫秒间隔
 */
-func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfMSecs int64, initStake float64) ([]float64, int, int) {
+func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfMSecs int64) ([]float64, int, int) {
 	for _, od := range odList {
 		startMS = min(startMS, od.Enter.CreateAt)
 		endMS = max(endMS, od.Exit.CreateAt)
@@ -1272,14 +1272,13 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 		priceStep := (exitPrice - entryPrice) / float64((exitMS-entryAlignMS)/tfMSecs+1)
 		posPrice := entryPrice + priceStep // 模拟每个单位的收盘价
 		enterCost := od.EnterCost()
-		stakeRate := enterCost / initStake
 
 		bCode, qCode, _, _ := core.SplitSymbol(od.Symbol)
 		if offset < len(returns) && od.Enter != nil {
 			if od.Enter.FeeType == qCode {
-				returns[offset] -= od.Enter.Fee / enterCost
+				returns[offset] -= od.Enter.Fee
 			} else if od.Enter.FeeType == bCode {
-				returns[offset] -= od.Enter.Fee / od.Enter.Amount
+				returns[offset] -= od.Enter.Fee * od.Enter.Average
 			}
 		}
 
@@ -1292,7 +1291,7 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 					closePrice = posPrice
 				}
 			}
-			ret := (closePrice/entryPrice - 1) * dirt * od.Leverage * stakeRate
+			ret := (closePrice/entryPrice - 1) * dirt * enterCost
 			if offset < len(returns) {
 				returns[offset] += ret
 			}
@@ -1303,9 +1302,9 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 		}
 		if offset-1 < len(returns) && od.Exit != nil {
 			if od.Exit.FeeType == qCode {
-				returns[offset-1] -= od.Exit.Fee / enterCost
+				returns[offset-1] -= od.Exit.Fee
 			} else if od.Exit.FeeType == bCode {
-				returns[offset-1] -= od.Exit.Fee / od.Exit.Amount
+				returns[offset-1] -= od.Exit.Fee * od.Exit.Average
 			}
 		}
 		dayEnd = offset

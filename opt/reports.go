@@ -6,8 +6,10 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/banbox/banbot/orm"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -143,7 +145,16 @@ func (r *BTResult) printBtResult() {
 }
 
 func (r *BTResult) dumpBtFiles() {
-	r.dumpOrders(ormo.HistODs)
+	csvPath := fmt.Sprintf("%s/orders.csv", r.OutDir)
+	err_ := DumpOrdersCSV(ormo.HistODs, csvPath)
+	if err_ != nil {
+		log.Error("dump orders.csv fail", zap.Error(err_))
+	}
+
+	err := ormo.DumpOrdersGob(filepath.Join(r.OutDir, "orders.gob"))
+	if err != nil {
+		log.Warn("dump orders.gob fail", zap.Error(err))
+	}
 
 	r.dumpConfig()
 
@@ -518,11 +529,15 @@ func measurePerformance(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) 
 	dayTfMsecs := int64(utils2.TFToSecs("1d") * 1000)
 	startMS := utils2.AlignTfMSecs(ods[0].EnterAt, dayTfMsecs)
 	endMS := utils2.AlignTfMSecs(ods[len(ods)-1].EnterAt, dayTfMsecs) + dayTfMsecs
-	returns, _, _ := ormo.CalcUnitReturns(ods, nil, startMS, endMS, dayTfMsecs, initStake)
+	returns, _, _ := ormo.CalcUnitReturns(ods, nil, startMS, endMS, dayTfMsecs)
 	if len(returns) <= 2 {
 		return 0, 0, nil
 	}
-	return calcMeasures(returns, 365)
+	retRates := make([]float64, len(returns))
+	for i, ret := range returns {
+		retRates[i] = ret / initStake
+	}
+	return calcMeasures(retRates, 365)
 }
 
 func calcMeasures(returns []float64, periods int) (float64, float64, *errs.Error) {
@@ -591,7 +606,7 @@ func kMeansDurations(durations []int, num int) string {
 	return b.String()
 }
 
-func (r *BTResult) dumpOrders(orders []*ormo.InOutOrder) {
+func DumpOrdersCSV(orders []*ormo.InOutOrder, outPath string) error {
 	sort.Slice(orders, func(i, j int) bool {
 		var a, b = orders[i], orders[j]
 		if a.EnterAt != b.EnterAt {
@@ -608,10 +623,9 @@ func (r *BTResult) dumpOrders(orders []*ormo.InOutOrder) {
 		}
 		return a.Enter.Amount < b.Enter.Amount
 	})
-	file, err_ := os.Create(fmt.Sprintf("%s/orders.csv", r.OutDir))
+	file, err_ := os.Create(outPath)
 	if err_ != nil {
-		log.Error("create orders.csv fail", zap.Error(err_))
-		return
+		return err_
 	}
 	defer file.Close()
 	writer := csv.NewWriter(file)
@@ -620,8 +634,7 @@ func (r *BTResult) dumpOrders(orders []*ormo.InOutOrder) {
 		"entAmount", "entCost", "entFee", "exitAt", "exitTag", "exitPrice", "exitAmount", "exitGot",
 		"exitFee", "maxPftRate", "maxDrawDown", "profitRate", "profit", "strategy"}
 	if err_ = writer.Write(heads); err_ != nil {
-		log.Error("write orders.csv fail", zap.Error(err_))
-		return
+		return err_
 	}
 	colNum := len(heads)
 	for _, od := range orders {
@@ -650,10 +663,10 @@ func (r *BTResult) dumpOrders(orders []*ormo.InOutOrder) {
 		row[20] = strconv.FormatFloat(od.Profit, 'f', 8, 64)
 		row[21] = od.Strategy
 		if err_ = writer.Write(row); err_ != nil {
-			log.Error("write orders.csv fail", zap.Error(err_))
-			return
+			return err_
 		}
 	}
+	return nil
 }
 
 func calcExOrder(od *ormo.ExOrder) (string, string, string, string) {
@@ -748,7 +761,7 @@ func (r *BTResult) dumpGraph() {
 	title := "Real-time Assets/Balances/Unrealized P&L/Withdrawals/Concurrent Orders"
 	tplPath := fmt.Sprintf("%s/lines.html", config.GetDataDir())
 	tplData, _ := os.ReadFile(tplPath)
-	err := DumpLineGraph(outPath, title, r.Plots.Labels, 5, tplData, []*ChartDs{
+	err := DumpChart(outPath, title, r.Plots.Labels, 5, tplData, []*ChartDs{
 		{Label: "Real", Data: r.Plots.Real},
 		{Label: "Available", Data: r.Plots.Available},
 		{Label: "Profit", Data: r.Plots.Profit, Hidden: true},
@@ -762,12 +775,10 @@ func (r *BTResult) dumpGraph() {
 	}
 	// Draw cumulative profit curves for each entry tag separately
 	// 为入场标签分别绘制累计利润曲线
-	labels, dsList := genEnterTagCurves(ormo.HistODs)
 	outPath = fmt.Sprintf("%s/enters.html", r.OutDir)
-	title = "Strategy Enter Tag Profits"
-	err = DumpLineGraph(outPath, title, labels, 5, tplData, dsList)
+	err = DumpEnterTagCumProfits(outPath, ormo.HistODs, 600)
 	if err != nil {
-		log.Error("save enters.html fail", zap.Error(err))
+		log.Error("DumpEnterTagCumProfits fail", zap.Error(err))
 	}
 }
 
@@ -886,14 +897,40 @@ func parseBtResult(path string) (*BTResult, *errs.Error) {
 	return &res, nil
 }
 
-func genEnterTagCurves(odList []*ormo.InOutOrder) ([]string, []*ChartDs) {
+/*
+DumpEnterTagCumProfits
+
+export line chart of cumulative profit based on entry tag statistics
+
+按入场信号统计累计利润导出折线图
+*/
+func DumpEnterTagCumProfits(path string, odList []*ormo.InOutOrder, xNum int) *errs.Error {
+	labels, dsList, err := CalcGroupCumProfits(odList, func(o *ormo.InOutOrder) string {
+		return fmt.Sprintf("%v:%v", o.Strategy, o.EnterTag)
+	}, xNum)
+	if err != nil {
+		return err
+	}
+	title := "Strategy Enter Tag Cum Profits"
+	err = DumpChart(path, title, labels, 3, nil, dsList)
+	return err
+}
+
+/*
+CalcGroupEndProfits
+
+calculate cumulative profit curve data for orders (directly using profit accumulation when closing positions)
+
+生成订单累计利润曲线数据（直接使用平仓时利润累加）
+*/
+func CalcGroupEndProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrder) string, xNum int) ([]string, []*ChartDs) {
 	if len(odList) == 0 {
 		return nil, nil
 	}
 	startMs := odList[0].EnterAt
 	tagMap := make(map[string][]*TimeVal)
 	for _, od := range odList {
-		key := fmt.Sprintf("%v:%v", od.Strategy, od.EnterTag)
+		key := genKey(od)
 		items, _ := tagMap[key]
 		curVal := float64(0)
 		if len(items) > 0 {
@@ -902,10 +939,10 @@ func genEnterTagCurves(odList []*ormo.InOutOrder) ([]string, []*ChartDs) {
 		tagMap[key] = append(items, &TimeVal{Time: od.ExitAt, Value: curVal + od.Profit})
 	}
 	endMs := odList[len(odList)-1].ExitAt
-	gapMs := (endMs - startMs) / 600
+	gapMs := (endMs - startMs) / int64(xNum)
 	var res []*ChartDs
 	for tag, items := range tagMap {
-		arr := make([]float64, 0, 605)
+		arr := make([]float64, 0, xNum+5)
 		arr = append(arr, 0)
 		curMs := startMs
 		i := 0
@@ -937,6 +974,89 @@ func genEnterTagCurves(odList []*ormo.InOutOrder) ([]string, []*ChartDs) {
 		labels = append(labels, btime.ToDateStr(curMs, ""))
 	}
 	return labels, res
+}
+
+/*
+CalcGroupCumProfits
+
+calculate cumulative profit curve data for orders (obtain K-line and calculate real-time cumulative profit for open positions)
+
+生成订单累计利润曲线数据（获取K线，计算实时持仓累计利润）
+*/
+func CalcGroupCumProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrder) string, xNum int) ([]string, []*ChartDs, *errs.Error) {
+	groups := make(map[string]map[string][]*ormo.InOutOrder)
+	minTimeMS, maxTimeMS := int64(math.MaxInt64), int64(0)
+	for _, od := range odList {
+		key := genKey(od)
+		odMap, ok1 := groups[key]
+		if !ok1 {
+			odMap = make(map[string][]*ormo.InOutOrder)
+			groups[key] = odMap
+		}
+		old, _ := odMap[od.Symbol]
+		odMap[od.Symbol] = append(old, od)
+		minTimeMS = min(minTimeMS, od.Enter.CreateAt)
+		maxTimeMS = max(maxTimeMS, od.Exit.CreateAt)
+	}
+	unitSecs := int((maxTimeMS-minTimeMS)/1000) / xNum
+	tf := utils.RoundSecsTF(unitSecs)
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+	startMS := utils2.AlignTfMSecs(minTimeMS, tfMSecs)
+	endMS := utils2.AlignTfMSecs(maxTimeMS, tfMSecs) + tfMSecs
+	exsMap := orm.GetExSymbolMap(core.ExgName, core.Market)
+	var result []*ChartDs
+	maxXNum := 0
+	for key, pairMap := range groups {
+		var glbRets []float64
+		for pair, orders := range pairMap {
+			exs := exsMap[pair]
+			_, bars, err := orm.GetOHLCV(exs, tf, startMS, endMS, 0, false)
+			if err != nil {
+				return nil, nil, err
+			}
+			var closes []float64
+			if len(bars) > 0 {
+				bars, _ = utils.FillOHLCVLacks(bars, startMS, endMS, tfMSecs)
+				closes = make([]float64, len(bars))
+				for i, b := range bars {
+					closes[i] = b.Close
+				}
+			}
+			// 计算每日回报
+			returns, _, _ := ormo.CalcUnitReturns(orders, closes, startMS, endMS, tfMSecs)
+			if glbRets == nil {
+				glbRets = returns
+			} else {
+				for i, v := range returns {
+					glbRets[i] += v
+				}
+			}
+		}
+		// 计算累计回报
+		var cumRets = make([]float64, len(glbRets))
+		sumRet := float64(0)
+		for i, v := range glbRets {
+			sumRet += v
+			cumRets[i] = sumRet
+		}
+		maxXNum = max(maxXNum, len(cumRets))
+		result = append(result, &ChartDs{
+			Label: key,
+			Data:  cumRets,
+		})
+	}
+	var labels = make([]string, 0, maxXNum)
+	curMS := startMS
+	lay := core.DefaultDateFmt
+	if int(tfMSecs/1000) >= utils2.TFToSecs("1d") {
+		lay = "2006-01-02"
+	}
+	for i := 0; i < maxXNum; i++ {
+		dateStr := btime.ToDateStr(curMS, lay)
+		labels = append(labels, dateStr)
+		curMS += tfMSecs
+	}
+	return labels, result, nil
 }
 
 type TimeVal struct {

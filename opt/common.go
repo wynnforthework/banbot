@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -389,10 +390,16 @@ func getTestPickers(text string) ([]string, *errs.Error) {
 }
 
 //go:embed lines.html
-var graphData []byte
+var LineChartData []byte
 
-func DumpLineGraph(path, title string, label []string, prec float64, tplData []byte, items []*ChartDs) *errs.Error {
-	g := LineGraph{
+//go:embed barStat.html
+var BarStatChartData []byte
+
+/*
+DumpChart dump a chart html with datasets. draw line chart if tplData is nil
+*/
+func DumpChart(path, title string, label []string, prec float64, tplData []byte, items []*ChartDs) *errs.Error {
+	g := Chart{
 		TplData:   tplData,
 		Title:     title,
 		Labels:    label,
@@ -402,7 +409,7 @@ func DumpLineGraph(path, title string, label []string, prec float64, tplData []b
 	return g.DumpFile(path)
 }
 
-func (g *LineGraph) Dump() ([]byte, *errs.Error) {
+func (g *Chart) Dump() ([]byte, *errs.Error) {
 	var err_ error
 	for _, it := range g.Datasets {
 		col := make([]float64, 0, len(it.Data))
@@ -422,7 +429,7 @@ func (g *LineGraph) Dump() ([]byte, *errs.Error) {
 		it.Data = col
 	}
 	if len(g.TplData) == 0 {
-		g.TplData = graphData
+		g.TplData = LineChartData
 	}
 	content := string(g.TplData)
 	data, err_ := utils2.Marshal(g)
@@ -433,7 +440,7 @@ func (g *LineGraph) Dump() ([]byte, *errs.Error) {
 	return []byte(content), nil
 }
 
-func (g *LineGraph) DumpFile(path string) *errs.Error {
+func (g *Chart) DumpFile(path string) *errs.Error {
 	data, err := g.Dump()
 	if err != nil {
 		return err
@@ -445,9 +452,71 @@ func (g *LineGraph) DumpFile(path string) *errs.Error {
 	return nil
 }
 
-type LineGraph struct {
-	TplData   []byte
-	Precision float64
+// DumpBarStat generate bar chart for data Distribution Statistics 生成数据分布的条形图
+func DumpBarStat(path, title string, maxNum int, data []float64) *errs.Error {
+	if len(data) == 0 {
+		return nil
+	}
+
+	minVal, maxVal := math.MaxFloat64, -math.MaxFloat64
+	for _, v := range data {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			continue
+		}
+		if v < minVal {
+			minVal = v
+		}
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+
+	interval := (maxVal - minVal) / float64(maxNum)
+	if interval == 0 {
+		interval = 1
+	}
+
+	counts := make([]float64, maxNum)
+	labels := make([]string, maxNum)
+
+	// count for every range
+	for _, v := range data {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			continue
+		}
+		idx := int((v - minVal) / interval)
+		if idx >= maxNum {
+			idx = maxNum - 1
+		}
+		counts[idx]++
+	}
+
+	// 生成标签
+	for i := 0; i < maxNum; i++ {
+		start := minVal + float64(i)*interval
+		end := start + interval
+		labels[i] = strconv.FormatFloat((start+end)/2, 'g', 3, 64)
+	}
+
+	barStat := Chart{
+		TplData: BarStatChartData,
+		Title:   title,
+		Labels:  labels,
+		Datasets: []*ChartDs{
+			{
+				Label:           "Count",
+				Data:            counts,
+				BackgroundColor: "rgba(54, 162, 235)",
+			},
+		},
+	}
+
+	return barStat.DumpFile(path)
+}
+
+type Chart struct {
+	TplData   []byte     `json:"-"`
+	Precision float64    `json:"-"`
 	Title     string     `json:"title"`
 	Labels    []string   `json:"labels"`
 	Datasets  []*ChartDs `json:"datasets"`

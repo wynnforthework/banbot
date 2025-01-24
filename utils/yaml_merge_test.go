@@ -11,7 +11,7 @@ func TestMergeYamlStr(t *testing.T) {
 		"E:\\trade\\go\\bandata\\config.local.yml",
 		"E:\\temp\\bbb\\config.yml",
 	}
-	data, err := MergeYamlStr(paths, nil)
+	data, err := MergeYamlStr(paths)
 	if err != nil {
 		panic(err)
 	}

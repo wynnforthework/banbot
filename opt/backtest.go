@@ -17,7 +17,6 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"os"
-	"path/filepath"
 	"slices"
 	"time"
 )
@@ -232,10 +231,6 @@ func (b *BackTest) Run() {
 		log.Error("backtest clean orders fail", zap.Error(err))
 		return
 	}
-	err = ormo.DumpOrdersGob(filepath.Join(b.OutDir, "orders.gob"))
-	if err != nil {
-		log.Warn("dump orders fail", zap.Error(err))
-	}
 	b.logPlot(biz.GetWallets(config.DefAcc), btime.TimeMS(), -1, -1)
 	if !b.isOpt {
 		log.Info(fmt.Sprintf("Complete! cost: %.1fs, avg: %.1f bar/s", btCost, float64(b.BarNum)/btCost))
@@ -246,14 +241,16 @@ func (b *BackTest) Run() {
 }
 
 func (b *BackTest) initTaskOut() *errs.Error {
-	config.Args.Logfile = b.OutDir + "/out.log"
-	if utils.Exists(config.Args.Logfile) {
-		err_ := os.Remove(config.Args.Logfile)
-		if err_ != nil {
-			log.Warn("delete old log fail", zap.Error(err_))
+	if b.OutDir != "" {
+		config.Args.Logfile = b.OutDir + "/out.log"
+		if utils.Exists(config.Args.Logfile) {
+			err_ := os.Remove(config.Args.Logfile)
+			if err_ != nil {
+				log.Warn("delete old log fail", zap.Error(err_))
+			}
 		}
+		config.Args.SetLog(!b.isOpt)
 	}
-	config.Args.SetLog(!b.isOpt)
 	_, ok := config.Accounts[config.DefAcc]
 	if !ok {
 		panic("default Account invalid!")

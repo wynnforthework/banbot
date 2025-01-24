@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 name to_user1 [to_user2] ..."
+    echo "Usage: $0 name to_user1 [to_user2] ...(name: filename without suffix of yaml file)"
     exit 1
 fi
 

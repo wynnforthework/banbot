@@ -241,7 +241,6 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	TimeRange = c.TimeRange
 	RunTimeframes = c.RunTimeframes
 	WatchJobs = c.WatchJobs
-	staticPairs, fixPairs := initPolicies(c)
 	if c.StratPerf == nil {
 		c.StratPerf = &StratPerfConfig{
 			MinOdNum:  5,
@@ -254,21 +253,17 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 		c.StratPerf.Validate()
 	}
 	StratPerf = c.StratPerf
-	if len(c.Pairs) > 0 {
-		staticPairs = true
-		fixPairs = append(fixPairs, c.Pairs...)
-	}
-	if staticPairs && len(fixPairs) > 0 {
-		c.Pairs, _ = utils2.UniqueItems(fixPairs)
-	}
-	Pairs, _ = utils2.UniqueItems(c.Pairs)
+	ApplyPairPolicy(c.Pairs, c.RunPolicy)
 	if c.PairMgr == nil {
 		c.PairMgr = &PairMgrConfig{}
 	}
 	PairMgr = c.PairMgr
 	PairFilters = c.PairFilters
 	Exchange = c.Exchange
-	initExgAccs()
+	err := initExgAccs()
+	if err != nil {
+		return err
+	}
 	Database = c.Database
 	SpiderAddr = strings.ReplaceAll(c.SpiderAddr, "host.docker.internal", "127.0.0.1")
 	if SpiderAddr == "" {
@@ -280,13 +275,25 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	return nil
 }
 
-func initPolicies(c *Config) (bool, []string) {
-	if c.RunPolicy == nil {
-		c.RunPolicy = make([]*RunPolicyConfig, 0)
+func ApplyPairPolicy(pairs []string, policies []*RunPolicyConfig) {
+	staticPairs, fixPairs := initPolicies(policies)
+	if len(pairs) > 0 {
+		staticPairs = true
+		fixPairs = append(fixPairs, pairs...)
+	}
+	if staticPairs && len(fixPairs) > 0 {
+		pairs, _ = utils2.UniqueItems(fixPairs)
+	}
+	Pairs, _ = utils2.UniqueItems(pairs)
+}
+
+func initPolicies(policyList []*RunPolicyConfig) (bool, []string) {
+	if policyList == nil {
+		policyList = make([]*RunPolicyConfig, 0)
 	}
 	var polPairs []string
 	staticPairs := true
-	for _, pol := range c.RunPolicy {
+	for _, pol := range policyList {
 		if pol.Params == nil {
 			pol.Params = make(map[string]float64)
 		}
@@ -300,7 +307,7 @@ func initPolicies(c *Config) (bool, []string) {
 			staticPairs = false
 		}
 	}
-	RunPolicy = c.RunPolicy
+	RunPolicy = policyList
 	return staticPairs, polPairs
 }
 
@@ -516,46 +523,48 @@ func (c *Config) ShowPairs() string {
 
 func (c *Config) Clone() *Config {
 	return &Config{
-		Name:            c.Name,
-		Env:             c.Env,
-		Leverage:        c.Leverage,
-		LimitVolSecs:    c.LimitVolSecs,
-		PutLimitSecs:    c.PutLimitSecs,
-		MarketType:      c.MarketType,
-		ContractType:    c.ContractType,
-		OdBookTtl:       c.OdBookTtl,
-		StopEnterBars:   c.StopEnterBars,
-		ConcurNum:       c.ConcurNum,
-		OrderType:       c.OrderType,
-		PreFire:         c.PreFire,
-		MarginAddRate:   c.MarginAddRate,
-		ChargeOnBomb:    c.ChargeOnBomb,
-		TakeOverStrat:   c.TakeOverStrat,
-		StakeAmount:     c.StakeAmount,
-		StakePct:        c.StakePct,
-		MaxStakeAmt:     c.MaxStakeAmt,
-		OpenVolRate:     c.OpenVolRate,
-		MinOpenRate:     c.MinOpenRate,
-		BTNetCost:       c.BTNetCost,
-		MaxOpenOrders:   c.MaxOpenOrders,
-		MaxSimulOpen:    c.MaxSimulOpen,
-		WalletAmounts:   c.WalletAmounts,
-		DrawBalanceOver: c.DrawBalanceOver,
-		StakeCurrency:   c.StakeCurrency,
-		FatalStop:       c.FatalStop,
-		FatalStopHours:  c.FatalStopHours,
-		TimeRangeRaw:    c.TimeRangeRaw,
-		TimeRange:       c.TimeRange,
-		RunTimeframes:   c.RunTimeframes,
-		KlineSource:     c.KlineSource,
-		WatchJobs:       c.WatchJobs,
-		RunPolicy:       c.RunPolicy,
-		StratPerf:       c.StratPerf,
-		Pairs:           c.Pairs,
-		PairMgr:         c.PairMgr,
-		PairFilters:     c.PairFilters,
-		SpiderAddr:      c.SpiderAddr,
-		Webhook:         c.Webhook,
+		Name:             c.Name,
+		Env:              c.Env,
+		Leverage:         c.Leverage,
+		LimitVolSecs:     c.LimitVolSecs,
+		PutLimitSecs:     c.PutLimitSecs,
+		MarketType:       c.MarketType,
+		ContractType:     c.ContractType,
+		OdBookTtl:        c.OdBookTtl,
+		StopEnterBars:    c.StopEnterBars,
+		ConcurNum:        c.ConcurNum,
+		OrderType:        c.OrderType,
+		PreFire:          c.PreFire,
+		MarginAddRate:    c.MarginAddRate,
+		ChargeOnBomb:     c.ChargeOnBomb,
+		TakeOverStrat:    c.TakeOverStrat,
+		StakeAmount:      c.StakeAmount,
+		StakePct:         c.StakePct,
+		MaxStakeAmt:      c.MaxStakeAmt,
+		OpenVolRate:      c.OpenVolRate,
+		MinOpenRate:      c.MinOpenRate,
+		BTNetCost:        c.BTNetCost,
+		RelaySimUnFinish: c.RelaySimUnFinish,
+		OrderBarMax:      c.OrderBarMax,
+		MaxOpenOrders:    c.MaxOpenOrders,
+		MaxSimulOpen:     c.MaxSimulOpen,
+		WalletAmounts:    c.WalletAmounts,
+		DrawBalanceOver:  c.DrawBalanceOver,
+		StakeCurrency:    c.StakeCurrency,
+		FatalStop:        c.FatalStop,
+		FatalStopHours:   c.FatalStopHours,
+		TimeRangeRaw:     c.TimeRangeRaw,
+		TimeRange:        c.TimeRange,
+		RunTimeframes:    c.RunTimeframes,
+		KlineSource:      c.KlineSource,
+		WatchJobs:        c.WatchJobs,
+		RunPolicy:        c.RunPolicy,
+		StratPerf:        c.StratPerf,
+		Pairs:            c.Pairs,
+		PairMgr:          c.PairMgr,
+		PairFilters:      c.PairFilters,
+		SpiderAddr:       c.SpiderAddr,
+		Webhook:          c.Webhook,
 	}
 }
 

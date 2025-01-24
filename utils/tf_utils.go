@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"fmt"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/utils"
+	"math"
 )
 
 func init() {
@@ -98,4 +100,51 @@ func BuildOHLCV(arr []*banexg.Kline, toTFMSecs int64, preFire float64, resOHLCV 
 		lastFinished = finishMS > resOHLCV[len(resOHLCV)-1].Time
 	}
 	return resOHLCV, lastFinished
+}
+
+func RoundSecsTF(secs int) string {
+	if secs < 60 {
+		if secs >= 45 {
+			return "1m"
+		} else if secs > 23 {
+			return "30s"
+		} else if secs > 17 {
+			return "20s"
+		} else if secs > 12 {
+			return "15s"
+		} else if secs > 7 {
+			return "10s"
+		} else if secs > 3 {
+			return "5s"
+		}
+		return fmt.Sprintf("%ds", secs)
+	}
+	var tf = ""
+	unitHours := float64(secs) / 3600
+	unitHoursRd := int(math.Round(unitHours))
+	if unitHoursRd >= 24*22 {
+		mons := int(math.Round(float64(unitHoursRd) / 24 / 30))
+		tf = fmt.Sprintf("%dM", mons)
+	} else if unitHoursRd >= 24*5.5 {
+		weeks := int(math.Round(float64(unitHoursRd) / 24 / 7))
+		tf = fmt.Sprintf("%dw", weeks)
+	} else if unitHoursRd >= 19 {
+		days := int(math.Round(float64(unitHoursRd) / 24))
+		tf = fmt.Sprintf("%dd", days)
+	} else if unitHoursRd >= 4 {
+		tf = fmt.Sprintf("%dh", int(math.Round(float64(unitHoursRd)/4))*4)
+	} else if unitHoursRd >= 1 && unitHours >= 0.7 {
+		tf = fmt.Sprintf("%dh", unitHoursRd)
+	} else if unitHours >= 0.4 {
+		tf = "30m"
+	} else if unitHours >= 0.19 {
+		tf = "15m"
+	} else if unitHours >= 0.066 {
+		minutes := max(1, int(math.Round(unitHours*12))) * 5
+		tf = fmt.Sprintf("%dm", minutes)
+	} else {
+		minutes := max(1, int(math.Round(unitHours*60)))
+		tf = fmt.Sprintf("%dm", minutes)
+	}
+	return tf
 }

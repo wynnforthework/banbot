@@ -198,6 +198,13 @@ func init() {
 		Help:    "collect result of optimize, and print in order",
 	})
 	AddCmdJob(&CmdJob{
+		Name:    "sim_bt",
+		Parent:  "tool",
+		Run:     opt.RunSimBT,
+		Options: []string{"in"},
+		Help:    "run backtest simulation from report",
+	})
+	AddCmdJob(&CmdJob{
 		Name:   "test_pickers",
 		Parent: "tool",
 		Run:    opt.RunRollBTPicker,
