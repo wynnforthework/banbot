@@ -62,6 +62,11 @@ type IOMsgRaw struct {
 	Data   json.RawMessage `json:"data"`
 }
 
+var (
+	tipRetryTimes     = make(map[string]int64)
+	tipRetryTimesLock sync.Mutex
+)
+
 func (c *BanConn) GetRemote() string {
 	return c.Remote
 }
@@ -612,7 +617,14 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 		for {
 			cn, err_ := net.Dial("tcp", addr)
 			if err_ != nil {
-				log.Error("connect fail, sleep 10s and retry..", zap.String("addr", addr))
+				curMS := btime.TimeMS()
+				tipRetryTimesLock.Lock()
+				nextMS, _ := tipRetryTimes[addr]
+				if curMS > nextMS {
+					tipRetryTimes[addr] = curMS + 10000
+					log.Error("connect fail, sleep 10s and retry..", zap.String("addr", addr))
+				}
+				tipRetryTimesLock.Unlock()
 				core.Sleep(time.Second * 10)
 				continue
 			}

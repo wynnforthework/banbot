@@ -5,7 +5,7 @@ ENV BanDataDir=/ban/data \
 
 WORKDIR /ban/strats
 
-RUN git pull origin main && \
+RUN git reset --hard HEAD && git pull origin main && \
     go get -u github.com/banbox/banbot && \
     go mod tidy && \
     go build -o ../bot

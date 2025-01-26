@@ -524,6 +524,7 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 		}
 	}
 	if i.ID == 0 {
+		i.NanInfTo(0)
 		err = i.IOrder.saveAdd(sess)
 		if err != nil {
 			return err
