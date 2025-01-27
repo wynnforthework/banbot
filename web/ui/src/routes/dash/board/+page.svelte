@@ -94,101 +94,119 @@
   });
 </script>
 
-<div class="p-4 space-y-6">
+<div class="space-y-6 p-4">
   <!-- Stats Row -->
-  <div class="stats shadow w-full">
-    <div class="stat">
-      <div class="stat-title">{m.watch_pairs()}</div>
-      <div class="stat-value">{data.pairs.length}</div>
+  <div class="stats shadow-md bg-base-100 rounded-lg w-full border border-base-200">
+    <div class="stat px-4">
+      <div class="stat-title text-sm text-base-content/70">{m.watch_pairs()}</div>
+      <div class="stat-value text-2xl mt-1.5">{data.pairs.length}</div>
     </div>
     
-    <div class="stat">
-      <div class="stat-title">{m.open_close_num()}</div>
-      <div class="stat-value">{data.orderNum - data.doneOrderNum} / {data.doneOrderNum}</div>
+    <div class="stat px-4">
+      <div class="stat-title text-sm text-base-content/70">{m.open_close_num()}</div>
+      <div class="stat-value text-2xl mt-1.5">{data.orderNum - data.doneOrderNum} / {data.doneOrderNum}</div>
     </div>
     
-    <div class="stat">
-      <div class="stat-title">{m.win_loss_rate()}</div>
-      <div class="stat-value">
-        {data.winNum} / {data.lossNum} / {(data.winRate * 100).toFixed(0)}%
+    <div class="stat px-4">
+      <div class="stat-title text-sm text-base-content/70">{m.win_loss_rate()}</div>
+      <div class="stat-value text-2xl mt-1.5">
+        <span class="text-success">{data.winNum}</span> / <span class="text-error">{data.lossNum}</span> / <span class="text-primary">{(data.winRate * 100).toFixed(0)}%</span>
       </div>
     </div>
     
-    <div class="stat">
-      <div class="stat-title">{m.profit_factor()}</div>
-      <div class="stat-value">{data.profitFactor.toFixed(2)}</div>
+    <div class="stat px-4">
+      <div class="stat-title text-sm text-base-content/70">{m.profit_factor()}</div>
+      <div class="stat-value text-2xl mt-1.5">{data.profitFactor.toFixed(2)}</div>
     </div>
   </div>
 
   <!-- System Info -->
-  <div class="card bg-base-100 shadow-xl">
-    <div class="card-body">
-      <h2 class="card-title">{m.system_info()}</h2>
-      <div class="grid grid-cols-2 gap-4">
-        <div>CPU: {data.cpuPct.toFixed(1)}%</div>
-        <div>RAM: {data.ramPct.toFixed(1)}%</div>
-        <div>{m.market()}: {data.exchange}.{data.market}</div>
-        <div>{m.timeframes()}: {data.runTfs.join(', ')}</div>
-        <div>{m.start_time()}: {fmtDateStrTZ(data.botStartMs)}</div>
-        <div>{m.last_active()}: {fmtDateStrTZ(data.lastProcess)}</div>
+  <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
+    <div class="card-body p-4">
+      <h2 class="card-title text-lg font-medium mb-3">{m.system_info()}</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">CPU:</span>
+          <span class="text-sm">{data.cpuPct.toFixed(1)}%</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">RAM:</span>
+          <span class="text-sm">{data.ramPct.toFixed(1)}%</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">{m.market()}:</span>
+          <span class="text-sm font-mono">{data.exchange}.{data.market}</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">{m.timeframes()}:</span>
+          <span class="text-sm font-mono">{data.runTfs.join(', ')}</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">{m.start_time()}:</span>
+          <span class="text-sm">{fmtDateStrTZ(data.botStartMs)}</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">{m.last_active()}:</span>
+          <span class="text-sm">{fmtDateStrTZ(data.lastProcess)}</span>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Trading Stats -->
-  <div class="card bg-base-100 shadow-xl">
-    <div class="card-body">
-      <h2 class="card-title">{m.trading_stats()}</h2>
-      <div class="my-4">
-        <span class="label-text">{m.entry_status()} : </span>
-        <span class="label-text mr-4">{entryStatus}</span>
-        <div class="join">
-          <span class="join-item px-4 flex items-center bg-base-200">
+  <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
+    <div class="card-body p-4">
+      <h2 class="card-title text-lg font-medium mb-3">{m.trading_stats()}</h2>
+      <div class="mb-4 flex flex-wrap items-center gap-3">
+        <span class="text-sm text-base-content/70">{m.entry_status()}:</span>
+        <span class="text-sm mr-4">{entryStatus}</span>
+        <div class="join shadow-sm">
+          <span class="join-item px-3 py-2 flex items-center bg-base-200/50 text-sm text-base-content/70">
             {m.delay_hours()}
           </span>
-          <input type="number" class="input input-bordered join-item w-24" 
+          <input type="number" class="input input-sm input-bordered join-item w-20 focus:outline-none text-sm" 
                  bind:value={delayHours}
                  min="0" max="9999" step="0.1"/>
-          <button class="btn join-item" onclick={saveAllowEntry}>
+          <button class="btn btn-sm join-item hover:bg-primary hover:text-primary-content transition-colors" onclick={saveAllowEntry}>
             {m.save()}
           </button>
         </div>
       </div>
       <div class="overflow-x-auto">
-        <table class="table">
+        <table class="table table-sm">
           <tbody>
             <!-- All Orders -->
             <tr>
-              <th colspan="4" class="text-center bg-base-200">{m.all_orders()}</th>
+              <th colspan="4" class="text-center bg-base-200/50 font-medium text-sm">{m.all_orders()}</th>
             </tr>
             <tr>
-              <td>{m.avg_profit_rate()}</td>
-              <td>{data.allProfitPctMean.toFixed(1)}%</td>
-              <td>{m.avg_profit()}</td>
-              <td>{data.allProfitMean.toFixed(5)}</td>
+              <td class="text-sm text-base-content/70">{m.avg_profit_rate()}</td>
+              <td class="text-sm font-mono">{data.allProfitPctMean.toFixed(1)}%</td>
+              <td class="text-sm text-base-content/70">{m.avg_profit()}</td>
+              <td class="text-sm font-mono">{data.allProfitMean.toFixed(5)}</td>
             </tr>
             <tr>
-              <td>{m.total_profit_rate()}</td>
-              <td>{data.allProfitPctSum.toFixed(1)}%</td>
-              <td>{m.total_profit()}</td>
-              <td>{data.allProfitSum.toFixed(5)}</td>
+              <td class="text-sm text-base-content/70">{m.total_profit_rate()}</td>
+              <td class="text-sm font-mono">{data.allProfitPctSum.toFixed(1)}%</td>
+              <td class="text-sm text-base-content/70">{m.total_profit()}</td>
+              <td class="text-sm font-mono">{data.allProfitSum.toFixed(5)}</td>
             </tr>
             
             <!-- Closed Orders -->
             <tr>
-              <th colspan="4" class="text-center bg-base-200">{m.closed_orders()}</th>
+              <th colspan="4" class="text-center bg-base-200/50 font-medium text-sm">{m.closed_orders()}</th>
             </tr>
             <tr>
-              <td>{m.avg_profit_rate()}</td>
-              <td>{data.doneProfitPctMean.toFixed(1)}%</td>
-              <td>{m.avg_profit()}</td>
-              <td>{data.doneProfitMean.toFixed(5)}</td>
+              <td class="text-sm text-base-content/70">{m.avg_profit_rate()}</td>
+              <td class="text-sm font-mono">{data.doneProfitPctMean.toFixed(1)}%</td>
+              <td class="text-sm text-base-content/70">{m.avg_profit()}</td>
+              <td class="text-sm font-mono">{data.doneProfitMean.toFixed(5)}</td>
             </tr>
             <tr>
-              <td>{m.total_profit_rate()}</td>
-              <td>{data.doneProfitPctSum.toFixed(1)}%</td>
-              <td>{m.total_profit()}</td>
-              <td>{data.doneProfitSum.toFixed(5)}</td>
+              <td class="text-sm text-base-content/70">{m.total_profit_rate()}</td>
+              <td class="text-sm font-mono">{data.doneProfitPctSum.toFixed(1)}%</td>
+              <td class="text-sm text-base-content/70">{m.total_profit()}</td>
+              <td class="text-sm font-mono">{data.doneProfitSum.toFixed(5)}</td>
             </tr>
           </tbody>
         </table>
@@ -197,19 +215,19 @@
   </div>
 
   <!-- Balance Info -->
-  <div class="card bg-base-100 shadow-xl">
-    <div class="card-body">
-      <h2 class="card-title">{m.wallet_balance()}</h2>
+  <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
+    <div class="card-body p-4">
+      <h2 class="card-title text-lg font-medium mb-3">{m.wallet_balance()}</h2>
       {#if data.balanceItems.length > 1}
-        <div class="text-lg">{m.total()}: {data.balanceTotal.toFixed(4)}</div>
+        <div class="text-base font-medium mb-3 text-primary">{m.total()}: {data.balanceTotal.toFixed(4)}</div>
       {/if}
-      <div class="flex flex-wrap gap-4">
+      <div class="flex flex-wrap gap-2">
         {#each data.balanceItems as item}
-          <div class="badge badge-lg gap-2">
-            <span class="font-bold">{(item as any).symbol}</span>
-            <span class="text-primary">{(item as any).free.toFixed(6)}</span>
+          <div class="badge badge-md gap-1.5 py-2.5 px-3 bg-base-200/70 text-base-content border-none">
+            <span class="font-medium text-sm">{(item as any).symbol}</span>
+            <span class="text-primary text-sm font-mono">{(item as any).free.toFixed(6)}</span>
             {#if (item as any).used > 0}
-              <span class="text-info">/ {(item as any).used.toFixed(6)}</span>
+              <span class="text-info text-sm font-mono">/ {(item as any).used.toFixed(6)}</span>
             {/if}
           </div>
         {/each}

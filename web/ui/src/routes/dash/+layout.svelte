@@ -49,24 +49,22 @@
   <AddBot newBot={loginOk}/>
 </Modal>
 
-<div class="flex h-screen" onclick={() => $ctx.clickPage += 1}>
-  <aside class="bg-neutral text-neutral-content shadow-xl {collapsed ? 'w-16' : 'w-64'} transition-all duration-300">
-    <div class="p-4 flex justify-center items-center">
-      <a href="/dash" class="text-xl font-bold">{collapsed ? 'Ban' : 'Banbot'}</a>
+<div class="flex flex-1" onclick={() => $ctx.clickPage += 1}>
+  <aside class="bg-base-200 text-base-content shadow-lg {collapsed ? 'w-16' : 'w-64'} transition-all duration-300 border-r border-base-300">
+    <div class="py-3 px-4 flex justify-center items-center border-b border-base-300">
+      <a href="/dash" class="text-lg font-semibold hover:text-primary transition-colors">{collapsed ? 'Ban' : 'Banbot'}</a>
     </div>
     
-    <ul class="menu menu-vertical">
+    <ul class="menu menu-vertical py-2 px-1.5 gap-1">
       {#each menuItems as {path, icon, text}}
         <li>
           <a 
             href={path} 
-            class:bg-primary={$page.url.pathname === path}
-            class:text-primary-content={$page.url.pathname === path}
-            class:font-bold={$page.url.pathname === path}
+            class="rounded-md transition-all duration-200 {$page.url.pathname.includes(path) ? 'bg-primary text-primary-content font-medium shadow-sm hover:bg-primary' : 'hover:bg-primary/20 hover:text-primary'}"
           >
-            <Icon name={icon} />
+            <Icon name={icon} class="w-4 h-4" />
             {#if !collapsed}
-              <span>{text}</span>
+              <span class="ml-1.5 text-sm">{text}</span>
             {/if}
           </a>
         </li>
@@ -74,24 +72,24 @@
     </ul>
   </aside> 
 	
-	<div class="flex-1 flex flex-col bg-base-200">
-    <header class="navbar bg-base-100 shadow-md h-12">
+	<div class="flex-1 flex flex-col bg-base-100">
+    <header class="navbar bg-base-100 shadow-sm h-12 px-3 border-b border-base-200">
       <div class="navbar-start">
-        <button class="btn btn-ghost btn-circle" onclick={() => collapsed = !collapsed}>
-          <Icon name={collapsed ? 'double-right' : 'double-left'} />
+        <button class="btn btn-ghost btn-sm btn-circle hover:bg-base-200 transition-colors" onclick={() => collapsed = !collapsed}>
+          <Icon name={collapsed ? 'double-right' : 'double-left'} class="w-4 h-4" />
         </button>
       </div>
       
       <div class="navbar-center">
         <ul class="menu menu-horizontal px-1">
           <li>
-            <details>
-              <summary>{$acc.name+'/'+$acc.account}</summary>
-              <ul class="p-2 bg-base-100 rounded-box shadow-xl z-10">
+            <details class="dropdown">
+              <summary class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200">{$acc.name+'/'+$acc.account}</summary>
+              <ul class="p-1.5 bg-base-100 rounded-md shadow-lg z-10 mt-1 w-48 border border-base-200">
                 {#each $ctx.accounts as acc}
                   <li>
                     <a 
-                      class={`${acc.url}_${acc.account}` === $save.current ? 'active' : ''} 
+                      class={`rounded-md py-1.5 px-3 text-sm hover:bg-base-200 transition-colors ${`${acc.url}_${acc.account}` === $save.current ? 'bg-primary/90 text-primary-content' : ''}`}
                       onclick={() => clickAccount(acc)}
                     >
                       {acc.name}/{acc.account}
@@ -104,18 +102,14 @@
         </ul>
       </div>
       
-      <div class="navbar-end">
-        <ul class="menu menu-horizontal px-1">
-          <li><a href="/dash">{m.bot_list()}</a></li>
-          <li><a onclick={() => showAddBot = true}>{m.add_bot()}</a></li>
-        </ul>
+      <div class="navbar-end gap-1.5">
+        <a href="/dash" class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200">{m.bot_list()}</a>
+        <button class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200" onclick={() => showAddBot = true}>{m.add_bot()}</button>
       </div>
     </header>
 		
-		<main class="flex-1 p-4 flex flex-col">
-			<!-- <div class="bg-base-100 rounded-lg shadow-lg p-6 min-h-[600px]"> -->
-				{@render children()}
-			<!-- </div> -->
+		<main class="flex-1 flex flex-col">
+			{@render children()}
 		</main>
 	</div>
 </div>

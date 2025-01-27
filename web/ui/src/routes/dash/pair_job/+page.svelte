@@ -85,23 +85,23 @@
 </script>
 
 <Modal title={activeStgy} bind:show={showCode}>
-  <pre class="overflow-auto max-h-[63vh] h-[800px]">{stgyContent}</pre>
+  <pre class="overflow-auto max-h-[63vh] h-[800px] p-3 bg-base-200/70 rounded-lg text-sm font-mono">{stgyContent}</pre>
 </Modal>
 
 <!-- Job Edit Modal will be implemented separately -->
-<div class="bg-base-100 rounded-lg shadow-lg p-6 min-h-[600px]">
+<div class="bg-base-100 p-4 min-h-[600px] border border-base-200">
   <div class="w-full">
     <!-- Tab Menu -->
     <div class="flex justify-between items-center mb-4">
-      <div class="tabs tabs-boxed">
+      <div class="tabs tabs-boxed bg-base-200/50 p-1 rounded-md">
         <button 
-          class="tab {tabName === 'symbol' ? 'tab-active' : ''}"
+          class="tab tab-sm transition-all duration-200 px-4 {tabName === 'symbol' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
           onclick={() => tabName = 'symbol'}
         >
           {m.pair()}
         </button>
         <button 
-          class="tab {tabName === 'strategy' ? 'tab-active' : ''}"
+          class="tab tab-sm transition-all duration-200 px-4 {tabName === 'strategy' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
           onclick={() => tabName = 'strategy'}
         >
           {m.strategy()}
@@ -109,7 +109,7 @@
       </div>
       
       <select 
-        class="select select-bordered w-full max-w-28"
+        class="select select-sm select-bordered w-full max-w-24 focus:outline-none text-sm"
         bind:value={pageSize}
         onchange={() => currentPage = 1}
       >
@@ -124,30 +124,30 @@
     <!-- Symbol Table -->
     {#if tabName === 'symbol'}
       <div class="overflow-x-auto">
-        <table class="table">
+        <table class="table table-sm">
           <thead>
             <tr>
-              <th>{m.pair()}</th>
-              <th>{m.timeframe()}</th>
-              <th>{m.price()}</th>
-              <th>{m.order_num()}</th>
-              <th>{m.strategy()}</th>
-              <th>{m.settings()}</th>
-              <th>{m.actions()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.pair()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.timeframe()}</th>
+              <th class="bg-base-200/30 font-medium text-sm text-right">{m.price()}</th>
+              <th class="bg-base-200/30 font-medium text-sm text-right">{m.order_num()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.strategy()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.settings()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.actions()}</th>
             </tr>
           </thead>
           <tbody>
             {#each getPaginatedData(jobs) as job}
-              <tr>
-                <td>{job.pair}</td>
-                <td>{job.tf}</td>
-                <td>{job.price}</td>
-                <td>{job.odNum}</td>
-                <td>{job.strategy}</td>
-                <td>{showJobArgs(job)}</td>
+              <tr class="hover:bg-base-200/50 transition-colors">
+                <td class="text-sm font-mono">{job.pair}</td>
+                <td class="text-sm">{job.tf}</td>
+                <td class="text-sm font-mono text-right">{job.price}</td>
+                <td class="text-sm font-mono text-right">{job.odNum}</td>
+                <td class="text-sm font-mono">{job.strategy}</td>
+                <td class="text-sm text-base-content/70">{showJobArgs(job)}</td>
                 <td>
                   {#if Array.isArray(job.args)}
-                    <button class="btn btn-xs btn-primary" 
+                    <button class="btn btn-xs bg-primary/90 hover:bg-primary text-primary-content border-none" 
                             onclick={() => editJobArgs(job)}>
                       {m.edit()}
                     </button>
@@ -162,18 +162,18 @@
     <!-- Strategy Table -->
     {:else if tabName === 'strategy'}
       <div class="overflow-x-auto">
-        <table class="table">
+        <table class="table table-sm">
           <thead>
             <tr>
-              <th>{m.strategy()}</th>
-              <th>{m.version()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.strategy()}</th>
+              <th class="bg-base-200/30 font-medium text-sm text-right">{m.version()}</th>
             </tr>
           </thead>
           <tbody>
             {#each getPaginatedData(stratList) as stgy}
-              <tr>
-                <td>{stgy.name}</td>
-                <td>{stgy.version}</td>
+              <tr class="hover:bg-base-200/50 transition-colors">
+                <td class="text-sm font-mono">{stgy.name}</td>
+                <td class="text-sm font-mono text-right">{stgy.version}</td>
               </tr>
             {/each}
           </tbody>
@@ -184,10 +184,10 @@
     <!-- 分页控制 -->
     {#if (tabName === 'symbol' ? jobs : stratList).length > 0}
       <div class="flex justify-end mt-4">
-        <div class="join">
+        <div class="join shadow-sm">
           {#each Array(getTotalPages(tabName === 'symbol' ? jobs.length : stratList.length)) as _, i}
             <button 
-              class="join-item btn {currentPage === i + 1 ? 'btn-active' : ''}"
+              class="join-item btn btn-xs min-w-[2rem] {currentPage === i + 1 ? 'bg-primary/90 text-primary-content hover:bg-primary border-primary' : 'hover:bg-base-200'}"
               onclick={() => handlePageChange(i + 1)}
             >
               {i + 1}

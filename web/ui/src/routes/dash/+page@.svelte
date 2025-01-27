@@ -41,13 +41,13 @@
   });
 </script>
 
-<div class="min-h-screen bg-base-200 flex items-center justify-center py-16">
-  <div class="container max-w-[1200px] mx-auto px-4">
-    <div class="text-center space-y-6 mb-12">
-      <h1 class="text-5xl font-bold text-primary">Banbot</h1>
-      <div class="space-y-4">
-        <p class="text-xl text-base-content/80 my-8">{m.dash_desc()}</p>
-        <div class="flex justify-center items-center gap-3 text-md text-base-content/70">
+<div class="min-h-screen bg-base-100 flex items-center justify-center py-12">
+  <div class="container max-w-[1100px] mx-auto px-3">
+    <div class="text-center space-y-4 mb-10">
+      <h1 class="text-4xl font-bold text-primary/90">Banbot</h1>
+      <div class="space-y-3">
+        <p class="text-lg text-base-content/80 my-6">{m.dash_desc()}</p>
+        <div class="flex justify-center items-center gap-2 text-sm text-base-content/70">
           <span>{m.dash_help()}</span>
           <a class="link link-primary hover:link-accent transition-colors duration-200" 
              href="https://www.banbot.site/">{m.our_doc()}</a>
@@ -56,16 +56,16 @@
     </div>
 
     {#if $save.tickets.length > 0}
-    <div class="card bg-base-100 shadow-xl">
-      <div class="card-body">
-        <div role="tablist" class="tabs tabs-boxed mb-4">
+    <div class="card bg-base-100 shadow-md border border-base-200 rounded-lg">
+      <div class="card-body p-4">
+        <div role="tablist" class="tabs tabs-boxed bg-base-200/50 p-1 mb-4 rounded-md">
           <a role="tab" 
-             class="tab {activeTab === 'accounts' ? 'tab-active' : ''}"
+             class="tab tab-sm {activeTab === 'accounts' ? 'tab-active bg-primary/90 text-primary-content' : ''}"
              onclick={() => activeTab = 'accounts'}>
             {m.trading_accounts()}
           </a>
           <a role="tab" 
-             class="tab {activeTab === 'tickets' ? 'tab-active' : ''}"
+             class="tab tab-sm {activeTab === 'tickets' ? 'tab-active bg-primary/90 text-primary-content' : ''}"
              onclick={() => activeTab = 'tickets'}>
             {m.login_credentials()}
           </a>
@@ -73,35 +73,39 @@
 
         {#if activeTab === 'accounts'}
           <div class="overflow-x-auto">
-            <table class="table">
+            <table class="table table-sm">
               <thead>
-                <tr>
-                  <th>{m.account()}</th>
-                  <th>{m.role()}</th>
-                  <th>{m.status()}</th>
-                  <th>{m.today_done()}</th>
-                  <th>{m.today_done_profit()}</th>
-                  <th>{m.open_num()}</th>
-                  <th>{m.upol_profit()}</th>
-                  <th>{m.actions()}</th>
+                <tr class="bg-base-200/30 text-sm">
+                  <th class="font-medium">{m.account()}</th>
+                  <th class="font-medium">{m.role()}</th>
+                  <th class="font-medium">{m.status()}</th>
+                  <th class="font-medium text-right">{m.today_done()}</th>
+                  <th class="font-medium text-right">{m.today_done_profit()}</th>
+                  <th class="font-medium text-right">{m.open_num()}</th>
+                  <th class="font-medium text-right">{m.upol_profit()}</th>
+                  <th class="font-medium">{m.actions()}</th>
                 </tr>
               </thead>
               <tbody>
                 {#each $ctx.accounts as acc}
-                  <tr class="hover">
+                  <tr class="hover:bg-base-200/50">
                     <td>
-                      <div class="tooltip" data-tip={acc.url}>
-                        {acc.account}
+                      <div class="tooltip tooltip-right" data-tip={acc.url}>
+                        <span class="font-mono text-sm">{acc.account}</span>
                       </div>
                     </td>
-                    <td>{acc.role}</td>
-                    <td>{acc.running ? m.running() : m.stopped()}</td>
-                    <td>{acc.dayDoneNum}</td>
-                    <td>{acc.dayDonePft?.toFixed(2)}</td>
-                    <td>{acc.dayOpenNum}</td>
-                    <td>{acc.dayOpenPft?.toFixed(2)}</td>
+                    <td class="text-sm">{acc.role}</td>
                     <td>
-                      <a class="btn btn-sm btn-primary" href="/dash/board" onclick={() => viewAccount(acc)}>
+                      <span class="badge badge-sm {acc.running ? 'badge-success' : 'badge-warning'} font-normal">
+                        {acc.running ? m.running() : m.stopped()}
+                      </span>
+                    </td>
+                    <td class="text-right font-mono text-sm">{acc.dayDoneNum}</td>
+                    <td class="text-right font-mono text-sm">{acc.dayDonePft?.toFixed(2)}</td>
+                    <td class="text-right font-mono text-sm">{acc.dayOpenNum}</td>
+                    <td class="text-right font-mono text-sm">{acc.dayOpenPft?.toFixed(2)}</td>
+                    <td>
+                      <a class="btn btn-xs btn-primary" href="/dash/board" onclick={() => viewAccount(acc)}>
                         {m.view()}
                       </a>
                     </td>
@@ -112,38 +116,38 @@
           </div>
         {:else}
           <div class="overflow-x-auto">
-            <table class="table">
+            <table class="table table-sm">
               <thead>
-                <tr>
-                  <th>{m.username()}</th>
-                  <th>{m.bot_name()}</th>
-                  <th>{m.account()}</th>
-                  <th>{m.actions()}</th>
+                <tr class="bg-base-200/30 text-sm">
+                  <th class="font-medium">{m.username()}</th>
+                  <th class="font-medium">{m.bot_name()}</th>
+                  <th class="font-medium">{m.account()}</th>
+                  <th class="font-medium">{m.actions()}</th>
                 </tr>
               </thead>
               <tbody>
                 {#each $save.tickets as ticket}
-                  <tr class="hover">
+                  <tr class="hover:bg-base-200/50">
                     <td>
-                      <div class="tooltip" data-tip={ticket.url}>
-                        {ticket.user_name}
+                      <div class="tooltip tooltip-right" data-tip={ticket.url}>
+                        <span class="font-mono text-sm">{ticket.user_name}</span>
                       </div>
                     </td>
-                    <td>{ticket.name}</td>
+                    <td class="text-sm">{ticket.name}</td>
                     <td>
                       {#if ticket.accounts}
-                        <div class="whitespace-pre-wrap font-mono text-sm">
+                        <div class="whitespace-pre-wrap font-mono text-xs opacity-80">
                           {Object.entries(ticket.accounts)
                             .map(([acc, role]) => `${acc}: ${role}`)
                             .join('\n')}
                         </div>
                       {/if}
                     </td>
-                    <td class="flex gap-2">
-                      <button class="btn btn-sm btn-error" onclick={() => delTicket(ticket)}>
+                    <td class="flex gap-1.5">
+                      <button class="btn btn-xs btn-error" onclick={() => delTicket(ticket)}>
                         {m.remove()}
                       </button>
-                      <button class="btn btn-sm btn-primary" onclick={() => showAdd = true}>
+                      <button class="btn btn-xs btn-primary" onclick={() => showAdd = true}>
                         {m.edit()}
                       </button>
                     </td>
@@ -157,10 +161,10 @@
     </div>
     {/if}
 
-    <div class="text-center mt-8">
+    <div class="text-center mt-6">
       {#if !showAdd}
-        <button class="btn btn-primary btn-wide gap-2" onclick={() => showAdd = true}>
-          <i class="fas fa-plus"></i>
+        <button class="btn btn-primary btn-sm gap-1.5 px-6" onclick={() => showAdd = true}>
+          <i class="fas fa-plus text-xs"></i>
           {m.login_bot()}
         </button>
       {:else}

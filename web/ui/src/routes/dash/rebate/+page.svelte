@@ -24,6 +24,7 @@
 
   let itemList = $state<Income[]>([]);
   let stats = $state({
+    load: false,
     startDate: '',
     stopDate: '',
     num: '0',
@@ -73,10 +74,11 @@
     stats.stopDate = '';
     stats.num = '0';
     stats.assets = '';
-
+    stats.load = false;
     if (res.length) {
       stats.startDate = fmtDateStr(res[0].time);
       stats.stopDate = fmtDateStr(res[res.length - 1].time);
+      stats.load = true;
     }
 
     if (searchData.account) {
@@ -98,17 +100,17 @@
   });
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4">
   <!-- Search Form -->
-  <div class="card bg-base-100 shadow-xl">
-    <div class="card-body">
+  <div class="card bg-base-100">
+    <div class="card-body p-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Income Type -->
         <div class="form-control">
-          <label class="label">
-            <span class="label-text">{m.income_type()}</span>
+          <label class="label py-1">
+            <span class="label-text text-sm font-medium text-base-content/70">{m.income_type()}</span>
           </label>
-          <select class="select select-bordered w-full" bind:value={searchData.intype}>
+          <select class="select select-sm select-bordered focus:outline-none w-full" bind:value={searchData.intype}>
             {#each incomeTypes as type}
               <option value={type.value}>{type.label}</option>
             {/each}
@@ -117,36 +119,36 @@
 
         <!-- Account -->
         <div class="form-control">
-          <label class="label">
-            <span class="label-text">{m.account()}</span>
+          <label class="label py-1">
+            <span class="label-text text-sm font-medium text-base-content/70">{m.account()}</span>
           </label>
           <input 
             type="text" 
-            class="input input-bordered" 
+            class="input input-sm input-bordered focus:outline-none" 
             bind:value={searchData.account}
           />
         </div>
 
         <!-- Symbol -->
         <div class="form-control">
-          <label class="label">
-            <span class="label-text">{m.symbol()}</span>
+          <label class="label py-1">
+            <span class="label-text text-sm font-medium text-base-content/70">{m.symbol()}</span>
           </label>
           <input 
             type="text" 
-            class="input input-bordered" 
+            class="input input-sm input-bordered focus:outline-none" 
             bind:value={searchData.symbol}
           />
         </div>
 
         <!-- Start Time -->
         <div class="form-control">
-          <label class="label">
-            <span class="label-text">{m.start_time()}</span>
+          <label class="label py-1">
+            <span class="label-text text-sm font-medium text-base-content/70">{m.start_time()}</span>
           </label>
           <input 
             type="text" 
-            class="input input-bordered" 
+            class="input input-sm input-bordered focus:outline-none" 
             placeholder="20231012"
             bind:value={searchData.startTime}
           />
@@ -154,19 +156,22 @@
 
         <!-- Limit -->
         <div class="form-control">
-          <label class="label">
-            <span class="label-text">{m.limit()}</span>
+          <label class="label py-1">
+            <span class="label-text text-sm font-medium text-base-content/70">{m.limit()}</span>
           </label>
           <input 
             type="number" 
-            class="input input-bordered" 
+            class="input input-sm input-bordered focus:outline-none" 
             bind:value={searchData.limit}
           />
         </div>
 
         <!-- Search Button -->
         <div class="form-control justify-end">
-          <button class="btn btn-primary mt-8" onclick={loadData}>
+          <button 
+            class="btn btn-sm bg-primary hover:bg-primary-focus text-primary-content border-none shadow-sm mt-6"
+            onclick={loadData}
+          >
             {m.search()}
           </button>
         </div>
@@ -175,54 +180,60 @@
   </div>
 
   <!-- Statistics -->
-  <div class="stats shadow bg-base-100">
-    <div class="stat">
-      <div class="stat-title">{m.start_time()}</div>
-      <div class="stat-value text-sm">{stats.startDate}</div>
+  {#if stats.load}
+    <div class="stats bg-base-100 rounded-xl border border-base-200 text-sm">
+      <div class="stat px-4 py-2">
+        <div class="stat-title text-xs text-base-content/60 font-medium">{m.start_time()}</div>
+        <div class="stat-value text-base mt-1">{stats.startDate}</div>
+      </div>
+      <div class="stat px-4 py-2">
+        <div class="stat-title text-xs text-base-content/60 font-medium">{m.end_time()}</div>
+        <div class="stat-value text-base mt-1">{stats.stopDate}</div>
+      </div>
+      <div class="stat px-4 py-2">
+        <div class="stat-title text-xs text-base-content/60 font-medium">{m.count()}</div>
+        <div class="stat-value text-base mt-1">{stats.num}</div>
+      </div>
+      <div class="stat px-4 py-2">
+        <div class="stat-title text-xs text-base-content/60 font-medium">{m.total()}</div>
+        <div class="stat-value text-base mt-1">{stats.assets}</div>
+      </div>
     </div>
-    <div class="stat">
-      <div class="stat-title">{m.end_time()}</div>
-      <div class="stat-value text-sm">{stats.stopDate}</div>
-    </div>
-    <div class="stat">
-      <div class="stat-title">{m.count()}</div>
-      <div class="stat-value text-sm">{stats.num}</div>
-    </div>
-    <div class="stat">
-      <div class="stat-title">{m.total()}</div>
-      <div class="stat-value text-sm">{stats.assets}</div>
-    </div>
-  </div>
+  {/if}
 
   <!-- Data Table -->
-  <div class="overflow-x-auto">
-    <table class="table table-zebra">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>{m.symbol()}</th>
-          <th>{m.amount()}</th>
-          <th>{m.asset()}</th>
-          <th>{m.timestamp()}</th>
-          <th>{m.time()}({curTZ()})</th>
-          <th>{m.account()}</th>
-          <th>{m.trade_id()}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each itemList as item}
-          <tr>
-            <td>{item.tranId}</td>
-            <td>{item.symbol}</td>
-            <td>{item.income}</td>
-            <td>{item.asset}</td>
-            <td>{item.time}</td>
-            <td>{fmtDateStr(item.time)}</td>
-            <td>{item.info}</td>
-            <td>{item.tradeId}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+  <div class="card bg-base-100">
+    <div class="card-body p-4">
+      <div class="overflow-x-auto">
+        <table class="table table-zebra table-sm">
+          <thead>
+            <tr>
+              <th class="bg-base-200/30 font-medium text-sm">ID</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.symbol()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.amount()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.asset()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.timestamp()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.time()}({curTZ()})</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.account()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.trade_id()}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each itemList as item}
+              <tr class="hover:bg-base-200/30 transition-colors text-sm">
+                <td class="font-medium">{item.tranId}</td>
+                <td>{item.symbol}</td>
+                <td class="font-medium">{item.income}</td>
+                <td>{item.asset}</td>
+                <td class="font-mono text-xs">{item.time}</td>
+                <td>{fmtDateStr(item.time)}</td>
+                <td>{item.info}</td>
+                <td class="font-mono text-xs">{item.tradeId}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>

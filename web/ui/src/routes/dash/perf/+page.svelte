@@ -94,29 +94,29 @@
 </script>
 
 {#snippet PerfTable(title: string, data: any[])}
-<div class="card bg-white shadow-lg">
-  <div class="card-body">
-    <h2 class="card-title text-primary mb-4">{title}</h2>
+<div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
+  <div class="card-body p-4">
+    <h2 class="card-title text-lg font-medium mb-3">{title}</h2>
     <div class="overflow-x-auto">
-      <table class="table table-zebra">
+      <table class="table table-sm">
         <thead>
           <tr>
-            <th>{title}</th>
-            <th>{m.win_total_num()}</th>
-            <th>{m.total_profit()}</th>
-            <th>{m.profit_rate()}</th>
-            <th>{m.actions()}</th>
+            <th class="bg-base-200/30 font-medium text-sm">{title}</th>
+            <th class="bg-base-200/30 font-medium text-sm text-right">{m.win_total_num()}</th>
+            <th class="bg-base-200/30 font-medium text-sm text-right">{m.total_profit()}</th>
+            <th class="bg-base-200/30 font-medium text-sm text-right">{m.profit_rate()}</th>
+            <th class="bg-base-200/30 font-medium text-sm">{m.actions()}</th>
           </tr>
         </thead>
         <tbody>
           {#each data as row}
-            <tr>
-              <td>{row.key}</td>
-              <td>{row.winNum}/{row.closeNum}</td>
-              <td>{row.profitSum.toFixed(5)}</td>
-              <td>{(row.profitPct * 100).toFixed(1)}%</td>
+            <tr class="hover:bg-base-200/50 transition-colors">
+              <td class="text-sm font-mono">{row.key}</td>
+              <td class="text-sm font-mono text-right">{row.winNum}/{row.closeNum}</td>
+              <td class="text-sm font-mono text-right">{row.profitSum.toFixed(5)}</td>
+              <td class="text-sm font-mono text-right">{(row.profitPct * 100).toFixed(1)}%</td>
               <td>
-                <a href="/dash/kline?pair={row.key}" class="link link-primary">
+                <a href="/dash/kline?pair={row.key}" class="btn btn-xs bg-primary/90 hover:bg-primary text-primary-content border-none">
                   {m.kline()}
                 </a>
               </td>
@@ -128,36 +128,37 @@
   </div>
 </div> 
 {/snippet}
+
 <!-- Tab Menu -->
-<div class="tabs tabs-boxed my-4">
+<div class="tabs tabs-boxed bg-base-200/50 p-1 rounded-md m-4">
   {#each tabLabels as {name, title}}
     <button 
-      class="tab {tabName === name ? 'tab-active' : ''}"
+      class="tab tab-sm transition-all duration-200 px-4 {tabName === name ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
       onclick={() => clickTab(name)}
     >
       {title}
     </button>
   {/each}
 </div>
-<div class="flex flex-col gap-6 min-h-screen">
-  <!-- 合并的控制面板 -->
-  <div class="card bg-white shadow-lg">
-    <div class="card-body">
 
+<div class="flex flex-col gap-6 min-h-screen m-4">
+  <!-- 合并的控制面板 -->
+  <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
+    <div class="card-body p-4">
       <!-- Pair Selection -->
       {#if tabName !== 'symbol'}
-        <div class="mt-6">
-          <h2 class="text-primary mb-4">{m.pair()}</h2>
-          <div class="flex flex-wrap gap-4">
+        <div class="mt-1">
+          <h2 class="text-base font-medium mb-3">{m.pair()}</h2>
+          <div class="flex flex-wrap gap-2">
             {#each allPairs as pair}
-              <label class="label cursor-pointer bg-base-200 px-4 py-2 rounded-lg">
+              <label class="label cursor-pointer bg-base-200/70 hover:bg-base-300 px-3 py-1.5 rounded-md transition-colors">
                 <input 
                   type="checkbox" 
-                  class="checkbox checkbox-primary"
+                  class="checkbox checkbox-primary checkbox-xs"
                   bind:group={selectedPairs}
                   value={pair}
                 />
-                <span class="label-text ml-2">{pair}</span>
+                <span class="label-text ml-1.5 text-sm">{pair}</span>
               </label>
             {/each}
           </div>
@@ -165,33 +166,33 @@
       {/if}
 
       <!-- Search Form -->
-      <div class="mt-6">
-        <div class="flex flex-wrap gap-6 items-end">
+      <div class="mt-4">
+        <div class="flex flex-wrap gap-4 items-end">
           <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.start_time()}</span>
+            <label class="label py-1">
+              <span class="label-text text-sm text-base-content/70">{m.start_time()}</span>
             </label>
             <input 
               type="text" 
-              class="input input-bordered" 
+              class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
               placeholder="20231012"
               bind:value={search.startTime}
             />
           </div>
           
           <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.end_time()}</span>
+            <label class="label py-1">
+              <span class="label-text text-sm text-base-content/70">{m.end_time()}</span>
             </label>
             <input 
               type="text" 
-              class="input input-bordered" 
+              class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
               placeholder="20231012"
               bind:value={search.stopTime}
             />
           </div>
           
-          <button class="btn btn-primary" onclick={loadData}>
+          <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" onclick={loadData}>
             {m.search()}
           </button>
         </div>
@@ -200,21 +201,21 @@
   </div>
 
   <!-- Data Table using snippet -->
-   {@render PerfTable(`${m.pair()}/${m.date()}`, dataList)}
+  {@render PerfTable(`${m.pair()}/${m.date()}`, dataList)}
 
   <!-- Duration Stats -->
-  <div class="stats shadow bg-white">
-    <div class="stat">
-      <div class="stat-title text-primary">{m.win_duration()}</div>
-      <div class="stat-value text-success">{fmtDuration(durations.wins)}</div>
+  <div class="stats shadow-md bg-base-100 rounded-lg border border-base-200">
+    <div class="stat px-4">
+      <div class="stat-title text-sm text-base-content/70">{m.win_duration()}</div>
+      <div class="stat-value text-success text-2xl mt-1.5">{fmtDuration(durations.wins)}</div>
     </div>
-    <div class="stat">
-      <div class="stat-title text-primary">{m.draw_duration()}</div>
-      <div class="stat-value text-warning">{fmtDuration(durations.draws)}</div>
+    <div class="stat px-4">
+      <div class="stat-title text-sm text-base-content/70">{m.draw_duration()}</div>
+      <div class="stat-value text-warning text-2xl mt-1.5">{fmtDuration(durations.draws)}</div>
     </div>
-    <div class="stat">
-      <div class="stat-title text-primary">{m.loss_duration()}</div>
-      <div class="stat-value text-error">{fmtDuration(durations.losses)}</div>
+    <div class="stat px-4">
+      <div class="stat-title text-sm text-base-content/70">{m.loss_duration()}</div>
+      <div class="stat-value text-error text-2xl mt-1.5">{fmtDuration(durations.losses)}</div>
     </div>
   </div>
 

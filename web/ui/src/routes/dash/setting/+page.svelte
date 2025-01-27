@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getAccApi, postAccApi } from '$lib/netio';
-  import { alerts } from '$lib/stores/alerts';
+  import { getAccApi } from '$lib/netio';
   import * as m from '$lib/paraglide/messages';
 
   let content = $state('');
@@ -11,36 +10,22 @@
     content = rsp.data ?? 'no data';
   }
 
-  async function reloadConfig() {
-    try {
-      const rsp = await postAccApi('/config', { data: content });
-      if (rsp.status === 200) {
-        alerts.addAlert('success', m.config_update_ok());
-      } else {
-        alerts.addAlert('error', JSON.stringify(rsp));
-      }
-      await loadData();
-    } catch (err) {
-      alerts.addAlert('error', (err as any).toString());
-    }
-  }
-
   onMount(() => {
     loadData();
+    // 因在线更新配置有很多限制，大多数配置无法即刻生效，故暂不提供在线修改
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1">
-  <!-- Header with reload button -->
-  <div class="flex justify-between items-center">
-    <h2 class="text-2xl font-bold">{m.config()}</h2>
-    <button class="btn btn-primary" onclick={reloadConfig}>{m.apply_config()}</button>
-  </div>
-
-  <!-- Config content -->
-  <div class="card bg-base-100 shadow-xl flex-1">
-    <div class="card-body flex-1">
-      <textarea class="textarea textarea-bordered w-full h-full font-mono" bind:value={content}></textarea>
+<div class="card bg-base-100">
+  <div class="card-body p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-xl font-semibold text-base-content">{m.config()}</h2>
+    </div>
+    
+    <div class="bg-base-200/50 rounded-lg h-[calc(100vh-12rem)]">
+      <pre 
+        class="p-4 font-mono text-sm w-full h-full whitespace-pre-wrap break-words"
+      >{content}</pre>
     </div>
   </div>
 </div>

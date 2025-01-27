@@ -511,7 +511,7 @@
     "cfg_concur_num": "Concurrent number of symbol candle downloads, default is 2 symbols",
     "cfg_order_type": "Order type: market for market orders, limit for limit orders",
     "cfg_stop_enter_bars": "Cancel the limit entry order if it is not filled within this many candles, default is 0 (disabled)",
-    "cfg_prefire": "Whether to trigger 10% ahead of the bar’s completion time",
+    "cfg_prefire": "Whether to trigger 10% ahead of the bar's completion time",
     "cfg_margin_add_rate": "For futures contracts, add margin when the loss reaches this ratio of the initial margin to avoid liquidation, default is 0.66",
     "cfg_stake_amount": "Default amount per order, lower priority than stake_pct",
     "cfg_stake_pct": "Percentage of account to use for each order, based on the nominal value",
@@ -602,5 +602,6 @@
     "cfg_rpc_keyword": "Message filter keywords",
     "cfg_webhook": "Message types that can be sent via RPC",
     "cfg_webhook_status": "Bot status messages: start, stop, etc.",
-    "cfg_api_server": "For external control of the bot or access to dashboard via API"
+    "cfg_api_server": "For external control of the bot or access to dashboard via API",
+    "system_logs": "System Logs"
 }

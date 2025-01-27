@@ -156,6 +156,6 @@ ${m.holding()}: ${fmtDuration(td.duration)}`;
   }
 </script>
 
-<div class="w-full h-full flex flex-col">
+<div class="w-full h-full flex flex-col pb-2">
   <Chart bind:this={kc} ctx={kcCtx} save={kcSave} />
 </div>

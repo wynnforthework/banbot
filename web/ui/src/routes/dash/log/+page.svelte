@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { getAccApi } from '$lib/netio';
+  import * as m from '$lib/paraglide/messages';
 
   let content = $state('');
 
@@ -18,17 +19,17 @@
   });
 </script>
 
-<div class="card bg-base-100 shadow-xl">
-  <div class="card-body">
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="card-title">System Logs</h2>
-      <button class="btn btn-primary btn-sm" onclick={loadData}>
-        Refresh
+<div class="card bg-base-100">
+  <div class="card-body p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h2 class="text-xl font-semibold text-base-content">{m.system_logs()}</h2>
+      <button class="btn btn-sm btn-primary" onclick={loadData}>
+        {m.refresh()}
       </button>
     </div>
     
-    <div class="bg-base-200 rounded-lg p-4 h-[calc(100vh-12rem)] overflow-auto">
-      <pre class="whitespace-pre-wrap font-mono text-sm">{content}</pre>
+    <div class="bg-base-200/50 rounded-lg p-4 h-[calc(100vh-12rem)]">
+      <pre class="whitespace-pre-wrap font-mono text-sm text-base-content/80">{content}</pre>
     </div>
   </div>
 </div>
