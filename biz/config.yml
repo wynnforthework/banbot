@@ -130,7 +130,7 @@ webhook:
     content: '{name}: {status}'
 api_server:
   enabled: false
-  bind_ip: 0.0.0.0
+  bind_ip: 127.0.0.1
   port: 8001
   jwt_secret_key: '123456789'
   users:

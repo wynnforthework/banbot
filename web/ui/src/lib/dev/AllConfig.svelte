@@ -162,7 +162,7 @@ webhook:  # ${m.cfg_webhook()}
     content: '{name}: {status}'
 api_server:  # ${m.cfg_api_server()}
   enabled: true
-  bind_ip: 0.0.0.0
+  bind_ip: 127.0.0.1  # ${m.cfg_api_bind_ip()}
   port: 8001
   jwt_secret_key: fn234njkcu89234nbf
   users:

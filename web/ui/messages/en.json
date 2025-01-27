@@ -603,5 +603,6 @@
     "cfg_webhook": "Message types that can be sent via RPC",
     "cfg_webhook_status": "Bot status messages: start, stop, etc.",
     "cfg_api_server": "For external control of the bot or access to dashboard via API",
+    "cfg_api_bind_ip": "It is recommended to open only to local or LAN users. You can use SSH port forwarding or nginx to expose it to specific internet users more safely.",
     "system_logs": "System Logs"
 }

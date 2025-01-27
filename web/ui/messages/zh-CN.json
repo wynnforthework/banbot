@@ -603,5 +603,6 @@
   "cfg_webhook": "可通过rpc发送的消息类型",
   "cfg_webhook_status": "机器人状态消息：启动，停止等",
   "cfg_api_server": "供外部通过api控制机器人或访问dashboard",
+  "cfg_api_bind_ip": "建议仅对本地或局域网开放，您可通过ssh端口转发或nginx反向代理更安全地暴露给公网特定对象",
   "system_logs": "系统日志"
 }

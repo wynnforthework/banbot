@@ -141,12 +141,12 @@
   {/each}
 </div>
 
-<div class="flex flex-col gap-6 min-h-screen m-4">
+<div class="flex flex-col gap-6 min-h-screen m-4 mt-0">
   <!-- 合并的控制面板 -->
   <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
     <div class="card-body p-4">
       <!-- Pair Selection -->
-      {#if tabName !== 'symbol'}
+      {#if tabName !== 'symbol' && allPairs.length > 0}
         <div class="mt-1">
           <h2 class="text-base font-medium mb-3">{m.pair()}</h2>
           <div class="flex flex-wrap gap-2">
@@ -166,36 +166,30 @@
       {/if}
 
       <!-- Search Form -->
-      <div class="mt-4">
-        <div class="flex flex-wrap gap-4 items-end">
-          <div class="form-control">
-            <label class="label py-1">
-              <span class="label-text text-sm text-base-content/70">{m.start_time()}</span>
-            </label>
-            <input 
-              type="text" 
-              class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
-              placeholder="20231012"
-              bind:value={search.startTime}
-            />
-          </div>
-          
-          <div class="form-control">
-            <label class="label py-1">
-              <span class="label-text text-sm text-base-content/70">{m.end_time()}</span>
-            </label>
-            <input 
-              type="text" 
-              class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
-              placeholder="20231012"
-              bind:value={search.stopTime}
-            />
-          </div>
-          
-          <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" onclick={loadData}>
-            {m.search()}
-          </button>
+      <div class="flex flex-wrap gap-4 items-center">
+        <div class="form-control flex-row items-center gap-2">
+          <label class="label-text text-sm text-base-content/70 whitespace-nowrap">{m.start_time()}</label>
+          <input 
+            type="text" 
+            class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
+            placeholder="20231012"
+            bind:value={search.startTime}
+          />
         </div>
+        
+        <div class="form-control flex-row items-center gap-2">
+          <label class="label-text text-sm text-base-content/70 whitespace-nowrap">{m.end_time()}</label>
+          <input 
+            type="text" 
+            class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
+            placeholder="20231012"
+            bind:value={search.stopTime}
+          />
+        </div>
+        
+        <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" onclick={loadData}>
+          {m.search()}
+        </button>
       </div>
     </div>
   </div>
