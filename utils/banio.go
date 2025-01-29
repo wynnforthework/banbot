@@ -674,6 +674,10 @@ var (
 	banClient *ClientIO
 )
 
+func HasBanConn() bool {
+	return banClient != nil || banServer != nil
+}
+
 func GetServerData(key string) (string, *errs.Error) {
 	if banServer != nil {
 		data := banServer.GetVal(key)

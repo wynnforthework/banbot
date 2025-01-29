@@ -413,7 +413,10 @@ func RefreshPairJobs(dp data.IProvider, showLog, isFirst bool, pBar *utils.Stage
 	}
 	// relay the simulate open position orders for new symbols at this time
 	// 接力入场新品种的截止此时模拟持仓订单
+	backMode := core.RunMode
 	err = relayUnFinishOrders(pairTfScores, forbidJobs, isFirst)
+	core.SetRunMode(backMode)
+	core.SetRunEnv(core.RunEnv)
 	if err != nil {
 		return err
 	}
@@ -437,7 +440,14 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		EndMS:   config.TimeRange.EndMS,
 	}
 	backTime := btime.CurTimeMS
+	simEndMs := backTime
+	if core.LiveMode {
+		simEndMs = btime.TimeMS()
+	}
 	backPols := config.RunPolicy
+	backRunMode := core.RunMode
+	core.SetRunMode(core.RunModeBackTest)
+	core.SetRunEnv(core.RunEnv)
 	// Divide into multiple groups based on the subscription period according to the strategy
 	// 按策略订阅周期划分为多个组
 	groups := strat.RelayPolicyGroups()
@@ -452,7 +462,11 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		btime.CurTimeMS = gp.StartMS
 		config.TimeRange = &config.TimeTuple{
 			StartMS: gp.StartMS,
-			EndMS:   backTime,
+			EndMS:   simEndMs,
+		}
+		err := ormo.InitTask(false, "")
+		if err != nil {
+			return err
 		}
 		lite := NewBackTestLite(true, nil, nil)
 		// set policy to run
@@ -494,6 +508,8 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 	// Restore global variables and relay open orders for entry
 	// 恢复全局变量，接力入场未平仓订单
 	biz.RestoreVars(backUp)
+	core.SetRunMode(backRunMode)
+	core.SetRunEnv(core.RunEnv)
 	if isFirst {
 		// 如果是初次执行，检查打开的订单是否已在测试期间平仓，是则自动平仓
 		// 主要针对实盘隔一段时间后重启有未平仓订单场景，需检查订单是否应在机器人停止期间平仓

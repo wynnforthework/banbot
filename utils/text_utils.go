@@ -80,6 +80,26 @@ func MapToStr[T any](m map[string]T, value bool, precFlt int) string {
 	return b.String()
 }
 
+func ArrToStr[T any](arr []T, precFlt int) string {
+	var b strings.Builder
+	for i, v := range arr {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		var valStr string
+		switch val := any(v).(type) {
+		case float64:
+			valStr = strconv.FormatFloat(val, 'f', precFlt, 64)
+		case float32:
+			valStr = strconv.FormatFloat(float64(val), 'f', precFlt, 64)
+		default:
+			valStr = fmt.Sprintf("%v", v)
+		}
+		b.WriteString(valStr)
+	}
+	return b.String()
+}
+
 func UniqueItems[T comparable](arr []T) ([]T, []T) {
 	var res = make([]T, 0, len(arr))
 	var has = make(map[T]bool)

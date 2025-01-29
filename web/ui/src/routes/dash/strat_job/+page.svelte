@@ -18,7 +18,7 @@
     args: Array<{title: string, value: any}>;
   }
 
-  let tabName = $state('symbol');
+  let tabName = $state('job');
   let jobs = $state<PairStgyTf[]>([]);
   let stratList = $state<StgyVer[]>([]);
   let showCode = $state(false);
@@ -73,7 +73,7 @@
   }
 
   function handlePageChange(page: number) {
-    const totalPages = getTotalPages(tabName === 'symbol' ? jobs.length : stratList.length);
+    const totalPages = getTotalPages(tabName === 'job' ? jobs.length : stratList.length);
     if (page >= 1 && page <= totalPages) {
       currentPage = page;
     }
@@ -95,10 +95,10 @@
     <div class="flex justify-between items-center mb-4">
       <div class="tabs tabs-boxed bg-base-200/50 p-1 rounded-md">
         <button 
-          class="tab tab-sm transition-all duration-200 px-4 {tabName === 'symbol' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
-          onclick={() => tabName = 'symbol'}
+          class="tab tab-sm transition-all duration-200 px-4 {tabName === 'job' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
+          onclick={() => tabName = 'job'}
         >
-          {m.pair()}
+          {m.job()}
         </button>
         <button 
           class="tab tab-sm transition-all duration-200 px-4 {tabName === 'strategy' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
@@ -122,7 +122,7 @@
     </div>
 
     <!-- Symbol Table -->
-    {#if tabName === 'symbol'}
+    {#if tabName === 'job'}
       <div class="overflow-x-auto">
         <table class="table table-sm">
           <thead>
@@ -182,10 +182,10 @@
     {/if}
 
     <!-- 分页控制 -->
-    {#if (tabName === 'symbol' ? jobs : stratList).length > 0}
+    {#if (tabName === 'job' ? jobs : stratList).length > 0}
       <div class="flex justify-end mt-4">
         <div class="join shadow-sm">
-          {#each Array(getTotalPages(tabName === 'symbol' ? jobs.length : stratList.length)) as _, i}
+          {#each Array(getTotalPages(tabName === 'job' ? jobs.length : stratList.length)) as _, i}
             <button 
               class="join-item btn btn-xs min-w-[2rem] {currentPage === i + 1 ? 'bg-primary/90 text-primary-content hover:bg-primary border-primary' : 'hover:bg-base-200'}"
               onclick={() => handlePageChange(i + 1)}

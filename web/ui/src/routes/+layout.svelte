@@ -24,6 +24,11 @@
 </script>
 
 <ParaglideJS {i18n}>
+  {#if $site.loading}
+    <div class="fixed inset-0 bg-white bg-opacity-20 z-50 flex items-center justify-center">
+      <span class="loading loading-spinner loading-lg"></span>
+    </div>
+  {/if}
 	<!-- 添加alerts显示区域 -->
 	<div class="alerts-container z-[1000]">
 		{#each $alerts as alert (alert.id)}

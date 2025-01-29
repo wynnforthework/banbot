@@ -200,7 +200,8 @@
   "save": "保存",
   "total": "总计",
   "home": "首页",
-  "pair_job": "币对 & 策略",
+  "strat_job": "策略任务",
+  "job": "任务",
   "kline": "K线",
   "perf": "收益统计",
   "order": "订单",
@@ -499,6 +500,7 @@
   "export_desc": "将导出为protobuf格式，也可在终端执行`bot data export`导出；如果您需要csv格式，请从终端执行`bot kline export`",
   "import_desc": "将protobuf格式数据导入，也可在终端执行`bot data import`导出；如需导入`csv.zip`数据，请执行`bot kline load`",
   "language": "语言",
+  "system_logs": "系统日志",
 
   "cfg_name": "机器人名称，用于在消息通知中区分不同的机器人",
   "cfg_env": "运行环境，prod代表生产网络，test代表测试网络（币安测试网），dry_run代表模拟环境",
@@ -603,6 +605,5 @@
   "cfg_webhook": "可通过rpc发送的消息类型",
   "cfg_webhook_status": "机器人状态消息：启动，停止等",
   "cfg_api_server": "供外部通过api控制机器人或访问dashboard",
-  "cfg_api_bind_ip": "建议仅对本地或局域网开放，您可通过ssh端口转发或nginx反向代理更安全地暴露给公网特定对象",
-  "system_logs": "系统日志"
+  "cfg_api_bind_ip": "建议仅对本地或局域网开放，您可通过ssh端口转发或nginx反向代理更安全地暴露给公网特定对象"
 }

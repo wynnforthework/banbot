@@ -37,7 +37,7 @@ func (t *CryptoTrader) Init() *errs.Error {
 		return err
 	}
 	t.dp = dp
-	err = ormo.InitTask(true, "")
+	err = ormo.InitTask(true, config.GetDataDir())
 	if err != nil {
 		return err
 	}

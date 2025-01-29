@@ -112,7 +112,7 @@ func closeOrdersByPos(accMap map[string]bool, pairMap map[string]bool) error {
 }
 
 func closeOrdersByLocal(accMap map[string]bool, pairMap map[string]bool, stratMap map[string]bool) error {
-	err := ormo.InitTask(true, "")
+	err := ormo.InitTask(true, config.GetDataDir())
 	if err != nil {
 		return err
 	}

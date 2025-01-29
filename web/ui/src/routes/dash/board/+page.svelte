@@ -124,18 +124,22 @@
   <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
     <div class="card-body p-4">
       <h2 class="card-title text-lg font-medium mb-3">{m.system_info()}</h2>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="flex items-center space-x-2">
           <span class="text-sm text-base-content/70">CPU:</span>
           <span class="text-sm">{data.cpuPct.toFixed(1)}%</span>
         </div>
         <div class="flex items-center space-x-2">
-          <span class="text-sm text-base-content/70">RAM:</span>
-          <span class="text-sm">{data.ramPct.toFixed(1)}%</span>
-        </div>
-        <div class="flex items-center space-x-2">
           <span class="text-sm text-base-content/70">{m.market()}:</span>
           <span class="text-sm font-mono">{data.exchange}.{data.market}</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">{m.last_active()}:</span>
+          <span class="text-sm">{fmtDateStrTZ(data.lastProcess)}</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-sm text-base-content/70">RAM:</span>
+          <span class="text-sm">{data.ramPct.toFixed(1)}%</span>
         </div>
         <div class="flex items-center space-x-2">
           <span class="text-sm text-base-content/70">{m.timeframes()}:</span>
@@ -144,10 +148,6 @@
         <div class="flex items-center space-x-2">
           <span class="text-sm text-base-content/70">{m.start_time()}:</span>
           <span class="text-sm">{fmtDateStrTZ(data.botStartMs)}</span>
-        </div>
-        <div class="flex items-center space-x-2">
-          <span class="text-sm text-base-content/70">{m.last_active()}:</span>
-          <span class="text-sm">{fmtDateStrTZ(data.lastProcess)}</span>
         </div>
       </div>
     </div>

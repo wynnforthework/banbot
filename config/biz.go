@@ -29,6 +29,15 @@ func GetDataDir() string {
 	return DataDir
 }
 
+func GetLogsDir() string {
+	logDir := filepath.Join(GetDataDir(), "logs")
+	err := utils2.EnsureDir(logDir, 0755)
+	if err != nil {
+		panic(err)
+	}
+	return logDir
+}
+
 func GetStratDir() string {
 	if stratDir == "" {
 		stratDir = getEnvPath("BanStratDir")
@@ -446,8 +455,53 @@ func (c *Config) DumpYaml() ([]byte, *errs.Error) {
 		if tag == "" || tag == "-" {
 			continue
 		}
+
+		// 处理yaml标签
+		tagParts := strings.Split(tag, ",")
+		fieldName := tagParts[0]
+		hasOmitempty := false
+		for _, opt := range tagParts[1:] {
+			if opt == "omitempty" {
+				hasOmitempty = true
+				break
+			}
+		}
+
 		val := v.Field(i)
-		itemMap[tag] = val.Interface()
+		// 如果有omitempty标签，则需要检查值是否为空
+		if hasOmitempty {
+			// 检查值是否为空
+			isZero := false
+			switch val.Kind() {
+			case reflect.String:
+				isZero = val.String() == ""
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				isZero = val.Int() == 0
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				isZero = val.Uint() == 0
+			case reflect.Float32, reflect.Float64:
+				isZero = val.Float() == 0
+			case reflect.Bool:
+				isZero = !val.Bool()
+			case reflect.Slice, reflect.Map:
+				isZero = val.Len() == 0
+			case reflect.Ptr:
+				isZero = val.IsNil()
+			case reflect.Interface:
+				isZero = val.IsNil()
+			}
+			if isZero {
+				continue
+			}
+		}
+
+		outVal := val.Interface()
+
+		if arrStr, ok := outVal.([]string); ok {
+			outVal = fmt.Sprintf("[%v]", utils2.ArrToStr(arrStr, 0))
+		}
+
+		itemMap[fieldName] = outVal
 	}
 	data, err_ := core.MarshalYaml(&itemMap)
 	if err_ != nil {
@@ -590,7 +644,7 @@ func (c *Config) Desensitize() *Config {
 	// 处理数据库配置
 	if c.Database != nil {
 		res.Database = &DatabaseConfig{
-			Url:         "fake://postgres:123@[127.0.0.1]:5432/ban",
+			Url:         "",
 			Retention:   c.Database.Retention,
 			MaxPoolSize: c.Database.MaxPoolSize,
 			AutoCreate:  c.Database.AutoCreate,
@@ -632,17 +686,12 @@ func (c *Config) Desensitize() *Config {
 			chlType := utils.GetMapVal(channelConfig, "type", "")
 			resChannel := make(map[string]interface{})
 			for k, v := range channelConfig {
-				if strings.Contains(strings.ToLower(k), "secret") {
-					resChannel[k] = "fake_" + k
-				} else {
+				if !strings.Contains(strings.ToLower(k), "secret") {
 					resChannel[k] = v
 				}
 			}
 			if chlType == "wework" {
-				corpID := utils.GetMapVal(channelConfig, "corp_id", "")
-				if corpID != "" {
-					resChannel["corp_id"] = "fake_corp_id"
-				}
+				delete(resChannel, "corp_id")
 			}
 			res.RPCChannels[channelName] = resChannel
 		}
@@ -651,19 +700,17 @@ func (c *Config) Desensitize() *Config {
 	// 处理API服务器配置
 	if c.APIServer != nil {
 		res.APIServer = &APIServerConfig{
-			Enable:       c.APIServer.Enable,
-			BindIPAddr:   c.APIServer.BindIPAddr,
-			Port:         c.APIServer.Port,
-			Verbosity:    c.APIServer.Verbosity,
-			JWTSecretKey: "fake_jwt_secret_key",
-			CORSOrigins:  c.APIServer.CORSOrigins,
+			Enable:      c.APIServer.Enable,
+			BindIPAddr:  c.APIServer.BindIPAddr,
+			Port:        c.APIServer.Port,
+			Verbosity:   c.APIServer.Verbosity,
+			CORSOrigins: c.APIServer.CORSOrigins,
 		}
 		if c.APIServer.Users != nil {
 			res.APIServer.Users = make([]*UserConfig, len(c.APIServer.Users))
 			for i, user := range c.APIServer.Users {
 				res.APIServer.Users[i] = &UserConfig{
 					Username:    user.Username,
-					Password:    "fake_pwd",
 					AccRoles:    user.AccRoles,
 					ExpireHours: user.ExpireHours,
 				}
@@ -865,8 +912,6 @@ func (c *RunPolicyConfig) PairDup(pair string) (*RunPolicyConfig, bool) {
 
 func (a *AccountConfig) Desensitize() *AccountConfig {
 	return &AccountConfig{
-		APIKey:      "fake_api_key",
-		APISecret:   "fake_api_secret",
 		NoTrade:     a.NoTrade,
 		MaxStakeAmt: a.MaxStakeAmt,
 		StakeRate:   a.StakeRate,

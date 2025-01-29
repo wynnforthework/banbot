@@ -23,7 +23,7 @@
   
   const menuItems = [
     { path: '/dash/board', icon: 'home', text: m.home() },
-    { path: '/dash/pair_job', icon: 'square-stack-3', text: m.pair_job() },
+    { path: '/dash/strat_job', icon: 'square-stack-3', text: m.strat_job() },
     { path: '/dash/kline', icon: 'chart-bar', text: m.kline() },
     { path: '/dash/perf', icon: 'calender', text: m.perf() },
     { path: '/dash/order', icon: 'number-list', text: m.order() },

@@ -10,6 +10,7 @@ class SiteState {
   heavyName: string = ''
   heavyProgress: number = 0
   path: string = ''
+  loading: boolean = false
 }
 
 export const site = writable(new SiteState())

@@ -1,5 +1,6 @@
 <script lang="ts">
   import * as m from '$lib/paraglide/messages.js'
+  import { languageTag } from '$lib/paraglide/runtime.js'
 </script>
 
 <main class="flex-1 flex items-center justify-center">
@@ -84,10 +85,12 @@
           <h3 class="step-title text-xl font-bold w-[13rem]">{m.dashboard()}</h3>
           <div class="content-block flex-1 p-6 bg-base-200 rounded-lg">
             <p>{m.dashboard_desc()}</p>
-            <a href="https://www.banbot.site/dash/" class="btn btn-primary mt-2 btn-outline btn-sm">{m.dashboard()}</a>
           </div>
         </div>
       </div>
+    </div>
+    <div class="flex mt-7 justify-center">
+      <a class="link" href="https://www.banbot.site/{languageTag()}/guide/live_trading" target="_blank">{m.document()}</a>
     </div>
   </div>
 </main>

@@ -149,6 +149,9 @@ func RunKlineAdjFactors(args *config.CmdArgs) *errs.Error {
 
 func RunSpider(args *config.CmdArgs) *errs.Error {
 	core.SetRunMode(core.RunModeLive)
+	if args.Logfile == "" {
+		args.Logfile = filepath.Join(config.GetLogsDir(), "spider.log")
+	}
 	err := biz.SetupComs(args)
 	if err != nil {
 		return err

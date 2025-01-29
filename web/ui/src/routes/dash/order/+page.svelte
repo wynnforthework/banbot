@@ -249,7 +249,7 @@
         <!-- 现有的操作按钮 -->
         {#if tabName === 'bot'}
           <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" onclick={clickCalcProfits}>
-            {m.refresh()}
+            {m.update_profits()}
           </button>
           <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" onclick={() => showOpenOrder = true}>
             {m.open_order()}

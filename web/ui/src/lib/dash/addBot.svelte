@@ -67,7 +67,6 @@
             return s;
           });
         }
-        Object.assign(info, empty);
         newBot(info);
       } else if (data.code === 401) {
         errorMsg = m.bad_user_pwd();

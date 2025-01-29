@@ -31,13 +31,25 @@ const requestApi = async function(method: ApiType, url: string,
       } 
       url = `${siteShot.apiHost}/api${url}`
     }
+    site.update((s) => {
+      s.loading = true;
+      return s;
+    });
     const rsp = await $fetch(url, {method, body, query, headers});
+    site.update((s) => {
+      s.loading = false;
+      return s;
+    });
     if(!_.isObject(rsp)){
       return {code: 200, data: rsp}
     }
     const data = rsp as Record<string, any>
     return {code: 200, msg: '', ...data}
   }catch (e){
+    site.update((s) => {
+      s.loading = false;
+      return s;
+    });
     const err = (e as FetchError)
     let msg = err.toString()
     if(typeof err.data === 'string'){

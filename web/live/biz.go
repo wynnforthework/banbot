@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/banbox/banbot/orm/ormo"
+	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"math"
 	"slices"
 	"sort"
@@ -35,6 +37,7 @@ func regApiBiz(api fiber.Router) {
 	api.Get("/incomes", getIncomes)
 	api.Get("/task_pairs", getTaskPairs)
 	api.Get("/orders", getOrders)
+	api.Post("/calc_profits", postCalcProfits)
 	api.Post("/forceexit", postForceExit)
 	api.Post("/close_pos", postClosePos)
 	api.Post("/delay_entry", postDelayEntry)
@@ -369,6 +372,42 @@ func getOrders(c *fiber.Ctx) error {
 		} else {
 			return fiber.NewError(fiber.StatusBadRequest, "invalid source")
 		}
+	})
+}
+
+func postCalcProfits(c *fiber.Ctx) error {
+	return wrapAccount(c, func(acc string) error {
+		openOds, lock := ormo.GetOpenODs(acc)
+		if len(openOds) == 0 {
+			return nil
+		}
+		lock.Lock()
+		defer lock.Unlock()
+		items, err := exg.Default.FetchLastPrices(nil, map[string]interface{}{
+			banexg.ParamMarket:  core.Market,
+			banexg.ParamAccount: acc,
+		})
+		if err != nil {
+			return err
+		}
+		prices := make(map[string]float64)
+		for _, it := range items {
+			prices[it.Symbol] = it.Price
+		}
+		core.SetPrices(prices)
+		fails := make(map[string]bool)
+		for _, od := range openOds {
+			if price, ok := prices[od.Symbol]; ok {
+				od.UpdateProfits(price)
+			} else {
+				fails[od.Symbol] = true
+			}
+		}
+		if len(fails) > 0 {
+			failStr := utils.MapToStr(fails, false, 0)
+			log.Warn("fetch latest prices fail", zap.String("for", failStr))
+		}
+		return nil
 	})
 }
 

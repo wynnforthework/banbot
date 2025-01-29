@@ -22,7 +22,7 @@
       <h2 class="text-xl font-semibold text-base-content">{m.config()}</h2>
     </div>
     
-    <div class="bg-base-200/50 rounded-lg h-[calc(100vh-12rem)]">
+    <div class="bg-base-200/50 rounded-lg">
       <pre 
         class="p-4 font-mono text-sm w-full h-full whitespace-pre-wrap break-words"
       >{content}</pre>

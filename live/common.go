@@ -79,7 +79,7 @@ func CronKlineDelays() {
 			if wait[0]+wait[1]*2 > curMS {
 				continue
 			}
-			timeoutMin := strconv.Itoa(int((curMS - wait[0]) / 60000))
+			timeoutMin := strconv.Itoa(int((curMS-wait[0])/60000)) + "mins"
 			arr, _ := fails[timeoutMin]
 			fails[timeoutMin] = append(arr, pair)
 		}

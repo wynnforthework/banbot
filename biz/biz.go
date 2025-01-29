@@ -51,6 +51,9 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	var logCores []zapcore.Core
 	if core.LiveMode {
 		logCores = append(logCores, rpc.NewExcNotify())
+		if args.Logfile == "" {
+			args.Logfile = filepath.Join(config.GetLogsDir(), config.Name+".log")
+		}
 	}
 	args.SetLog(true, logCores...)
 	err = core.Setup()

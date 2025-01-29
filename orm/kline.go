@@ -1641,6 +1641,13 @@ Update unfinished insertion tasks and call them when the robot starts,
 更新未完成的插入任务，在机器人启动时调用，
 */
 func (q *Queries) UpdatePendingIns() *errs.Error {
+	if utils.HasBanConn() {
+		lockVal, err := utils.GetNetLock("UpdatePendingIns", 10)
+		if err != nil {
+			return err
+		}
+		defer utils.DelNetLock("UpdatePendingIns", lockVal)
+	}
 	ctx := context.Background()
 	items, err_ := q.GetAllInsKlines(ctx)
 	if err_ != nil {

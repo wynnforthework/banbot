@@ -28,7 +28,7 @@
       </button>
     </div>
     
-    <div class="bg-base-200/50 rounded-lg p-4 h-[calc(100vh-12rem)]">
+    <div class="bg-base-200/50 rounded-lg p-4">
       <pre class="whitespace-pre-wrap font-mono text-sm text-base-content/80">{content}</pre>
     </div>
   </div>

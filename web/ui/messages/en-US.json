@@ -200,7 +200,8 @@
     "save": "Save",
     "total": "Total",
     "home": "Home",
-    "pair_job": "Pair & Job",
+    "strat_job": "Strategy Jobs",
+    "job": "Job",
     "kline": "Kline",
     "perf": "Performance",
     "order": "Order",
@@ -499,6 +500,7 @@
     "export_desc": "Export to protobuf format here. or execute `bot data export` in the terminal to export. If you need csv format, execute `bot kline export` from the terminal.",
     "import_desc": "Import protobuf format data here, or execute `bot data import` in the terminal to export. If you need to import `csv.zip` data, please execute `bot kline load`",
     "language": "Language",
+    "system_logs": "System Logs",
 
     "cfg_name": "Bot name, used to distinguish different bots in message notifications",
     "cfg_env": "Running environment, prod represents production network, test represents test network (Binance testnet), dry_run represents simulation",
@@ -603,6 +605,5 @@
     "cfg_webhook": "Message types that can be sent via RPC",
     "cfg_webhook_status": "Bot status messages: start, stop, etc.",
     "cfg_api_server": "For external control of the bot or access to dashboard via API",
-    "cfg_api_bind_ip": "It is recommended to open only to local or LAN users. You can use SSH port forwarding or nginx to expose it to specific internet users more safely.",
-    "system_logs": "System Logs"
+    "cfg_api_bind_ip": "It is recommended to open only to local or LAN users. You can use SSH port forwarding or nginx to expose it to specific internet users more safely."
 }
