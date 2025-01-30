@@ -669,7 +669,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		return err2
 	}
 	hashVal := utils.MD5(cfgData)[:10]
-	btPath := fmt.Sprintf("$/backtest/%s", hashVal)
+	btPath := fmt.Sprintf("$backtest/%s", hashVal)
 	absPath := config.ParsePath(btPath)
 
 	// 创建目标目录
@@ -706,7 +706,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 			if old != nil {
 				backupPath = hashVal + "_" + strconv.FormatInt(old.ID, 10)
 			}
-			realPath := config.ParsePath(fmt.Sprintf("$/backtest/%s", backupPath))
+			realPath := config.ParsePath(fmt.Sprintf("$backtest/%s", backupPath))
 			err = utils.CopyDir(absPath, realPath)
 			if err != nil {
 				return err

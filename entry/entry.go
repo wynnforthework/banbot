@@ -32,7 +32,7 @@ func RunBackTest(args *config.CmdArgs) *errs.Error {
 		if err != nil {
 			panic(err)
 		}
-		args.OutPath = fmt.Sprintf("$/backtest/%s", hash)
+		args.OutPath = fmt.Sprintf("$backtest/%s", hash)
 	}
 	if args.Separate && len(config.RunPolicy) > 1 {
 		log.Info("run backtest separately for policies", zap.Int("num", len(config.RunPolicy)))

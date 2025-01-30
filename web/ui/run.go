@@ -28,7 +28,7 @@ func ServeStatic(app *fiber.App) error {
 	errMsg := ""
 	if !utils.Exists(indexPath) {
 		reDown = 1
-		errMsg = "$/uidist/index.html not exists"
+		errMsg = "$uidist/index.html not exists"
 	} else if err2 != nil || oldVer != core.UIVersion {
 		reDown = 2
 		errMsg = "uidist is too old"

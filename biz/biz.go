@@ -411,11 +411,11 @@ func InitDataDir() *errs.Error {
 	}
 	if !exists {
 		err = utils.WriteFile(configPath, replaceDockerHosts(configData))
-		log.Info("init done: $/config.yml")
+		log.Info("init done: $config.yml")
 	}
 	if !existLocal {
 		err = utils.WriteFile(configLocalPath, replaceDockerHosts(configLocalData))
-		log.Info("init done: $/config.local.yml")
+		log.Info("init done: $config.local.yml")
 	}
 	return err
 }

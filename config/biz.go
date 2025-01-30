@@ -5,7 +5,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -417,7 +416,8 @@ func (p *StratPerfConfig) Validate() {
 
 func ParsePath(path string) string {
 	if strings.HasPrefix(path, "$") {
-		return strings.Replace(path, "$", GetDataDir(), 1)
+		path = strings.TrimLeft(path, "$\\/")
+		return filepath.Join(GetDataDir(), path)
 	}
 	return path
 }
@@ -448,64 +448,7 @@ func GetStakeAmount(accName string) float64 {
 }
 
 func (c *Config) DumpYaml() ([]byte, *errs.Error) {
-	itemMap := make(map[string]interface{})
-	t := reflect.TypeOf(*c)
-	v := reflect.ValueOf(*c)
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-		tag := field.Tag.Get("yaml")
-		if tag == "" || tag == "-" {
-			continue
-		}
-
-		// 处理yaml标签
-		tagParts := strings.Split(tag, ",")
-		fieldName := tagParts[0]
-		hasOmitempty := false
-		for _, opt := range tagParts[1:] {
-			if opt == "omitempty" {
-				hasOmitempty = true
-				break
-			}
-		}
-
-		val := v.Field(i)
-		// 如果有omitempty标签，则需要检查值是否为空
-		if hasOmitempty {
-			// 检查值是否为空
-			isZero := false
-			switch val.Kind() {
-			case reflect.String:
-				isZero = val.String() == ""
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				isZero = val.Int() == 0
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				isZero = val.Uint() == 0
-			case reflect.Float32, reflect.Float64:
-				isZero = val.Float() == 0
-			case reflect.Bool:
-				isZero = !val.Bool()
-			case reflect.Slice, reflect.Map:
-				isZero = val.Len() == 0
-			case reflect.Ptr:
-				isZero = val.IsNil()
-			case reflect.Interface:
-				isZero = val.IsNil()
-			}
-			if isZero {
-				continue
-			}
-		}
-
-		outVal := val.Interface()
-
-		if arrStr, ok := outVal.([]string); ok {
-			outVal = fmt.Sprintf("[%v]", utils2.ArrToStr(arrStr, 0))
-		}
-
-		itemMap[fieldName] = outVal
-	}
-	data, err_ := core.MarshalYaml(&itemMap)
+	data, err_ := core.MarshalYaml(c)
 	if err_ != nil {
 		return nil, errs.New(errs.CodeMarshalFail, err_)
 	}

@@ -102,17 +102,17 @@ type Config struct {
 	MaxSimulOpen     int                               `yaml:"max_simul_open,omitempty" mapstructure:"max_simul_open"`
 	WalletAmounts    map[string]float64                `yaml:"wallet_amounts,omitempty" mapstructure:"wallet_amounts"`
 	DrawBalanceOver  float64                           `yaml:"draw_balance_over,omitempty" mapstructure:"draw_balance_over"`
-	StakeCurrency    []string                          `yaml:"stake_currency,omitempty" mapstructure:"stake_currency"`
+	StakeCurrency    []string                          `yaml:"stake_currency,omitempty,flow" mapstructure:"stake_currency"`
 	FatalStop        map[string]float64                `yaml:"fatal_stop,omitempty" mapstructure:"fatal_stop"`
 	FatalStopHours   int                               `yaml:"fatal_stop_hours,omitempty" mapstructure:"fatal_stop_hours"`
 	TimeRangeRaw     string                            `yaml:"timerange,omitempty" mapstructure:"timerange"`
-	TimeRange        *TimeTuple                        `json:"-" mapstructure:"-"`
-	RunTimeframes    []string                          `yaml:"run_timeframes,omitempty" mapstructure:"run_timeframes"`
+	TimeRange        *TimeTuple                        `yaml:"-" json:"-" mapstructure:"-"`
+	RunTimeframes    []string                          `yaml:"run_timeframes,omitempty,flow" mapstructure:"run_timeframes"`
 	KlineSource      string                            `yaml:"kline_source,omitempty" mapstructure:"kline_source"`
 	WatchJobs        map[string][]string               `yaml:"watch_jobs,omitempty" mapstructure:"watch_jobs"`
 	RunPolicy        []*RunPolicyConfig                `yaml:"run_policy,omitempty" mapstructure:"run_policy"`
 	StratPerf        *StratPerfConfig                  `yaml:"strat_perf,omitempty" mapstructure:"strat_perf"`
-	Pairs            []string                          `yaml:"pairs,omitempty" mapstructure:"pairs"`
+	Pairs            []string                          `yaml:"pairs,omitempty,flow" mapstructure:"pairs"`
 	PairMgr          *PairMgrConfig                    `yaml:"pairmgr,omitempty" mapstructure:"pairmgr"`
 	PairFilters      []*CommonPairFilter               `yaml:"pairlists,omitempty" mapstructure:"pairlists"`
 	Exchange         *ExchangeConfig                   `yaml:"exchange,omitempty" mapstructure:"exchange"`
@@ -127,7 +127,7 @@ type Config struct {
 type RunPolicyConfig struct {
 	Name          string                        `yaml:"name" mapstructure:"name"`
 	Filters       []*CommonPairFilter           `yaml:"filters,omitempty" mapstructure:"filters"`
-	RunTimeframes []string                      `yaml:"run_timeframes,omitempty" mapstructure:"run_timeframes"`
+	RunTimeframes []string                      `yaml:"run_timeframes,omitempty,flow" mapstructure:"run_timeframes"`
 	MaxPair       int                           `yaml:"max_pair,omitempty" mapstructure:"max_pair"`
 	MaxOpen       int                           `yaml:"max_open,omitempty" mapstructure:"max_open"`
 	MaxSimulOpen  int                           `yaml:"max_simul_open,omitempty" mapstructure:"max_simul_open"`
@@ -135,7 +135,7 @@ type RunPolicyConfig struct {
 	StakeRate     float64                       `yaml:"stake_rate,omitempty" mapstructure:"stake_rate"`
 	Dirt          string                        `yaml:"dirt,omitempty" mapstructure:"dirt"`
 	StratPerf     *StratPerfConfig              `yaml:"strat_perf,omitempty" mapstructure:"strat_perf"`
-	Pairs         []string                      `yaml:"pairs,omitempty" mapstructure:"pairs"`
+	Pairs         []string                      `yaml:"pairs,omitempty,flow" mapstructure:"pairs"`
 	Params        map[string]float64            `yaml:"params,omitempty" mapstructure:"params"`
 	PairParams    map[string]map[string]float64 `yaml:"pair_params,omitempty" mapstructure:"pair_params"`
 	defs          map[string]*core.Param
@@ -164,7 +164,7 @@ type APIServerConfig struct {
 	Port         int           `yaml:"port" mapstructure:"port"`                               // LOCAL LISTENING PORT 本地监听端口
 	Verbosity    string        `yaml:"verbosity" mapstructure:"verbosity"`                     // Detail level 详细程度
 	JWTSecretKey string        `yaml:"jwt_secret_key,omitempty" mapstructure:"jwt_secret_key"` // Key used for password encryption 用于密码加密的密钥
-	CORSOrigins  []string      `yaml:"CORS_origins" mapstructure:"CORS_origins"`               // When accessing banweb, you need to add the address of banweb here to allow access. banweb访问时，要这里添加banweb的地址放行
+	CORSOrigins  []string      `yaml:"CORS_origins,flow" mapstructure:"CORS_origins"`          // When accessing banweb, you need to add the address of banweb here to allow access. banweb访问时，要这里添加banweb的地址放行
 	Users        []*UserConfig `yaml:"users" mapstructure:"users"`                             // Login user 登录用户
 }
 
@@ -180,7 +180,7 @@ type UserConfig struct {
 type WeWorkChannel struct {
 	Enable     bool     `yaml:"enable" mapstructure:"enable"`
 	Type       string   `yaml:"type" mapstructure:"type"`
-	MsgTypes   []string `yaml:"msg_types" mapstructure:"msg_types"`
+	MsgTypes   []string `yaml:"msg_types,flow" mapstructure:"msg_types"`
 	AgentId    string   `yaml:"agentid,omitempty" mapstructure:"agentid"`
 	CorpId     string   `yaml:"corpid,omitempty" mapstructure:"corpid"`
 	CorpSecret string   `yaml:"corpsecret,omitempty" mapstructure:"corpsecret"`
@@ -190,7 +190,7 @@ type WeWorkChannel struct {
 type TelegramChannel struct {
 	Enable   bool     `yaml:"enable" mapstructure:"enable"`
 	Type     string   `yaml:"type" mapstructure:"type"`
-	MsgTypes []string `yaml:"msg_types" mapstructure:"msg_types"`
+	MsgTypes []string `yaml:"msg_types,flow" mapstructure:"msg_types"`
 	Token    string   `yaml:"token" mapstructure:"token"`
 	Channel  string   `yaml:"channel" mapstructure:"channel"`
 }
@@ -255,12 +255,12 @@ type MarketRange struct {
 
 type MarketSymbolsRange struct {
 	*MarketRange `yaml:",inline"`
-	Symbols      []string `yaml:"symbols"`
+	Symbols      []string `yaml:"symbols,flow"`
 }
 
 type MarketTFSymbolsRange struct {
 	*MarketSymbolsRange `yaml:",inline"`
-	TimeFrames          []string `yaml:"timeframes"`
+	TimeFrames          []string `yaml:"timeframes,flow"`
 }
 
 // ExportConfig represents the export configuration
