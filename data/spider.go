@@ -165,6 +165,9 @@ func consumeWriteQ(workNum int) {
 			}
 		}
 	}
+	hourStamps := make(map[int32]int64)
+	hourLock := sync.Mutex{}
+	hourMSecs := int64(utils2.TFToSecs("1h") * 1000)
 	for save := range writeQ {
 		setOne()
 		go func(job *SaveKline) {
@@ -194,6 +197,35 @@ func consumeWriteQ(workNum int) {
 				}
 				if err == nil && len(addBars) > 0 {
 					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, addBars, true)
+					// 下载1h及以上周期K线数据
+					hourLock.Lock()
+					lastMS, _ := hourStamps[job.Sid]
+					hourAlign := utils2.AlignTfMSecs(btime.TimeMS(), hourMSecs)
+					if hourAlign > lastMS {
+						hourStamps[job.Sid] = hourAlign
+					}
+					hourLock.Unlock()
+					if lastMS == 0 {
+						kinfos, _ := sess.FindKInfos(ctx, job.Sid)
+						for _, kinfo := range kinfos {
+							if kinfo.Timeframe == "1h" {
+								lastMS = kinfo.Stop
+								break
+							}
+						}
+					}
+					if hourAlign > lastMS {
+						exs := orm.GetSymbolByID(job.Sid)
+						if exs == nil {
+							log.Error("sid not found in cache", zap.Int32("sid", job.Sid))
+						} else {
+							var exchange banexg.BanExchange
+							exchange, err = exg.GetWith(exs.Exchange, exs.Market, "")
+							if err == nil {
+								_, err = sess.DownOHLCV2DB(exchange, exs, "1h", lastMS, hourAlign, nil)
+							}
+						}
+					}
 				}
 			}
 			if err != nil {
@@ -238,6 +270,7 @@ type Miner struct {
 	BookReady    bool
 	BookPairs    map[string]bool
 	IsWatchPrice bool
+	klineStates  map[string]*SubKLineState
 }
 
 type LiveSpider struct {
@@ -251,14 +284,15 @@ func newMiner(spider *LiveSpider, exgName, market string) (*Miner, *errs.Error) 
 		return nil, err
 	}
 	return &Miner{
-		spider:     spider,
-		ExgName:    exgName,
-		Market:     market,
-		exchange:   exchange,
-		Fetchs:     map[string]*FetchJob{},
-		KlinePairs: map[string]bool{},
-		TradePairs: map[string]bool{},
-		BookPairs:  map[string]bool{},
+		spider:      spider,
+		ExgName:     exgName,
+		Market:      market,
+		exchange:    exchange,
+		Fetchs:      map[string]*FetchJob{},
+		KlinePairs:  map[string]bool{},
+		TradePairs:  map[string]bool{},
+		BookPairs:   map[string]bool{},
+		klineStates: map[string]*SubKLineState{},
 	}, nil
 }
 
@@ -447,9 +481,13 @@ func (m *Miner) watchOdBooks(pairs []string) {
 type SubKLineState struct {
 	Sid        int32
 	NextNotify float64
+	ExpectMS   int64
 	PrevBar    *banexg.Kline
 }
 
+/*
+这里将订阅此市场的最小周期(1s/1m)；1h/1d等大周期已在writeQ消费端判断并fetch
+*/
 func (m *Miner) watchKLines(pairs []string) {
 	if len(pairs) == 0 {
 		return
@@ -462,8 +500,24 @@ func (m *Miner) watchKLines(pairs []string) {
 	if banexg.IsContract(m.Market) {
 		timeFrame = "1m"
 	}
+	tfSecs := utils2.TFToSecs(timeFrame)
+	tfMSecs := int64(tfSecs * 1000)
+	expectMS := utils2.AlignTfMSecs(btime.TimeMS(), tfMSecs)
 	for p := range m.KlinePairs {
 		jobs = append(jobs, [2]string{p, timeFrame})
+		if _, ok := m.klineStates[p]; !ok {
+			exs, err := orm.GetExSymbol(m.exchange, p)
+			if err != nil {
+				code := fmt.Sprintf("%s.%s.%s", m.ExgName, m.Market, p)
+				log.Error("invalid watchKLines", zap.String("pair", code), zap.Error(err))
+				continue
+			}
+			res := &SubKLineState{
+				Sid:      exs.ID,
+				ExpectMS: expectMS,
+			}
+			m.klineStates[p] = res
+		}
 	}
 	out, err := m.exchange.WatchOHLCVs(jobs, nil)
 	if err != nil {
@@ -478,37 +532,16 @@ func (m *Miner) watchKLines(pairs []string) {
 	log.Info("start watch kline", zap.String("exg", m.ExgName), zap.Int("num", len(m.KlinePairs)))
 	prefix := fmt.Sprintf("ohlcv_%s_%s_", m.ExgName, m.Market)
 	unPrefix := "u" + prefix
-	tfSecs := utils2.TFToSecs(timeFrame)
-
-	// pair_tf to state map
-	subStateMap := map[string]*SubKLineState{}
-	getState := func(key string) *SubKLineState {
-		if val, ok := subStateMap[key]; ok {
-			return val
-		}
-		pair := strings.Split(key, "_")[0]
-		exs, err := orm.GetExSymbol(m.exchange, pair)
-		if err != nil {
-			log.Error("save kline fail", zap.String("key", key), zap.Error(err))
-			subStateMap[key] = nil
-			return nil
-		}
-		res := &SubKLineState{
-			Sid:        exs.ID,
-			NextNotify: 0,
-			PrevBar:    nil,
-		}
-		subStateMap[key] = res
-		return res
-	}
 
 	// The candlestick is received, sent to the robot, and saved to the database
 	// 收到K线，发送到机器人，保存到数据库
 	handleSubKLines := func(key string, arr []*banexg.Kline) {
 		parts := strings.Split(key, "_")
 		pair, curTF := parts[0], parts[1]
-		state := getState(key)
-		if state == nil {
+		state, ok := m.klineStates[pair]
+		if !ok {
+			code := fmt.Sprintf("%s.%s.%s", m.ExgName, m.Market, pair)
+			log.Warn("no pair state: " + code)
 			return
 		}
 		curTS := btime.Time()
@@ -539,6 +572,7 @@ func (m *Miner) watchKLines(pairs []string) {
 		}
 		if state.PrevBar == nil || last.Time >= state.PrevBar.Time {
 			state.PrevBar = last
+			state.ExpectMS = last.Time
 		}
 		if len(finishes) > 0 {
 			// There are completed k-lines, written to the database, and only then the message is broadcast
@@ -556,6 +590,7 @@ func (m *Miner) watchKLines(pairs []string) {
 		}
 	}
 
+	// 处理ws推送的K线数据
 	go func() {
 		defer func() {
 			m.KlineReady = false
@@ -591,6 +626,50 @@ func (m *Miner) watchKLines(pairs []string) {
 			}
 		}
 	}()
+
+	// 交易所ws可能偶发故障，这里定期检查，通过rest获取k线(约1m一次)
+	delayMS := int64(20000)
+	minMSecs := int64(utils2.TFToSecs("1m") * 1000)
+	go func() {
+		for {
+			time.Sleep(time.Millisecond * 3000)
+			curMS := btime.TimeMS()
+			curMinuteMS := utils2.AlignTfMSecs(curMS, minMSecs)
+			if curMS-curMinuteMS < delayMS {
+				continue
+			}
+			alignMS := utils2.AlignTfMSecs(curMS, tfMSecs)
+			adds := make(map[string]int)
+			for pair, sta := range m.klineStates {
+				if curMinuteMS > sta.ExpectMS+delayMS {
+					bars, err := m.exchange.FetchOHLCV(pair, timeFrame, sta.ExpectMS, 0, nil)
+					if err != nil {
+						log.Warn("FetchOHLCV fail", zap.String("pair", pair), zap.Error(err))
+						continue
+					}
+					if len(bars) > 0 {
+						adds[pair] = len(bars)
+						key := fmt.Sprintf("%s_%s", pair, timeFrame)
+						last := bars[len(bars)-1]
+						if last.Time < alignMS {
+							// 交易所未返回未完成bar，添加最后一个未完成bar
+							bars = append(bars, &banexg.Kline{
+								Time:  last.Time + tfMSecs,
+								Open:  last.Close,
+								High:  last.Close,
+								Low:   last.Close,
+								Close: last.Close,
+							})
+						}
+						handleSubKLines(key, bars)
+					}
+				}
+			}
+			if len(adds) > 0 {
+				log.Warn("FetchOHLCV as ws timeout", zap.String("items", utils.MapToStr(adds, true, 0)))
+			}
+		}
+	}()
 }
 
 func RunSpider(addr string) *errs.Error {
@@ -607,6 +686,7 @@ func RunSpider(addr string) *errs.Error {
 	}
 	err = sess.PurgeKlineUn()
 	if err != nil {
+		conn.Release()
 		return err
 	}
 	conn.Release()

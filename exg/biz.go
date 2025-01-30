@@ -27,10 +27,6 @@ func Setup() *errs.Error {
 }
 
 func create(name, market, contractType string) (banexg.BanExchange, *errs.Error) {
-	exgCfg := config.Exchange
-	if exgCfg == nil {
-		return nil, errs.NewMsg(core.ErrBadConfig, "exchange is required")
-	}
 	var cfg = config.GetExgConfig()
 	var options = map[string]interface{}{}
 	for key, val := range cfg.Options {

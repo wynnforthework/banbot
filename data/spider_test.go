@@ -14,6 +14,7 @@ import (
 )
 
 func TestWatchOhlcv(t *testing.T) {
+	core.SetRunMode(core.RunModeLive)
 	client, err := NewKlineWatcher("127.0.0.1:6789")
 	if err != nil {
 		panic(err)

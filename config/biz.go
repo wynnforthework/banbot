@@ -327,8 +327,10 @@ func initPolicies(policyList []*RunPolicyConfig) (bool, []string) {
 }
 
 func GetExgConfig() *ExgItemConfig {
-	if cfg, ok := Exchange.Items[Exchange.Name]; ok {
-		return cfg
+	if Exchange != nil {
+		if cfg, ok := Exchange.Items[Exchange.Name]; ok {
+			return cfg
+		}
 	}
 	return &ExgItemConfig{}
 }
