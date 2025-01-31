@@ -27,12 +27,11 @@ type BaseFilter struct {
 // VolumePairFilter Used to represent a configuration that sorts all trading pairs in reverse order by volume value 用于表示按成交量价值倒序排序所有交易对的配置
 type VolumePairFilter struct {
 	BaseFilter
-	Limit         int     `yaml:"limit" mapstructure:"limit,omitempty"` // The number of returned results is limited to the first 100 返回结果的数量限制，取前100个
-	LimitRate     float64 `yaml:"limit_rate" mapstructure:"limit_rate"`
-	MinValue      float64 `yaml:"min_value" mapstructure:"min_value,omitempty"`           // Minimum volume value 最低成交量价值
-	RefreshSecs   int     `yaml:"refresh_secs" mapstructure:"refresh_secs,omitempty"`     // Cache time, in seconds 缓存时间，以秒为单位
-	BackTimeframe string  `yaml:"back_timeframe" mapstructure:"back_timeframe,omitempty"` // The time period for calculating the volume, which is set to days by default 计算成交量的时间周期，默认为天
-	BackPeriod    int     `yaml:"back_period" mapstructure:"back_period,omitempty"`       // The multiplier for the time range obtained by multiplying it by the BackTimeframe 与BackTimeframe相乘得到的时间范围的乘数
+	Limit      int     `yaml:"limit" mapstructure:"limit,omitempty"` // The number of returned results is limited to the first 100 返回结果的数量限制，取前100个
+	LimitRate  float64 `yaml:"limit_rate" mapstructure:"limit_rate"`
+	MinValue   float64 `yaml:"min_value" mapstructure:"min_value,omitempty"`     // Minimum volume value 最低成交量价值
+	CacheSecs  int     `yaml:"cache_secs" mapstructure:"cache_secs,omitempty"`   // Cache time, in seconds 缓存时间，以秒为单位
+	BackPeriod string  `yaml:"back_period" mapstructure:"back_period,omitempty"` // The time period for calculating the volume 计算成交量的时间周期
 }
 
 /*
@@ -53,10 +52,10 @@ type PriceFilter struct {
 // RateOfChangeFilter 一段时间内(high-low)/low比值
 type RateOfChangeFilter struct {
 	BaseFilter
-	BackDays      int     `yaml:"back_days" mapstructure:"back_days,omitempty"`           // 回顾的K线天数
-	Min           float64 `yaml:"min" mapstructure:"min,omitempty"`                       // 最小价格变动比率
-	Max           float64 `yaml:"max" mapstructure:"max,omitempty"`                       // 最大价格变动比率
-	RefreshPeriod int     `yaml:"refresh_period" mapstructure:"refresh_period,omitempty"` // 缓存时间，秒
+	BackDays  int     `yaml:"back_days" mapstructure:"back_days,omitempty"`   // 回顾的K线天数
+	Min       float64 `yaml:"min" mapstructure:"min,omitempty"`               // 最小价格变动比率
+	Max       float64 `yaml:"max" mapstructure:"max,omitempty"`               // 最大价格变动比率
+	CacheSecs int     `yaml:"cache_secs" mapstructure:"cache_secs,omitempty"` // 缓存时间，秒
 }
 
 // 流动性过滤器。

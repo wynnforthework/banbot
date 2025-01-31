@@ -94,12 +94,7 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
 	var symbolVols = make([]SymbolVol, 0)
 	if !f.NeedTickers {
-		backTf, backNum := f.BackTimeframe, f.BackPeriod
-		tfSecs := utils2.TFToSecs(backTf)
-		if tfSecs > 3600 {
-			backTf = "1h"
-			backNum *= tfSecs / 3600
-		}
+		backTf, backNum := utils.SecsToTfNum(utils2.TFToSecs(f.BackPeriod))
 		var err *errs.Error
 		symbolVols, err = getSymbolVols(symbols, backTf, backNum)
 		if err != nil {

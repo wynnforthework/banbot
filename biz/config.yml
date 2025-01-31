@@ -42,9 +42,8 @@ pairlists:
     limit: 100
     limit_rate: 1
     min_value: 100000
-    refresh_secs: 7200
-    back_timeframe: 1d
-    back_period: 7
+    cache_secs: 7200
+    back_period: 7d
   - name: PriceFilter
     max_unit_value: 100
     precision: 0.0015
@@ -54,7 +53,7 @@ pairlists:
     back_days: 5
     min: 0.03
     max: 10
-    refresh_period: 1440
+    cache_secs: 1440
   - name: SpreadFilter
     max_ratio: 0.005
 #  - name: CorrelationFilter

@@ -79,9 +79,8 @@ pairlists:  # ${m.cfg_pairlists()}
   - name: VolumePairList  # ${m.cfg_pairlists_vol()}
     limit: 100  # ${m.cfg_pairlists_limit100()}
     min_value: 100000  # ${m.cfg_pairlists_min_value()}
-    refresh_secs: 7200  # ${m.cfg_pairlists_refresh_secs()}
-    back_timeframe: 1d  # ${m.cfg_pairlists_back_timeframe()}
-    back_period: 1  # ${m.cfg_pairlists_back_period()}
+    cache_secs: 7200  # ${m.cfg_pairlists_refresh_secs()}
+    back_period: 3d  # ${m.cfg_pairlists_back_period()}
   - name: PriceFilter
     max_unit_value: 100  # ${m.cfg_pairlists_max_unit_value()}
     precision: 0.0015  # ${m.cfg_price_precision()}
@@ -91,7 +90,7 @@ pairlists:  # ${m.cfg_pairlists()}
     back_days: 5  # ${m.cfg_back_days()}
     min: 0.03  # ${m.cfg_roc_min()}
     max: 10  # ${m.cfg_roc_max()}
-    refresh_period: 1440  # ${m.cfg_refresh_period()}
+    cache_secs: 1440  # ${m.cfg_refresh_period()}
   - name: SpreadFilter  # ${m.cfg_spread_filter()}
     max_ratio: 0.005  # ${m.cfg_spread_max()}
   - name: CorrelationFilter  # ${m.cfg_correlation()}

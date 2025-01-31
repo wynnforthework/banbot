@@ -148,3 +148,18 @@ func RoundSecsTF(secs int) string {
 	}
 	return tf
 }
+
+func SecsToTfNum(secs int) (string, int) {
+	if secs%utils.SecsDay == 0 {
+		return "1d", secs / utils.SecsDay
+	} else if secs%utils.SecsHour == 0 {
+		return "1h", secs / utils.SecsHour
+	} else if secs%utils.SecsMin*15 == 0 {
+		return "15m", secs / utils.SecsMin / 15
+	} else if secs%utils.SecsMin*5 == 0 {
+		return "5m", secs / utils.SecsMin / 5
+	} else if secs%utils.SecsMin == 0 {
+		return "1m", secs / utils.SecsMin
+	}
+	return "1m", secs / utils.SecsMin
+}
