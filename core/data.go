@@ -55,6 +55,7 @@ const (
 	StepTotal      = 1000
 	KBatchSize     = 900 // The maximum number of K lines returned by the exchange in a single request. When 1000, the API weight is too large. 单次请求交易所最大返回K线数量, 1000时api权重过大
 	DefaultDateFmt = "2006-01-02 15:04:05"
+	DateFmt        = "2006-01-02"
 	DelayBatchMS   = 3000  // Number of milliseconds to defer batch logic 批量逻辑推迟的毫秒数
 	PrefMinRate    = 0.001 // Job minimum opening ratio, directly use MinStakeAmount to open a position job最低开仓比率，直接使用MinStakeAmount开仓
 	AmtDust        = 1e-8

@@ -4,17 +4,7 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"github.com/banbox/banbot/biz"
-	"github.com/banbox/banbot/btime"
-	"github.com/banbox/banbot/config"
-	"github.com/banbox/banbot/exg"
-	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banbot/orm/ormo"
-	"github.com/banbox/banexg"
-	"github.com/banbox/banexg/log"
-	utils2 "github.com/banbox/banexg/utils"
-	"github.com/xuri/excelize/v2"
-	"go.uber.org/zap"
+	"github.com/banbox/banbot/core"
 	"io"
 	"math"
 	"os"
@@ -23,6 +13,19 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/banbox/banbot/biz"
+	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/config"
+	"github.com/banbox/banbot/exg"
+	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/orm/ormo"
+	"github.com/banbox/banexg"
+	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
+	utils2 "github.com/banbox/banexg/utils"
+	"github.com/xuri/excelize/v2"
+	"go.uber.org/zap"
 )
 
 /*
@@ -543,4 +546,150 @@ func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*b
 		res = append(res, order)
 	}
 	return res
+}
+
+type AssetData struct {
+	Title    string     `json:"title"`
+	Labels   []string   `json:"labels"`
+	Datasets []*ChartDs `json:"datasets"`
+	Times    []int64    // 存储解析后的时间戳
+}
+
+/*
+MergeAssetsHtml 合并多个assets.html文件的曲线到一个html文件中
+
+files assets.html文件路径Map，键是路径，值是代表此文件的字符串ID
+outPath 输出文件路径
+lines 需要提取的曲线名称列表，默认为["Real", "Available"]
+*/
+func MergeAssetsHtml(outPath string, files map[string]string, tags []string, useRate bool) *errs.Error {
+	if len(files) <= 1 {
+		return errs.NewMsg(errs.CodeParamRequired, "at least 2 files need to merge")
+	}
+	if len(tags) == 0 {
+		tags = []string{"Real", "Available"}
+	}
+	linesMap := make(map[string]bool)
+	for _, line := range tags {
+		linesMap[line] = true
+	}
+
+	// 读取所有文件的数据
+	var allData []*AssetData
+	var minTime, maxTime int64 = math.MaxInt64, 0
+	for file, prefix := range files {
+		data, err := readAssetHtml(file, prefix, useRate)
+		if err != nil {
+			return err
+		}
+		allData = append(allData, data)
+		// 更新整体时间范围
+		if len(data.Times) > 0 {
+			minTime = min(minTime, data.Times[0])
+			maxTime = max(maxTime, data.Times[len(data.Times)-1])
+		}
+	}
+
+	// 确定采样数量和间隔
+	maxSamples := 0
+	for _, data := range allData {
+		maxSamples = max(maxSamples, len(data.Labels))
+	}
+
+	// 生成最终的时间戳和标签
+	interval := (maxTime - minTime) / int64(maxSamples-1)
+	dateLay := core.DefaultDateFmt
+	if interval >= utils2.SecsDay*1000 {
+		dateLay = core.DateFmt
+	}
+	var labels = make([]string, 0, maxSamples+3)
+	var finalTimes = make([]int64, 0, maxSamples+3)
+	for i := 0; i < maxSamples; i++ {
+		t := minTime + interval*int64(i)
+		finalTimes = append(finalTimes, t)
+		labels = append(labels, btime.ToDateStr(t, dateLay))
+	}
+	finalTimes = append(finalTimes, maxTime)
+	labels = append(labels, btime.ToDateStr(maxTime, dateLay))
+
+	// 合并数据集
+	var datasets []*ChartDs
+	for _, data := range allData {
+		for _, ds := range data.Datasets {
+			if _, ok := linesMap[ds.Label]; !ok {
+				continue
+			}
+			values := make([]float64, 0, len(finalTimes))
+			curVal := math.NaN()
+			idx := 0
+			nextTime, nextVal := data.Times[0], ds.Data[0]
+			for _, curTime := range finalTimes {
+				if curTime >= nextTime {
+					curVal = nextVal
+					idx += 1
+					if idx < len(data.Times) {
+						nextTime, nextVal = data.Times[idx], ds.Data[idx]
+					} else {
+						nextTime = math.MaxInt64
+					}
+				}
+				values = append(values, curVal)
+			}
+
+			// 添加到最终数据集
+			label := fmt.Sprintf("%s_%s", data.Title, ds.Label)
+			datasets = append(datasets, &ChartDs{
+				Label: label,
+				Data:  values,
+			})
+		}
+	}
+
+	// 生成最终的图表
+	title := "Merged Assets Comparison"
+	return DumpChart(outPath, title, labels, 5, nil, datasets)
+}
+
+// readAssetHtml 读取assets.html文件并解析数据
+func readAssetHtml(file, prefix string, useRate bool) (*AssetData, *errs.Error) {
+	content, err := os.ReadFile(file)
+	if err != nil {
+		return nil, errs.New(errs.CodeIOReadFail, err)
+	}
+
+	// 提取JSON数据
+	start := strings.Index(string(content), "var chartData = ") + 15
+	end := strings.Index(string(content)[start:], "\n")
+	if start < 15 || end < 0 {
+		return nil, errs.New(errs.CodeInvalidData, fmt.Errorf("invalid html format in file %s", file))
+	}
+	jsonStr := string(content)[start : start+end]
+
+	var data AssetData
+	if err = utils2.UnmarshalString(jsonStr, &data, utils2.JsonNumDefault); err != nil {
+		return nil, errs.New(errs.CodeUnmarshalFail, err)
+	}
+
+	// 解析时间标签为时间戳
+	data.Times = make([]int64, len(data.Labels))
+	for i, label := range data.Labels {
+		data.Times[i] = btime.ParseTimeMS(label)
+	}
+	if prefix == "" {
+		prefix = filepath.Base(filepath.Dir(file))
+	}
+	data.Title = prefix
+	if useRate {
+		for _, ds := range data.Datasets {
+			initVal := ds.Data[0]
+			if initVal != 0 {
+				resArr := make([]float64, 0, len(ds.Data))
+				for _, curVal := range ds.Data {
+					resArr = append(resArr, curVal/initVal)
+				}
+			}
+		}
+	}
+
+	return &data, nil
 }

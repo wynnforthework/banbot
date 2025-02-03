@@ -240,6 +240,12 @@ func init() {
 		Options: []string{"out", "out_type", "timeframes", "batch_size", "run_every"},
 		Help:    "calculate correlation matrix for symbols",
 	})
+	AddCmdJob(&CmdJob{
+		Name:   "merge_assets",
+		Parent: "tool",
+		RunRaw: runMergeAssets,
+		Help:   "merge multiple assets.html files into one",
+	})
 
 	AddCmdJob(&CmdJob{
 		Name:   "close_order",
