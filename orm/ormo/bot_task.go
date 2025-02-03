@@ -28,10 +28,11 @@ func InitTask(showLog bool, outDir string) *errs.Error {
 		return nil
 	}
 	orm.SetDbPath(orm.DbTrades, filepath.Join(outDir, "orders.db"))
-	q, err := Conn(orm.DbTrades, true)
+	q, conn, err := Conn(orm.DbTrades, true)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	idList := make([]string, 0, len(config.Accounts))
 	for account := range config.Accounts {
 		task, err := q.GetAccTask(account)

@@ -1,6 +1,7 @@
 package opt
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
@@ -514,9 +515,10 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		// 如果是初次执行，检查打开的订单是否已在测试期间平仓，是则自动平仓
 		// 主要针对实盘隔一段时间后重启有未平仓订单场景，需检查订单是否应在机器人停止期间平仓
 		var sess *ormo.Queries
+		var conn *sql.DB
 		var err *errs.Error
 		if core.LiveMode {
-			sess, err = ormo.Conn(orm.DbTrades, true)
+			sess, conn, err = ormo.Conn(orm.DbTrades, true)
 			if err != nil {
 				return err
 			}
@@ -545,17 +547,22 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		if len(closeNums) > 0 {
 			log.Info("closed delayed order", zap.Any("nums", closeNums))
 		}
+		if conn != nil {
+			conn.Close()
+		}
 	}
 	if len(relayOpens) == 0 {
 		return nil
 	}
 	var sess *ormo.Queries
+	var conn *sql.DB
 	var err *errs.Error
 	if core.LiveMode {
-		sess, err = ormo.Conn(orm.DbTrades, true)
+		sess, conn, err = ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 	}
 	openOds := utils.ValsOfMap(relayOpens)
 	for acc := range config.Accounts {

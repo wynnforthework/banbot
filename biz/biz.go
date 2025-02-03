@@ -2,6 +2,7 @@ package biz
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"fmt"
 	"maps"
@@ -109,11 +110,13 @@ func RefreshJobs(pairs []string, pairTfScores map[string]map[string]float64, sho
 	}
 	if len(accOds) > 0 {
 		var sess *ormo.Queries
+		var conn *sql.DB
 		if core.LiveMode {
-			sess, err = ormo.Conn(orm.DbTrades, true)
+			sess, conn, err = ormo.Conn(orm.DbTrades, true)
 			if err != nil {
 				return nil, err
 			}
+			defer conn.Close()
 		}
 		for acc, odList := range accOds {
 			odMgr := GetOdMgr(acc)
@@ -211,15 +214,17 @@ func TryFireBatches(currMS int64) int {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
 	var sess *ormo.Queries
+	var conn *sql.DB
 	var err *errs.Error
 	if core.LiveMode {
 		// In real-time mode, the order is saved to the database. In non-real-time mode, the order is temporarily saved to the memory without the need for a database.
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
-		sess, err = ormo.Conn(orm.DbTrades, true)
+		sess, conn, err = ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get db sess fail", zap.Error(err))
 			return 0
 		}
+		defer conn.Close()
 	}
 	var waitNum = 0
 	for key, tasks := range strat.BatchTasks {

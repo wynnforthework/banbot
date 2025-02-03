@@ -1,6 +1,7 @@
 package biz
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -153,15 +154,17 @@ func (t *Trader) ExecOrders(odMgr IOrderMgr, jobs map[string]*strat.StratJob, en
 		return nil
 	}
 	var sess *ormo.Queries
+	var conn *sql.DB
 	var err *errs.Error
 	if core.LiveMode {
 		// Live mode is saved to the database. Non-real-time mode, orders are temporarily saved in memory, no database required
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
-		sess, err = ormo.Conn(orm.DbTrades, true)
+		sess, conn, err = ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get db sess fail", zap.Error(err))
 			return err
 		}
+		defer conn.Close()
 	}
 	var ents, exts []*ormo.InOutOrder
 	ents, exts, err = odMgr.ProcessOrders(sess, env, enters, exits, edits)

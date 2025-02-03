@@ -57,11 +57,12 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 		if len(doneParts) == 0 && !createInv {
 			return true
 		}
-		sess, err := ormo.Conn(orm.DbTrades, true)
+		sess, conn, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get sess fail bnbExitByMyOrder.tryFillExit", zap.Error(err))
 			return true
 		}
+		defer conn.Close()
 		for _, part = range doneParts {
 			lock = part.Lock()
 			err = o.finishOrder(part, sess)
@@ -127,11 +128,12 @@ func bnbTraceExgOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			// 现货市场卖出即平仓，忽略平仓
 			return false
 		}
-		sess, err := ormo.Conn(orm.DbTrades, true)
+		sess, conn, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get sess fail bnbTraceExgOrder", zap.Error(err))
 			return true
 		}
+		defer conn.Close()
 		feeName, feeCost := getFeeNameCost(od.Fee, od.Symbol, od.Type, od.Side, od.Amount, od.Average)
 		iod := o.makeInOutOd(sess, od.Symbol, isShort, od.Average, od.Filled, od.Type, feeCost, feeName,
 			od.Timestamp, ormo.OdStatusClosed, od.ID)

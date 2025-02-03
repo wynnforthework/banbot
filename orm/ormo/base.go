@@ -1,6 +1,7 @@
 package ormo
 
 import (
+	"database/sql"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
@@ -15,12 +16,12 @@ var (
 	taskIdAccMap = make(map[int64]string)
 )
 
-func Conn(path string, write bool) (*Queries, *errs.Error) {
+func Conn(path string, write bool) (*Queries, *sql.DB, *errs.Error) {
 	db, err := orm.DbLite(orm.DbTrades, path, write)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return New(db), nil
+	return New(db), db, nil
 }
 
 func GetTaskID(account string) int64 {
@@ -134,10 +135,11 @@ func SaveDirtyODs(path string, account string) *errs.Error {
 	if len(dirtyOds) == 0 {
 		return nil
 	}
-	sess, err := Conn(path, true)
+	sess, conn, err := Conn(path, true)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	var odErr *errs.Error
 	for _, od := range dirtyOds {
 		err = od.Save(sess)

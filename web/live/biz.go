@@ -120,10 +120,11 @@ func getTodayNum(c *fiber.Ctx) error {
 		dayDoneNum := 0
 		dayDonePft := float64(0)
 		if taskId > 0 {
-			sess, err := ormo.Conn(orm.DbTrades, false)
+			sess, conn, err := ormo.Conn(orm.DbTrades, false)
 			if err != nil {
 				return err
 			}
+			defer conn.Close()
 			orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 				TaskID:      taskId,
 				Status:      2, // 已完成状态
@@ -150,10 +151,11 @@ func getTodayNum(c *fiber.Ctx) error {
 
 func getStatistics(c *fiber.Ctx) error {
 	return wrapAccount(c, func(acc string) error {
-		sess, err := ormo.Conn(orm.DbTrades, false)
+		sess, conn, err := ormo.Conn(orm.DbTrades, false)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 		taskId := ormo.GetTaskID(acc)
 		orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID: taskId,
@@ -285,10 +287,11 @@ func getOrders(c *fiber.Ctx) error {
 		CurPrice float64 `json:"curPrice"`
 	}
 	getBotOrders := func(acc string) error {
-		sess, err := ormo.Conn(orm.DbTrades, false)
+		sess, conn, err := ormo.Conn(orm.DbTrades, false)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 		taskId := ormo.GetTaskID(acc)
 		var symbols []string
 		if data.Symbols != "" {
@@ -447,10 +450,11 @@ func postForceExit(c *fiber.Ctx) error {
 		}
 		lock.Unlock()
 
-		sess, err := ormo.Conn(orm.DbTrades, true)
+		sess, conn, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 		odMgr := biz.GetLiveOdMgr(acc)
 		closeNum, failNum := 0, 0
 		var errMsg strings.Builder
@@ -634,10 +638,11 @@ func getTaskPairs(c *fiber.Ctx) error {
 		return err_
 	}
 	return wrapAccount(c, func(acc string) error {
-		sess, err := ormo.Conn(orm.DbTrades, false)
+		sess, conn, err := ormo.Conn(orm.DbTrades, false)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 		ctx := context.Background()
 		taskId := ormo.GetTaskID(acc)
 		if data.Stop == 0 {
@@ -678,10 +683,11 @@ func getPerformance(c *fiber.Ctx) error {
 		return err_
 	}
 	return wrapAccount(c, func(acc string) error {
-		sess, err := ormo.Conn(orm.DbTrades, false)
+		sess, conn, err := ormo.Conn(orm.DbTrades, false)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 		taskId := ormo.GetTaskID(acc)
 		orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID:      taskId,

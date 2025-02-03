@@ -2,6 +2,7 @@ package ormo
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"math/rand"
@@ -518,10 +519,12 @@ func (i *InOutOrder) saveToDb(sess *Queries) *errs.Error {
 		return err
 	}
 	if sess == nil {
-		sess, err = Conn(orm.DbTrades, true)
+		var conn *sql.DB
+		sess, conn, err = Conn(orm.DbTrades, true)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 	}
 	i.NanInfTo(0)
 	if i.ID == 0 {

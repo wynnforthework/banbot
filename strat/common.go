@@ -310,10 +310,11 @@ func CalcJobScores(pair, tf, stgy string) *errs.Error {
 	if core.LiveMode {
 		// Retrieve recent orders from the database
 		// 从数据库查询最近订单
-		sess, err := ormo.Conn(orm.DbTrades, false)
+		sess, conn, err := ormo.Conn(orm.DbTrades, false)
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
 		taskId := ormo.GetTaskID(config.DefAcc)
 		orders, err = sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID:    taskId,

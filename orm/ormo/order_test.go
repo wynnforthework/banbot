@@ -1,10 +1,12 @@
 package ormo
 
 import (
+	"path/filepath"
+	"testing"
+
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg/errs"
-	"testing"
 )
 
 func initApp() *errs.Error {
@@ -18,9 +20,11 @@ func TestGetOrders(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	sess, err := Conn(orm.DbTrades, false)
+	orm.SetDbPath(orm.DbTrades, filepath.Join(config.GetDataDir(), "temp.db"))
+	sess, conn, err := Conn(orm.DbTrades, false)
 	if err != nil {
 		panic(err)
 	}
+	defer conn.Close()
 	sess.GetOrders(GetOrdersArgs{})
 }

@@ -141,10 +141,11 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 	for _, od := range exOdList {
 		exgOdMap[od.ID] = od
 	}
-	sess, err := ormo.Conn(orm.DbTrades, true)
+	sess, conn, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	defer conn.Close()
 	// Loading orders from the database
 	// 从数据库加载订单
 	openOds, lock := ormo.GetOpenODs(o.Account)
@@ -365,10 +366,11 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	}
 	// Get the exchange order before getting the connection to reduce the time taken
 	// 获取交易所订单后再获取连接，减少占用时长
-	sess, err := ormo.Conn(orm.DbTrades, true)
+	sess, conn, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		return openOds, err
 	}
+	defer conn.Close()
 	if len(openOds) > 0 {
 		for _, exod := range exOrders {
 			if !banexg.IsOrderDone(exod.Status) {
@@ -1192,11 +1194,12 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 	odKey := od.Key()
 	forceDelOd := func(err *errs.Error) {
 		log.Error("del enter order", zap.String("key", odKey), zap.Error(err))
-		sess, err := ormo.Conn(orm.DbTrades, true)
+		sess, conn, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
 			log.Error("get db sess fail", zap.Error(err))
 			return
 		}
+		defer conn.Close()
 		err = sess.DelOrder(od)
 		if err != nil {
 			log.Error("del order fail", zap.String("key", odKey), zap.Error(err))
@@ -1810,11 +1813,12 @@ func getSecsByLimit(pair, side string, price float64) (int, float64, *errs.Error
 func saveIOrders(saveOds []*ormo.InOutOrder) {
 	// There are orders that need to be saved
 	// 有需要保存的订单
-	sess, err := ormo.Conn(orm.DbTrades, true)
+	sess, conn, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		log.Error("get sess to save old limits fail", zap.Error(err))
 		return
 	}
+	defer conn.Close()
 	for _, od := range saveOds {
 		err = od.Save(sess)
 		if err != nil {
@@ -2091,11 +2095,12 @@ func checkAccFatalStop(account string, maxIntv int) {
 	if stopUntil >= btime.TimeMS() {
 		return
 	}
-	sess, err := ormo.Conn(orm.DbTrades, false)
+	sess, conn, err := ormo.Conn(orm.DbTrades, false)
 	if err != nil {
 		log.Error("get db sess fail", zap.Error(err))
 		return
 	}
+	defer conn.Close()
 	minTimeMS := btime.TimeMS() - int64(maxIntv)*60000
 	taskId := ormo.GetTaskID(account)
 	orders, err := sess.GetOrders(ormo.GetOrdersArgs{
@@ -2145,10 +2150,11 @@ func calcFatalLoss(wallets *BanWallets, orders []*ormo.InOutOrder, backMins int)
 }
 
 func (o *LiveOrderMgr) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *errs.Error {
-	sess, err := ormo.Conn(orm.DbTrades, true)
+	sess, conn, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	_, err = o.ExitOpenOrders(sess, bar.Symbol, &strat.ExitReq{
 		Tag:  core.ExitTagEnvEnd,
 		Dirt: core.OdDirtBoth,

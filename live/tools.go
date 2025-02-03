@@ -117,10 +117,11 @@ func closeOrdersByLocal(accMap map[string]bool, pairMap map[string]bool, stratMa
 		return err
 	}
 	biz.InitLiveOrderMgr(sendOrderMsg)
-	sess, err := ormo.Conn(orm.DbTrades, true)
+	sess, conn, err := ormo.Conn(orm.DbTrades, true)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	checkAccs := make(map[string][]*ormo.InOutOrder)
 	for account := range config.Accounts {
 		if len(accMap) > 0 {
