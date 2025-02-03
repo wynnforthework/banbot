@@ -72,6 +72,7 @@ func regApiDev(api fiber.Router) {
 	api.Get("/symbols", getSymbols)
 	api.Post("/data_tools", handleDataTools)
 	api.Get("/download", handleDownload)
+	api.Get("/compare_assets", getCompareAssets)
 }
 
 func onWsDev(c *websocket.Conn) {
@@ -1435,4 +1436,65 @@ func handleDownload(c *fiber.Ctx) error {
 
 	// 发送文件
 	return c.SendFile(absPath)
+}
+
+func getCompareAssets(c *fiber.Ctx) error {
+	ids := c.Query("ids")
+	if ids == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "ids is required")
+	}
+	idList := strings.Split(ids, ",")
+	if len(idList) < 2 {
+		return fiber.NewError(fiber.StatusBadRequest, "at least 2 ids are required")
+	}
+
+	qu, conn, err2 := ormu.Conn()
+	if err2 != nil {
+		return err2
+	}
+	defer conn.Close()
+
+	// 构建files参数
+	files := make(map[string]string)
+	for _, id := range idList {
+		idVal, err := strconv.Atoi(id)
+		if err != nil {
+			return fmt.Errorf("task id must be int, current: %v", idVal)
+		}
+		task, err := qu.GetTask(context.Background(), int64(idVal))
+		if err != nil {
+			return fmt.Errorf("query task %v failed: %v", idVal, err)
+		}
+		if task.Path == "" {
+			continue
+		}
+		path := filepath.Join(config.GetDataDir(), "backtest", task.Path, "assets.html")
+		if !utils.Exists(path) {
+			return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("assets.html not found for id %s, path: %s", id, path))
+		}
+		files[path] = id
+	}
+
+	// 创建临时文件
+	file, err := os.CreateTemp("", "ban_merge_assets")
+	if err != nil {
+		return err
+	}
+	tmpFile := file.Name()
+	defer os.Remove(tmpFile)
+
+	err2 = opt.MergeAssetsHtml(tmpFile, files, nil, true)
+	if err2 != nil {
+		return err2
+	}
+
+	// 读取临时文件内容
+	content, err_ := os.ReadFile(tmpFile)
+	if err_ != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "read temp file failed")
+	}
+
+	// 设置响应头
+	c.Set("Content-Type", "text/html")
+	return c.Send(content)
 }

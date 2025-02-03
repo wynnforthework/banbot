@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"github.com/banbox/banbot/core"
 	"io"
 	"math"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/banbox/banbot/core"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
@@ -624,7 +625,7 @@ func MergeAssetsHtml(outPath string, files map[string]string, tags []string, use
 			idx := 0
 			nextTime, nextVal := data.Times[0], ds.Data[0]
 			for _, curTime := range finalTimes {
-				if curTime >= nextTime {
+				for curTime >= nextTime {
 					curVal = nextVal
 					idx += 1
 					if idx < len(data.Times) {

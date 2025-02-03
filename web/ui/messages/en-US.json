@@ -501,6 +501,9 @@
     "import_desc": "Import protobuf format data here, or execute `bot data import` in the terminal to export. If you need to import `csv.zip` data, please execute `bot kline load`",
     "language": "Language",
     "system_logs": "System Logs",
+    "multi_select": "Multi Select",
+    "exit_select": "Exit Multi Select",
+    "compare_assets": "Compare Assets",
 
     "cfg_name": "Bot name, used to distinguish different bots in message notifications",
     "cfg_env": "Running environment, prod represents production network, test represents test network (Binance testnet), dry_run represents simulation",

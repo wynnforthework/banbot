@@ -245,7 +245,7 @@ func updateBtTaskResult(task *ormu.Task, errTask error) {
 	}
 	defer conn.Close()
 	btRoot := fmt.Sprintf("%s/backtest", config.GetDataDir())
-	taskRes, err := collectBtTask(filepath.Join(btRoot, task.Path))
+	taskRes, err := collectBtTask(btRoot, task.Path)
 	if err != nil {
 		var errMsg string
 		if errTask != nil {
@@ -379,7 +379,7 @@ func collectBtResults() error {
 			return nil
 		}
 
-		task, err := collectBtTask(fullPath)
+		task, err := collectBtTask(btRoot, relPath)
 		if err != nil || task == nil {
 			return err
 		}
@@ -422,7 +422,8 @@ func collectBtResults() error {
 	return err
 }
 
-func collectBtTask(btDir string) (*ormu.Task, error) {
+func collectBtTask(rootDir, relPath string) (*ormu.Task, error) {
+	btDir := filepath.Join(rootDir, relPath)
 	fileInfo, err := os.Stat(filepath.Join(btDir, "assets.html"))
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -466,7 +467,7 @@ func collectBtTask(btDir string) (*ormu.Task, error) {
 	dayMSecs := int64(utils.TFToSecs("1d") * 1000)
 	return &ormu.Task{
 		Mode:        "backtest",
-		Path:        filepath.Base(btDir),
+		Path:        relPath,
 		Strats:      strings.Join(cfg.Strats(), ","),
 		Periods:     strings.Join(cfg.TimeFrames(), ","),
 		Pairs:       cfg.ShowPairs(),

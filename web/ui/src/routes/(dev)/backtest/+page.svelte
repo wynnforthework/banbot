@@ -9,6 +9,7 @@
   import { fmtDateStr } from '$lib/dateutil';
   import {addListener} from '$lib/dev/websocket';
   import { i18n } from '$lib/i18n';
+  import {site} from "$lib/stores/site";
 
   let tasks = $state<BtTask[]>([]);
   let strats = $state<string[]>([]);
@@ -22,6 +23,10 @@
   let hasPrev = $state(false);
   let hasNext = $state(true);
   let loading = $state(false);
+
+  let isMultiSelect = $state(false);
+  let selectedTasks = $state<BtTask[]>([]);
+  let compareUrl = $state('');
 
   onMount(async () => {
     await loadOptions();
@@ -140,6 +145,37 @@ Error: ${task.info}`
       goto(i18n.resolveRoute(`/backtest/item?id=${task.id}`))
     }
   }
+
+  function toggleMultiSelect() {
+    isMultiSelect = !isMultiSelect;
+    selectedTasks = [];
+    compareUrl = '';
+  }
+
+  function toggleTaskSelection(task: BtTask, event: MouseEvent) {
+    if (!isMultiSelect) return;
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const idx = selectedTasks.findIndex(t => t.id === task.id);
+    if (idx >= 0) {
+      selectedTasks = selectedTasks.filter(t => t.id !== task.id);
+    } else {
+      selectedTasks = [...selectedTasks, task];
+    }
+    
+    // 更新对比URL
+    if (selectedTasks.length >= 2) {
+      const ids = selectedTasks.map(t => t.id).join(',');
+      compareUrl = `${$site.apiHost}/api/dev/compare_assets?ids=${ids}`;
+    } else {
+      compareUrl = '';
+    }
+  }
+
+  function isTaskSelected(task: BtTask) {
+    return selectedTasks.some(t => t.id === task.id);
+  }
 </script>
 
 <style>
@@ -196,14 +232,24 @@ Error: ${task.info}`
       </button>
     </div>
 
-    <a class="btn btn-primary" href="/backtest/new">{m.run_backtest()}</a>
+    <div class="flex gap-4">
+      <button class="btn" onclick={toggleMultiSelect}>
+        {isMultiSelect ? m.exit_select() : m.multi_select()}
+      </button>
+      {#if !isMultiSelect}
+        <a class="btn btn-primary" href="/backtest/new">{m.run_backtest()}</a>
+      {:else if compareUrl}
+        <a class="btn btn-primary" href={compareUrl} target="_blank">{m.compare_assets()}</a>
+      {/if}
+    </div>
   </div>
 
   <!-- 结果列表 -->
   <div class="grid grid-cols-3 gap-6 mb-6">
     {#each tasks as task, tidx}
-      <div class="card bg-base-100 shadow hover:shadow-lg transition-shadow duration-200 cursor-pointer relative"
-           onclick={() => clickTask(task)} onmouseenter={() => hoveredCard = tidx}
+      <div class="card bg-base-100 shadow hover:shadow-lg transition-shadow duration-200 cursor-pointer relative {isTaskSelected(task) ? 'ring-2 ring-primary' : ''}"
+           onclick={(e) => isMultiSelect ? toggleTaskSelection(task, e) : clickTask(task)} 
+           onmouseenter={() => hoveredCard = tidx}
            onmouseleave={() => hoveredCard = null}>
         {#if hoveredCard === tidx}
           <div class="custom-tooltip {tidx >= 3 ? 'loc-top' : ''}">{taskTooltip(task)}</div>
