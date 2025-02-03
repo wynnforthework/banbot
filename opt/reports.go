@@ -37,6 +37,7 @@ type BTResult struct {
 	ShowDrawDownPct float64    `json:"showDrawDownPct"` // Displays the maximum drawdown percentage 显示最大回撤百分比
 	MaxDrawDownVal  float64    `json:"maxDrawDownVal"`  // Maximum drawdown percentage 最大回撤金额
 	ShowDrawDownVal float64    `json:"showDrawDownVal"` // Displays the maximum drawdown percentage 显示最大回撤金额
+	MaxUsageVal     float64    `json:"maxUsageVal"`
 	BarNum          int        `json:"barNum"`
 	TimeNum         int        `json:"timeNum"`
 	OrderNum        int        `json:"orderNum"`
@@ -194,9 +195,10 @@ func (r *BTResult) Collect() {
 	}
 	// Calculate the maximum drawdown on the chart
 	// 计算图表上的最大回撤
-	ddRate, ddVal := r.Plots.calcDrawDown()
+	ddRate, ddVal, maxUsage := r.Plots.calcDrawDown()
 	r.ShowDrawDownPct = ddRate * 100
 	r.ShowDrawDownVal = ddVal
+	r.MaxUsageVal = maxUsage
 	if len(orders) > 0 {
 		r.WinRatePct = winCount * 100 / float64(len(orders))
 		r.groupByPairs(orders)
@@ -257,6 +259,7 @@ func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 	drawDownVal := strconv.FormatFloat(r.ShowDrawDownVal, 'f', 0, 64)
 	realDrawVal := strconv.FormatFloat(r.MaxDrawDownVal, 'f', 0, 64)
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownVal, realDrawVal)})
+	table.Append([]string{"Max Usage", strconv.FormatFloat(r.MaxUsageVal, 'f', 0, 64)})
 	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
 	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
 	table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})
@@ -784,16 +787,20 @@ func (r *BTResult) dumpGraph() {
 	}
 }
 
-func (p *PlotData) calcDrawDown() (float64, float64) {
-	var drawDownRate, maxReal, drawDownVal float64
+func (p *PlotData) calcDrawDown() (float64, float64, float64) {
+	var drawDownRate, maxReal, drawDownVal, maxUsage float64
 	if len(p.Real) > 0 {
 		reals := p.Real
 		maxReal = reals[0]
-		for _, val := range reals {
+		avas := p.Available
+		for i, val := range reals {
 			if val > maxReal {
 				maxReal = val
 			} else {
 				drawDownVal = max(drawDownVal, maxReal-val)
+				if i < len(avas) {
+					maxUsage = max(maxUsage, maxReal-avas[i])
+				}
 				curDown := math.Abs(val/maxReal - 1)
 				if curDown > drawDownRate {
 					drawDownRate = curDown
@@ -801,7 +808,7 @@ func (p *PlotData) calcDrawDown() (float64, float64) {
 			}
 		}
 	}
-	return drawDownRate, drawDownVal
+	return drawDownRate, drawDownVal, maxUsage
 }
 
 func (r *BTResult) calcMeasures(num int) *errs.Error {
