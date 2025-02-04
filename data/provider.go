@@ -159,10 +159,12 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob, pb *utils.StagedP
 
 type HistProvider struct {
 	Provider[IHistKlineFeeder]
-	pBar *utils.StagedPrg
+	getEnd    FnGetInt64
+	maxTfSecs int
+	pBar      *utils.StagedPrg
 }
 
-func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd, showLog bool, pBar *utils.StagedPrg) *HistProvider {
+func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd, getEnd FnGetInt64, showLog bool, pBar *utils.StagedPrg) *HistProvider {
 	return &HistProvider{
 		Provider: Provider[IHistKlineFeeder]{
 			holders: make(map[string]IHistKlineFeeder),
@@ -182,7 +184,8 @@ func NewHistProvider(callBack FnPairKline, envEnd FuncEnvEnd, showLog bool, pBar
 			dirtyVers: make(chan int, 5),
 			showLog:   showLog,
 		},
-		pBar: pBar,
+		getEnd: getEnd,
+		pBar:   pBar,
 	}
 }
 
@@ -245,18 +248,30 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 	// handle symbols whose minimal timeframe changed but do not require warming up
 	// 处理最小周期变化，但无需预热的品种
 	for _, hold := range newHolds {
+		staArr := hold.getStates()
+		last := staArr[len(staArr)-1]
+		if last.TFSecs > p.maxTfSecs {
+			p.maxTfSecs = last.TFSecs
+		}
 		pair := hold.getSymbol()
 		if _, ok := holders[pair]; ok {
 			continue
 		}
 		holders[pair] = hold
-		sta := hold.getStates()[0]
+		sta := staArr[0]
 		hold.SetSeek(sta.NextMS)
 	}
 	// Delete items that are not warmed up
 	// 删除未预热的项
 	p.holders = holders
 	btime.CurTimeMS = maxSince
+	if p.getEnd != nil {
+		// 结束时间推迟3个bar，以便触发下次品种刷新
+		endMs := p.getEnd() + int64(p.maxTfSecs*1000*3)
+		for _, h := range holders {
+			h.SetEndMS(endMs)
+		}
+	}
 	return err
 }
 

@@ -45,7 +45,7 @@ type BackTest struct {
 NewBackTestLite 创建一个临时内部回测，仅用于寻找回测未平仓订单来接力
 Create a temporary internal backtest, solely for the purpose of finding backtest open orders to relay.
 */
-func NewBackTestLite(isOpt bool, onBar data.FnPairKline, pBar *utils.StagedPrg) *BackTestLite {
+func NewBackTestLite(isOpt bool, onBar data.FnPairKline, getEnd data.FnGetInt64, pBar *utils.StagedPrg) *BackTestLite {
 	b := &BackTestLite{
 		BTResult: NewBTResult(),
 		isOpt:    isOpt,
@@ -58,7 +58,7 @@ func NewBackTestLite(isOpt bool, onBar data.FnPairKline, pBar *utils.StagedPrg) 
 			b.FeedKLine(bar)
 		}
 	}
-	b.dp = data.NewHistProvider(onBar, b.OnEnvEnd, !isOpt, pBar)
+	b.dp = data.NewHistProvider(onBar, b.OnEnvEnd, getEnd, !isOpt, pBar)
 	biz.InitLocalOrderMgr(b.orderCB, !isOpt)
 	return b
 }
@@ -139,7 +139,13 @@ func NewBackTest(isOpt bool, outDir string) *BackTest {
 	b := &BackTest{
 		PBar: utils.NewStagedPrg(stages, stgWeis),
 	}
-	b.BackTestLite = NewBackTestLite(isOpt, b.FeedKLine, b.PBar)
+	getEnd := func() int64 {
+		if b.nextRefresh > 0 {
+			return b.nextRefresh
+		}
+		return config.TimeRange.EndMS
+	}
+	b.BackTestLite = NewBackTestLite(isOpt, b.FeedKLine, getEnd, b.PBar)
 	if outDir == "" && !isOpt {
 		hash, err := config.Data.HashCode()
 		if err != nil {
@@ -469,7 +475,7 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		if err != nil {
 			return err
 		}
-		lite := NewBackTestLite(true, nil, nil)
+		lite := NewBackTestLite(true, nil, nil, nil)
 		// set policy to run
 		// 重新加载策略任务
 		config.RunPolicy = gp.Policies

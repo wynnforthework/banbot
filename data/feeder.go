@@ -24,6 +24,7 @@ import (
 
 type FnPairKline = func(bar *orm.InfoKline)
 type FuncEnvEnd = func(bar *banexg.PairTFKline, adj *orm.AdjInfo)
+type FnGetInt64 = func() int64
 
 type PairTFCache struct {
 	TimeFrame  string
@@ -501,6 +502,8 @@ type IHistKlineFeeder interface {
 		SetSeek Set the reading position and call it before loop reading   设置读取位置，在循环读取前调用
 	*/
 	SetSeek(since int64)
+	/* SetEndMS Set the end position for reading 设置读取的结束位置*/
+	SetEndMS(ms int64)
 	/*
 		GetBar Get the current K line, and then call CallNext to move the pointer to the next 获取当前K线，然后可调用CallNext移动指针到下一个
 	*/
@@ -552,6 +555,10 @@ func (f *HistKLineFeeder) GetBar() *banexg.Kline {
 	}
 	bar := f.caches[f.rowIdx]
 	return bar
+}
+
+func (f *HistKLineFeeder) SetEndMS(ms int64) {
+	f.TimeRange.EndMS = ms
 }
 
 func (f *HistKLineFeeder) RunBar(bar *banexg.Kline) *errs.Error {
@@ -650,7 +657,7 @@ func (f *DBKlineFeeder) DownIfNeed(sess *orm.Queries, exchange banexg.BanExchang
 		}
 		defer conn.Release()
 	}
-	_, err = sess.DownOHLCV2DB(exchange, f.ExSymbol, downTf, f.TimeRange.StartMS, f.TimeRange.EndMS, pBar)
+	_, err = sess.DownOHLCV2DB(exchange, f.ExSymbol, downTf, btime.TimeMS(), f.TimeRange.EndMS, pBar)
 	return err
 }
 
