@@ -174,8 +174,8 @@ func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
 	args.Init()
 	if args.MemProfile {
 		go func() {
-			log.Info("mem profile serve http at :8080 ...")
-			err_ = http.ListenAndServe(":8080", nil)
+			log.Info("mem profile serve http at :6060 ...")
+			err_ = http.ListenAndServe(":6060", nil)
 			if err_ != nil {
 				log.Error("run mem profile http fail", zap.Error(err_))
 			}
@@ -187,7 +187,7 @@ func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
 			panic(err_)
 		}
 		outPath := filepath.Join(wd, "cpu.profile")
-		err := utils.StartCpuProfile(outPath)
+		err := utils.StartCpuProfile(outPath, 6060)
 		if err != nil {
 			panic(err)
 		}

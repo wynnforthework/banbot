@@ -2,15 +2,20 @@
 [文档](https://www.banbot.site/en-US/api/)
 
 # 常见问题
-### 如何进行函数性能测试？
+### 如何进行函数性能测试？（不含IO）
 回测时添加`-cpu-profile`参数，启用性能测试，输出`cpu.profile`到回测目录下。然后执行下面命令可以查看结果
 ```shell
-go tool pprof -http :8080 cpu.profile
+go tool pprof -http :6060 cpu.profile
+```
+### 如何进行函数性能测试？（包含IO）
+回测时添加`-cpu-profile`参数，启用性能测试，然后执行下面命令可以查看结果
+```shell
+go tool pprof --http=:6061 http://localhost:6060/debug/fgprof?seconds=10
 ```
 ### 如何分析内存泄露？(初级)
-命令行启动添加`-mem-profile`参数，将会在8080端口提供pprof分析接口。执行下面命令查看当前内存占用最多：
+命令行启动添加`-mem-profile`参数，将会在6060端口提供pprof分析接口。执行下面命令查看当前内存占用最多：
 ```shell
-go tool pprof http://localhost:8080/debug/pprof/heap
+go tool pprof http://localhost:6060/debug/pprof/heap
 > top
 ```
 然后执行`list [method]`即可显示具体某个方法的内存行热点。

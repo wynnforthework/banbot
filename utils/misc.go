@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/banbox/banbot/core"
+	"github.com/felixge/fgprof"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -444,7 +446,7 @@ func normalizeLanguageCode(code string) string {
 	}
 }
 
-func StartCpuProfile(path string) *errs.Error {
+func StartCpuProfile(path string, port int) *errs.Error {
 	if _, err_ := os.Stat(path); err_ == nil {
 		err_ = os.Remove(path)
 		if err_ != nil {
@@ -459,6 +461,14 @@ func StartCpuProfile(path string) *errs.Error {
 		if err_ != nil {
 			return errs.New(errs.CodeRunTime, err_)
 		}
+		http.DefaultServeMux.Handle("/debug/fgprof", fgprof.Handler())
+		go func() {
+			log.Info("cpu profile http started", zap.Int("port", port))
+			err_ = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+			if err_ != nil {
+				log.Warn("serve fgprof fail", zap.Int("port", port), zap.Error(err_))
+			}
+		}()
 		core.ExitCalls = append(core.ExitCalls, func() {
 			pprof.StopCPUProfile()
 			err_ = f.Close()
