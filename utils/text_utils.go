@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -178,4 +179,27 @@ func SplitLines(text string) []string {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
 	return strings.Split(text, "\n")
+}
+
+// MaskDBUrl 将数据库连接字符串中的敏感信息（用户名和密码）替换为***
+func MaskDBUrl(url string) string {
+	// 处理postgresql格式：postgresql://user:pass@host:port/dbname
+	if idx := strings.Index(url, "://"); idx > 0 {
+		protocol := url[:idx+3]
+		rest := url[idx+3:]
+		if atIdx := strings.Index(rest, "@"); atIdx > 0 {
+			return protocol + "***:***@" + rest[atIdx+1:]
+		}
+	}
+
+	// 处理其他格式的连接字符串
+	// 如果包含password=或pwd=，替换其值为***
+	re := regexp.MustCompile(`(?i)(password|pwd)=([^;\s]+)`)
+	url = re.ReplaceAllString(url, "$1=***")
+
+	// 替换用户名
+	re = regexp.MustCompile(`(?i)(user(name)?)=([^;\s]+)`)
+	url = re.ReplaceAllString(url, "$1=***")
+
+	return url
 }

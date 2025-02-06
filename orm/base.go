@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	utils2 "github.com/banbox/banbot/utils"
 	"net"
 	"runtime"
 	"strings"
@@ -105,7 +106,7 @@ func Setup() *errs.Error {
 			log.Info("added no_data column to khole table")
 		}
 	}
-	log.Info("connect db ok", zap.String("url", dbCfg.Url), zap.Int("pool", dbCfg.MaxPoolSize))
+	log.Info("connect db ok", zap.String("url", utils2.MaskDBUrl(dbCfg.Url)), zap.Int("pool", dbCfg.MaxPoolSize))
 	err2 = LoadAllExSymbols()
 	if err2 != nil {
 		return err2

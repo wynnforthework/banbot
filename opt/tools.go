@@ -2,13 +2,14 @@ package opt
 
 import (
 	"encoding/csv"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,61 +35,71 @@ CompareExgBTOrders
 Compare the exchange export order records with the backtest order records.
 对比交易所导出订单记录和回测订单记录。
 */
-func CompareExgBTOrders(args []string) {
+func CompareExgBTOrders(args []string) error {
 	err := biz.SetupComs(&config.CmdArgs{})
 	if err != nil {
-		panic(err)
-	}
-	_, err = orm.LoadMarkets(exg.Default, false)
-	if err != nil {
-		panic(err)
+		return err
 	}
 	var exgPath, btPath, exgName, botName string
+	var amtRate float64
+	var skipUnHitBt bool
 	var sub = flag.NewFlagSet("cmp", flag.ExitOnError)
 	sub.StringVar(&exgName, "exg", "binance", "exchange name")
 	sub.StringVar(&botName, "bot-name", "", "botName for live trade")
 	sub.StringVar(&exgPath, "exg-path", "", "exchange order xlsx file")
 	sub.StringVar(&btPath, "bt-path", "", "backTest order file")
+	sub.Float64Var(&amtRate, "amt-rate", 0.1, "amt rate threshold, 0~1")
+	sub.BoolVar(&skipUnHitBt, "skip-unhit", true, "skip unhit pairs for backtest order")
 	err_ := sub.Parse(args)
 	if err_ != nil {
-		panic(err_)
+		return err_
 	}
-	if exgPath == "" {
-		panic("`exg-path` is required")
+	if exgPath == "" || btPath == "" || botName == "" {
+		return errors.New("`exg-path` `bt-path` bot-name is required")
 	}
-	if btPath == "" {
-		panic("`bt-path` is required")
+	btOrders, startMS, endMS, err_ := readBackTestOrders(btPath)
+	if err_ != nil {
+		return err_
 	}
-	if botName == "" {
-		log.Error("bot-name is required")
-		return
-	}
-	btOrders, startMS, endMS := readBackTestOrders(btPath)
 	if len(btOrders) == 0 {
-		log.Warn("no batcktest orders found")
-		return
+		return errors.New("no batcktest orders found")
+	}
+	exs := orm.GetSymbolByID(int32(btOrders[0].Sid))
+	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+	if err != nil {
+		return err
+	}
+	_, err = orm.LoadMarkets(exchange, false)
+	if err != nil {
+		return err
 	}
 	f, err_ := excelize.OpenFile(exgPath)
 	if err_ != nil {
-		panic(err_)
+		return err_
 	}
 	defer f.Close()
 	var exgOrders []*banexg.Order
 	switch exgName {
 	case "binance":
-		exgOrders = readBinanceOrders(f, startMS, endMS, botName)
+		exgOrders, err = readBinanceOrders(f, exchange, startMS, endMS, botName)
 	default:
-		panic("unsupport exchange: " + exgName)
+		return errors.New("unsupport exchange: " + exgName)
+	}
+	if err != nil {
+		return err
 	}
 	if len(exgOrders) == 0 {
-		log.Warn("no exchange orders to compare")
-		return
+		return errors.New("no exchange orders to compare")
 	}
 	pairExgOds := buildExgOrders(exgOrders, botName)
-	file, err_ := os.Create(fmt.Sprintf("%s/cmp_orders.csv", filepath.Dir(exgPath)))
+	exgOdList := make([]*ormo.InOutOrder, 0)
+	for _, odList := range pairExgOds {
+		exgOdList = append(exgOdList, odList...)
+	}
+	outPath := fmt.Sprintf("%s/cmp_orders.csv", filepath.Dir(exgPath))
+	file, err_ := os.Create(outPath)
 	if err_ != nil {
-		log.Error("create cmp_orders.csv fail", zap.Error(err_))
-		return
+		return err_
 	}
 	defer file.Close()
 	writer := csv.NewWriter(file)
@@ -97,27 +108,49 @@ func CompareExgBTOrders(args []string) {
 		"Fee", "Profit", "entDelay", "exitDelay", "priceDiff %", "amtDiff %", "feeDiff %",
 		"profitDiff %", "profitDf", "reason"}
 	if err_ = writer.Write(heads); err_ != nil {
-		log.Error("write orders.csv fail", zap.Error(err_))
-		return
+		return err_
 	}
 	for _, iod := range btOrders {
 		tfMSecs := int64(utils2.TFToSecs(iod.Timeframe) * 1000)
 		tfMSecsFlt := float64(tfMSecs)
 		entFixMS := utils2.AlignTfMSecs(iod.EnterAt, tfMSecs)
 		exgOds, _ := pairExgOds[iod.Symbol]
+		if skipUnHitBt && len(exgOds) == 0 {
+			continue
+		}
 		dirt := "long"
 		if iod.Short {
 			dirt = "short"
 		}
 		// Find out if there are matching exchange orders
 		// 查找是否有匹配的交易所订单
-		var matOd *ormo.InOutOrder
-		for i, exod := range exgOds {
+		var matches []*ormo.InOutOrder
+		for _, exod := range exgOds {
 			if exod.Short == iod.Short && math.Abs(float64(exod.EnterAt-entFixMS)) < tfMSecsFlt {
-				matOd = exod
-				pairExgOds[iod.Symbol] = append(exgOds[:i], exgOds[i+1:]...)
-				break
+				amtRate2 := exod.Enter.Filled / iod.Enter.Filled
+				if math.Abs(amtRate2-1) <= amtRate {
+					matches = append(matches, exod)
+				}
 			}
+		}
+		var matOd *ormo.InOutOrder
+		if len(matches) > 1 {
+			slices.SortFunc(matches, func(a, b *ormo.InOutOrder) int {
+				diffA := math.Abs(float64(a.ExitAt-iod.ExitAt) / 1000)
+				diffB := math.Abs(float64(b.ExitAt-iod.ExitAt) / 1000)
+				return int(diffA - diffB)
+			})
+		}
+		if len(matches) > 0 {
+			matOd = matches[0]
+			unMatches := make([]*ormo.InOutOrder, 0, len(exgOds))
+			for _, exod := range exgOds {
+				if exod == matOd {
+					continue
+				}
+				unMatches = append(unMatches, exod)
+			}
+			pairExgOds[iod.Symbol] = unMatches
 		}
 		if matOd == nil {
 			// There is no corresponding record for backtesting orders
@@ -180,6 +213,7 @@ func CompareExgBTOrders(args []string) {
 			}
 		}
 	}
+	// append unmatch exchange orders
 	for _, odList := range pairExgOds {
 		for _, iod := range odList {
 			dirt := "long"
@@ -203,129 +237,99 @@ func CompareExgBTOrders(args []string) {
 			}
 		}
 	}
+	log.Info("dump compare result", zap.String("at", outPath))
+	outPath = fmt.Sprintf("%s/exg_orders.csv", filepath.Dir(exgPath))
+	log.Info("dump exchange orders", zap.String("at", outPath))
+	return DumpOrdersCSV(exgOdList, outPath)
 }
 
-func readBackTestOrders(path string) ([]*ormo.InOutOrder, int64, int64) {
-	file, err := os.Open(path)
+func readBackTestOrders(path string) ([]*ormo.InOutOrder, int64, int64, error) {
+	info, err := os.Stat(path)
 	if err != nil {
-		log.Error("Error opening file:", zap.Error(err))
-		return nil, 0, 0
+		return nil, 0, 0, err
 	}
-	defer file.Close()
-	reader := csv.NewReader(file)
-	reader.Comma = ','
-	var pairIdx, tfIdx, dirtIdx, lvgIdx, entIdx, entPriceIdx, entAmtIdx, costIdx, entFeeIdx int
-	var exitIdx, exitPriceIdx, exitAmtIdx, exitFeeIdx, profitIdx int
-	var res []*ormo.InOutOrder
+	if info.IsDir() {
+		path = filepath.Join(path, "orders.gob")
+	} else if !strings.HasSuffix(path, ".gob") {
+		return nil, 0, 0, errors.New("orders.gob path is required")
+	}
+	orders, err2 := ormo.LoadOrdersGob(path)
+	if err2 != nil {
+		return nil, 0, 0, err2
+	}
 	var startMS, endMS int64
 	var maxTfSecs int
-	for {
-		row, err := reader.Read()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			log.Error("Error reading record:", zap.Error(err))
-			return nil, 0, 0
+	for _, od := range orders {
+		tfSecs := utils2.TFToSecs(od.Timeframe)
+		if tfSecs > maxTfSecs {
+			maxTfSecs = tfSecs
 		}
-		if costIdx == 0 {
-			for idx, title := range row {
-				title = strings.TrimSpace(title)
-				switch title {
-				case "symbol":
-					pairIdx = idx
-				case "timeframe":
-					tfIdx = idx
-				case "direction":
-					dirtIdx = idx
-				case "leverage":
-					lvgIdx = idx
-				case "entAt":
-					entIdx = idx
-				case "entPrice":
-					entPriceIdx = idx
-				case "entAmount":
-					entAmtIdx = idx
-				case "entCost":
-					costIdx = idx
-				case "entFee":
-					entFeeIdx = idx
-				case "exitAt":
-					exitIdx = idx
-				case "exitPrice":
-					exitPriceIdx = idx
-				case "exitAmount":
-					exitAmtIdx = idx
-				case "exitFee":
-					exitFeeIdx = idx
-				case "profit":
-					profitIdx = idx
-				}
-			}
-			if costIdx == 0 {
-				log.Error("read orders head fail", zap.Strings("head", row))
-				return nil, 0, 0
-			}
-		} else {
-			symbol := row[pairIdx]
-			timeFrame := row[tfIdx]
-			maxTfSecs = max(maxTfSecs, utils2.TFToSecs(timeFrame))
-			isShort := row[dirtIdx] == "short"
-			leverage, _ := strconv.ParseFloat(row[lvgIdx], 64)
-			enterMS := btime.ParseTimeMS(row[entIdx])
-			entPrice, _ := strconv.ParseFloat(row[entPriceIdx], 64)
-			entAmount, _ := strconv.ParseFloat(row[entAmtIdx], 64)
-			entFee, _ := strconv.ParseFloat(row[entFeeIdx], 64)
-			exitMS := btime.ParseTimeMS(row[exitIdx])
-			exitPrice, _ := strconv.ParseFloat(row[exitPriceIdx], 64)
-			exitAmount, _ := strconv.ParseFloat(row[exitAmtIdx], 64)
-			exitFee, _ := strconv.ParseFloat(row[exitFeeIdx], 64)
-			profit, _ := strconv.ParseFloat(row[profitIdx], 64)
-			if startMS == 0 {
-				startMS = enterMS
-			} else {
-				endMS = max(endMS, exitMS)
-			}
-			if leverage == 0 {
-				leverage = 1
-			}
-			res = append(res, &ormo.InOutOrder{
-				IOrder: &ormo.IOrder{
-					Symbol:    symbol,
-					Timeframe: timeFrame,
-					Short:     isShort,
-					Leverage:  leverage,
-					EnterAt:   enterMS,
-					ExitAt:    exitMS,
-					Profit:    profit,
-				},
-				Enter: &ormo.ExOrder{
-					Enter:    true,
-					Symbol:   symbol,
-					CreateAt: enterMS,
-					UpdateAt: enterMS,
-					Price:    entPrice,
-					Average:  entPrice,
-					Amount:   entAmount,
-					Filled:   entAmount,
-					Fee:      entFee,
-				},
-				Exit: &ormo.ExOrder{
-					Symbol:   symbol,
-					CreateAt: exitMS,
-					UpdateAt: exitMS,
-					Price:    exitPrice,
-					Average:  exitPrice,
-					Amount:   exitAmount,
-					Filled:   exitAmount,
-					Fee:      exitFee,
-				},
-			})
+		if startMS == 0 || od.Enter.CreateAt < startMS {
+			startMS = od.Enter.CreateAt
+		}
+		if od.Exit != nil && od.Exit.UpdateAt > endMS {
+			endMS = od.Exit.UpdateAt
 		}
 	}
 	// Move the end time back by 2 bars to prevent the exchange order section from being filtered
 	// 将结束时间，往后推移2个bar，防止交易所订单部分被过滤
 	endMS += int64(maxTfSecs*1000) * 2
-	return res, startMS, endMS
+	return orders, startMS, endMS, nil
+}
+
+/*
+handleExitOrders 处理平仓订单，返回更新后的订单列表和已使用的平仓数量
+remainFilled: 剩余需要平仓的数量
+od: 交易所订单
+odList: 当前持仓订单列表
+excludeOd: 需要排除的订单（已经通过ClientOrderID匹配的订单）
+返回值: 更新后的订单列表, 已使用的平仓数量
+*/
+func handleExitOrders(remainFilled float64, od *banexg.Order, odList []*ormo.InOutOrder, excludeOd *ormo.InOutOrder) ([]*ormo.InOutOrder, float64) {
+	newList := make([]*ormo.InOutOrder, 0, len(odList))
+	usedAmount := float64(0)
+	initAmt := remainFilled
+	for _, iod := range odList {
+		if iod == excludeOd || iod.Exit != nil || iod.Enter.Side == od.Side {
+			newList = append(newList, iod)
+			continue
+		}
+		part := iod
+		curFee := od.Fee.Cost
+		exitAmount := iod.Enter.Amount
+		if remainFilled < iod.Enter.Amount*0.99 {
+			exitAmount = remainFilled
+			part = iod.CutPart(remainFilled, remainFilled)
+			rate := remainFilled / od.Filled
+			curFee = od.Fee.Cost * rate
+		} else {
+			rate := iod.Enter.Amount / od.Filled
+			curFee = od.Fee.Cost * rate
+		}
+		part.ExitAt = od.LastUpdateTimestamp
+		part.Exit = &ormo.ExOrder{
+			Symbol:   part.Symbol,
+			CreateAt: od.LastUpdateTimestamp,
+			UpdateAt: od.LastUpdateTimestamp,
+			Price:    od.Price,
+			Average:  od.Average,
+			Amount:   part.Enter.Amount,
+			Filled:   part.Enter.Filled,
+			Fee:      curFee,
+		}
+		part.Status = ormo.InOutStatusFullExit
+		part.UpdateProfits(od.Average)
+		remainFilled -= exitAmount
+		usedAmount += exitAmount
+		newList = append(newList, part)
+		if part != iod {
+			newList = append(newList, iod)
+		}
+		if remainFilled <= initAmt*0.01 {
+			break
+		}
+	}
+	return newList, usedAmount
 }
 
 /*
@@ -334,119 +338,164 @@ Construct an InOutOrder from an exchange order for comparison; It is not used fo
 从交易所订单构建InOutOrder用于对比；非实盘/回测时使用
 */
 func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo.InOutOrder {
-	sort.Slice(ods, func(i, j int) bool {
-		return ods[i].LastTradeTimestamp < ods[j].LastTradeTimestamp
-	})
-	var jobMap = make(map[string][]*ormo.InOutOrder)
+	// 按ClientOrderID分组订单
+	orderMap := make(map[string][]*banexg.Order)
 	for _, od := range ods {
 		if od.Filled == 0 {
 			continue
 		}
-		odList, _ := jobMap[od.Symbol]
-		newList := make([]*ormo.InOutOrder, 0, len(odList))
-		if clientPrefix != "" && strings.HasPrefix(od.ClientOrderID, clientPrefix) {
-			// 优先通过ClientOrderID匹配
-			var openOd *ormo.InOutOrder
-			for _, iod := range odList {
-				if od.ClientOrderID == iod.Enter.OrderID {
-					openOd = iod
-					break
-				}
-			}
-			if openOd != nil {
-				openOd.ExitAt = od.LastUpdateTimestamp
-				openOd.Exit = &ormo.ExOrder{
-					Symbol:   openOd.Symbol,
-					CreateAt: od.LastUpdateTimestamp,
-					UpdateAt: od.LastUpdateTimestamp,
-					Price:    od.Price,
-					Average:  od.Average,
-					Amount:   openOd.Enter.Amount,
-					Filled:   openOd.Enter.Filled,
-					Fee:      od.Fee.Cost,
-				}
-				openOd.Status = ormo.InOutStatusFullExit
-				openOd.UpdateProfits(od.Average)
-				continue
-			}
-			newList = odList
-		} else {
-			// An order placed by a non-robot attempts to close the robot's position
-			// 非机器人下的订单，尝试平机器人的仓
-			for i, iod := range odList {
-				if iod.Enter.Side == od.Side || iod.Exit != nil {
-					newList = append(newList, iod)
-					continue
-				}
-				part := iod
-				curFee := od.Fee.Cost
-				if od.Filled < iod.Enter.Amount {
-					part = iod.CutPart(od.Filled, od.Filled)
-				} else if od.Filled > iod.Enter.Amount {
-					rate := iod.Enter.Amount / od.Filled
-					curFee = od.Fee.Cost * rate
-					od.Fee.Cost -= curFee
-				}
-				part.ExitAt = od.LastUpdateTimestamp
-				part.Exit = &ormo.ExOrder{
-					Symbol:   part.Symbol,
-					CreateAt: od.LastUpdateTimestamp,
-					UpdateAt: od.LastUpdateTimestamp,
-					Price:    od.Price,
-					Average:  od.Average,
-					Amount:   part.Enter.Amount,
-					Filled:   part.Enter.Filled,
-					Fee:      curFee,
-				}
-				part.Status = ormo.InOutStatusFullExit
-				part.UpdateProfits(od.Average)
-				od.Filled -= iod.Enter.Amount
-				newList = append(newList, part)
-				if part != iod {
-					newList = append(newList, iod)
-				}
-				if od.Filled <= 0 {
-					newList = append(newList, odList[i+1:]...)
-					break
-				}
-			}
-		}
-		jobMap[od.Symbol] = newList
-		if od.Filled <= 0 {
+		orderMap[od.ClientOrderID] = append(orderMap[od.ClientOrderID], od)
+	}
+	jobMap := make(map[string][]*ormo.InOutOrder)
+	var temps []*banexg.Order
+
+	for _, orders := range orderMap {
+		if len(orders) != 2 {
+			// 不是配对订单，加入temps
+			temps = append(temps, orders...)
 			continue
 		}
+
+		// 确保orders[0]是较早的订单
+		if orders[0].LastTradeTimestamp > orders[1].LastTradeTimestamp {
+			orders[0], orders[1] = orders[1], orders[0]
+		}
+
+		// 检查是否是一买一卖
+		if orders[0].Side == orders[1].Side {
+			temps = append(temps, orders...)
+			continue
+		}
+		ent, exit := orders[0], orders[1]
+		if !strings.HasPrefix(ent.ClientOrderID, clientPrefix) || !strings.HasPrefix(exit.ClientOrderID, clientPrefix) {
+			temps = append(temps, orders...)
+			continue
+		}
+
+		// 创建InOutOrder
 		iod := &ormo.InOutOrder{
 			IOrder: &ormo.IOrder{
-				Symbol:  od.Symbol,
-				Short:   od.Side == banexg.OdSideSell,
-				EnterAt: od.LastTradeTimestamp,
+				Symbol:  ent.Symbol,
+				Short:   ent.Side == banexg.OdSideSell,
+				EnterAt: ent.LastTradeTimestamp,
+				ExitAt:  exit.LastTradeTimestamp,
+				Status:  ormo.InOutStatusFullExit,
 			},
 			Enter: &ormo.ExOrder{
 				Enter:    true,
-				Symbol:   od.Symbol,
-				Side:     od.Side,
-				CreateAt: od.LastTradeTimestamp,
-				UpdateAt: od.LastTradeTimestamp,
-				Price:    od.Price,
-				Average:  od.Average,
-				Amount:   od.Filled,
-				Filled:   od.Filled,
-				Fee:      od.Fee.Cost,
-				OrderID:  od.ClientOrderID,
+				Symbol:   ent.Symbol,
+				Side:     ent.Side,
+				CreateAt: ent.LastTradeTimestamp,
+				UpdateAt: ent.LastTradeTimestamp,
+				Price:    ent.Price,
+				Average:  ent.Average,
+				Amount:   ent.Filled,
+				Filled:   ent.Filled,
+				Fee:      ent.Fee.Cost,
+				OrderID:  ent.ClientOrderID,
+			},
+			Exit: &ormo.ExOrder{
+				Symbol:   exit.Symbol,
+				CreateAt: exit.LastTradeTimestamp,
+				UpdateAt: exit.LastTradeTimestamp,
+				Price:    exit.Price,
+				Average:  exit.Average,
+				Amount:   exit.Filled, // 使用入场订单的数量
+				Filled:   exit.Filled,
+				Fee:      exit.Fee.Cost,
 			},
 		}
-		jobMap[od.Symbol] = append(newList, iod)
+
+		// 将InOutOrder添加到结果map
+		jobMap[ent.Symbol] = append(jobMap[ent.Symbol], iod)
+
+		inoutRate := exit.Filled / ent.Filled
+		if inoutRate > 1.01 {
+			// 平仓数量未耗尽，同时平仓其他订单
+			remainOrder := *exit
+			remainOrder.Filled = exit.Filled - ent.Filled
+			remainOrder.Fee.Cost = exit.Fee.Cost * (remainOrder.Filled / exit.Filled)
+			temps = append(temps, &remainOrder)
+			iod.Exit.Amount = ent.Filled
+			iod.Exit.Filled = ent.Filled
+			iod.Exit.Fee = exit.Fee.Cost * (ent.Fee.Cost / exit.Fee.Cost)
+		} else if inoutRate < 0.99 {
+			// 未完全平仓
+			remainOrder := *ent
+			remainOrder.Filled = ent.Filled - exit.Filled
+			remainOrder.Fee.Cost = ent.Fee.Cost * (remainOrder.Filled / ent.Filled)
+			temps = append(temps, &remainOrder)
+			iod.Enter.Amount = exit.Filled
+			iod.Enter.Filled = exit.Filled
+			iod.Enter.Fee = ent.Fee.Cost * (exit.Fee.Cost / ent.Fee.Cost)
+		}
+		iod.UpdateProfits(exit.Average)
 	}
+
+	// 处理未配对订单
+	if len(temps) > 0 {
+		// 按时间排序temps
+		sort.Slice(temps, func(i, j int) bool {
+			return temps[i].LastTradeTimestamp < temps[j].LastTradeTimestamp
+		})
+
+		// 对每个未配对订单执行原来的逻辑
+		for _, od := range temps {
+			odList, _ := jobMap[od.Symbol]
+			newList := make([]*ormo.InOutOrder, 0, len(odList))
+			remainFilled := od.Filled
+
+			// 尝试平仓现有持仓
+			var usedAmount float64
+			newList, usedAmount = handleExitOrders(remainFilled, od, odList, nil)
+			remainFilled -= usedAmount
+
+			jobMap[od.Symbol] = newList
+			if remainFilled <= od.Filled*0.01 || !strings.HasPrefix(od.ClientOrderID, clientPrefix) {
+				continue
+			}
+
+			// 创建新的入场订单
+			iod := &ormo.InOutOrder{
+				IOrder: &ormo.IOrder{
+					Symbol:  od.Symbol,
+					Short:   od.Side == banexg.OdSideSell,
+					EnterAt: od.LastTradeTimestamp,
+					Status:  ormo.InOutStatusFullEnter,
+				},
+				Enter: &ormo.ExOrder{
+					Enter:    true,
+					Symbol:   od.Symbol,
+					Side:     od.Side,
+					CreateAt: od.LastTradeTimestamp,
+					UpdateAt: od.LastTradeTimestamp,
+					Price:    od.Price,
+					Average:  od.Average,
+					Amount:   remainFilled,
+					Filled:   remainFilled,
+					Fee:      od.Fee.Cost * (remainFilled / od.Filled),
+					OrderID:  od.ClientOrderID,
+				},
+			}
+			jobMap[od.Symbol] = append(newList, iod)
+		}
+	}
+
 	return jobMap
 }
 
-func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*banexg.Order {
+func readBinanceOrders(f *excelize.File, exchange banexg.BanExchange, start, stop int64, botName string) ([]*banexg.Order, *errs.Error) {
+	// TODO go-i18n
 	rowId := 1 // 首个从第2行开始
 	sheet := "sheet1"
 	colEnd := 'M'
 	var res = make([]*banexg.Order, 0, 20)
 	var order *banexg.Order
-	markets := exg.Default.GetCurMarkets()
+	markets := exchange.GetCurMarkets()
+	if len(markets) == 0 {
+		exInfo := exchange.Info()
+		return res, errs.NewMsg(errs.CodeParamInvalid, "no markets for %v.%v", exInfo.ID, exInfo.MarketType)
+	}
 	idMap := make(map[string]string)
 	for symbol, mar := range markets {
 		idMap[mar.ID] = symbol
@@ -482,7 +531,7 @@ func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*b
 				continue
 			}
 			createMS := btime.ParseTimeMS(textA)
-			alignMS := utils2.AlignTfMSecs(createMS, 60000)
+			alignMS := int64(math.Round(float64(createMS)/60000)) * 60000
 			clientID, _ := row["C"]
 			if alignMS < start || alignMS >= stop && strings.HasPrefix(clientID, botName) {
 				// 允许截止时间之后的非机器人订单，用于平仓
@@ -530,7 +579,7 @@ func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*b
 			} else {
 				log.Error("unknown order state: " + stateStr)
 			}
-		} else if order == nil || strings.Contains(textB, "成交时间") {
+		} else if order == nil || strings.Contains(textB, "(UTC)") {
 			continue
 		} else if textA == "" && textB != "" {
 			// 成交记录
@@ -546,7 +595,7 @@ func readBinanceOrders(f *excelize.File, start, stop int64, botName string) []*b
 	if order != nil {
 		res = append(res, order)
 	}
-	return res
+	return res, nil
 }
 
 type AssetData struct {

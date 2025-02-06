@@ -246,6 +246,12 @@ func init() {
 		RunRaw: runMergeAssets,
 		Help:   "merge multiple assets.html files into one",
 	})
+	AddCmdJob(&CmdJob{
+		Name:   "cmp_orders",
+		Parent: "tool",
+		RunRaw: opt.CompareExgBTOrders,
+		Help:   "compare exchange orders with backtest",
+	})
 
 	AddCmdJob(&CmdJob{
 		Name:   "close_order",
