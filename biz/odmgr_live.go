@@ -1905,6 +1905,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
 		return
 	}
 	tg.SaveOld()
+	od.DirtyInfo = true
 	if tg.Price <= 0 {
 		// Stop loss/take profit is not set, or needs to be cancelled
 		// 未设置止损/止盈，或需要撤销
@@ -1936,7 +1937,8 @@ func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
 		odType = banexg.OdTypeLimit
 		price = tg.Limit
 	}
-	params[banexg.ParamClosePosition] = true
+	// 这里不应设置ClosePosition仓位止盈止损，否则多策略或多个订单止盈止损会互相覆盖
+	// 双向持仓无需设置ReduceOnly
 	if prefix == ormo.OdActionStopLoss {
 		params[banexg.ParamStopLossPrice] = tg.Price
 	} else if prefix == ormo.OdActionTakeProfit {
@@ -1953,6 +1955,9 @@ func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
 	if tg.Rate > 0 && tg.Rate < 1 {
 		amt *= tg.Rate
 	}
+	log.Debug("set trigger", zap.String("acc", o.Account), zap.String("key", od.Key()),
+		zap.Float64("amt", od.Enter.Amount), zap.Float64("qmt", amt),
+		zap.Float64("price", od.Enter.Average))
 	res, err := exg.Default.CreateOrder(od.Symbol, odType, side, amt, price, params)
 	if err != nil {
 		if err.BizCode == -2021 {
@@ -1982,6 +1987,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
 	orderId := tg.OrderId
 	if res != nil {
 		tg.OrderId = res.ID
+		od.DirtyInfo = true
 	}
 	if orderId != "" && (res == nil || res.Status == "open") {
 		_, err = exg.Default.CancelOrder(orderId, od.Symbol, map[string]interface{}{
@@ -2017,6 +2023,7 @@ func cancelTriggerOds(od *ormo.InOutOrder) {
 			logFields = append(logFields, zap.String("sl", sl.OrderId))
 		}
 		sl.OrderId = ""
+		od.DirtyInfo = true
 	}
 	if tp != nil && tp.OrderId != "" {
 		_, err := exg.Default.CancelOrder(tp.OrderId, od.Symbol, args)
@@ -2026,6 +2033,7 @@ func cancelTriggerOds(od *ormo.InOutOrder) {
 			logFields = append(logFields, zap.String("tp", tp.OrderId))
 		}
 		tp.OrderId = ""
+		od.DirtyInfo = true
 	}
 	if len(logFields) > 0 {
 		logFields = append(logFields, zap.String("key", odKey))
