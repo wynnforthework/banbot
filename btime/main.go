@@ -42,13 +42,13 @@ Get the current 10-digit second-level timestamp
 获取当前10位秒级时间戳
 */
 func Time() float64 {
-	if core.LiveMode {
-		return UTCTime()
-	} else {
+	if core.BackTestMode {
 		if CurTimeMS == 0 {
 			CurTimeMS = UTCStamp()
 		}
 		return float64(CurTimeMS) * 0.001
+	} else {
+		return UTCTime()
 	}
 }
 
@@ -58,13 +58,13 @@ Get the current 13-digit millisecond timestamp
 获取当前13位毫秒时间戳
 */
 func TimeMS() int64 {
-	if core.LiveMode {
-		return UTCStamp()
-	} else {
+	if core.BackTestMode {
 		if CurTimeMS == 0 {
 			CurTimeMS = UTCStamp()
 		}
 		return CurTimeMS
+	} else {
+		return UTCStamp()
 	}
 }
 
@@ -76,7 +76,7 @@ func MSToTime(timeMSecs int64) *time.Time {
 }
 
 func Now() *time.Time {
-	if !core.LiveMode {
+	if core.BackTestMode {
 		if CurTimeMS == 0 {
 			CurTimeMS = UTCStamp()
 		}

@@ -205,7 +205,7 @@ type PairMgrConfig struct {
 	Limit int `yaml:"limit" mapstructure:"limit,omitempty"`
 	// apply filters to static pairs force
 	ForceFilters bool `yaml:"force_filters" mapstructure:"force_filters,omitempty"`
-	// hole/close 品种切换时保留还是退出仓位
+	// hold/close 品种切换时保留还是退出仓位
 	PosOnRotation string `yaml:"pos_on_rotation" mapstructure:"pos_on_rotation"`
 }
 

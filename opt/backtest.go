@@ -382,10 +382,9 @@ func (b *BackTest) cronDumpBtStatus() {
 }
 
 func (b *BackTest) initRefreshCron() *errs.Error {
-	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 	if config.PairMgr.Cron != "" {
 		var err_ error
-		b.schedule, err_ = parser.Parse(config.PairMgr.Cron)
+		b.schedule, err_ = utils.NewCronScheduler(config.PairMgr.Cron)
 		if err_ != nil {
 			return errs.New(core.ErrBadConfig, err_)
 		}
@@ -403,7 +402,7 @@ func (b *BackTest) initRefreshCron() *errs.Error {
 }
 
 func RefreshPairJobs(dp data.IProvider, showLog, isFirst bool, pBar *utils.StagedPrg) *errs.Error {
-	pairs, pairTfScores, err := biz.RefreshPairs(showLog, pBar)
+	pairs, pairTfScores, err := biz.RefreshPairs(showLog, isFirst, pBar)
 	if err != nil {
 		return err
 	}

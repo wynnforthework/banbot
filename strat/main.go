@@ -2,13 +2,12 @@ package strat
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
-	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
@@ -432,20 +431,9 @@ func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string) ([]string, *err
 			}
 			polFilters[polID] = filters
 		}
-		var tickersMap map[string]*banexg.Ticker
-		if core.LiveMode {
-			for _, flt := range filters {
-				if flt.IsNeedTickers() {
-					tickersMap, err = exg.GetTickers()
-					if err != nil {
-						return nil, err
-					}
-					break
-				}
-			}
-		}
+		curMS := btime.TimeMS()
 		for _, flt := range filters {
-			pairs, err = flt.Filter(pairs, tickersMap)
+			pairs, err = flt.Filter(pairs, curMS)
 			if err != nil {
 				return nil, err
 			}

@@ -7,6 +7,7 @@ import (
 func SetRunMode(mode string) {
 	RunMode = mode
 	LiveMode = RunMode == RunModeLive
+	BackTestMode = RunMode == RunModeBackTest
 }
 
 func SetRunEnv(env string) {

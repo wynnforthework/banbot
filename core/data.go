@@ -14,6 +14,7 @@ var (
 	StartAt       int64                                // start timestamp(13 digits) 启动时间，13位时间戳
 	EnvReal       bool                                 // Whether to actually submit the order to the exchange(run_env:prod/test) 是否是提交到交易所真实订单模式run_env:prod/test
 	LiveMode      bool                                 // Whether real-time mode(real trade/dry run) 是否是实时模式：实盘+模拟运行
+	BackTestMode  bool                                 // 回测模式
 	TFSecs        map[string]int                       // All time frames involved 所有涉及的时间周期
 	ExgName       string                               // current exchange name 交易所名称
 	Market        string                               // current market name 当前市场

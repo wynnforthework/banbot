@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/core"
 	"github.com/felixge/fgprof"
+	"github.com/robfig/cron/v3"
 	"net/http"
 	"os"
 	"os/exec"
@@ -478,4 +479,23 @@ func StartCpuProfile(path string, port int) *errs.Error {
 		})
 	}
 	return nil
+}
+
+func NewCronScheduler(exp string) (cron.Schedule, error) {
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	return parser.Parse(exp)
+}
+
+func CronPrev(scd cron.Schedule, stamp time.Time) time.Time {
+	var endTime = stamp
+	for i := 0; i < 5; i++ {
+		endTime = scd.Next(endTime)
+	}
+	curTime := stamp.Add(-endTime.Sub(stamp))
+	var prev = curTime
+	for curTime.Before(stamp) {
+		prev = curTime
+		curTime = scd.Next(curTime)
+	}
+	return prev
 }

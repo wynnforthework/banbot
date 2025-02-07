@@ -1,27 +1,24 @@
 package goods
 
 import (
-	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 )
 
 type IFilter interface {
 	GetName() string
 	IsDisable() bool
-	IsNeedTickers() bool
-	Filter(pairs []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error)
+	Filter(pairs []string, timeMS int64) ([]string, *errs.Error)
 }
 
 type IProducer interface {
 	IFilter
-	GenSymbols(tickers map[string]*banexg.Ticker) ([]string, *errs.Error)
+	GenSymbols(timeMS int64) ([]string, *errs.Error)
 }
 
 type BaseFilter struct {
-	Name        string `yaml:"name" mapstructure:"name"`
-	Disable     bool   `yaml:"disable" mapstructure:"disable"`
-	NeedTickers bool
-	AllowEmpty  bool
+	Name       string `yaml:"name" mapstructure:"name"`
+	Disable    bool   `yaml:"disable" mapstructure:"disable,omitempty"`
+	AllowEmpty bool
 }
 
 // VolumePairFilter Used to represent a configuration that sorts all trading pairs in reverse order by volume value 用于表示按成交量价值倒序排序所有交易对的配置

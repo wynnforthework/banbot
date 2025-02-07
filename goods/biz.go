@@ -2,12 +2,11 @@ package goods
 
 import (
 	"fmt"
-
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
-	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
-	"github.com/banbox/banexg"
+	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/go-viper/mapstructure/v2"
@@ -16,7 +15,6 @@ import (
 var (
 	pairProducer IProducer
 	filters      = make([]IFilter, 0, 10)
-	needTickers  = false
 	ShowLog      = true
 )
 
@@ -28,20 +26,11 @@ func Setup() *errs.Error {
 	if err != nil {
 		return err
 	}
-	for i, flt := range fts {
-		if i == 0 {
-			producer, ok := flt.(IProducer)
-			if !ok {
-				return errs.NewMsg(core.ErrBadConfig, "first pair filter must be IProducer")
-			}
-			pairProducer = producer
-			continue
-		}
-		if flt.IsNeedTickers() {
-			needTickers = true
-			break
-		}
+	producer, ok := fts[0].(IProducer)
+	if !ok {
+		return errs.NewMsg(core.ErrBadConfig, "first pair filter must be IProducer")
 	}
+	pairProducer = producer
 	filters = fts[1:]
 	return nil
 }
@@ -59,14 +48,12 @@ func GetPairFilters(items []*config.CommonPairFilter, withInvalid bool) ([]IFilt
 		case "VolumePairList":
 			output = &VolumePairFilter{BaseFilter: base}
 		case "PriceFilter":
-			base.NeedTickers = true
 			output = &PriceFilter{BaseFilter: base}
 		case "RateOfChangeFilter":
 			output = &RateOfChangeFilter{BaseFilter: base}
 		case "VolatilityFilter":
 			output = &VolatilityFilter{BaseFilter: base}
 		case "SpreadFilter":
-			base.NeedTickers = true
 			output = &SpreadFilter{BaseFilter: base}
 		case "OffsetFilter":
 			output = &OffsetFilter{BaseFilter: base}
@@ -91,16 +78,24 @@ func GetPairFilters(items []*config.CommonPairFilter, withInvalid bool) ([]IFilt
 /*
 RefreshPairList
 
+刷新交易品种，如果alignStart=true，则计算当前时间前一个cron的触发时间对应的交易品种
 更新core.Pairs和core.PairsMap
 */
-func RefreshPairList() ([]string, *errs.Error) {
+func RefreshPairList(alignStart bool) ([]string, *errs.Error) {
 	var pairs []string
 	var allowFilter = false
 	var err *errs.Error
-	var tickersMap map[string]*banexg.Ticker
+	curTime := btime.TimeMS()
+	if alignStart && config.PairMgr.Cron != "" {
+		schedule, err_ := utils.NewCronScheduler(config.PairMgr.Cron)
+		if err_ != nil {
+			return nil, err
+		}
+		curTime = utils.CronPrev(schedule, btime.ToTime(curTime)).UnixMilli()
+	}
 	if len(config.Pairs) > 0 {
 		pairs = config.Pairs
-		pairVols, err := getSymbolVols(pairs, "1h", 1)
+		pairVols, err := getSymbolVols(pairs, "1h", 1, curTime)
 		if err != nil {
 			return nil, err
 		}
@@ -108,13 +103,7 @@ func RefreshPairList() ([]string, *errs.Error) {
 		allowFilter = config.PairMgr.ForceFilters
 	} else {
 		allowFilter = true
-		if needTickers && core.LiveMode {
-			tickersMap, err = exg.GetTickers()
-			if err != nil {
-				return nil, err
-			}
-		}
-		pairs, err = pairProducer.GenSymbols(tickersMap)
+		pairs, err = pairProducer.GenSymbols(curTime)
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +121,7 @@ func RefreshPairList() ([]string, *errs.Error) {
 				continue
 			}
 			oldNum := len(pairs)
-			pairs, err = flt.Filter(pairs, tickersMap)
+			pairs, err = flt.Filter(pairs, curTime)
 			if err != nil {
 				return nil, err
 			}

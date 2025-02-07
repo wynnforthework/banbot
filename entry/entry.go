@@ -88,7 +88,7 @@ func RunDownData(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	pairs, err := goods.RefreshPairList()
+	pairs, err := goods.RefreshPairList(false)
 	if err != nil {
 		return err
 	}

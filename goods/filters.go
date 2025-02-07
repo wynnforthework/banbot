@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
@@ -22,10 +21,6 @@ import (
 	"gonum.org/v1/gonum/floats"
 )
 
-func (f *BaseFilter) IsNeedTickers() bool {
-	return f.NeedTickers
-}
-
 func (f *BaseFilter) IsDisable() bool {
 	return f.Disable
 }
@@ -34,7 +29,7 @@ func (f *BaseFilter) GetName() string {
 	return f.Name
 }
 
-func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+func (f *AgeFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
 	if f.Min == 0 && f.Max == 0 {
 		return symbols, nil
 	}
@@ -62,12 +57,11 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 	if err != nil {
 		return nil, err
 	}
-	curMS := btime.TimeMS()
-	minStartMS := curMS - dayMs*int64(f.Min)
+	minStartMS := timeMS - dayMs*int64(f.Min)
 	valids := make(map[string]bool)
 	for _, exs := range careMap {
 		if exs.ListMs > 0 {
-			days := int((curMS - exs.ListMs) / dayMs)
+			days := int((timeMS - exs.ListMs) / dayMs)
 			if f.Max > 0 && days > f.Max {
 				continue
 			} else if f.Min > 0 && days < f.Min {
@@ -91,23 +85,13 @@ func (f *AgeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) 
 	return result, nil
 }
 
-func (f *VolumePairFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+func (f *VolumePairFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
 	var symbolVols = make([]SymbolVol, 0)
-	if !f.NeedTickers {
-		backTf, backNum := utils.SecsToTfNum(utils2.TFToSecs(f.BackPeriod))
-		var err *errs.Error
-		symbolVols, err = getSymbolVols(symbols, backTf, backNum)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		for _, symbol := range symbols {
-			tik, ok := tickers[symbol]
-			if !ok {
-				continue
-			}
-			symbolVols = append(symbolVols, SymbolVol{symbol, tik.QuoteVolume, tik.Close})
-		}
+	backTf, backNum := utils.SecsToTfNum(utils2.TFToSecs(f.BackPeriod))
+	var err *errs.Error
+	symbolVols, err = getSymbolVols(symbols, backTf, backNum, timeMS)
+	if err != nil {
+		return nil, err
 	}
 	slices.SortFunc(symbolVols, func(a, b SymbolVol) int {
 		return int((b.Vol - a.Vol) / 1000)
@@ -141,12 +125,8 @@ type SymbolVol struct {
 	Price  float64
 }
 
-func getSymbolVols(symbols []string, tf string, num int) ([]SymbolVol, *errs.Error) {
+func getSymbolVols(symbols []string, tf string, num int, endMS int64) ([]SymbolVol, *errs.Error) {
 	var symbolVols = make([]SymbolVol, 0)
-	endMS := int64(0)
-	if !core.LiveMode {
-		endMS = btime.TimeMS()
-	}
 	callBack := func(symbol string, _ string, klines []*banexg.Kline, adjs []*orm.AdjInfo) {
 		if len(klines) == 0 {
 			symbolVols = append(symbolVols, SymbolVol{symbol, 0, 0})
@@ -220,16 +200,10 @@ func filterByMinCost(symbols []SymbolVol) ([]string, map[string]float64) {
 	return res, skip
 }
 
-func (f *VolumePairFilter) GenSymbols(tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+func (f *VolumePairFilter) GenSymbols(timeMS int64) ([]string, *errs.Error) {
 	symbols := make([]string, 0)
-	if f.NeedTickers && len(tickers) > 0 {
-		for symbol, _ := range tickers {
-			symbols = append(symbols, symbol)
-		}
-	} else {
-		markets := exg.Default.GetCurMarkets()
-		symbols = utils.KeysOfMap(markets)
-	}
+	markets := exg.Default.GetCurMarkets()
+	symbols = utils.KeysOfMap(markets)
 	pairs := make([]string, 0, len(symbols))
 	for _, pair := range symbols {
 		_, quote, _, _ := core.SplitSymbol(pair)
@@ -241,34 +215,16 @@ func (f *VolumePairFilter) GenSymbols(tickers map[string]*banexg.Ticker) ([]stri
 	if len(symbols) == 0 {
 		return nil, errs.NewMsg(errs.CodeRunTime, "no symbols generate from VolumePairFilter")
 	}
-	return f.Filter(symbols, tickers)
+	return f.Filter(symbols, timeMS)
 }
 
-func (f *PriceFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	if core.LiveMode {
-		res := make([]string, 0, len(symbols))
-		if len(tickers) == 0 {
-			log.Warn("no tickers, PriceFilter skipped")
-			return symbols, nil
+func (f *PriceFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
+	return filterByOHLCV(symbols, "1h", timeMS, 1, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
+		if len(klines) == 0 {
+			return f.AllowEmpty
 		}
-		for _, s := range symbols {
-			tik, ok := tickers[s]
-			if !ok {
-				continue
-			}
-			if f.validatePrice(s, tik.Last) {
-				res = append(res, s)
-			}
-		}
-		return res, nil
-	} else {
-		return filterByOHLCV(symbols, "1h", 1, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
-			if len(klines) == 0 {
-				return f.AllowEmpty
-			}
-			return f.validatePrice(s, klines[len(klines)-1].Close)
-		})
-	}
+		return f.validatePrice(s, klines[len(klines)-1].Close)
+	})
 }
 
 func (f *PriceFilter) validatePrice(symbol string, price float64) bool {
@@ -318,8 +274,8 @@ func (f *PriceFilter) validatePrice(symbol string, price float64) bool {
 	return true
 }
 
-func (f *RateOfChangeFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	return filterByOHLCV(symbols, "1d", f.BackDays, core.AdjFront, f.validate)
+func (f *RateOfChangeFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
+	return filterByOHLCV(symbols, "1d", timeMS, f.BackDays, core.AdjFront, f.validate)
 }
 
 func (f *RateOfChangeFilter) validate(pair string, arr []*banexg.Kline) bool {
@@ -347,15 +303,15 @@ func (f *RateOfChangeFilter) validate(pair string, arr []*banexg.Kline) bool {
 	return true
 }
 
-func filterByOHLCV(symbols []string, timeFrame string, limit int, adj int, cb func(string, []*banexg.Kline) bool) ([]string, *errs.Error) {
+func filterByOHLCV(symbols []string, timeFrame string, endMS int64, limit int, adj int, cb func(string, []*banexg.Kline) bool) ([]string, *errs.Error) {
 	var has = make(map[string]struct{})
 	handle := func(pair string, _ string, arr []*banexg.Kline, adjs []*orm.AdjInfo) {
-		arr = orm.ApplyAdj(adjs, arr, adj, 0, 0)
+		arr = orm.ApplyAdj(adjs, arr, adj, endMS, 0)
 		if cb(pair, arr) {
 			has[pair] = struct{}{}
 		}
 	}
-	err := orm.FastBulkOHLCV(exg.Default, symbols, timeFrame, 0, 0, limit, handle)
+	err := orm.FastBulkOHLCV(exg.Default, symbols, timeFrame, 0, endMS, limit, handle)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +324,7 @@ func filterByOHLCV(symbols []string, timeFrame string, limit int, adj int, cb fu
 	return res, nil
 }
 
-func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+func (f *CorrelationFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
 	if f.Timeframe == "" || f.BackNum == 0 || f.Max == 0 && f.TopN == 0 && f.TopRate == 0 {
 		return symbols, nil
 	}
@@ -390,7 +346,7 @@ func (f *CorrelationFilter) Filter(symbols []string, tickers map[string]*banexg.
 			skips = append(skips, pair)
 			continue
 		}
-		_, klines, err := orm.GetOHLCV(exs, f.Timeframe, 0, 0, f.BackNum, false)
+		_, klines, err := orm.GetOHLCV(exs, f.Timeframe, 0, timeMS, f.BackNum, false)
 		if err != nil || len(klines)*2 < f.BackNum {
 			skips = append(skips, pair)
 			continue
@@ -492,8 +448,8 @@ type IdVal struct {
 	Val float64
 }
 
-func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
-	return filterByOHLCV(symbols, "1d", f.BackDays, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
+func (f *VolatilityFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
+	return filterByOHLCV(symbols, "1d", timeMS, f.BackDays, core.AdjFront, func(s string, klines []*banexg.Kline) bool {
 		if len(klines) == 0 {
 			return f.AllowEmpty
 		}
@@ -510,11 +466,11 @@ func (f *VolatilityFilter) Filter(symbols []string, tickers map[string]*banexg.T
 	})
 }
 
-func (f *SpreadFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+func (f *SpreadFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
 	return symbols, nil
 }
 
-func (f *OffsetFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+func (f *OffsetFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
 	var res = symbols
 	if f.Reverse {
 		slices.Reverse(res)
@@ -532,7 +488,7 @@ func (f *OffsetFilter) Filter(symbols []string, tickers map[string]*banexg.Ticke
 	return res, nil
 }
 
-func (f *ShuffleFilter) Filter(symbols []string, tickers map[string]*banexg.Ticker) ([]string, *errs.Error) {
+func (f *ShuffleFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
 	rand.Shuffle(len(symbols), func(i, j int) {
 		symbols[i], symbols[j] = symbols[j], symbols[i]
 	})
