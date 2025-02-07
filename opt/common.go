@@ -138,7 +138,7 @@ func newRollBtOpt(args *config.CmdArgs) (*rollBtOpt, *errs.Error) {
 	if err != nil {
 		return nil, err
 	}
-	dateRange := config.TimeRange
+	dateRange := config.TimeRange.Clone()
 	allStartMs, allEndMs := dateRange.StartMS, dateRange.EndMS
 	runMSecs := int64(utils2.TFToSecs(args.RunPeriod)) * 1000
 	reviewMSecs := int64(utils2.TFToSecs(args.ReviewPeriod)) * 1000

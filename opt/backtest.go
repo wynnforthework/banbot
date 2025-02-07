@@ -442,10 +442,7 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 	// Backup global state
 	// 备份全局状态
 	backUp := biz.BackupVars()
-	timeRange := &config.TimeTuple{
-		StartMS: config.TimeRange.StartMS,
-		EndMS:   config.TimeRange.EndMS,
-	}
+	timeRange := config.TimeRange.Clone()
 	backTime := btime.CurTimeMS
 	simEndMs := backTime
 	if core.LiveMode {

@@ -940,3 +940,10 @@ func GetExportConfig(path string) (*ExportConfig, *errs.Error) {
 	}
 	return &cfg, nil
 }
+
+func (tr *TimeTuple) Clone() *TimeTuple {
+	return &TimeTuple{
+		StartMS: tr.StartMS,
+		EndMS:   tr.EndMS,
+	}
+}

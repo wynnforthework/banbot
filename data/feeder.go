@@ -607,7 +607,7 @@ func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline, showLog bool) (*D
 	res := &DBKlineFeeder{
 		HistKLineFeeder: HistKLineFeeder{
 			KlineFeeder: *feeder,
-			TimeRange:   config.TimeRange,
+			TimeRange:   config.TimeRange.Clone(),
 			TradeTimes:  tradeTimes,
 		},
 	}

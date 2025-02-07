@@ -268,6 +268,7 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 	if p.getEnd != nil {
 		// 结束时间推迟3个bar，以便触发下次品种刷新
 		endMs := p.getEnd() + int64(p.maxTfSecs*1000*3)
+		endMs = min(endMs, config.TimeRange.EndMS)
 		for _, h := range holders {
 			h.SetEndMS(endMs)
 		}
@@ -357,13 +358,14 @@ func RunHistFeeders(makeFeeders func() []IHistKlineFeeder, versions chan int, pB
 		if bar.Time > lastBarMs {
 			// 更新进度条
 			if pBar != nil {
+				curMS := btime.TimeMS()
 				if pBar.Last == 0 {
-					pBar.Last = btime.TimeMS()
-				} else {
-					pBarAdd := (btime.TimeMS() - pBar.Last) / 1000
+					pBar.Last = curMS
+				} else if curMS > pBar.Last {
+					pBarAdd := (curMS - pBar.Last) / 1000
 					if pBarAdd > 0 {
 						pBar.Add(int(pBarAdd))
-						pBar.Last = btime.TimeMS()
+						pBar.Last = curMS
 					}
 				}
 			}
