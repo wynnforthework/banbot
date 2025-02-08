@@ -132,8 +132,9 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 			exits = append(exits, job.Exits...)
 		}
 	}
-	// Update auxiliary subscription data
+	// invoke OnInfoBar
 	// 更新辅助订阅数据
+	// 此处不应允许开平仓或更新止盈止损等，否则订单的TimeFrame会出现歧义
 	for _, job := range infoJobs {
 		job.IsWarmUp = bar.IsWarmUp
 		job.Strat.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)

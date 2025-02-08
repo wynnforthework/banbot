@@ -37,7 +37,8 @@ type BTResult struct {
 	ShowDrawDownPct float64    `json:"showDrawDownPct"` // Displays the maximum drawdown percentage 显示最大回撤百分比
 	MaxDrawDownVal  float64    `json:"maxDrawDownVal"`  // Maximum drawdown percentage 最大回撤金额
 	ShowDrawDownVal float64    `json:"showDrawDownVal"` // Displays the maximum drawdown percentage 显示最大回撤金额
-	MaxFundOccup    float64    `json:"maxUsageVal"`
+	MaxFundOccup    float64    `json:"maxFundOccup"`
+	MaxOccupForPair float64    `json:"maxOccupForPair"`
 	BarNum          int        `json:"barNum"`
 	TimeNum         int        `json:"timeNum"`
 	OrderNum        int        `json:"orderNum"`
@@ -259,6 +260,7 @@ func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 	realDrawVal := strconv.FormatFloat(r.MaxDrawDownVal, 'f', 0, 64)
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownVal, realDrawVal)})
 	table.Append([]string{"Max Fund Occupy", strconv.FormatFloat(r.MaxFundOccup, 'f', 0, 64)})
+	table.Append([]string{"Max Occupy by Pair", strconv.FormatFloat(r.MaxOccupForPair, 'f', 0, 64)})
 	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
 	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
 	table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})

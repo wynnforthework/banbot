@@ -286,7 +286,9 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 		drawDownPct := (b.MaxReal - totalLegal) * 100 / b.MaxReal
 		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
 		b.MaxDrawDownVal = max(b.MaxDrawDownVal, b.MaxReal-totalLegal)
-		b.MaxFundOccup = max(b.MaxFundOccup, b.MaxReal-wallets.AvaLegal(nil))
+		maxOccupy := b.MaxReal - wallets.AvaLegal(nil)
+		b.MaxFundOccup = max(b.MaxFundOccup, maxOccupy)
+		b.MaxOccupForPair = max(b.MaxOccupForPair, maxOccupy/float64(len(core.Pairs)))
 	}
 	odNum := ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
 	if b.TimeNum%b.PlotEvery != 0 {
