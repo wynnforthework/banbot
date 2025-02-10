@@ -2,7 +2,7 @@
   import Modal from "./Modal.svelte"
   import { getContext } from "svelte";
   import * as m from '$lib/paraglide/messages.js'
-  import { ChartSave } from "./chart";
+  import { ChartSave, ChartCtx } from "./chart";
   import type { Writable } from "svelte/store";
   import type { Period } from "./types";
 
@@ -10,6 +10,7 @@
   
   const title = m.timeframe();
   const save = getContext('save') as Writable<ChartSave>;
+  const ctx = getContext('ctx') as Writable<ChartCtx>;
   
   const periods: Period[] = [
     { timeframe: '1m', multiplier: 1, timespan: 'minute', secs: 60 },
@@ -24,6 +25,7 @@
   ];
 
   function handlePeriodClick(period: Period) {
+    $ctx.clickSymbolPeriod += 1;
     $save.period = period;
     show = false;
   }

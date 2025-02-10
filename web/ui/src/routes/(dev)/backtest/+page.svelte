@@ -28,6 +28,8 @@
   let selectedTasks = $state<BtTask[]>([]);
   let compareUrl = $state('');
 
+  let pageSize = 12;
+
   onMount(async () => {
     await loadOptions();
   });
@@ -65,7 +67,7 @@
       strat: selectedStrat,
       period: selectedPeriod,
       range: selectedRange,
-      limit: 20,
+      limit: pageSize,
       maxId: maxId || 0
     });
     if(show) loading = false;
@@ -76,7 +78,7 @@
     }
     tasks = rsp.data;
     hasPrev = !!(maxId && maxId > 0);
-    hasNext = tasks.length >= 20;
+    hasNext = tasks.length >= pageSize;
     let nearDone = false;
     tasks.forEach(task => {
       if(task.status >= 3)return;
@@ -287,7 +289,7 @@ Error: ${task.info}`
             </div>
             <div class="text-sm opacity-60">{showPairs(task.pairs)}</div>
             {#if task.status === 3}
-              <div class="text-sm opacity-80">{m.max_drawdown()}: {task.maxDrawdown.toFixed(1)}%</div>
+              <div class="text-sm opacity-80">{m.max_drawdown_short()}: {task.maxDrawdown.toFixed(1)}%</div>
             {:else if task.status === 4}
               <div class="text-sm text-error">{task.info}</div>
             {/if}

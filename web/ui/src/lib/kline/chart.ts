@@ -32,6 +32,9 @@ export class ChartCtx {
   timeStart: number
   timeEnd: number
 
+  clickSymbolPeriod: number
+  lastSymbolPeriod: number
+
   allInds: BanInd[]
 
   constructor() {
@@ -50,6 +53,9 @@ export class ChartCtx {
     
     this.timeEnd = 0
     this.timeStart = 0
+
+    this.clickSymbolPeriod = 0
+    this.lastSymbolPeriod = 0
 
     this.allInds = []
 

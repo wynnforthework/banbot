@@ -465,13 +465,17 @@ func collectBtTask(rootDir, relPath string) (*ormu.Task, error) {
 		return nil, err
 	}
 	dayMSecs := int64(utils.TFToSecs("1d") * 1000)
+	createMS := int64(utils.GetMapVal(data, "createMS", float64(0)))
+	if createMS == 0 {
+		createMS = fileInfo.ModTime().UnixMilli()
+	}
 	return &ormu.Task{
 		Mode:        "backtest",
 		Path:        relPath,
 		Strats:      strings.Join(cfg.Strats(), ","),
 		Periods:     strings.Join(cfg.TimeFrames(), ","),
 		Pairs:       cfg.ShowPairs(),
-		CreateAt:    fileInfo.ModTime().UnixMilli(),
+		CreateAt:    createMS,
 		StartAt:     utils.AlignTfMSecs(cfg.TimeRange.StartMS, dayMSecs),
 		StopAt:      utils.AlignTfMSecs(cfg.TimeRange.EndMS, dayMSecs),
 		Status:      ormu.BtStatusDone,

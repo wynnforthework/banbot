@@ -30,13 +30,12 @@
 
     let refresh = $state(0);
     let containerWidth = $derived.by(() => {
-        // 不要删除这行，这是为了添加依赖
-        console.debug('refresh', refresh);
+        // 使用 refresh 触发重新计算
+        refresh;
         return container?.clientWidth || 0;
     });
     let sliderLeft = $derived((start / 1000) * containerWidth);
     let sliderWidth = $derived(((end - start) / 1000) * containerWidth); 
-
 
     function drawChart() {
         if (!canvas) return;
@@ -144,9 +143,24 @@
         if (container) {
             resizeObserver.observe(container);
         }
-        refresh += 1;
 
-        return () => resizeObserver.disconnect();
+        const intersectionObserver = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    refresh += 1;
+                    drawChart();
+                }
+            });
+        });
+
+        if (container) {
+            intersectionObserver.observe(container);
+        }
+
+        return () => {
+            resizeObserver.disconnect();
+            intersectionObserver.disconnect();
+        };
     });
 
     $effect(() => {

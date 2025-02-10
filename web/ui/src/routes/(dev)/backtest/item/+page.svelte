@@ -40,6 +40,7 @@
 
   // 订单列表相关状态
   let orders = $state<InOutOrder[]>([]);
+  let pairOrders = $state<InOutOrder[]>([]);
   let total = $state(0);
   let currentPage = $state(1);
   let pageSize = $state(20);
@@ -66,8 +67,10 @@
   // K线图相关状态
   let detailOrder = $state<InOutOrder | null>(null);
   let drawOrder = $state<InOutOrder | null>(null);
+  let clickOrder = $state<number>(0);
   let timeRange = $state({ start: 0, end: 300 });
   let showOrderModal = $state(false);
+  let drawMultiple = $state(true);
   const TRADE_GROUP = 'ban_trades';
   
   const kcCtx = writable<ChartCtx>(new ChartCtx());
@@ -83,8 +86,7 @@
     id = $page.url.searchParams.get('id') || '';
     await loadDetail();
     if(task?.status !== 3) {
-      activeTab = 'logs';
-      loadLogs(true);
+      setActiveTab('logs');
     }
     if(activeTab === 'strat_code') {
       await loadStratTree();
@@ -106,7 +108,7 @@
       odNums = detail.plots.odNum;
     }else{
       odNums = [];
-      activeTab = 'logs';
+      setActiveTab('logs');
     }
   }
 
@@ -204,28 +206,6 @@
     loadOrders();
   }
 
-  $effect(() => {
-    if(activeTab === 'orders') {
-      setTimeout(loadOrders, 0);
-    } else if(activeTab === 'config') {
-      setTimeout(loadConfig, 0);
-    } else if(activeTab === 'logs' && !logs) {
-      setTimeout(() => {
-        loadLogs(true);
-      }, 0)
-    } else if(activeTab === 'strat_code') {
-      setTimeout(loadStratTree, 0);
-    } else if(activeTab === 'analysis') {
-      setTimeout(() => {
-        loadOrders().then(() => {
-          if(orders.length > 0) {
-            onOrderAnalysis(orders[0]);
-          }
-        });
-      })
-    }
-  });
-
   function formatNumber(num: number, decimals = 2) {
     if(!num) return '0';
     if(decimals >= 6 && num > 1){
@@ -235,6 +215,7 @@
   }
 
   function onOrderAnalysis(order: InOutOrder) {
+    clickOrder = order.id
     drawOrder = order;
     const exs = exsMap?.[order.sid];
     if(!exs) {
@@ -245,19 +226,43 @@
     const showStartMS = order.enter_at - period.secs * 1000 * 300;
     const showEndMS = order.exit_at + period.secs * 1000 * 100;
     const dayMs = 24 * 60 * 60 * 1000;
-    kcSave.update(c => {
-      c.symbol = { market: exs.market, exchange: exs.exchange, ticker: order.symbol, name: order.symbol, shortName: order.symbol };
-      c.period = period;
-      c.dateStart = fmtDateStr(showStartMS, 'YYYYMMDD');
-      c.dateEnd = fmtDateStr(showEndMS + dayMs, 'YYYYMMDD');
-      return c;
-    });
-    kcCtx.update(c => {
-      c.timeStart = showStartMS;
-      c.timeEnd = showEndMS;
-      c.fireOhlcv += 1;
-      return c;
-    });
+    function fireLoad(){
+      if(!exs) return;
+      kcSave.update(c => {
+        c.symbol = { market: exs.market, exchange: exs.exchange, ticker: order.symbol, name: order.symbol, shortName: order.symbol };
+        c.period = period;
+        c.dateStart = fmtDateStr(showStartMS, 'YYYYMMDD');
+        c.dateEnd = fmtDateStr(showEndMS + dayMs, 'YYYYMMDD');
+        return c;
+      });
+      kcCtx.update(c => {
+        c.timeStart = showStartMS;
+        c.timeEnd = showEndMS;
+        c.fireOhlcv += 1;
+        return c;
+      });
+    }
+    pairOrders = [drawOrder];
+    if(!drawMultiple){
+      fireLoad();
+      return;
+    }
+    // load orders for symbol
+    getApi('/dev/bt_orders', {
+      task_id: id,
+      page: 1,
+      page_size: 100,
+      symbol: order.symbol,
+      start_ms: showStartMS,
+      end_ms: showEndMS
+    }).then(rsp => {
+      if(rsp.code != 200) {
+        alerts.addAlert("error", rsp.msg || 'load orders failed');
+        return;
+      }
+      pairOrders = rsp.orders;
+      fireLoad();
+    })
   }
 
   function onOrderDetail(order: InOutOrder) {
@@ -281,17 +286,44 @@
 
   const klineLoad = derived(kcCtx, ($ctx) => $ctx.klineLoaded);
   klineLoad.subscribe(val => {
-    if(!drawOrder)return
-    const chart = kc?.getChart();
-    if(!chart)return;
+    if (!drawOrder || !kc) return;
+    const chart = kc.getChart();
+    if (!chart) return;
     chart.removeOverlay({ groupId: TRADE_GROUP });
-    const range = chart.getVisibleRange();
-    
-    // 计算需要显示的bar数量
-    const period = makePeriod(drawOrder.timeframe);
-    const tfMSecs = period.secs * 1000; // bar的时间间隔(毫秒)
-    
+    const klineDatas = chart.getDataList();
+    if (klineDatas.length == 0)return;
+    const timeStart = klineDatas[0].timestamp;
+    const timeEnd = klineDatas[klineDatas.length - 1].timestamp;
+    const tfMSecs = $kcSave.period.secs * 1000; // bar的时间间隔(毫秒)
+
+    // 筛选符合条件的订单
+    const filteredOrders = pairOrders.filter(order => {
+      const exs = exsMap?.[order.sid];
+      if (!exs) return false; // 跳过找不到交易所信息的订单
+
+      // 条件 1: 当前品种匹配
+      if (order.symbol !== $kcSave.symbol.ticker) return false;
+
+      // 条件 2: 入场和平仓时间在 K 线图的时间范围内
+      const enterBarTime = Math.floor(order.enter_at / tfMSecs) * tfMSecs;
+      const exitBarTime = Math.floor(order.exit_at / tfMSecs) * tfMSecs;
+      if (!(enterBarTime >= timeStart && enterBarTime <= timeEnd &&
+              exitBarTime >= timeStart && exitBarTime <= timeEnd)) {
+        return false;
+      }
+
+      // 条件 3: 入场和出场不在同一根 K 线上
+      if (enterBarTime === exitBarTime) return false;
+
+      return true;
+    });
+    if(filteredOrders.length == 0){
+      console.log('no match orders to show')
+      return;
+    }
+
     // 计算缩放比例
+    const range = chart.getVisibleRange();
     const showStartMS = drawOrder.enter_at - tfMSecs * 50;
     const showEndMS = drawOrder.exit_at + tfMSecs * 20;
     const showBarNum = Math.ceil((showEndMS - showStartMS) / tfMSecs);
@@ -303,14 +335,15 @@
       chart.zoomAtTimestamp(scale, showEndMS, 0);
     }, 10);
 
-    // 绘制订单到K线
-    const td = drawOrder;
-    const color = td.short ? '#FF9600' : '#1677FF';
-    const exitColor = td.short ? '#935EBD' : '#01C5C4';
-    const inAction = `${td.short ? m.open_short() : m.open_long()}`;
-    const outAction = `${td.short ? m.close_short() : m.close_long()}`;
+    // 绘制筛选后的订单
+    filteredOrders.forEach(td => {
+      const color = td.short ? '#FF9600' : '#1677FF';
+      const exitColor = td.short ? '#935EBD' : '#01C5C4';
+      const inAction = `${td.short ? m.open_short() : m.open_long()}`;
+      const outAction = `${td.short ? m.close_short() : m.close_long()}`;
+      const isActive = td.id == drawOrder?.id;
 
-    const inText = `${inAction} ${td.enter_tag} ${td.leverage}x
+      const inText = `${inAction} ${td.enter_tag} ${td.leverage}x
 ${td.strategy}
 ${m.order()}: ${td.enter?.order_id}
 ${m.entry()}: ${fmtDateStr(td.enter!.create_at)}
@@ -318,51 +351,53 @@ ${m.price()}: ${td.enter?.average?.toFixed(5)}
 ${m.amount()}: ${td.enter?.amount.toFixed(6)}
 ${m.cost()}: ${td.quote_cost?.toFixed(2)}`;
 
-    const points = [{
-      timestamp: td.enter?.create_at,
-      value: td.enter?.average ?? td.init_price
-    }];
+      const points = [{
+        timestamp: td.enter?.create_at,
+        value: td.enter?.average ?? td.init_price
+      }];
 
-    if (td.exit && td.exit.filled) {
-      const outText = `${outAction} ${td.exit_tag} ${td.leverage}x
+      if (td.exit && td.exit.filled) {
+        const outText = `${outAction} ${td.exit_tag} ${td.leverage}x
 ${td.strategy}
 ${m.order()}: ${td.exit?.order_id}
 ${m.exit()}: ${fmtDateStr(td.exit?.create_at)}
 ${m.price()}: ${td.exit?.average?.toFixed(5)}
 ${m.amount()}: ${td.exit?.amount?.toFixed(6)}
 ${m.profit()}: ${(td.profit_rate * 100).toFixed(1)}% ${td.profit.toFixed(5)}
-${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
+${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
 
-      points.push({
-        timestamp: td.exit?.create_at ?? 0,
-        value: td.exit.average ?? 0
-      });
+        points.push({
+          timestamp: td.exit?.create_at ?? 0,
+          value: td.exit.average ?? 0
+        });
+
+        chart.createOverlay({
+          name: 'trade',
+          groupId: TRADE_GROUP,
+          points,
+          extendData: {
+            line_color: color,
+            in_color: color,
+            in_text: inText,
+            out_color: exitColor,
+            out_text: outText,
+            active: isActive,
+          } as TradeInfo
+        } as OverlayCreate)
+        return;
+      }
 
       chart.createOverlay({
-        name: 'trade',
+        name: 'note',
         groupId: TRADE_GROUP,
         points,
         extendData: {
           line_color: color,
           in_color: color,
           in_text: inText,
-          out_color: exitColor,
-          out_text: outText
         } as TradeInfo
-      } as OverlayCreate)
-      return;
-    }
-
-    chart.createOverlay({
-      name: 'note',
-      groupId: TRADE_GROUP,
-      points,
-      extendData: {
-        line_color: color,
-        in_color: color,
-        in_text: inText,
-      } as TradeInfo
-    } as OverlayCreate);
+      } as OverlayCreate);
+    });
   });
 
   interface TableColumn {
@@ -393,6 +428,55 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
     loadOrders();
   }
 
+  // 定义导航菜单项
+  let navItems = $derived.by(() => {
+    const items = [];
+    
+    if (task?.status == 3) {
+      if (detail) {
+        items.push(
+          { id: 'overview', label: m.overview() },
+          { id: 'assets', label: m.bt_assets() },
+          { id: 'enters', label: m.bt_enters() }
+        );
+      }
+      
+      items.push({ id: 'config', label: m.configuration() });
+      
+      if (detail) {
+        items.push(
+          { id: 'orders', label: m.orders() },
+          { id: 'analysis', label: m.bt_analysis() },
+          { id: 'strat_code', label: m.bt_strat_code() }
+        );
+      }
+    }
+    
+    items.push({ id: 'logs', label: m.bt_logs() });
+    return items;
+  });
+
+  function setActiveTab(tab: string) {
+    activeTab = tab;
+    if(activeTab === 'orders') {
+      loadOrders();
+    } else if(activeTab === 'config') {
+      loadConfig();
+    } else if(activeTab === 'logs' && !logs) {
+      loadLogs(true);
+    } else if(activeTab === 'strat_code') {
+      loadStratTree();
+    } else if(activeTab === 'analysis') {
+      loadOrders().then(() => {
+        if(orders.length > 0) {
+          onOrderAnalysis(orders[0]);
+        }
+      });
+      setTimeout(() => {
+        kc?.getChart()?.resize();
+      }, 100)
+    }
+  }
 </script>
 
 <div class="px-4 py-6 flex-1 flex flex-col">
@@ -405,52 +489,13 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
     <!-- 左侧导航 -->
     <div class="w-[13%] flex-shrink-0">
       <ul class="menu bg-base-200 rounded-box">
-        {#if task?.status == 3}
-          {#if detail}
+        {#each navItems as item}
           <li>
-            <button class:active={activeTab === 'overview'} onclick={() => activeTab = 'overview'}>
-              {m.overview()}
+            <button class:active={activeTab === item.id} onclick={() => setActiveTab(item.id)}>
+              {item.label}
             </button>
           </li>
-          <li>
-            <button class:active={activeTab === 'assets'} onclick={() => activeTab = 'assets'}>
-              {m.bt_assets()}
-            </button>
-          </li>
-          <li>
-            <button class:active={activeTab === 'enters'} onclick={() => activeTab = 'enters'}>
-              {m.bt_enters()}
-            </button>
-          </li>
-          {/if}
-          <li>
-            <button class:active={activeTab === 'config'} onclick={() => activeTab = 'config'}>
-              {m.configuration()}
-            </button>
-          </li>
-          {#if detail}
-          <li>
-            <button class:active={activeTab === 'orders'} onclick={() => activeTab = 'orders'}>
-              {m.orders()}
-            </button>
-          </li>
-          <li>
-            <button class:active={activeTab === 'analysis'} onclick={() => activeTab = 'analysis'}>
-              {m.bt_analysis()}
-            </button>
-          </li>
-          <li>
-            <button class:active={activeTab === 'strat_code'} onclick={() => activeTab = 'strat_code'}>
-              {m.bt_strat_code()}
-            </button>
-          </li>
-          {/if}
-        {/if}
-        <li>
-          <button class:active={activeTab === 'logs'} onclick={() => activeTab = 'logs'}>
-            {m.bt_logs()}
-          </button>
-        </li>
+        {/each}
       </ul>
       {#if activeTab == 'analysis'}
       <div class="flex flex-col gap-3 bg-base-200 mt-4 p-4 rounded-box">
@@ -483,6 +528,19 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
 
     <!-- 右侧内容 -->
     <div class="flex-1 flex flex-col">
+      <!-- K线图区域 -->
+      <div class="h-[60vh] flex flex-col" class:hidden={activeTab !== 'analysis'}>
+        <Chart class="border" bind:this={kc} ctx={kcCtx} save={kcSave} customLoad={true}/>
+        <div class="flex justify-between">
+          <RangeSlider class="mb-1 mt-3" data={odNums} bind:start={timeRange.start} bind:end={timeRange.end} change={changeTimeRange} />
+          <label class="label cursor-pointer justify-end">
+            <input type="checkbox" class="toggle toggle-primary" title={m.draw_multi_orders()} bind:checked={drawMultiple} 
+              onchange={() => {
+                drawOrder && onOrderAnalysis(drawOrder)
+              }}/>
+          </label>
+        </div>
+      </div>
       {#if activeTab === 'overview' && detail}
         {#if task?.status == 3}
         <!-- 重要统计信息 -->
@@ -800,32 +858,24 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at)/1000)}`;
         </div>
 
       {:else if activeTab === 'analysis'}
-        <div class="flex flex-col flex-1">
-          <!-- K线图区域 -->
-          <div class="h-[60vh] flex flex-col">
-            <Chart class="border" bind:this={kc} ctx={kcCtx} save={kcSave} customLoad={true}/>
-            <RangeSlider class="mb-1 mt-3" data={odNums} bind:start={timeRange.start} bind:end={timeRange.end} change={changeTimeRange} />
+        <!-- 订单列表区域 -->
+        <div class="min-h-[20vh]">
+          <div class="p-2 flex flex-wrap justify-between">
+            {#each orders as order}
+              {@render orderCard(
+                order,
+                clickOrder === order.id,
+                () => onOrderAnalysis(order),
+                () => onOrderDetail(order)
+              )}
+            {/each}
+            <!-- 添加占位元素 -->
+            {#each Array(10) as _}
+              <div class="w-[15em] mr-2 h-0 invisible"></div>
+            {/each}
           </div>
-
-          <!-- 订单列表区域 -->
-          <div class="min-h-[20vh]">
-            <div class="p-2 flex flex-wrap justify-between">
-              {#each orders as order}
-                {@render orderCard(
-                  order,
-                  drawOrder?.id === order.id,
-                  () => onOrderAnalysis(order),
-                  () => onOrderDetail(order)
-                )}
-              {/each}
-              <!-- 添加占位元素 -->
-              {#each Array(10) as _}
-                <div class="w-[15em] mr-2 h-0 invisible"></div>
-              {/each}
-            </div>
-            <!-- 分页器 -->
-            {@render pagination(total, pageSize, currentPage, handlePageChange, handlePageSizeChange)}
-          </div>
+          <!-- 分页器 -->
+          {@render pagination(total, pageSize, currentPage, handlePageChange, handlePageSizeChange)}
         </div>
 
       {:else if activeTab === 'logs'}

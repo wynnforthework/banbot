@@ -46,6 +46,7 @@ type BTResult struct {
 	histOdOff       int        // 计算已完成订单利润的偏移
 	donePftLegal    float64    // 已完成订单利润
 	Plots           *PlotData  `json:"plots"`
+	CreateMS        int64      `json:"createMS"`
 	StartMS         int64      `json:"startMS"`
 	EndMS           int64      `json:"endMS"`
 	PlotEvery       int        `json:"plotEvery"`
@@ -102,6 +103,7 @@ func NewBTResult() *BTResult {
 	res := &BTResult{
 		Plots:     &PlotData{},
 		PlotEvery: 1,
+		CreateMS:  btime.UTCStamp(),
 	}
 	return res
 }
@@ -856,6 +858,9 @@ func (r *BTResult) Score() float64 {
 func (r *BTResult) dumpDetail(outPath string) {
 	if outPath == "" {
 		outPath = fmt.Sprintf("%s/detail.json", r.OutDir)
+	}
+	if r.CreateMS == 0 {
+		r.CreateMS = btime.UTCStamp()
 	}
 	data, err_ := utils2.Marshal(r)
 	if err_ != nil {

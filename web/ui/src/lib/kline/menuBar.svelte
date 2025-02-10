@@ -18,7 +18,7 @@
   import ModalScreenShot from './ModalScreenShot.svelte';
   import ModalTimezone from './ModalTimezone.svelte';
   // Props
-  let {customLoad = false} = $props();
+  let {customLoad = false, loadBump = 0} = $props();
 
   // Context
   const chart = getContext('chart') as Writable<Nullable<Chart>>;
@@ -50,6 +50,8 @@
 
   let fileRef = $state<HTMLInputElement>()
   let periodBarRef: HTMLElement
+  let loadBtnRef = $state<HTMLButtonElement>();
+  let loadBtnAnimating = $state(false);
 
   const ticker = derived(save, ($save) => $save.symbol.ticker);
   ticker.subscribe(() => {
@@ -159,6 +161,15 @@
     }, 0)
   }
 
+  $effect(() => {
+    if (loadBump > 0 && loadBtnRef) {
+      loadBtnAnimating = true;
+      setTimeout(() => {
+        loadBtnAnimating = false;
+      }, 200);
+    }
+  });
+
 </script>
 
 {#snippet MenuButton(onClick: () => void, icon: string = "", text: string = "", size: number = 16)}
@@ -214,7 +225,9 @@
       <input bind:value={$save.dateEnd} placeholder="%Y%m%d" class="input input-bordered w-full"/>
     </span>
     <span class="p-0 m-0">
-      <button class="btn btn-primary w-[70px]" onclick={clickLoadData}>{m.load()}</button>
+      <button class="btn btn-primary w-[70px] {loadBtnAnimating ? 'bump-animation' : ''}" 
+        bind:this={loadBtnRef}
+        onclick={clickLoadData}>{m.load()}</button>
     </span>
   {/if}
   {@render MenuButton(() => showIndSearchModal = true, "indicator", m.indicator())}
@@ -228,5 +241,15 @@
 <style>
 .rotate {
   @apply rotate-180 transform-gpu;
+}
+
+.bump-animation {
+  animation: bump 0.2s ease-in-out;
+}
+
+@keyframes bump {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
 }
 </style> 

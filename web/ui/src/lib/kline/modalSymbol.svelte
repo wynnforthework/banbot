@@ -26,6 +26,11 @@
       symbol.ticker.toLowerCase().includes(searchTerm)
     );
   });
+
+  function clickItem(item: SymbolInfo){
+    $ctx.clickSymbolPeriod += 1;
+    $save.symbol = item;
+  }
 </script>
 
 <Modal {title} width=460 bind:show={show}>
@@ -58,7 +63,7 @@
       {#each showList as symbol, i}
         <li 
           class="px-5 py-3 flex justify-between items-center hover:bg-base-200 cursor-pointer"
-          onclick={() => {$save.symbol = symbol}}
+          onclick={() => {clickItem(symbol)}}
         >
           <div class="flex items-center">
             {#if symbol.logo}

@@ -1,29 +1,28 @@
 <script lang="ts">
   import {page} from '$app/stores';
-  import { setContext } from 'svelte';
+  import {onMount, setContext} from 'svelte';
   import * as kc from 'klinecharts';
-  import type {Chart, Nullable} from 'klinecharts'
+  import {type Nullable} from 'klinecharts';
   import {persisted} from 'svelte-persisted-store';
-  import { ChartCtx, ChartSave } from './chart';
+  import {ChartCtx, ChartSave} from './chart';
   import overlays from './overlays';
   import figures from './figures';
   import indicators from './indicators';
   import MyDatafeed from './mydatafeed';
-  import {onMount} from 'svelte';
-  import {adjustFromTo, makeFormatDate, setTimezone, getUTCStamp} from '../dateutil';
-  import type {SymbolInfo, Period, BarArr} from './types';
+  import {adjustFromTo, fmtDateStr, getUTCStamp, makeFormatDate, setTimezone, TFToSecs, toUTCStamp} from '../dateutil';
+  import type {BarArr, Period, SymbolInfo} from './types';
   import DrawBar from './DrawBar.svelte';
   import {getApi} from '../netio';
   import {makeCloudInds} from './indicators/cloudInds';
   import {browser} from '$app/environment';
-  import {getThemeStyles,GetNumberDotOffset, build_ohlcvs} from './coms';
-  import {TFToSecs, toUTCStamp, fmtDateStr} from '../dateutil';
-  import { createAlertStore } from '../stores/alerts';
-	import Alert from '../Alert.svelte';
-  import { derived, writable } from 'svelte/store';
-  import MenuBar from './MenuBar.svelte';
+  import {build_ohlcvs, GetNumberDotOffset, getThemeStyles} from './coms';
+  import {createAlertStore} from '../stores/alerts';
+  import Alert from '../Alert.svelte';
   import type {Writable} from 'svelte/store';
-	import _ from 'lodash';
+  import {derived, writable} from 'svelte/store';
+  import MenuBar from './MenuBar.svelte';
+  import _ from 'lodash';
+
   setTimezone('UTC')
 
   const datafeed = new MyDatafeed()
@@ -58,6 +57,7 @@
   const chart: Writable<Nullable<kc.Chart>> = writable(null)
   const batchNum = 500;
   const alerts = createAlertStore();
+  let loadBump = $state(0);
   
   setContext('ctx', ctx)
   setContext('save', save)
@@ -235,21 +235,35 @@
     loadKlineRange(s, p, from, curTime, !customLoad)
   }
 
+  function fireLoadBump(){
+    if($ctx.clickSymbolPeriod > $ctx.lastSymbolPeriod){
+      setTimeout(() => {loadBump += 1;}, 500);
+      $ctx.lastSymbolPeriod = $ctx.clickSymbolPeriod;
+    }
+  }
+
   // 监听周期变化
   const period = derived(save, ($save) => $save.period.timeframe);
   period.subscribe((new_tf) => {
     $chart?.setCustomApi({
       formatDate: makeFormatDate($save.period.timespan)
     })
-    if ($ctx.loadingKLine || customLoad) return
-    // 手动加载模式下，不监听币种和周期变化自动加载。
+    if ($ctx.loadingKLine) return
+    if(customLoad){
+      fireLoadBump();
+      return;
+    }
     loadSymbolPeriod()
   })
   
   // 监听币种变化
   const symbol = derived(save, ($save) => $save.symbol.ticker);
   symbol.subscribe((val) => {
-    if ($ctx.loadingKLine || customLoad) return
+    if ($ctx.loadingKLine) return
+    if(customLoad){
+      fireLoadBump();
+      return;
+    }
     datafeed.unsubscribe()
     loadSymbolPeriod()
   })
@@ -304,7 +318,7 @@
       <Alert type={alert.type} text={alert.text}/>
     {/each}
   </div>
-  <MenuBar customLoad={customLoad}/>
+  <MenuBar customLoad={customLoad} loadBump={loadBump}/>
   <div class="kline-content">
     {#if $save.showDrawBar}
       <DrawBar bind:this={drawBarRef}/>
