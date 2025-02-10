@@ -530,7 +530,10 @@ func readBinanceOrders(f *excelize.File, exchange banexg.BanExchange, start, sto
 			if stateStr == "已撤销" || stateStr == "已过期" {
 				continue
 			}
-			createMS := btime.ParseTimeMS(textA)
+			createMS, err_ := btime.ParseTimeMS(textA)
+			if err_ != nil {
+				return nil, errs.NewMsg(errs.CodeRunTime, "A%d time format error: %v", rowId, err_)
+			}
 			alignMS := int64(math.Round(float64(createMS)/60000)) * 60000
 			clientID, _ := row["C"]
 			if alignMS < start || alignMS >= stop && strings.HasPrefix(clientID, botName) {
@@ -583,7 +586,10 @@ func readBinanceOrders(f *excelize.File, exchange banexg.BanExchange, start, sto
 			continue
 		} else if textA == "" && textB != "" {
 			// 成交记录
-			curMS := btime.ParseTimeMS(textB)
+			curMS, err_ := btime.ParseTimeMS(textB)
+			if err_ != nil {
+				return nil, errs.NewMsg(errs.CodeRunTime, "B%d time format error: %v", rowId, err_)
+			}
 			feeStr, _ := row["F"]
 			feeStr = reNonAl.ReplaceAllString(feeStr, "")
 			feeVal, _ := strconv.ParseFloat(feeStr, 64)
@@ -723,7 +729,10 @@ func readAssetHtml(file, prefix string, useRate bool) (*AssetData, *errs.Error) 
 	// 解析时间标签为时间戳
 	data.Times = make([]int64, len(data.Labels))
 	for i, label := range data.Labels {
-		data.Times[i] = btime.ParseTimeMS(label)
+		data.Times[i], err = btime.ParseTimeMS(label)
+		if err != nil {
+			return nil, errs.New(errs.CodeRunTime, err)
+		}
 	}
 	if prefix == "" {
 		prefix = filepath.Base(filepath.Dir(file))

@@ -10,6 +10,7 @@
   import {addListener} from '$lib/dev/websocket';
   import { i18n } from '$lib/i18n';
   import {site} from "$lib/stores/site";
+  import Icon from "$lib/Icon.svelte";
 
   let tasks = $state<BtTask[]>([]);
   let strats = $state<string[]>([]);
@@ -299,9 +300,7 @@ Error: ${task.info}`
             {#if task.status === 3}
               <div class="text-2xl font-bold">{task.profitRate.toFixed(1)}%</div>
             {:else if task.status === 4}
-              <div class="badge badge-lg badge-error gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-4 h-4 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-              </div>
+              <Icon name="alert" class="text-red-700"/>
             {:else}
               {#if task.status === 1}
                 <div class="badge badge-lg badge-neutral">{m.pending()}</div>

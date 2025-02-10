@@ -923,9 +923,12 @@ func ParseTimeRange(timeRange string) (int64, int64, error) {
 	if len(parts) != 2 {
 		return 0, 0, fmt.Errorf("invalid time range format: %s", timeRange)
 	}
-	startMS := btime.ParseTimeMS(parts[0])
-	stopMS := btime.ParseTimeMS(parts[1])
-	return startMS, stopMS, nil
+	startMS, err := btime.ParseTimeMS(parts[0])
+	if err != nil {
+		return 0, 0, err
+	}
+	stopMS, err := btime.ParseTimeMS(parts[1])
+	return startMS, stopMS, err
 }
 
 func GetExportConfig(path string) (*ExportConfig, *errs.Error) {

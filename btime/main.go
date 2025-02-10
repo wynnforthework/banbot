@@ -99,34 +99,34 @@ Supported forms:
 2006-01-02 15:04
 2006-01-02 15:04:05
 */
-func ParseTimeMS(timeStr string) int64 {
+func ParseTimeMS(timeStr string) (int64, error) {
 	textLen := len(timeStr)
 	digitNum := CountDigit(timeStr)
 	if textLen == 4 && digitNum == 4 {
-		return ParseTimeMSBy("2006", timeStr)
+		return ParseTimeMSBy("2006", timeStr), nil
 	} else if textLen == 6 && digitNum == 6 {
-		return ParseTimeMSBy("200601", timeStr)
+		return ParseTimeMSBy("200601", timeStr), nil
 	} else if textLen == 8 && digitNum == 8 {
-		return ParseTimeMSBy("20060102", timeStr)
+		return ParseTimeMSBy("20060102", timeStr), nil
 	} else if textLen == 10 && digitNum == 10 {
 		// 10位时间戳
 		secs, err := strconv.ParseInt(timeStr, 10, 64)
 		if err != nil {
 			panic(err)
 		}
-		return secs * int64(1000)
+		return secs * int64(1000), nil
 	} else if textLen == 13 && digitNum == 13 {
 		msecs, err := strconv.ParseInt(timeStr, 10, 64)
 		if err != nil {
 			panic(err)
 		}
-		return msecs
+		return msecs, nil
 	} else if textLen == 16 && digitNum == 12 {
-		return ParseTimeMSBy("2006-01-02 15:04", timeStr)
+		return ParseTimeMSBy("2006-01-02 15:04", timeStr), nil
 	} else if textLen == 19 && digitNum == 14 {
-		return ParseTimeMSBy(core.DefaultDateFmt, timeStr)
+		return ParseTimeMSBy(core.DefaultDateFmt, timeStr), nil
 	}
-	panic(fmt.Errorf("unSupport date fmt: %s", timeStr))
+	return 0, fmt.Errorf("unSupport date fmt: %s", timeStr)
 }
 
 func ParseTimeMSBy(layout, timeStr string) int64 {

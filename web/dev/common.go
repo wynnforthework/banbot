@@ -266,10 +266,15 @@ func updateBtTaskResult(task *ormu.Task, errTask error) {
 		return
 	}
 	if taskRes == nil {
-		taskRes = &ormu.Task{}
+		taskRes = &ormu.Task{
+			Status: ormu.BtStatusFail,
+		}
+	}
+	if taskRes.Status < ormu.BtStatusDone {
+		taskRes.Status = ormu.BtStatusDone
 	}
 	err = qu.UpdateTask(context.Background(), ormu.UpdateTaskParams{
-		Status:      int64(ormu.BtStatusDone),
+		Status:      taskRes.Status,
 		Progress:    1,
 		OrderNum:    taskRes.OrderNum,
 		ProfitRate:  taskRes.ProfitRate,
