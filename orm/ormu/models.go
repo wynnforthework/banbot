@@ -24,4 +24,5 @@ type Task struct {
 	MaxDrawdown float64 `json:"maxDrawdown"`
 	Sharpe      float64 `json:"sharpe"`
 	Info        string  `json:"info"`
+	Note        string  `json:"note"`
 }

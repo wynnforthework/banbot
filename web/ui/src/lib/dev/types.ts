@@ -29,4 +29,5 @@ export interface BtTask {
   walletAmount?: number;
   stakeAmount?: number;
   info?: string;
+  note?: string;
 }

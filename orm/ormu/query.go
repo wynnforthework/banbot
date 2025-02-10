@@ -27,7 +27,7 @@ type FindTasksParams struct {
 func (q *Queries) FindTasks(ctx context.Context, arg FindTasksParams) ([]*Task, *errs.Error) {
 	var b strings.Builder
 	b.WriteString(`SELECT id, mode, args, config, path, strats, periods, pairs, 
-		create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info 
+		create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info, note 
 		FROM task WHERE 1=1 `)
 
 	params := make([]interface{}, 0)
@@ -131,6 +131,7 @@ func (q *Queries) FindTasks(ctx context.Context, arg FindTasksParams) ([]*Task, 
 			&i.MaxDrawdown,
 			&i.Sharpe,
 			&i.Info,
+			&i.Note,
 		); err != nil {
 			return nil, errs.New(core.ErrDbReadFail, err)
 		}

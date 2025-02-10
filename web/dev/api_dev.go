@@ -73,6 +73,7 @@ func regApiDev(api fiber.Router) {
 	api.Post("/data_tools", handleDataTools)
 	api.Get("/download", handleDownload)
 	api.Get("/compare_assets", getCompareAssets)
+	api.Post("/update_note", handleUpdateNote)
 }
 
 func onWsDev(c *websocket.Conn) {
@@ -1497,4 +1498,34 @@ func getCompareAssets(c *fiber.Ctx) error {
 	// 设置响应头
 	c.Set("Content-Type", "text/html")
 	return c.Send(content)
+}
+
+// handleUpdateNote 处理更新回测任务备注的请求
+func handleUpdateNote(c *fiber.Ctx) error {
+	type UpdateNoteArgs struct {
+		TaskID int64  `json:"taskId" validate:"required"`
+		Note   string `json:"note"`
+	}
+	var args = new(UpdateNoteArgs)
+	if err := base.VerifyArg(c, args, base.ArgBody); err != nil {
+		return err
+	}
+
+	qu, conn, err := ormu.Conn()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	err_ := qu.SetTaskNote(context.Background(), ormu.SetTaskNoteParams{
+		ID:   args.TaskID,
+		Note: args.Note,
+	})
+	if err_ != nil {
+		return fmt.Errorf("update task note failed: %v", err_)
+	}
+
+	return c.JSON(fiber.Map{
+		"code": 200,
+	})
 }

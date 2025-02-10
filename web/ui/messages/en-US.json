@@ -506,6 +506,8 @@
     "exit_select": "Exit Multi Select",
     "compare_assets": "Compare Assets",
     "draw_multi_orders": "show multiple orders",
+    "edit_note": "edit note",
+    "enter_note": "please input note content",
 
     "cfg_name": "Bot name, used to distinguish different bots in message notifications",
     "cfg_env": "Running environment, prod represents production network, test represents test network (Binance testnet), dry_run represents simulation",

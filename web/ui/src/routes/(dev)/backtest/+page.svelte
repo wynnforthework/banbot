@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getApi } from '$lib/netio';
+  import { getApi, postApi } from '$lib/netio';
   import {alerts} from '$lib/stores/alerts';
   import type {BtTask} from "$lib/dev/types"
   import * as m from '$lib/paraglide/messages.js'
@@ -29,6 +29,9 @@
   let compareUrl = $state('');
 
   let pageSize = 12;
+
+  let editingTask = $state<BtTask|null>(null);
+  let editingNote = $state('');
 
   onMount(async () => {
     await loadOptions();
@@ -178,6 +181,34 @@ Error: ${task.info}`
   function isTaskSelected(task: BtTask) {
     return selectedTasks.some(t => t.id === task.id);
   }
+
+  function openNoteDialog(e: Event, task: BtTask) {
+    e.stopPropagation();
+    editingTask = task;
+    editingNote = task.note || '';
+  }
+
+  function closeNoteDialog() {
+    editingTask = null;
+    editingNote = '';
+  }
+
+  async function saveNote() {
+    if (!editingTask) return;
+    
+    const rsp = await postApi('/dev/update_note', {
+      taskId: editingTask.id,
+      note: editingNote
+    });
+
+    if (rsp.code != 200) {
+      alerts.addAlert('error', rsp.msg || 'Failed to update note');
+      return;
+    }
+
+    editingTask.note = editingNote;
+    closeNoteDialog();
+  }
 </script>
 
 <style>
@@ -319,10 +350,35 @@ Error: ${task.info}`
             <div>{m.init_amount()}: {task.walletAmount}</div>
             <div>{m.stake_amount()}: {task.stakeAmount}</div>
           </div>
+
+          <div class="flex justify-between items-center text-xs opacity-60 pt-3 border-t border-base-200">
+            <div class="min-w-[150px]">{fmtDateStr(task.createAt, 'YYYY-MM-DD HH:mm:ss')}</div>
+            <div class="truncate hover:cursor-pointer"
+                 title={task.note || ''} onclick={(e) => openNoteDialog(e, task)}>
+              {task.note || m.edit_note()}
+            </div>
+          </div>
         </div>
       </div>
     {/each}
   </div>
+
+  <!-- 备注编辑对话框 -->
+  {#if editingTask}
+    <div class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="font-bold text-lg mb-4">{m.edit_note()}</h3>
+        <textarea class="textarea textarea-bordered w-full h-32" 
+                  bind:value={editingNote} 
+                  placeholder={m.enter_note()}></textarea>
+        <div class="modal-action">
+          <button class="btn" onclick={closeNoteDialog}>{m.cancel()}</button>
+          <button class="btn btn-primary" onclick={saveNote}>{m.save()}</button>
+        </div>
+      </div>
+      <div class="modal-backdrop" onclick={closeNoteDialog}></div>
+    </div>
+  {/if}
 
   <!-- 分页器 -->
   {#if hasPrev || hasNext}

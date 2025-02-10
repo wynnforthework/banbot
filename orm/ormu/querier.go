@@ -13,6 +13,7 @@ type Querier interface {
 	DelTasks(ctx context.Context, ids []int64) error
 	GetTask(ctx context.Context, id int64) (*Task, error)
 	GetTaskOptions(ctx context.Context) ([]*GetTaskOptionsRow, error)
+	SetTaskNote(ctx context.Context, arg SetTaskNoteParams) error
 	SetTaskPath(ctx context.Context, arg SetTaskPathParams) error
 	UpdateTask(ctx context.Context, arg UpdateTaskParams) error
 }

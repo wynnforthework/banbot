@@ -24,6 +24,7 @@ func (t *Task) ToMap() map[string]interface{} {
 		"winRate":     t.WinRate,
 		"maxDrawdown": t.MaxDrawdown,
 		"sharpe":      t.Sharpe,
+		"note":        t.Note,
 	}
 
 	if t.Info != "" {

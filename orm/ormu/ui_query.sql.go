@@ -12,9 +12,9 @@ import (
 
 const addTask = `-- name: AddTask :one
 insert into task
-(mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info)
-values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    returning id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info
+(mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info, note)
+values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    returning id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info, note
 `
 
 type AddTaskParams struct {
@@ -36,6 +36,7 @@ type AddTaskParams struct {
 	MaxDrawdown float64 `json:"maxDrawdown"`
 	Sharpe      float64 `json:"sharpe"`
 	Info        string  `json:"info"`
+	Note        string  `json:"note"`
 }
 
 func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error) {
@@ -58,6 +59,7 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error)
 		arg.MaxDrawdown,
 		arg.Sharpe,
 		arg.Info,
+		arg.Note,
 	)
 	var i Task
 	err := row.Scan(
@@ -80,6 +82,7 @@ func (q *Queries) AddTask(ctx context.Context, arg AddTaskParams) (*Task, error)
 		&i.MaxDrawdown,
 		&i.Sharpe,
 		&i.Info,
+		&i.Note,
 	)
 	return &i, err
 }
@@ -104,7 +107,7 @@ func (q *Queries) DelTasks(ctx context.Context, ids []int64) error {
 }
 
 const getTask = `-- name: GetTask :one
-select id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info from task
+select id, mode, args, config, path, strats, periods, pairs, create_at, start_at, stop_at, status, progress, order_num, profit_rate, win_rate, max_drawdown, sharpe, info, note from task
 where id = ?
 `
 
@@ -131,6 +134,7 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (*Task, error) {
 		&i.MaxDrawdown,
 		&i.Sharpe,
 		&i.Info,
+		&i.Note,
 	)
 	return &i, err
 }
@@ -172,6 +176,20 @@ func (q *Queries) GetTaskOptions(ctx context.Context) ([]*GetTaskOptionsRow, err
 		return nil, err
 	}
 	return items, nil
+}
+
+const setTaskNote = `-- name: SetTaskNote :exec
+update task set note=? where id = ?
+`
+
+type SetTaskNoteParams struct {
+	Note string `json:"note"`
+	ID   int64  `json:"id"`
+}
+
+func (q *Queries) SetTaskNote(ctx context.Context, arg SetTaskNoteParams) error {
+	_, err := q.db.ExecContext(ctx, setTaskNote, arg.Note, arg.ID)
+	return err
 }
 
 const setTaskPath = `-- name: SetTaskPath :exec

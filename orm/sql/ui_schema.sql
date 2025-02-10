@@ -19,5 +19,6 @@ CREATE TABLE task
     win_rate  REAL    NOT NULL,
     max_drawdown REAL NOT NULL,
     sharpe    REAL    NOT NULL,
-    info      TEXT    NOT NULL -- 存放不需检索的信息
+    info      TEXT    NOT NULL, -- 存放不需检索的信息
+    note      TEXT    NOT NULL
 );
