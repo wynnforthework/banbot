@@ -35,6 +35,8 @@ export class ChartCtx {
   clickSymbolPeriod: number
   lastSymbolPeriod: number
 
+  fireResize: number
+
   allInds: BanInd[]
 
   constructor() {
@@ -56,6 +58,8 @@ export class ChartCtx {
 
     this.clickSymbolPeriod = 0
     this.lastSymbolPeriod = 0
+
+    this.fireResize = 0
 
     this.allInds = []
 

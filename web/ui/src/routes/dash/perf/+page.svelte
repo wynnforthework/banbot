@@ -3,27 +3,12 @@
   import * as m from '$lib/paraglide/messages';
   import { getAccApi } from '$lib/netio';
   import { fmtDuration } from '$lib/dateutil';
-
-  interface PairPerf {
-    key: string;
-    closeNum: number;
-    profitSum: number;
-    profitPct: number;
-  }
-
-  interface TagStat {
-    key: string;
-    totalCost: number;
-    closeNum: number;
-    winNum: number;
-    profitSum: number;
-    profitPct: number;
-  }
+  import type {OdGroup} from '$lib/order/types'
 
   let tabName = $state('day');
-  let dataList = $state<TagStat[]>([]);
-  let exitTags = $state<TagStat[]>([]);
-  let enterTags = $state<TagStat[]>([]);
+  let dataList = $state<OdGroup[]>([]);
+  let exitTags = $state<OdGroup[]>([]);
+  let enterTags = $state<OdGroup[]>([]);
   let allPairs = $state<string[]>([]);
   let selectedPairs = $state<string[]>([]);
   

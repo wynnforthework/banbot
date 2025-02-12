@@ -981,7 +981,7 @@ type GetOrdersArgs struct {
 	CloseAfter  int64 // Start timestamp 开始时间戳
 	CloseBefore int64 // End timestamp 结束时间戳
 	Limit       int
-	AfterID     int
+	AfterID     int // position means after; negative means before
 	OrderBy     string
 }
 
@@ -998,6 +998,10 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	if args.AfterID > 0 {
 		b.WriteString(fmt.Sprintf(" and id > $%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, args.AfterID)
+	} else if args.AfterID < 0 {
+		b.WriteString(fmt.Sprintf(" and id < $%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, -args.AfterID)
+		args.OrderBy = "id desc"
 	}
 	if args.Status >= 1 {
 		rel := "<"

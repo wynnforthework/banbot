@@ -7,6 +7,7 @@
   import Modal from '$lib/kline/Modal.svelte';
   import { fmtDateStr, toUTCStamp, curTZ } from '$lib/dateutil';
   import { OrderDetail, type InOutOrder } from '$lib/order';
+  import {getFirstValid} from "$lib/common";
 
   let tabName = $state('bot'); // bot/exchange/position
   let banodList = $state<InOutOrder[]>([]);
@@ -339,7 +340,7 @@
                 <td>{order.timeframe}/{order.short ? m.short() : m.long()}/{order.leverage}</td>
                 <td class="text-sm">{fmtDateStr(order.enter_at)}</td>
                 <td>{order.enter_tag}</td>
-                <td>{(order.enter?.average ?? order.enter?.price ?? order.init_price).toFixed(7)}</td>
+                <td>{getFirstValid([order.enter?.average, order.enter?.price, order.init_price]).toFixed(7)}</td>
                 <td class="text-sm">{fmtDateStr(order.exit_at)}</td>
                 <td>{order.exit_tag}</td>
                 <td>{(order.profit_rate * 100).toFixed(1)}%</td>

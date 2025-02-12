@@ -1074,3 +1074,34 @@ type TimeVal struct {
 	Time  int64
 	Value float64
 }
+
+/*
+SampleOdNums
+对一系列订单在整个时间范围的每个时间节点采样计算
+*/
+func SampleOdNums(odList []*ormo.InOutOrder, num int) ([]int, int64, int64) {
+	if len(odList) == 0 {
+		return make([]int, num), 0, 0
+	}
+	sort.Slice(odList, func(i, j int) bool {
+		return odList[i].EnterAt < odList[j].EnterAt
+	})
+	nums := make([]int, num)
+	minTimeMS, maxTimeMS := odList[0].EnterAt, int64(0)
+	for _, od := range odList {
+		maxTimeMS = max(od.ExitAt, maxTimeMS)
+	}
+	gapMS := (maxTimeMS - minTimeMS) / int64(num)
+	for _, od := range odList {
+		startIdx := int((od.EnterAt - minTimeMS) / gapMS)
+		endPos := len(nums)
+		if od.ExitAt > 0 {
+			endPos = int(math.Ceil(float64(od.ExitAt-minTimeMS)/float64(gapMS))) + 1
+			endPos = min(len(nums), endPos)
+		}
+		for i := startIdx; i < endPos; i++ {
+			nums[i] += 1
+		}
+	}
+	return nums, minTimeMS, maxTimeMS
+}

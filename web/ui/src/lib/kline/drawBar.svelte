@@ -13,6 +13,7 @@ import {derived} from 'svelte/store';
 import type {ChartCtx} from './chart';
 import _ from 'lodash';
 import { overlayMap } from './overlays'
+import {getFirstValid} from "$lib/common";
 
 let popoverKey = $state('');
 let modeIcon = $state('weakMagnet')
@@ -31,7 +32,7 @@ const overlays = persisted<Record<string, Record<string, any>>>($save.key + '_ov
 
 function getOverlayKey(overlayId: string): string {
   const sym = $save.symbol;
-  const symbol = sym.shortName ?? sym.name ?? sym.ticker;
+  const symbol = getFirstValid([sym.shortName, sym.name, sym.ticker]);
   return `${symbol}_${$save.period.timeframe}_${overlayId}`
 }
 

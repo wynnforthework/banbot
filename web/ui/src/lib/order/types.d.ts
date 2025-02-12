@@ -48,3 +48,17 @@ export interface InOutOrder extends IOrder {
   info?: Record<string, any>;
   curPrice?: number;
 }
+
+
+export interface OdGroup {
+  key: string;
+  holdHours: number;
+  totalCost: number;
+  closeNum: number;
+  winNum: number;
+  profitSum: number;
+  profitPct: number;
+  nums: number[];
+  minTime: number;
+  maxTime: number;
+}

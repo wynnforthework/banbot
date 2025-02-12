@@ -4,14 +4,14 @@
   import {ctx, save, acc, loadAccounts} from '$lib/dash/store';
   import type { BotAccount, BotTicket } from '$lib/dash/types';
   import * as m from '$lib/paraglide/messages.js';
-	import { alerts } from '$lib/stores/alerts';
+  import { alerts } from '$lib/stores/alerts';
   import { loadBotAccounts } from '$lib/dash/store';
-	import AddBot from '$lib/dash/AddBot.svelte';
+  import AddBot from '$lib/dash/AddBot.svelte';
   import Modal from '$lib/kline/Modal.svelte';
   import {site} from '@/lib/stores/site'
 	
-	let { children } = $props();
-	let collapsed = $state(false);
+  let { children } = $props();
+  let collapsed = $state(false);
   let showAddBot = $state(false);
   $site.apiReady = false;
   loadAccounts().then(() => {
@@ -42,6 +42,13 @@
     alerts.addAlert('success', `${m.add_bot_ok()}: ${info.name} (${num} accounts)`);
     showAddBot = false;
     loadBotAccounts(info);
+  }
+
+  function toggleCollapse(){
+    collapsed = !collapsed;
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 500)
   }
 </script>
 
@@ -75,7 +82,7 @@
 	<div class="flex-1 flex flex-col bg-base-100">
     <header class="navbar bg-base-100 shadow-sm h-12 px-3 border-b border-base-200">
       <div class="navbar-start">
-        <button class="btn btn-ghost btn-sm btn-circle hover:bg-base-200 transition-colors" onclick={() => collapsed = !collapsed}>
+        <button class="btn btn-ghost btn-sm btn-circle hover:bg-base-200 transition-colors" onclick={toggleCollapse}>
           <Icon name={collapsed ? 'double-right' : 'double-left'} class="w-4 h-4" />
         </button>
       </div>

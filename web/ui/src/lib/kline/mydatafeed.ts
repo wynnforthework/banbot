@@ -16,7 +16,6 @@ export default class MyDatafeed implements Datafeed {
       exchange: symbol.exchange,
       from, to, strategy
     }
-    console.log('getHistoryKLineData', query)
     const rsp = await getApi('/kline/hist', query)
     const kline_data = (rsp.data || []).map((data: any) => ({
       timestamp: data[0],

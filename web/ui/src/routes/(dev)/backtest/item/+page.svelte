@@ -22,6 +22,8 @@
   import { fmtDateStr, fmtDuration, curTZ } from '$lib/dateutil';
   import type { OverlayCreate } from 'klinecharts';
   import type { TradeInfo } from '$lib/kline/types';
+  import { pagination, orderCard } from '@/lib/snippets.svelte';
+  import {getFirstValid} from "$lib/common";
 
   let id = $state('');
   let btPath = $state('');
@@ -289,42 +291,20 @@
     if (!drawOrder || !kc) return;
     const chart = kc.getChart();
     if (!chart) return;
+
     chart.removeOverlay({ groupId: TRADE_GROUP });
     const klineDatas = chart.getDataList();
     if (klineDatas.length == 0)return;
-    const timeStart = klineDatas[0].timestamp;
-    const timeEnd = klineDatas[klineDatas.length - 1].timestamp;
-    const tfMSecs = $kcSave.period.secs * 1000; // bar的时间间隔(毫秒)
 
-    // 筛选符合条件的订单
-    const filteredOrders = pairOrders.filter(order => {
-      const exs = exsMap?.[order.sid];
-      if (!exs) return false; // 跳过找不到交易所信息的订单
-
-      // 条件 1: 当前品种匹配
-      if (order.symbol !== $kcSave.symbol.ticker) return false;
-
-      // 条件 2: 入场和平仓时间在 K 线图的时间范围内
-      const enterBarTime = Math.floor(order.enter_at / tfMSecs) * tfMSecs;
-      const exitBarTime = Math.floor(order.exit_at / tfMSecs) * tfMSecs;
-      if (!(enterBarTime >= timeStart && enterBarTime <= timeEnd &&
-              exitBarTime >= timeStart && exitBarTime <= timeEnd)) {
-        return false;
-      }
-
-      // 条件 3: 入场和出场不在同一根 K 线上
-      if (enterBarTime === exitBarTime) return false;
-
-      return true;
-    });
-    if(filteredOrders.length == 0){
+    if(pairOrders.length == 0){
       console.log('no match orders to show')
       return;
     }
 
     // 计算缩放比例
+    const tfMSecs = $kcSave.period.secs * 1000;
     const range = chart.getVisibleRange();
-    const showStartMS = drawOrder.enter_at - tfMSecs * 50;
+    const showStartMS = drawOrder.enter_at - tfMSecs * 20;
     const showEndMS = drawOrder.exit_at + tfMSecs * 20;
     const showBarNum = Math.ceil((showEndMS - showStartMS) / tfMSecs);
     const scale =  (range.to - range.from) / showBarNum;
@@ -336,39 +316,41 @@
     }, 10);
 
     // 绘制筛选后的订单
-    filteredOrders.forEach(td => {
+    pairOrders.forEach(td => {
       const color = td.short ? '#FF9600' : '#1677FF';
       const exitColor = td.short ? '#935EBD' : '#01C5C4';
       const inAction = `${td.short ? m.open_short() : m.open_long()}`;
       const outAction = `${td.short ? m.close_short() : m.close_long()}`;
-      const isActive = td.id == drawOrder?.id;
+      const isActive = td.id === drawOrder?.id;
+      const enterMS = getFirstValid([td.enter?.update_at, td.enter?.create_at, td.enter_at]);
 
       const inText = `${inAction} ${td.enter_tag} ${td.leverage}x
 ${td.strategy}
 ${m.order()}: ${td.enter?.order_id}
-${m.entry()}: ${fmtDateStr(td.enter!.create_at)}
+${m.entry()}: ${fmtDateStr(enterMS)}
 ${m.price()}: ${td.enter?.average?.toFixed(5)}
 ${m.amount()}: ${td.enter?.amount.toFixed(6)}
 ${m.cost()}: ${td.quote_cost?.toFixed(2)}`;
 
       const points = [{
-        timestamp: td.enter?.create_at,
-        value: td.enter?.average ?? td.init_price
+        timestamp: enterMS,
+        value: getFirstValid([td.enter?.average, td.enter?.price, td.init_price])
       }];
 
       if (td.exit && td.exit.filled) {
+        const exitMS = getFirstValid([td.exit?.update_at, td.exit?.create_at, td.exit_at]);
         const outText = `${outAction} ${td.exit_tag} ${td.leverage}x
 ${td.strategy}
 ${m.order()}: ${td.exit?.order_id}
-${m.exit()}: ${fmtDateStr(td.exit?.create_at)}
+${m.exit()}: ${fmtDateStr(exitMS)}
 ${m.price()}: ${td.exit?.average?.toFixed(5)}
 ${m.amount()}: ${td.exit?.amount?.toFixed(6)}
 ${m.profit()}: ${(td.profit_rate * 100).toFixed(1)}% ${td.profit.toFixed(5)}
 ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
 
         points.push({
-          timestamp: td.exit?.create_at ?? 0,
-          value: td.exit.average ?? 0
+          timestamp: exitMS,
+          value: getFirstValid([td.exit?.average, td.exit?.price, td.init_price])
         });
 
         chart.createOverlay({
@@ -386,6 +368,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         } as OverlayCreate)
         return;
       }
+      if(!isActive)return;
 
       chart.createOverlay({
         name: 'note',
@@ -910,76 +893,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
     <div class="card-body">
       <h3 class="card-title text-sm">{title}</h3>
       <p class="break-all">{content}</p>
-    </div>
-  </div>
-{/snippet}
-
-{#snippet pagination(total: number, pageSize: number, currentPage: number, onPageChange: (newPage: number) => void, onPageSizeChange: (newSize: number) => void)}
-  <div class="flex justify-between items-center">
-    <div class="flex items-center gap-2">
-      <span>{m.page_size()}: </span>
-      <input type="number" class="input input-bordered input-sm w-20" value={pageSize} onchange={e => onPageSizeChange(Number(e.currentTarget.value))} />
-    </div>
-    <div class="join">
-      <button class="join-item btn btn-sm" disabled={currentPage === 1}
-        onclick={() => onPageChange(currentPage - 1)}>
-        {m.prev_page()}
-      </button>
-      <button class="join-item btn btn-disabled btn-sm">
-        {currentPage} / {Math.ceil(total / pageSize)}
-      </button>
-      <button class="join-item btn btn-sm" disabled={currentPage >= Math.ceil(total / pageSize)}
-        onclick={() => onPageChange(currentPage + 1)}>
-        {m.next_page()}
-      </button>
-    </div>
-  </div>
-{/snippet}
-
-{#snippet orderCard(order: InOutOrder, isSelected: boolean, onAnalysis: () => void, onDetail: (e: Event) => void)}
-  <div class="w-[15em] mr-2 mb-3 bg-base-200 hover:bg-base-300 cursor-pointer shadow-sm hover:shadow-md transition-all rounded-lg" 
-    onclick={onAnalysis}
-    class:bg-slate-200={isSelected}
-  >
-    <div class="p-3.5">
-      <div class="flex mb-2.5 items-center justify-between">
-        <h3 class="text-sm font-semibold">{order.symbol}</h3>
-        <button class="btn btn-xs btn-ghost" 
-          onclick={onDetail}>{m.details()}</button>
-      </div>
-      
-      <div class="flex justify-between mb-2 text-sm">
-        <div class="tooltip opacity-75" data-tip={m.enter_tag()}>
-          {order.enter_tag}
-        </div>
-        <div class="tooltip font-medium" data-tip={m.enter_price()}>
-          {formatNumber(order.enter?.average||order.enter?.price || 0, 8)}
-        </div>
-        <div class="tooltip opacity-75" data-tip={m.enter_amount()}>
-          {formatNumber(order.enter?.filled ||order.enter?.amount || 0, 8)}
-        </div>
-      </div>
-
-      <div class="flex justify-between mb-2 text-sm">
-        <div class="tooltip opacity-75" data-tip={m.exit_tag()}>
-          {order.exit_tag}
-        </div>
-        <span class={`px-1.5 py-0.5 text-xs rounded ${order.short ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-          {order.short ? m.short() : m.long()} {order.leverage}x
-        </span>
-        <div class="tooltip font-medium" data-tip={m.profit_rate()} class:text-success={order.profit > 0} class:text-error={order.profit <= 0}>
-          {formatPercent(order.profit * 100 / ((order.enter?.filled || 0) * (order.enter?.average || 1)))}
-        </div>
-      </div>
-
-      <div class="flex justify-between text-xs text-base-content/60">
-        <div class="tooltip" data-tip={m.exit_time()}>
-          {fmtDateStr(order.exit_at)}
-        </div>
-        <div class="tooltip" data-tip={m.strategy()}>
-          {order.strategy}
-        </div>
-      </div>
     </div>
   </div>
 {/snippet}

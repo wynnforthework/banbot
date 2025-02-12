@@ -3,6 +3,7 @@ package live
 import (
 	"context"
 	"fmt"
+	"github.com/banbox/banbot/opt"
 	"math"
 	"slices"
 	"sort"
@@ -37,6 +38,7 @@ func regApiBiz(api fiber.Router) {
 	api.Get("/statistics", getStatistics)
 	api.Get("/incomes", getIncomes)
 	api.Get("/task_pairs", getTaskPairs)
+	api.Get("/exs_map", getExsMap)
 	api.Get("/orders", getOrders)
 	api.Post("/calc_profits", postCalcProfits)
 	api.Post("/forceexit", postForceExit)
@@ -45,6 +47,7 @@ func regApiBiz(api fiber.Router) {
 	api.Get("/config", getConfig)
 	api.Get("/stg_jobs", getStratJobs)
 	api.Get("/performance", getPerformance)
+	api.Get("/group_sta", getGroupSta)
 	api.Get("/log", getLog)
 	api.Get("/bot_info", getBotInfo)
 }
@@ -277,6 +280,8 @@ func getOrders(c *fiber.Ctx) error {
 		Strategy  string `query:"strategy"`
 		TimeFrame string `query:"timeFrame"`
 		Source    string `query:"source" validate:"required"`
+		EnterTag  string `query:"enterTag"`
+		ExitTag   string `query:"exitTag"`
 	}
 	var data = new(OrderArgs)
 	if err := base.VerifyArg(c, data, base.ArgQuery); err != nil {
@@ -313,6 +318,8 @@ func getOrders(c *fiber.Ctx) error {
 			CloseBefore: data.StopMs,
 			Limit:       data.Limit,
 			AfterID:     data.AfterID,
+			EnterTag:    data.EnterTag,
+			ExitTag:     data.ExitTag,
 		})
 		if err != nil {
 			return err
@@ -660,14 +667,22 @@ func getTaskPairs(c *fiber.Ctx) error {
 	})
 }
 
+func getExsMap(c *fiber.Ctx) error {
+	exsMap := orm.GetExSymbols(core.ExgName, core.Market)
+	return c.JSON(fiber.Map{
+		"data": exsMap,
+	})
+}
+
 type GroupItem struct {
-	Key       string  `json:"key"`
-	HoldHours float64 `json:"holdHours"`
-	TotalCost float64 `json:"totalCost"`
-	ProfitSum float64 `json:"profitSum"`
-	ProfitPct float64 `json:"profitPct"`
-	CloseNum  int     `json:"closeNum"`
-	WinNum    int     `json:"winNum"`
+	Key       string             `json:"key"`
+	HoldHours float64            `json:"holdHours"`
+	TotalCost float64            `json:"totalCost"`
+	ProfitSum float64            `json:"profitSum"`
+	ProfitPct float64            `json:"profitPct"`
+	CloseNum  int                `json:"closeNum"`
+	WinNum    int                `json:"winNum"`
+	Orders    []*ormo.InOutOrder `json:"-"`
 }
 
 func getPerformance(c *fiber.Ctx) error {
@@ -751,6 +766,7 @@ func groupOrders(orders []*ormo.InOutOrder, odKey func(od *ormo.InOutOrder) stri
 		gp.ProfitSum += od.Profit
 		gp.TotalCost += od.EnterCost()
 		gp.HoldHours += holdHours
+		gp.Orders = append(gp.Orders, od)
 		if od.Profit > 0 {
 			gp.WinNum += 1
 		}
@@ -772,6 +788,90 @@ func groupOrders(orders []*ormo.InOutOrder, odKey func(od *ormo.InOutOrder) stri
 		return 1
 	})
 	return res
+}
+
+type GroupSta struct {
+	*GroupItem
+	Nums    []int `json:"nums"`
+	MinTime int64 `json:"minTime"`
+	MaxTime int64 `json:"maxTime"`
+}
+
+func getGroupSta(c *fiber.Ctx) error {
+	type GroupStaArgs struct {
+		Symbol    string `query:"symbol"`
+		Strategy  string `query:"strategy"`
+		EnterTag  string `query:"enterTag"`
+		ExitTag   string `query:"exitTag"`
+		GroupBy   string `query:"groupBy"`
+		StartTime string `query:"startTime"`
+		EndTime   string `query:"endTime"`
+	}
+	var data = new(GroupStaArgs)
+	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
+		return err_
+	}
+	var err_ error
+	startMS, endMS := int64(0), int64(0)
+	if data.StartTime != "" {
+		startMS, err_ = btime.ParseTimeMS(data.StartTime)
+		if err_ != nil {
+			return err_
+		}
+	}
+	if data.EndTime != "" {
+		endMS, err_ = btime.ParseTimeMS(data.EndTime)
+		if err_ != nil {
+			return err_
+		}
+	}
+	return wrapAccount(c, func(acc string) error {
+		sess, conn, err := ormo.Conn(orm.DbTrades, false)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		taskId := ormo.GetTaskID(acc)
+		var symbols []string
+		if data.Symbol != "" {
+			symbols = strings.Split(data.Symbol, ",")
+		}
+		orders, err := sess.GetOrders(ormo.GetOrdersArgs{
+			TaskID:      taskId,
+			Strategy:    data.Strategy,
+			Pairs:       symbols,
+			CloseAfter:  startMS,
+			CloseBefore: endMS,
+			EnterTag:    data.EnterTag,
+			ExitTag:     data.ExitTag,
+		})
+		if err != nil {
+			return err
+		}
+		groups := groupOrders(orders, func(od *ormo.InOutOrder) string {
+			if data.GroupBy == "strategy" {
+				return od.Strategy
+			} else if data.GroupBy == "enterTag" {
+				return fmt.Sprintf("%v:%v", od.Strategy, od.EnterTag)
+			} else if data.GroupBy == "exitTag" {
+				return fmt.Sprintf("%v:%v", od.Strategy, od.ExitTag)
+			}
+			return od.Symbol
+		})
+		staList := make([]*GroupSta, 0, len(groups))
+		for _, g := range groups {
+			odNums, minTime, maxTime := opt.SampleOdNums(g.Orders, 300)
+			staList = append(staList, &GroupSta{
+				GroupItem: g,
+				Nums:      odNums,
+				MinTime:   minTime,
+				MaxTime:   maxTime,
+			})
+		}
+		return c.JSON(fiber.Map{
+			"data": staList,
+		})
+	})
 }
 
 func getLog(c *fiber.Ctx) error {

@@ -10,6 +10,15 @@
   import {alerts} from '@/lib/stores/alerts';
   import { postApi, getApi } from '@/lib/netio';
   
+  const menuItems = [
+    { href: '/strategy', icon: 'code', label: m.strategy() },
+    { href: '/backtest', icon: 'calculate', label: m.backtest() },
+    { href: '/data', icon: 'chart-bar', label: m.data() },
+    { href: '/trade', icon: 'banknotes', label: m.live_trading() },
+    //{ href: '/tools', icon: 'tool', label: m.tools() },
+    //{ href: '/optimize', icon: 'cpu', label: m.optimize() },
+  ];
+  
   site.update((s) => {
     if(dev){
       s.apiHost = 'http://localhost:8000';
@@ -77,21 +86,25 @@
           <Icon name="horz3"/>
         </div>
         <ul tabindex="0" class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow">
-          <li><a href="/strategy" class="py-3" class:text-primary={$site.path.startsWith('/strategy')}><Icon name="code"/>{m.strategy()}</a></li>
-          <li><a href="/backtest" class="py-3" class:text-primary={$site.path.startsWith('/backtest')}><Icon name="calculate"/>{m.backtest()}</a></li>
-          <li><a href="/data" class="py-3" class:text-primary={$site.path.startsWith('/data')}><Icon name="chart-bar"/>{m.data()}</a></li>
-          <li><a href="/trade" class="py-3" class:text-primary={$site.path.startsWith('/trade')}><Icon name="banknotes"/>{m.live_trading()}</a></li>
+          {#each menuItems as {href, icon, label}}
+            <li>
+              <a href={href} class="py-3" class:text-primary={$site.path?.includes(href)}>
+                <Icon name={icon}/>{label}
+              </a>
+            </li>
+          {/each}
         </ul>
       </div>
       
       <!-- 桌面端的水平菜单 -->
       <ul class="menu menu-horizontal px-1 hidden lg:flex">
-        <li><a href="/strategy" class:text-primary={$site.path.startsWith('/strategy')}><Icon name="code"/>{m.strategy()}</a></li>
-        <li><a href="/backtest" class:text-primary={$site.path.startsWith('/backtest')}><Icon name="calculate"/>{m.backtest()}</a></li>
-        <li><a href="/data" class:text-primary={$site.path.startsWith('/data')}><Icon name="chart-bar"/>{m.data()}</a></li>
-        <li><a href="/trade" class:text-primary={$site.path.startsWith('/trade')}><Icon name="banknotes"/>{m.live_trading()}</a></li>
-        <!-- <li><a href="/tools"><Icon name="tool"/>{m.tools()}</a></li> -->
-        <!-- <li><a href="/optimize"><Icon name="cpu"/>{m.optimize()}</a></li> -->
+        {#each menuItems as {href, icon, label}}
+          <li>
+            <a href={href} class:text-primary={$site.path?.includes(href)}>
+              <Icon name={icon}/>{label}
+            </a>
+          </li>
+        {/each}
       </ul>
     </div>
     

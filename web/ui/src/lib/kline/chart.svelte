@@ -306,6 +306,11 @@
     }
   })
 
+  const fireResize = derived(ctx, ($ctx) => $ctx.fireResize);
+  fireResize.subscribe(async (val) => {
+    $chart?.resize();
+  })
+
   export function getChart(): Nullable<kc.Chart>{
     return $chart
   }

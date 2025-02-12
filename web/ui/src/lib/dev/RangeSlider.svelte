@@ -10,11 +10,13 @@
     let initialStart = 0;
     let initialEnd = 0;
 
+    // 逻辑宽度1000，start,end都是逻辑位置
+    // 实际显示过程会根据data的长度计算显示
     let {
         start=$bindable(0),
         end=$bindable(100),
         data=[],
-        height=35,
+        height=25,
         isBar=false,
         class: className = '',
         change,
