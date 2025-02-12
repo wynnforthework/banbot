@@ -34,6 +34,7 @@ import (
 func regApiBiz(api fiber.Router) {
 	api.Get("/version", getVersion)
 	api.Get("/balance", getBalance)
+	api.Post("/refresh_wallet", postRefreshWallet)
 	api.Get("/today_num", getTodayNum)
 	api.Get("/statistics", getStatistics)
 	api.Get("/incomes", getIncomes)
@@ -85,20 +86,41 @@ func getVersion(c *fiber.Ctx) error {
 func getBalance(c *fiber.Ctx) error {
 	return wrapAccount(c, func(account string) error {
 		wallet := biz.GetWallets(account)
-		items := make([]map[string]interface{}, 0)
-		for coin, item := range wallet.Items {
-			total := item.Total(true)
-			items = append(items, map[string]interface{}{
-				"symbol":     coin,
-				"total":      total,
-				"upol":       item.UnrealizedPOL,
-				"free":       item.Available,
-				"used":       total - item.Available,
-				"total_fiat": item.FiatValue(true),
-			})
-		}
 		return c.JSON(fiber.Map{
-			"items": items,
+			"items": walletItems(wallet),
+			"total": wallet.FiatValue(true),
+		})
+	})
+}
+
+func walletItems(wallet *biz.BanWallets) []map[string]interface{} {
+	items := make([]map[string]interface{}, 0)
+	for coin, item := range wallet.Items {
+		total := item.Total(true)
+		items = append(items, map[string]interface{}{
+			"symbol":     coin,
+			"total":      total,
+			"upol":       item.UnrealizedPOL,
+			"free":       item.Available,
+			"used":       total - item.Available,
+			"total_fiat": item.FiatValue(true),
+		})
+	}
+	return items
+}
+
+func postRefreshWallet(c *fiber.Ctx) error {
+	return wrapAccount(c, func(account string) error {
+		wallet := biz.GetWallets(account)
+		rsp, err := exg.Default.FetchBalance(map[string]interface{}{
+			banexg.ParamAccount: account,
+		})
+		if err != nil {
+			return err
+		}
+		biz.UpdateWalletByBalances(wallet, rsp)
+		return c.JSON(fiber.Map{
+			"items": walletItems(wallet),
 			"total": wallet.FiatValue(true),
 		})
 	})

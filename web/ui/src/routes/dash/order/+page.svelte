@@ -8,6 +8,7 @@
   import { fmtDateStr, toUTCStamp, curTZ } from '$lib/dateutil';
   import { OrderDetail, type InOutOrder } from '$lib/order';
   import {getFirstValid} from "$lib/common";
+  import { pagination } from '@/lib/snippets.svelte';
 
   let tabName = $state('bot'); // bot/exchange/position
   let banodList = $state<InOutOrder[]>([]);
@@ -16,7 +17,6 @@
   let pageSize = $state(15);
   let limitSize = $state(30);
   let currentPage = $state(1);
-  let banodNum = $state(0);
   let showOdDetail = $state(false);
   let showExOdDetail = $state(false);
   let showOpenOrder = $state(false);
@@ -24,8 +24,9 @@
   let openingOd = $state(false);
   let closingExgPos = $state(false);
   let exFilter = $state('');
-  let selectedOrder = $state<any>(null);
-  let lastId = $state(0); // 添加lastId用于bot分页
+  let selectedOrder = $state<InOutOrder|null>(null);
+  let pageFirst = $state(0);
+  let pageLast = $state(0);
 
   let search = $state({
     status: '',
@@ -65,6 +66,10 @@
   }
 
   async function loadData(page: number) {
+    let afterDirt = -1;
+    if (currentPage > page){
+      afterDirt = 1;
+    }
     currentPage = page;
     const data: Record<string, any> = {...search};
     data.startMs = toUTCStamp(data.startMs);
@@ -74,7 +79,11 @@
     if (tabName === 'bot') {
       data.limit = pageSize;
       if (page > 1) {
-        data.afterId = lastId;
+        if(afterDirt > 0){
+          data.afterId = pageFirst * afterDirt;
+        }else{
+          data.afterId = pageLast * afterDirt;
+        }
       }
     } else if (tabName === 'exchange') {
       // exchange和position必须传symbols
@@ -92,7 +101,8 @@
     if (tabName === 'bot') {
       banodList = res;
       if (res.length > 0) {
-        lastId = res[res.length - 1].id;
+        pageLast = res[res.length - 1].id;
+        pageFirst = res[0].id;
       }
     } else if (tabName === 'exchange') {
       if (search.status) {
@@ -299,7 +309,6 @@
                 alerts.addAlert('error', m.symbol_required());
                 return;
               }
-              lastId = 0;
               loadData(1);
             }}
           >
@@ -446,25 +455,14 @@
     </div>
 
     <!-- 修改分页控制 -->
-    {#if banodNum > pageSize && tabName === 'bot'}
-      <div class="flex justify-end mt-4">
-        <div class="join">
-          {#each Array(Math.ceil(banodNum / pageSize)) as _, i}
-            <button 
-              class="join-item btn btn-sm {currentPage === i + 1 ? 'btn-active' : ''}"
-              onclick={() => loadData(i + 1)}
-            >
-              {i + 1}
-            </button>
-          {/each}
-        </div>
-      </div>
+    {#if tabName === 'bot'}
+      {@render pagination(0, pageSize, currentPage, loadData, pSize => {pageSize = pSize })}
     {/if}
   </div>
 </div>
 
 <!-- Modals -->
-<OrderDetail bind:show={showOdDetail} order={selectedOrder} editable={true} />
+<OrderDetail bind:show={showOdDetail} order={selectedOrder} editable={(selectedOrder?.status ?? 0) < 4 } />
 
 <Modal title={m.exchange_details()} bind:show={showExOdDetail} width={800}>
   {#if selectedOrder}

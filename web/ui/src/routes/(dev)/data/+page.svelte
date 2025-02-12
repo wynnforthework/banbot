@@ -5,7 +5,8 @@
   import * as m from '$lib/paraglide/messages.js';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
   import { exchanges, markets } from '$lib/common';
-  import {curTZ, fmtDateStr} from '$lib/dateutil'
+  import {curTZ, fmtDateStr} from '$lib/dateutil';
+  import { pagination } from '@/lib/snippets.svelte';
 
   // 状态变量
   let symbols: ExSymbol[] = $state([]);
@@ -52,9 +53,6 @@
       }, 10);
     }
   });
-
-  // 分页相关
-  const totalPages = $derived(Math.ceil(totalCount / pageSize));
 
   function toggleDrawer() {
     isDrawerOpen = !isDrawerOpen;
@@ -139,36 +137,7 @@
         </table>
     </div>
 
-    <div class="flex justify-between items-center mt-4">
-        <div class="flex items-center gap-2">
-            <span>{m.page_size()}: </span>
-            <input 
-                type="number" 
-                class="input input-bordered input-sm w-20" 
-                value={pageSize} 
-                onchange={e => pageSize = Number(e.currentTarget.value)}
-            />
-        </div>
-        <div class="join">
-            <button 
-                class="join-item btn btn-sm" 
-                disabled={currentPage === 1}
-                onclick={() => currentPage = Math.max(1, currentPage - 1)}
-            >
-                {m.prev_page()}
-            </button>
-            <button class="join-item btn btn-disabled btn-sm">
-                {currentPage} / {totalPages}
-            </button>
-            <button 
-                class="join-item btn btn-sm" 
-                disabled={currentPage === totalPages || symbols.length < pageSize}
-                onclick={() => currentPage = currentPage + 1}
-            >
-                {m.next_page()}
-            </button>
-        </div>
-    </div>
+    {@render pagination(totalCount, pageSize, currentPage, i => {currentPage = i}, i => {pageSize = i})}
 </div>
 
 <DrawerDataTools exchanges={exchanges} markets={markets} bind:show={isDrawerOpen} />

@@ -867,7 +867,7 @@ func (w *BanWallets) TryUpdateStakePctAmt() {
 	}
 }
 
-func updateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
+func UpdateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 	if core.IsPriceEmpty() {
 		// A one-time refresh if a price is requested when all prices are not loaded
 		// 所有价格都未加载时，如果请求价格，则一次性刷新
@@ -956,7 +956,7 @@ func WatchLiveBalances() {
 				wallets.IsWatch = false
 			}()
 			for item := range out {
-				updateWalletByBalances(wallets, item)
+				UpdateWalletByBalances(wallets, item)
 			}
 		}()
 	}

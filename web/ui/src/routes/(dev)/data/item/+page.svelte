@@ -10,6 +10,7 @@
   import Icon from '$lib/Icon.svelte';
   import Icon2 from '$lib/kline/Icon.svelte';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
+  import { pagination } from '@/lib/snippets.svelte';
 
   let symbol = $state<ExSymbol | null>(null);
   let kinfos = $state<any[]>([]);
@@ -325,29 +326,5 @@
     </div>
   </div>
 </div>
-
-{#snippet pagination(total: number, pageSize: number, currentPage: number, onPageChange: (newPage: number) => void, onPageSizeChange: (newSize: number) => void)}
-  <div class="flex justify-between items-center mt-4">
-    <div class="flex items-center gap-2">
-      <span>{m.page_size()}: </span>
-      <input type="number" class="input input-bordered input-sm w-20" value={pageSize} onchange={e => onPageSizeChange(Number(e.currentTarget.value))} />
-    </div>
-    <div class="join">
-      <button class="join-item btn btn-sm" disabled={currentPage === 1}
-        onclick={() => onPageChange(currentPage - 1)}>
-        {m.prev_page()}
-      </button>
-      {#if total > 0}
-        <button class="join-item btn btn-disabled btn-sm">
-          {currentPage} / {Math.ceil(total / pageSize)}
-        </button>
-      {/if}
-      <button class="join-item btn btn-sm" disabled={total > 0 && currentPage >= Math.ceil(total / pageSize)}
-        onclick={() => onPageChange(currentPage + 1)}>
-        {m.next_page()}
-      </button>
-    </div>
-  </div>
-{/snippet}
 
 <DrawerDataTools bind:show={isDrawerOpen} />

@@ -1351,7 +1351,7 @@ func getSymbolData(c *fiber.Ctx) error {
 	if args.Limit <= 0 {
 		args.Limit = 100
 	}
-	if args.StartMS <= 0 {
+	if args.StartMS <= 0 && args.EndMS <= 0 {
 		args.StartMS = core.MSMinStamp
 	}
 

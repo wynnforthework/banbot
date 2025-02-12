@@ -30,10 +30,12 @@
               onclick={() => onPageChange(currentPage - 1)}>
         {m.prev_page()}
       </button>
+      {#if total > 0}
       <button class="join-item btn btn-disabled btn-sm">
         {currentPage} / {Math.ceil(total / pageSize)}
       </button>
-      <button class="join-item btn btn-sm" disabled={currentPage >= Math.ceil(total / pageSize)}
+      {/if}
+      <button class="join-item btn btn-sm" disabled={total > 0 && currentPage >= Math.ceil(total / pageSize)}
               onclick={() => onPageChange(currentPage + 1)}>
         {m.next_page()}
       </button>

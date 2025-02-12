@@ -998,6 +998,7 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	if args.AfterID > 0 {
 		b.WriteString(fmt.Sprintf(" and id > $%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, args.AfterID)
+		args.OrderBy = "id asc"
 	} else if args.AfterID < 0 {
 		b.WriteString(fmt.Sprintf(" and id < $%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, -args.AfterID)
@@ -1051,7 +1052,7 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 		sqlParams = append(sqlParams, args.ExitTag)
 	}
 	if args.OrderBy == "" {
-		args.OrderBy = "enter_at desc"
+		args.OrderBy = "id desc"
 	}
 	b.WriteString("order by " + args.OrderBy)
 	if args.Limit > 0 {

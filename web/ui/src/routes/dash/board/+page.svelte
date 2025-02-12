@@ -1,12 +1,60 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages.js';
-  import { getAccApi } from '$lib/netio';
+  import { getAccApi, postAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import { acc, loadAccounts } from '$lib/dash/store';
   import { fmtDateStr, fmtDateStrTZ, getUTCStamp } from '@/lib/dateutil';
+  import Icon from '$lib/Icon.svelte';
 
-  let data = $state({
+  interface BalanceItem{
+    symbol: string;
+    total: number;
+    upol: number;
+    free: number;
+    used: number;
+    total_fiat: number;
+  }
+
+  interface BotStatus {
+    cpuPct: number;
+    ramPct: number;
+    lastProcess: number;
+    allowTradeAt: number;
+    doneProfitPctMean: number;
+    doneProfitMean: number;
+    doneProfitPctSum: number;
+    doneProfitSum: number;
+    allProfitPctMean: number;
+    allProfitMean: number;
+    allProfitPctSum: number;
+    allProfitSum: number;
+    orderNum: number;
+    doneOrderNum: number;
+    firstOdTs: number;
+    lastOdTs: number;
+    avgDuration: number;
+    bestPair: string;
+    bestProfitPct: number;
+    winNum: number;
+    lossNum: number;
+    profitFactor: number;
+    winRate: number;
+    expectancy: number;
+    expectancyRatio: number;
+    maxDrawdownPct: number;
+    maxDrawdownVal: number;
+    totalCost: number;
+    botStartMs: number;
+    balanceTotal: number;
+    balanceItems: BalanceItem[];
+    runTfs: string[];
+    exchange: string;
+    market: string;
+    pairs: string[];
+  }
+
+  let data = $state<BotStatus>({
     cpuPct: 0,
     ramPct: 0,
     lastProcess: 0,
@@ -60,6 +108,16 @@
       return;
     }
     alerts.addAlert('error', m.save_failed({msg: rsp.msg ?? ''}));
+  }
+
+  async function refreshWallet(){
+    const rsp = await postAccApi('/refresh_wallet', {});
+    if(rsp.code === 200) {
+      data.balanceTotal = rsp.total ?? 0;
+      data.balanceItems = rsp.items ?? [];
+    }else{
+      alerts.addAlert('error', rsp.msg ?? '');
+    }
   }
 
   onMount(async () => {
@@ -217,17 +275,20 @@
   <!-- Balance Info -->
   <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow rounded-lg border border-base-200">
     <div class="card-body p-4">
-      <h2 class="card-title text-lg font-medium mb-3">{m.wallet_balance()}</h2>
+      <h2 class="card-title text-lg font-medium mb-3">
+        {m.wallet_balance()}
+        <Icon name="refresh" class="cursor-pointer" onclick={refreshWallet}/>
+      </h2>
       {#if data.balanceItems.length > 1}
         <div class="text-base font-medium mb-3 text-primary">{m.total()}: {data.balanceTotal.toFixed(4)}</div>
       {/if}
       <div class="flex flex-wrap gap-2">
         {#each data.balanceItems as item}
           <div class="badge badge-md gap-1.5 py-2.5 px-3 bg-base-200/70 text-base-content border-none">
-            <span class="font-medium text-sm">{(item as any).symbol}</span>
-            <span class="text-primary text-sm font-mono">{(item as any).free.toFixed(6)}</span>
-            {#if (item as any).used > 0}
-              <span class="text-info text-sm font-mono">/ {(item as any).used.toFixed(6)}</span>
+            <span class="font-medium text-sm">{item.symbol}</span>
+            <span class="text-primary text-sm font-mono">{item.free.toFixed(6)}</span>
+            {#if item.used > 0}
+              <span class="text-info text-sm font-mono">/ {item.used.toFixed(6)}</span>
             {/if}
           </div>
         {/each}

@@ -57,7 +57,7 @@
 </Modal>
 
 <div class="flex flex-1" onclick={() => $ctx.clickPage += 1}>
-  <aside class="bg-base-200 text-base-content shadow-lg {collapsed ? 'w-16' : 'w-64'} transition-all duration-300 border-r border-base-300">
+  <aside class="bg-base-200 text-base-content shadow-lg {collapsed ? 'w-16' : 'w-64 min-w-[200px]'} transition-all duration-300 border-r border-base-300">
     <div class="py-3 px-4 flex justify-center items-center border-b border-base-300">
       <a href="/dash" class="text-lg font-semibold hover:text-primary transition-colors">{collapsed ? 'Ban' : 'Banbot'}</a>
     </div>
