@@ -32,10 +32,13 @@ func initWebHooks() *errs.Error {
 				return errs.NewMsg(core.ErrBadConfig, "`name` is required in accounts.%s.rpc_channels[%d]", acc, i)
 			}
 			chl["_acc"] = accName
+			if _, ok := chl["accounts"]; !ok {
+				chl["accounts"] = []string{accName}
+			}
 			accChls = append(accChls, chl)
 		}
 	}
-	items := config.RPCChannels
+	items := maps.Clone(config.RPCChannels)
 	for _, chl := range accChls {
 		chlName := utils.PopMapVal(chl, "name", "")
 		acc := utils.PopMapVal(chl, "_acc", "")

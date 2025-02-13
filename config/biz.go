@@ -410,6 +410,9 @@ func ParsePath(path string) string {
 	if strings.HasPrefix(path, "$") {
 		path = strings.TrimLeft(path, "$\\/")
 		return filepath.Join(GetDataDir(), path)
+	} else if strings.HasPrefix(path, "@") {
+		path = strings.TrimLeft(path, "@\\/")
+		return filepath.Join(GetDataDir(), path)
 	}
 	return path
 }

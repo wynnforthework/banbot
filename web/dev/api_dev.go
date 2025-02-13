@@ -221,7 +221,7 @@ func parsePath(curPath string) (string, error) {
 	if curPath == "" {
 		return "", nil
 	}
-	if strings.HasPrefix(curPath, "$") {
+	if strings.HasPrefix(curPath, "$") || strings.HasPrefix(curPath, "@") {
 		curPath = config.ParsePath(curPath)
 	} else {
 		baseDir, err := getRootDir()
