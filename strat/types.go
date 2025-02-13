@@ -155,3 +155,10 @@ type ExitReq struct {
 	FilledOnly bool    // Only exit orders that have already entered when True True时只退出已入场的订单
 	Force      bool    // Whether to force exit 是否强制退出
 }
+
+type accStratLimits map[string]*stgLimits
+
+type stgLimits struct {
+	limit  int
+	strats map[string]int
+}

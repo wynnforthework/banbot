@@ -572,20 +572,22 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 	openOds := utils.ValsOfMap(relayOpens)
 	for acc := range config.Accounts {
 		odMgr := biz.GetOdMgr(acc)
-		err = odMgr.RelayOrders(sess, openOds)
-		if err != nil {
-			return err
-		}
 		jobs := strat.GetJobs(acc)
+		allowOds := make([]*ormo.InOutOrder, 0, len(openOds))
 		for _, od := range openOds {
 			stgMap, ok := jobs[fmt.Sprintf("%s_%s", od.Symbol, od.Timeframe)]
 			if ok {
 				if job, ok := stgMap[od.Strategy]; ok {
 					job.OrderNum += 1
+					allowOds = append(allowOds, od)
 					continue
 				}
 			}
 			log.Warn("job not found for", zap.String("key", od.Key()))
+		}
+		err = odMgr.RelayOrders(sess, allowOds)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

@@ -32,7 +32,7 @@ func postLogin(c *fiber.Ctx) error {
 		return err
 	}
 
-	users := config.APIServer.Users
+	users := config.GetApiUsers()
 	for _, u := range users {
 		if u.Username != req.Username || u.Password != req.Password {
 			continue
@@ -104,7 +104,7 @@ func AuthMiddleware(secret string) fiber.Handler {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			user := claims["user"]
 			c.Locals("user", user)
-			users := config.APIServer.Users
+			users := config.GetApiUsers()
 			for _, u := range users {
 				if u.Username == user {
 					c.Locals("accounts", u.AccRoles)

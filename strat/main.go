@@ -43,11 +43,13 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	core.StgPairTfs = make(map[string]map[string]string)
 	resetJobs()
 	pairTfWarms := make(Warms)
+	// 记录每个账户下，每个策略的任务数量，防止超过账户要求数量
+	accLimits := newAccStratLimits()
 	for _, pol := range config.RunPolicy {
 		stgy := New(pol)
 		polID := pol.ID()
 		if stgy == nil {
-			return pairTfWarms, nil, errs.NewMsg(core.ErrRunTime, "strategy %s load fail", polID)
+			return nil, nil, errs.NewMsg(core.ErrRunTime, "strategy %s load fail", polID)
 		}
 		Versions[stgy.Name] = stgy.Version
 		stgyMaxNum := pol.MaxPair
@@ -84,6 +86,9 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			if jobType > 0 {
 				if jobType > 1 {
 					holdNum += 1
+					for acc := range config.Accounts {
+						accLimits.tryAdd(acc, polID)
+					}
 				}
 				continue
 			}
@@ -94,10 +99,11 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			}
 			if _, ok = items[polID]; ok {
 				// 当前pair+stratID已有任务，跳过
-				err = markStratJob(tf, polID, exs, dirt)
+				err = markStratJob(tf, polID, exs, dirt, accLimits)
 				if err != nil {
 					return nil, nil, err
 				}
+				holdNum += 1
 				continue
 			}
 			// Check for proprietary parameters of the current target and reinitialize the strategy
@@ -112,7 +118,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			// Record the data that needs to be preheated; Record subscription information
 			// 记录需要预热的数据；记录订阅信息
 			pairTfWarms.Update(exs.Symbol, tf, curStgy.WarmupNum)
-			ensureStratJob(curStgy, tf, exs, env, dirt, pairTfWarms.Update)
+			ensureStratJob(curStgy, tf, exs, env, dirt, pairTfWarms.Update, accLimits)
 		}
 		printFailTfScores(polID, failTfScores)
 	}
@@ -122,6 +128,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	exitJobs := make(map[*StratJob]bool)
 	exitPairs := make(map[string]bool) // 不再监听的品种
 	newPairs := make(map[string]bool)  // 继续监听的品种
+	pairTfs := make(Warms)
 	holdPosition := config.PairMgr.PosOnRotation != "close"
 	for acc, jobs := range AccJobs {
 		exitOds := make([]*ormo.InOutOrder, 0, 4)
@@ -170,6 +177,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 					}
 				}
 				envKeys[envKey] = true
+				pairTfs.Update(pair, tf, 0)
 			} else {
 				delete(jobs, envKey)
 			}
@@ -211,7 +219,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 					core.TFSecs[tf] = utils2.TFToSecs(tf)
 				}
 				// 确保添加到pairTfWarms中
-				pairTfWarms.Update(pair, tf, 0)
+				pairTfs.Update(pair, tf, 0)
 			}
 		}
 		AccInfoJobs[acc] = newJobMap
@@ -221,7 +229,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	// 确保所有pair、tf都在返回的中有记录，防止被数据订阅端移除
 	for _, pairMap := range core.StgPairTfs {
 		for pair, tf := range pairMap {
-			pairTfWarms.Update(pair, tf, 0)
+			pairTfs.Update(pair, tf, 0)
 		}
 	}
 	// Remove useless items from PairStrats
@@ -243,7 +251,20 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			delete(Envs, envKey)
 		}
 	}
-	return pairTfWarms, accExitOds, nil
+	// 从pairTfs中确认哪些要恢复
+	for pair, tfMap := range pairTfs {
+		rawTfMap, ok := pairTfWarms[pair]
+		if !ok {
+			continue
+		}
+		for tf := range tfMap {
+			rawNum, ok2 := rawTfMap[tf]
+			if ok2 {
+				tfMap[tf] = rawNum
+			}
+		}
+	}
+	return pairTfs, accExitOds, nil
 }
 
 func ExitStratJobs() {
@@ -296,9 +317,9 @@ func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 	return env
 }
 
-func markStratJob(tf, stgName string, exs *orm.ExSymbol, dirt int) *errs.Error {
+func markStratJob(tf, stgName string, exs *orm.ExSymbol, dirt int, accLimits accStratLimits) *errs.Error {
 	envKey := strings.Join([]string{exs.Symbol, tf}, "_")
-	for _, jobs := range AccJobs {
+	for acc, jobs := range AccJobs {
 		envJobs, ok := jobs[envKey]
 		if !ok {
 			return errs.NewMsg(errs.CodeRunTime, "`envKey` for StratJob not found: %s", envKey)
@@ -307,19 +328,21 @@ func markStratJob(tf, stgName string, exs *orm.ExSymbol, dirt int) *errs.Error {
 		if !ok {
 			return errs.NewMsg(errs.CodeRunTime, "`name` for StratJob not found: %s %s", stgName, envKey)
 		}
-		job.MaxOpenShort = job.Strat.EachMaxShort
-		job.MaxOpenLong = job.Strat.EachMaxLong
-		if dirt == core.OdDirtShort {
-			job.MaxOpenLong = -1
-		} else if dirt == core.OdDirtLong {
-			job.MaxOpenShort = -1
+		if accLimits.tryAdd(acc, stgName) {
+			job.MaxOpenShort = job.Strat.EachMaxShort
+			job.MaxOpenLong = job.Strat.EachMaxLong
+			if dirt == core.OdDirtShort {
+				job.MaxOpenLong = -1
+			} else if dirt == core.OdDirtLong {
+				job.MaxOpenShort = -1
+			}
 		}
 	}
 	return nil
 }
 
 func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarEnv, dirt int,
-	logWarm func(pair, tf string, num int)) {
+	logWarm func(pair, tf string, num int), accLimits accStratLimits) {
 	envKey := strings.Join([]string{exs.Symbol, tf}, "_")
 	for account, jobs := range AccJobs {
 		envJobs, ok := jobs[envKey]
@@ -327,8 +350,12 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 			envJobs = make(map[string]*StratJob)
 			jobs[envKey] = envJobs
 		}
+		allowOpen := accLimits.tryAdd(account, stgy.Name)
 		job, ok := envJobs[stgy.Name]
 		if !ok {
+			if !allowOpen {
+				continue
+			}
 			job = &StratJob{
 				Strat:         stgy,
 				Env:           env,
@@ -346,12 +373,14 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 			}
 			envJobs[stgy.Name] = job
 		}
-		job.MaxOpenShort = stgy.EachMaxShort
-		job.MaxOpenLong = stgy.EachMaxLong
-		if dirt == core.OdDirtShort {
-			job.MaxOpenLong = -1
-		} else if dirt == core.OdDirtLong {
-			job.MaxOpenShort = -1
+		if allowOpen {
+			job.MaxOpenShort = stgy.EachMaxShort
+			job.MaxOpenLong = stgy.EachMaxLong
+			if dirt == core.OdDirtShort {
+				job.MaxOpenLong = -1
+			} else if dirt == core.OdDirtLong {
+				job.MaxOpenShort = -1
+			}
 		}
 		// Load subscription information for other targets
 		// 加载订阅其他标的信息

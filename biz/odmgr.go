@@ -149,7 +149,12 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 	}
 	openOds, lock := ormo.GetOpenODs(o.Account)
 	lock.Lock()
-	enters = checkOrderNum(enters, len(openOds), config.MaxOpenOrders, "max_open_orders")
+	maxOpenNum := config.MaxOpenOrders
+	acc, _ := config.Accounts[o.Account]
+	if acc != nil && acc.MaxOpenOrders > 0 {
+		maxOpenNum = acc.MaxOpenOrders
+	}
+	enters = checkOrderNum(enters, len(openOds), maxOpenNum, "max_open_orders")
 	if len(enters) > 0 && config.MaxSimulOpen > 0 {
 		enters = checkOrderNum(enters, o.simulOpen, config.MaxSimulOpen, "max_simul_open")
 	}

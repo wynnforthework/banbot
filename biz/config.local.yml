@@ -5,3 +5,9 @@ run_policy:
     run_timeframes: [15m]
     # pairs: [BTC/USDT:USDT]
     params: {atr: 15}
+accounts:
+  user1:
+    binance:
+      prod:
+        api_key: vvv
+        api_secret: vvv

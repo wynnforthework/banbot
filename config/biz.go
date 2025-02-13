@@ -273,7 +273,14 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	}
 	PairMgr = c.PairMgr
 	PairFilters = c.PairFilters
+	Accounts = c.Accounts
 	Exchange = c.Exchange
+	if Exchange == nil {
+		Exchange = &ExchangeConfig{
+			Name:  "binance",
+			Items: make(map[string]map[string]interface{}),
+		}
+	}
 	err := initExgAccs()
 	if err != nil {
 		return err
@@ -325,15 +332,6 @@ func initPolicies(policyList []*RunPolicyConfig) (bool, []string) {
 	return staticPairs, polPairs
 }
 
-func GetExgConfig() *ExgItemConfig {
-	if Exchange != nil {
-		if cfg, ok := Exchange.Items[Exchange.Name]; ok {
-			return cfg
-		}
-	}
-	return &ExgItemConfig{}
-}
-
 func GetTakeOverTF(pair, defTF string) string {
 	if pairMap, ok := core.StgPairTfs[TakeOverStrat]; ok {
 		if tf, ok := pairMap[pair]; ok {
@@ -358,13 +356,7 @@ func initExgAccs() *errs.Error {
 	} else {
 		btime.LocShow = btime.UTCLocale
 	}
-	exgCfg := GetExgConfig()
-	var accs map[string]*AccountConfig
-	if core.RunEnv != core.RunEnvTest {
-		accs = exgCfg.AccountProds
-	} else {
-		accs = exgCfg.AccountTests
-	}
+	var accs = Accounts
 	Accounts = make(map[string]*AccountConfig)
 	BakAccounts = make(map[string]*AccountConfig)
 	if core.EnvReal {
@@ -432,17 +424,17 @@ func GetStakeAmount(accName string) float64 {
 	} else {
 		amount = StakeAmount
 	}
+	// Multiply by the account multiplier
+	// 乘以账户倍率
+	if ok && acc.StakeRate > 0 {
+		amount *= acc.StakeRate
+	}
 	// Check if the maximum amount is exceeded
 	// 检查是否超出最大金额
 	if ok && acc.MaxStakeAmt > 0 && acc.MaxStakeAmt < amount {
 		amount = acc.MaxStakeAmt
 	} else if MaxStakeAmt > 0 && MaxStakeAmt < amount {
 		amount = MaxStakeAmt
-	}
-	// Multiply by the account multiplier
-	// 乘以账户倍率
-	if ok && acc.StakeRate > 0 {
-		amount *= acc.StakeRate
 	}
 	return amount
 }
@@ -571,6 +563,8 @@ func (c *Config) Clone() *Config {
 		PairFilters:      c.PairFilters,
 		SpiderAddr:       c.SpiderAddr,
 		Webhook:          c.Webhook,
+		Accounts:         c.Accounts,
+		Exchange:         c.Exchange,
 	}
 }
 
@@ -586,6 +580,13 @@ api_server.users[*].pwd
 func (c *Config) Desensitize() *Config {
 	var res = c.Clone()
 
+	if res.Accounts != nil {
+		for _, acc := range res.Accounts {
+			acc.Exchanges = nil
+			acc.APIServer = nil
+		}
+	}
+
 	// 处理数据库配置
 	if c.Database != nil {
 		res.Database = &DatabaseConfig{
@@ -593,34 +594,6 @@ func (c *Config) Desensitize() *Config {
 			Retention:   c.Database.Retention,
 			MaxPoolSize: c.Database.MaxPoolSize,
 			AutoCreate:  c.Database.AutoCreate,
-		}
-	}
-
-	// 处理交易所配置
-	if c.Exchange != nil {
-		res.Exchange = &ExchangeConfig{
-			Name:  c.Exchange.Name,
-			Items: make(map[string]*ExgItemConfig),
-		}
-		for exgName, exgItem := range c.Exchange.Items {
-			resItem := &ExgItemConfig{
-				Options: exgItem.Options,
-			}
-			// 处理生产账户
-			if exgItem.AccountProds != nil {
-				resItem.AccountProds = make(map[string]*AccountConfig)
-				for accName, acc := range exgItem.AccountProds {
-					resItem.AccountProds[accName] = acc.Desensitize()
-				}
-			}
-			// 处理测试账户
-			if exgItem.AccountTests != nil {
-				resItem.AccountTests = make(map[string]*AccountConfig)
-				for accName, acc := range exgItem.AccountTests {
-					resItem.AccountTests[accName] = acc.Desensitize()
-				}
-			}
-			res.Exchange.Items[exgName] = resItem
 		}
 	}
 
@@ -855,14 +828,19 @@ func (c *RunPolicyConfig) PairDup(pair string) (*RunPolicyConfig, bool) {
 	return res, isDiff
 }
 
-func (a *AccountConfig) Desensitize() *AccountConfig {
-	return &AccountConfig{
-		NoTrade:     a.NoTrade,
-		MaxStakeAmt: a.MaxStakeAmt,
-		StakeRate:   a.StakeRate,
-		StakePctAmt: a.StakePctAmt,
-		Leverage:    a.Leverage,
+func (a *AccountConfig) GetApiSecret() *ApiSecretConfig {
+	if a == nil || len(a.Exchanges) == 0 {
+		return &ApiSecretConfig{}
 	}
+	cfg, _ := a.Exchanges[Exchange.Name]
+	if cfg != nil {
+		if core.RunEnv != core.RunEnvTest && cfg.Prod != nil {
+			return cfg.Prod
+		} else if core.RunEnv == core.RunEnvTest && cfg.Test != nil {
+			return cfg.Test
+		}
+	}
+	return &ApiSecretConfig{}
 }
 
 func LoadPerfs(inDir string) {
@@ -949,4 +927,21 @@ func (tr *TimeTuple) Clone() *TimeTuple {
 		StartMS: tr.StartMS,
 		EndMS:   tr.EndMS,
 	}
+}
+
+func GetApiUsers() []*UserConfig {
+	res := make([]*UserConfig, 0)
+	for name, acc := range Accounts {
+		if acc.APIServer == nil {
+			continue
+		}
+		res = append(res, &UserConfig{
+			Username: name,
+			Password: acc.APIServer.Pwd,
+			AccRoles: map[string]string{
+				name: acc.APIServer.Role,
+			},
+		})
+	}
+	return append(res, APIServer.Users...)
 }

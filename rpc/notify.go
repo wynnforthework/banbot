@@ -8,6 +8,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
+	"maps"
 )
 
 var (
@@ -22,7 +23,31 @@ func initWebHooks() *errs.Error {
 	if len(config.RPCChannels) == 0 {
 		return nil
 	}
-	for name, item := range config.RPCChannels {
+	// 解析accounts中的rpc配置
+	accChls := make([]map[string]interface{}, 0)
+	for accName, acc := range config.Accounts {
+		for i, chl := range acc.RPCChannels {
+			chlName := utils.GetMapVal(chl, "name", "")
+			if chlName == "" {
+				return errs.NewMsg(core.ErrBadConfig, "`name` is required in accounts.%s.rpc_channels[%d]", acc, i)
+			}
+			chl["_acc"] = accName
+			accChls = append(accChls, chl)
+		}
+	}
+	items := config.RPCChannels
+	for _, chl := range accChls {
+		chlName := utils.PopMapVal(chl, "name", "")
+		acc := utils.PopMapVal(chl, "_acc", "")
+		base, _ := items[chlName]
+		if base == nil {
+			return errs.NewMsg(core.ErrBadConfig, "channel `%s.%s` not exists", acc, chlName)
+		}
+		chlCfg := maps.Clone(base)
+		maps.Copy(chlCfg, chl)
+		items[fmt.Sprintf("%s_%s", chlName, acc)] = chlCfg
+	}
+	for name, item := range items {
 		chlType := utils.GetMapVal(item, "type", "")
 		var channel IWebHook
 		switch chlType {

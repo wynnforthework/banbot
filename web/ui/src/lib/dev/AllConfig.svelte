@@ -113,24 +113,34 @@ pairlists:  # ${m.cfg_pairlists()}
     limit: 30
   - name: ShuffleFilter  # ${m.cfg_pairlists_shuffle()}
     seed: 42
+accounts:
+  user1:  # ${m.cfg_acc_name()}
+    no_trade: false  # ${m.cfg_acc_no_trade()}
+    stake_rate: 1  # ${m.cfg_acc_stake_rate()}
+    leverage: 0  # ${m.cfg_acc_lvg()}
+    max_stake_amt: 0  # ${m.cfg_acc_max_stake()}
+    max_pair: 0  # ${m.cfg_acc_max_pair()}
+    max_open_orders: 0  # ${m.cfg_acc_max_open_orders()}
+    binance:
+      prod:  # ${m.cfg_acc_prod()}
+        api_key: vvv
+        api_secret: vvv
+      test:  # ${m.cfg_acc_test()}
+        api_key: vvv
+        api_secret: vvv
+    rpc_channels:  # ${m.cfg_rpc_channels()}
+      - name: wx_bot
+        to_user: ChannelUserID
+    api_server:  # ${m.cfg_acc_api_server()}
+      pwd: abc
+      role: admin
 exchange:
   name: binance  # ${m.cfg_exg_name()}
-  binance:
-    account_prods:  # ${m.cfg_acc_prod()}
-      user1: # ${m.cfg_acc_name()}
-        api_key: xxx
-        api_secret: bbb
-        max_stake_amt: 1000  # ${m.cfg_acc_max_stake()}
-        stake_rate: 1  # ${m.cfg_acc_stake_rate()}
-        leverage: 0  # ${m.cfg_acc_lvg()}
-      user2: # ${m.cfg_acc_another()}
-        api_key: xxx
-        api_secret: bbb
-    account_tests:  # ${m.cfg_acc_test()}
-      default:
-        api_key: xxx
-        api_secret: bbb
-    options:  # ${m.cfg_exg_options()}
+  binance:  # ${m.cfg_exg_options()}
+    fees:
+      linear:
+        taker: 0.0005
+        maker: 0.0002
 database:
   retention: all
   max_pool_size: 50

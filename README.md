@@ -40,10 +40,10 @@ docker run -d --name timescaledb -p 127.0.0.1:5432:5432 \
 #### 2. start banbot 
 create your `/root/config.yaml`:
 ```yaml
-exchange:
-  binance:
-    account_prods:
-      user1:  # you can change this
+accounts:
+  user1:  # you can change this
+    binance:
+      prod:
         api_key: your_api_key_here
         api_secret: your_secret_here
 #database:

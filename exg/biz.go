@@ -27,9 +27,9 @@ func Setup() *errs.Error {
 }
 
 func create(name, market, contractType string) (banexg.BanExchange, *errs.Error) {
-	var cfg = config.GetExgConfig()
+	var exgOpts, _ = config.Exchange.Items[config.Exchange.Name]
 	var options = map[string]interface{}{}
-	for key, val := range cfg.Options {
+	for key, val := range exgOpts {
 		key = utils.SnakeToCamel(key)
 		if key == banexg.OptFees {
 			var target = make(map[string]map[string]float64)
@@ -45,16 +45,18 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	accs := map[string]map[string]interface{}{}
 	var defAcc string
 	for key, acc := range config.Accounts {
+		sec := acc.GetApiSecret()
 		accs[key] = map[string]interface{}{
-			banexg.OptApiKey:    acc.APIKey,
-			banexg.OptApiSecret: acc.APISecret,
+			banexg.OptApiKey:    sec.APIKey,
+			banexg.OptApiSecret: sec.APISecret,
 		}
 		defAcc = key
 	}
 	for key, acc := range config.BakAccounts {
+		sec := acc.GetApiSecret()
 		accs[key] = map[string]interface{}{
-			banexg.OptApiKey:    acc.APIKey,
-			banexg.OptApiSecret: acc.APISecret,
+			banexg.OptApiKey:    sec.APIKey,
+			banexg.OptApiSecret: sec.APISecret,
 		}
 		defAcc = key
 	}

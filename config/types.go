@@ -115,6 +115,7 @@ type Config struct {
 	Pairs            []string                          `yaml:"pairs,omitempty,flow" mapstructure:"pairs"`
 	PairMgr          *PairMgrConfig                    `yaml:"pairmgr,omitempty" mapstructure:"pairmgr"`
 	PairFilters      []*CommonPairFilter               `yaml:"pairlists,omitempty" mapstructure:"pairlists"`
+	Accounts         map[string]*AccountConfig         `yaml:"accounts,omitempty" mapstructure:"accounts,omitempty"`
 	Exchange         *ExchangeConfig                   `yaml:"exchange,omitempty" mapstructure:"exchange"`
 	Database         *DatabaseConfig                   `yaml:"database,omitempty" mapstructure:"database"`
 	SpiderAddr       string                            `yaml:"spider_addr,omitempty" mapstructure:"spider_addr"`
@@ -219,26 +220,37 @@ type CommonPairFilter struct {
 
 // ExchangeConfig Represents the configuration information of the exchange 表示交易所的配置信息
 type ExchangeConfig struct {
-	Name  string                    `yaml:"name" mapstructure:"name"`
-	Items map[string]*ExgItemConfig `yaml:",inline" mapstructure:",remain"`
-}
-
-// Configuration of specific exchanges 具体交易所的配置
-type ExgItemConfig struct {
-	AccountProds map[string]*AccountConfig `yaml:"account_prods,omitempty" mapstructure:"account_prods,omitempty"`
-	AccountTests map[string]*AccountConfig `yaml:"account_tests,omitempty" mapstructure:"account_tests,omitempty"`
-	Options      map[string]interface{}    `yaml:"options,omitempty" mapstructure:"options,omitempty"`
+	Name  string                            `yaml:"name" mapstructure:"name"`
+	Items map[string]map[string]interface{} `yaml:",inline" mapstructure:",remain"`
 }
 
 // AccountConfig Configuration to store API keys and secrets 存储 API 密钥和秘密的配置
 type AccountConfig struct {
-	APIKey      string  `yaml:"api_key,omitempty" mapstructure:"api_key"`
-	APISecret   string  `yaml:"api_secret,omitempty" mapstructure:"api_secret"`
-	NoTrade     bool    `yaml:"no_trade,omitempty" mapstructure:"no_trade"`
-	MaxStakeAmt float64 `yaml:"max_stake_amt,omitempty" mapstructure:"max_stake_amt"` // Maximum amount allowed for a single transaction 允许的单笔最大金额
-	StakeRate   float64 `yaml:"stake_rate,omitempty" mapstructure:"stake_rate"`       // Multiple of billing amount relative to benchmark  相对基准的开单金额倍数
-	StakePctAmt float64 `yaml:"-"`                                                    // The amount currently allowed when billing by percentage按百分比开单时，当前允许的金额
-	Leverage    float64 `yaml:"leverage,omitempty" mapstructure:"leverage"`
+	NoTrade       bool                      `yaml:"no_trade,omitempty" mapstructure:"no_trade"`
+	StakeRate     float64                   `yaml:"stake_rate,omitempty" mapstructure:"stake_rate"`       // Multiple of billing amount relative to benchmark  相对基准的开单金额倍数
+	StakePctAmt   float64                   `yaml:"-"`                                                    // The amount currently allowed when billing by percentage按百分比开单时，当前允许的金额
+	MaxStakeAmt   float64                   `yaml:"max_stake_amt,omitempty" mapstructure:"max_stake_amt"` // Maximum amount allowed for a single transaction 允许的单笔最大金额
+	Leverage      float64                   `yaml:"leverage,omitempty" mapstructure:"leverage"`
+	MaxPair       int                       `yaml:"max_pair,omitempty" mapstructure:"max_pair"`
+	MaxOpenOrders int                       `yaml:"max_open_orders,omitempty" mapstructure:"max_open_orders"`
+	RPCChannels   []map[string]interface{}  `yaml:"rpc_channels,omitempty" mapstructure:"rpc_channels"`
+	APIServer     *AccPwdRole               `yaml:"api_server,omitempty" mapstructure:"api_server"`
+	Exchanges     map[string]*ExgApiSecrets `yaml:",inline" mapstructure:",remain"`
+}
+
+type ExgApiSecrets struct {
+	Prod *ApiSecretConfig `yaml:"prod,omitempty" mapstructure:"prod"`
+	Test *ApiSecretConfig `yaml:"test,omitempty" mapstructure:"test"`
+}
+
+type ApiSecretConfig struct {
+	APIKey    string `yaml:"api_key,omitempty" mapstructure:"api_key"`
+	APISecret string `yaml:"api_secret,omitempty" mapstructure:"api_secret"`
+}
+
+type AccPwdRole struct {
+	Pwd  string `yaml:"pwd,omitempty" mapstructure:"pwd"`
+	Role string `yaml:"role,omitempty" mapstructure:"role"`
 }
 
 type TimeTuple struct {

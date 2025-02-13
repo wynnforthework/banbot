@@ -565,3 +565,37 @@ func DumpAccFailOpens() string {
 	lockAccFailOpen.Unlock()
 	return b.String()
 }
+
+func newAccStratLimits() accStratLimits {
+	res := make(accStratLimits)
+	for acc, cfg := range config.Accounts {
+		res[acc] = &stgLimits{
+			limit:  cfg.MaxPair,
+			strats: make(map[string]int),
+		}
+	}
+	return res
+}
+
+/*
+尝试对某个策略增加计数
+*/
+func (l *stgLimits) tryAdd(name string) bool {
+	num, _ := l.strats[name]
+	if l.limit > 0 && num >= l.limit {
+		return false
+	}
+	l.strats[name] = num + 1
+	return true
+}
+
+/*
+尝试对某个账户的某个策略增加计数
+*/
+func (a accStratLimits) tryAdd(acc, name string) bool {
+	li, ok := a[acc]
+	if ok {
+		return li.tryAdd(name)
+	}
+	return true
+}
