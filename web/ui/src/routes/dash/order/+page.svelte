@@ -237,7 +237,10 @@
         </button>
         <button 
           class="tab tab-sm transition-all duration-200 px-4 {tabName === 'position' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
-          onclick={() => tabName = 'position'}
+          onclick={() => {
+            tabName = 'position';
+            loadData(1);
+          }}
         >
           {m.exchange_positions()}
         </button>

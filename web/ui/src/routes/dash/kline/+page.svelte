@@ -354,11 +354,11 @@ ${m.holding()}: ${fmtDuration(td.exit_at - enterMS)}`;
 
 </script>
 
-<div class="flex gap-2">
+<div class="flex gap-2 h-[calc(100vh-4rem)]">
   <!-- 左侧筛选和分组 -->
-  <div class="w-[200px] flex flex-col gap-2 p-2">
+  <div class="w-[200px] flex flex-col gap-2 p-2 h-full">
     <!-- 筛选条件 -->
-    <div class="card bg-base-100">
+    <div class="card bg-base-100 shrink-0">
       <div class="card-body p-0">
         <div class="flex flex-col gap-3">
           <div class="form-control">
@@ -387,7 +387,7 @@ ${m.holding()}: ${fmtDuration(td.exit_at - enterMS)}`;
     </div>
 
     <!-- 分组统计 -->
-    <div class="bg-base-100 flex-1">
+    <div class="bg-base-100 flex-1 overflow-hidden flex flex-col">
       <div class="overflow-y-auto flex-1">
         {#each groupStats as stat}
           <div class="card bg-base-200 mb-2 hover:bg-base-300 cursor-pointer"
@@ -407,37 +407,41 @@ ${m.holding()}: ${fmtDuration(td.exit_at - enterMS)}`;
   </div>
 
   <!-- 右侧K线和订单列表 -->
-  <div class="flex-1 flex flex-col gap-2">
+  <div class="flex-1 flex flex-col gap-2 h-full">
     <!-- K线图区域 -->
-    <Chart bind:this={kc} ctx={kcCtx} save={kcSave} customLoad={true} />
-    <div class="flex justify-between items-center mt-2">
-      <RangeSlider class="flex-1 mr-4" data={odNums} bind:start={timeRange.start} bind:end={timeRange.end}
-        change={changeTimeRange}/>
-      <label class="label cursor-pointer gap-2">
-        <input type="checkbox" class="toggle toggle-primary" bind:checked={drawMultiple}
-          title={m.draw_multi_orders()} onchange={() => clickOrder && onOrderSelect(clickOrder)}
-        />
-      </label>
+    <div class="shrink-0">
+      <Chart bind:this={kc} ctx={kcCtx} save={kcSave} customLoad={true} />
+      <div class="flex justify-between items-center mt-2">
+        <RangeSlider class="flex-1 mr-4" data={odNums} bind:start={timeRange.start} bind:end={timeRange.end}
+          change={changeTimeRange}/>
+        <label class="label cursor-pointer gap-2">
+          <input type="checkbox" class="toggle toggle-primary" bind:checked={drawMultiple}
+            title={m.draw_multi_orders()} onchange={() => clickOrder && onOrderSelect(clickOrder)}
+          />
+        </label>
+      </div>
     </div>
 
     <!-- 订单列表 -->
-    <div class="min-h-[20vh] bg-base-100">
-      <div class="flex flex-wrap justify-between">
-        {#each tradeList as order}
-          {@render orderCard(
-            order,
-            clickOrder?.id === order.id,
-            () => onOrderSelect(order),
-            () => onOrderDetail(order)
-          )}
-        {/each}
-        <!-- 添加占位元素 -->
-        {#each Array(10) as _}
-          <div class="w-[15em] mr-2 h-0 invisible"></div>
-        {/each}
+    <div class="flex-1 bg-base-100 overflow-hidden flex flex-col">
+      <div class="overflow-y-auto flex-1">
+        <div class="flex flex-wrap justify-between">
+          {#each tradeList as order}
+            {@render orderCard(
+              order,
+              clickOrder?.id === order.id,
+              () => onOrderSelect(order),
+              () => onOrderDetail(order)
+            )}
+          {/each}
+          <!-- 添加占位元素 -->
+          {#each Array(10) as _}
+            <div class="w-[15em] mr-2 h-0 invisible"></div>
+          {/each}
+        </div>
+        <!-- 分页器 -->
+        {@render pagination(total, job.pageSize, job.page, handlePageChange, handlePageSizeChange)}
       </div>
-      <!-- 分页器 -->
-      {@render pagination(total, job.pageSize, job.page, handlePageChange, handlePageSizeChange)}
     </div>
   </div>
 
