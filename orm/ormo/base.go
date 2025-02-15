@@ -53,6 +53,7 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
+	mOpenLock.Lock()
 	val, ok := accOpenODs[account]
 	lock, _ := lockOpenMap[account]
 	if !ok {
@@ -61,6 +62,7 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
 		lock = &sync.Mutex{}
 		lockOpenMap[account] = lock
 	}
+	mOpenLock.Unlock()
 	return val, lock
 }
 
@@ -116,6 +118,7 @@ Find unsaved orders from open orders and save them all to the database
 */
 func SaveDirtyODs(path string, account string) *errs.Error {
 	var dirtyOds []*InOutOrder
+	mOpenLock.Lock()
 	for accKey, ods := range accOpenODs {
 		if account != "" && accKey != account {
 			continue
@@ -132,6 +135,7 @@ func SaveDirtyODs(path string, account string) *errs.Error {
 		}
 		lock.Unlock()
 	}
+	mOpenLock.Unlock()
 	if len(dirtyOds) == 0 {
 		return nil
 	}
