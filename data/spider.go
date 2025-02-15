@@ -199,21 +199,25 @@ func consumeWriteQ(workNum int) {
 					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, addBars, true)
 					// 下载1h及以上周期K线数据
 					hourLock.Lock()
+					// 上一个小时对齐时间戳
 					lastMS, _ := hourStamps[job.Sid]
-					hourAlign := utils2.AlignTfMSecs(btime.TimeMS(), hourMSecs)
-					if hourAlign > lastMS {
-						hourStamps[job.Sid] = hourAlign
-					}
-					hourLock.Unlock()
 					if lastMS == 0 {
 						kinfos, _ := sess.FindKInfos(ctx, job.Sid)
 						for _, kinfo := range kinfos {
 							if kinfo.Timeframe == "1h" {
-								lastMS = kinfo.Stop
+								lastMS = kinfo.Stop - hourMSecs
 								break
 							}
 						}
 					}
+					hourAlign := utils2.AlignTfMSecs(btime.TimeMS(), hourMSecs)
+					if lastMS == 0 {
+						lastMS = hourAlign - hourMSecs
+					}
+					if hourAlign > lastMS {
+						hourStamps[job.Sid] = hourAlign
+					}
+					hourLock.Unlock()
 					if hourAlign > lastMS {
 						exs := orm.GetSymbolByID(job.Sid)
 						if exs == nil {

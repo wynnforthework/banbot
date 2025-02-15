@@ -11,7 +11,7 @@ import (
 
 /*
 Check whether there are any missing K lines, and automatically query and update if there are any.
-检查是否有缺失的K线，有则自动查询更新
+检查是否有缺失的K线，有则自动查询更新（一般在刚启动时，收到的爬虫推送1mK线不含前面的，需要下载前面的并保存到WaitBar中）
 */
 func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64) ([]*banexg.Kline, *errs.Error) {
 	if j.NextMS == 0 || j.NextMS >= startMS {
