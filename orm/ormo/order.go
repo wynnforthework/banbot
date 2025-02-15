@@ -273,7 +273,7 @@ func (i *InOutOrder) CanClose() bool {
 		return true
 	}
 	tfMSecs := int64(utils2.TFToSecs(i.Timeframe) * 1000)
-	return float64(btime.TimeMS()-i.EnterAt) > float64(tfMSecs)*0.9
+	return float64(btime.TimeMS()-i.RealEnterMS()) > float64(tfMSecs)*0.9
 }
 
 func (i *InOutOrder) SetExit(tag, orderType string, limit float64) {
@@ -722,6 +722,28 @@ func (i *InOutOrder) NanInfTo(v float64) {
 	i.Exit.NanInfTo(v)
 }
 
+func (i *InOutOrder) RealEnterMS() int64 {
+	if i.Enter != nil {
+		if i.Enter.UpdateAt > 0 {
+			return i.Enter.UpdateAt
+		} else if i.Enter.CreateAt > 0 {
+			return i.Enter.CreateAt
+		}
+	}
+	return i.EnterAt
+}
+
+func (i *InOutOrder) RealExitMS() int64 {
+	if i.Exit != nil {
+		if i.Exit.UpdateAt > 0 {
+			return i.Exit.UpdateAt
+		} else if i.Exit.CreateAt > 0 {
+			return i.Exit.CreateAt
+		}
+	}
+	return i.ExitAt
+}
+
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 	var err_ error
 	i.ID, err_ = sess.AddIOrder(context.Background(), AddIOrderParams{
@@ -1104,7 +1126,7 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	}
 	res := utils.ValsOfMap(itemMap)
 	slices.SortFunc(res, func(a, b *InOutOrder) int {
-		return int((a.EnterAt - b.EnterAt) / 1000)
+		return int((a.RealEnterMS() - b.RealEnterMS()) / 1000)
 	})
 	return res, nil
 }

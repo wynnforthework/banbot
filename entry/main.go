@@ -172,7 +172,7 @@ func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
 		return
 	}
 	args.Init()
-	if args.MemProfile {
+	if core.MemProfile {
 		go func() {
 			log.Info("mem profile serve http at :6060 ...")
 			err_ = http.ListenAndServe(":6060", nil)
@@ -181,7 +181,7 @@ func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
 			}
 		}()
 	}
-	if args.CPUProfile {
+	if core.CPUProfile {
 		wd, err_ := os.Getwd()
 		if err_ != nil {
 			panic(err_)
@@ -200,15 +200,9 @@ func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
 }
 
 func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) error {
-	cmd.Var(&args.Configs, "config", "config path to use, Multiple -config options may be used")
-	cmd.StringVar(&args.Logfile, "logfile", "", "Log to the file specified")
-	cmd.StringVar(&args.DataDir, "datadir", "", "Path to data dir.")
-	cmd.StringVar(&args.LogLevel, "level", "info", "set logging level to debug")
-	cmd.BoolVar(&args.NoCompress, "no-compress", false, "disable compress for hyper table")
-	cmd.BoolVar(&args.NoDefault, "no-default", false, "ignore default: config.yml, config.local.yml")
-	cmd.IntVar(&args.MaxPoolSize, "max-pool-size", 0, "max pool size for db")
-	cmd.BoolVar(&args.CPUProfile, "cpu-profile", false, "enable cpu profile")
-	cmd.BoolVar(&args.MemProfile, "mem-profile", false, "enable memory profile")
+	args.BindToFlag(cmd)
+	cmd.BoolVar(&core.CPUProfile, "cpu-profile", false, "enable cpu profile")
+	cmd.BoolVar(&core.MemProfile, "mem-profile", false, "enable memory profile")
 
 	for _, key := range opts {
 		switch key {

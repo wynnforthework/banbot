@@ -516,6 +516,10 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 	biz.RestoreVars(backUp)
 	core.SetRunMode(backRunMode)
 	core.SetRunEnv(core.RunEnv)
+	return syncSimOrders(isFirst, relayOpens, relayDones)
+}
+
+func syncSimOrders(isFirst bool, relayOpens, relayDones map[string]*ormo.InOutOrder) *errs.Error {
 	if isFirst {
 		// 如果是初次执行，检查打开的订单是否已在测试期间平仓，是则自动平仓
 		// 主要针对实盘隔一段时间后重启有未平仓订单场景，需检查订单是否应在机器人停止期间平仓
@@ -569,12 +573,22 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		}
 		defer conn.Close()
 	}
-	openOds := utils.ValsOfMap(relayOpens)
 	for acc := range config.Accounts {
 		odMgr := biz.GetOdMgr(acc)
 		jobs := strat.GetJobs(acc)
-		allowOds := make([]*ormo.InOutOrder, 0, len(openOds))
-		for _, od := range openOds {
+		allowOds := make([]*ormo.InOutOrder, 0, len(relayOpens))
+		odMap, lock := ormo.GetOpenODs(acc)
+		curKeyMap := make(map[string]*ormo.InOutOrder)
+		lock.Lock()
+		for _, od := range odMap {
+			curKeyMap[od.KeyAlign()] = od
+		}
+		lock.Unlock()
+		for keyAlign, od := range relayOpens {
+			if _, ok := curKeyMap[keyAlign]; ok {
+				// 此订单已存在，跳过
+				continue
+			}
 			stgMap, ok := jobs[fmt.Sprintf("%s_%s", od.Symbol, od.Timeframe)]
 			if ok {
 				if job, ok := stgMap[od.Strategy]; ok {
@@ -585,9 +599,11 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 			}
 			log.Warn("job not found for", zap.String("key", od.Key()))
 		}
-		err = odMgr.RelayOrders(sess, allowOds)
-		if err != nil {
-			return err
+		if len(allowOds) > 0 {
+			err = odMgr.RelayOrders(sess, allowOds)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

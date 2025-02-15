@@ -349,7 +349,7 @@ func textGroupProfitRanges(r *BTResult) string {
 
 func (r *BTResult) groupByDates(orders []*ormo.InOutOrder) {
 	units := []string{"1Y", "1Q", "1M", "1w", "1d", "6h", "1h"}
-	startMS, endMS := orders[0].EnterAt, orders[len(orders)-1].EnterAt
+	startMS, endMS := orders[0].RealEnterMS(), orders[len(orders)-1].RealEnterMS()
 	var bestTF string
 	var bestTFSecs int
 	var bestScore float64
@@ -374,18 +374,19 @@ func (r *BTResult) groupByDates(orders []*ormo.InOutOrder) {
 	}
 	tfUnit := bestTF[1]
 	groups := groupItems(orders, false, func(od *ormo.InOutOrder, i int) string {
+		entMS := od.RealEnterMS()
 		if tfUnit == 'Y' {
-			return btime.ToDateStr(od.EnterAt, "2006")
+			return btime.ToDateStrLoc(entMS, "2006")
 		} else if tfUnit == 'Q' {
-			enterMS := utils2.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
-			return btime.ToDateStr(enterMS, "2006-01")
+			enterMS := utils2.AlignTfMSecs(entMS, int64(bestTFSecs*1000))
+			return btime.ToDateStrLoc(enterMS, "2006-01")
 		} else if tfUnit == 'M' {
-			return btime.ToDateStr(od.EnterAt, "2006-01")
+			return btime.ToDateStrLoc(entMS, "2006-01")
 		} else if tfUnit == 'd' || tfUnit == 'w' {
-			enterMS := utils2.AlignTfMSecs(od.EnterAt, int64(bestTFSecs*1000))
-			return btime.ToDateStr(enterMS, "2006-01-02")
+			enterMS := utils2.AlignTfMSecs(entMS, int64(bestTFSecs*1000))
+			return btime.ToDateStrLoc(enterMS, "2006-01-02")
 		} else {
-			return btime.ToDateStr(od.EnterAt, "2006-01-02 15")
+			return btime.ToDateStrLoc(entMS, "2006-01-02 15")
 		}
 	})
 	sort.Slice(groups, func(i, j int) bool {
@@ -435,7 +436,7 @@ func groupItems(orders []*ormo.InOutOrder, measure bool, getTag func(od *ormo.In
 	for i, od := range orders {
 		tag := getTag(od, i)
 		sta, ok := groups[tag]
-		duration := max(0, int((od.ExitAt-od.EnterAt)/1000))
+		duration := max(0, int((od.RealExitMS()-od.RealEnterMS())/1000))
 		isWin := od.Profit >= 0
 		if !ok {
 			sta = &RowItem{
@@ -528,15 +529,15 @@ func measurePerformance(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) 
 		return 0, 0, nil
 	}
 	sort.Slice(ods, func(i, j int) bool {
-		return ods[i].ExitAt < ods[j].ExitAt
+		return ods[i].RealExitMS() < ods[j].RealExitMS()
 	})
 	initStake := float64(0)
 	for key, val := range config.WalletAmounts {
 		initStake += val * core.GetPriceSafe(key)
 	}
 	dayTfMsecs := int64(utils2.TFToSecs("1d") * 1000)
-	startMS := utils2.AlignTfMSecs(ods[0].EnterAt, dayTfMsecs)
-	endMS := utils2.AlignTfMSecs(ods[len(ods)-1].EnterAt, dayTfMsecs) + dayTfMsecs
+	startMS := utils2.AlignTfMSecs(ods[0].RealEnterMS(), dayTfMsecs)
+	endMS := utils2.AlignTfMSecs(ods[len(ods)-1].RealEnterMS(), dayTfMsecs) + dayTfMsecs
 	returns, _, _ := ormo.CalcUnitReturns(ods, nil, startMS, endMS, dayTfMsecs)
 	if len(returns) <= 2 {
 		return 0, 0, nil
@@ -617,8 +618,9 @@ func kMeansDurations(durations []int, num int) string {
 func DumpOrdersCSV(orders []*ormo.InOutOrder, outPath string) error {
 	sort.Slice(orders, func(i, j int) bool {
 		var a, b = orders[i], orders[j]
-		if a.EnterAt != b.EnterAt {
-			return a.EnterAt < b.EnterAt
+		var ta, tb = a.RealEnterMS(), b.RealEnterMS()
+		if ta != tb {
+			return ta < tb
 		}
 		if a.Symbol != b.Symbol {
 			return a.Symbol < b.Symbol
@@ -655,12 +657,12 @@ func DumpOrdersCSV(orders []*ormo.InOutOrder, outPath string) error {
 			row[3] = "short"
 		}
 		row[4] = fmt.Sprintf("%v", od.Leverage)
-		row[5] = btime.ToDateStr(od.EnterAt, "")
+		row[5] = btime.ToDateStrLoc(od.RealEnterMS(), "")
 		row[6] = od.EnterTag
 		if od.Enter != nil {
 			row[7], row[8], row[9], row[10] = calcExOrder(od.Enter)
 		}
-		row[11] = btime.ToDateStr(od.ExitAt, "")
+		row[11] = btime.ToDateStrLoc(od.RealExitMS(), "")
 		row[12] = od.ExitTag
 		if od.Exit != nil {
 			row[13], row[14], row[15], row[16] = calcExOrder(od.Exit)
@@ -938,7 +940,7 @@ func CalcGroupEndProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrd
 	if len(odList) == 0 {
 		return nil, nil
 	}
-	startMs := odList[0].EnterAt
+	startMs := odList[0].RealEnterMS()
 	tagMap := make(map[string][]*TimeVal)
 	for _, od := range odList {
 		key := genKey(od)
@@ -947,9 +949,9 @@ func CalcGroupEndProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrd
 		if len(items) > 0 {
 			curVal = items[len(items)-1].Value
 		}
-		tagMap[key] = append(items, &TimeVal{Time: od.ExitAt, Value: curVal + od.Profit})
+		tagMap[key] = append(items, &TimeVal{Time: od.RealExitMS(), Value: curVal + od.Profit})
 	}
-	endMs := odList[len(odList)-1].ExitAt
+	endMs := odList[len(odList)-1].RealExitMS()
 	gapMs := (endMs - startMs) / int64(xNum)
 	var res []*ChartDs
 	for tag, items := range tagMap {
@@ -1084,19 +1086,19 @@ func SampleOdNums(odList []*ormo.InOutOrder, num int) ([]int, int64, int64) {
 		return make([]int, num), 0, 0
 	}
 	sort.Slice(odList, func(i, j int) bool {
-		return odList[i].EnterAt < odList[j].EnterAt
+		return odList[i].RealEnterMS() < odList[j].RealEnterMS()
 	})
 	nums := make([]int, num)
-	minTimeMS, maxTimeMS := odList[0].EnterAt, int64(0)
+	minTimeMS, maxTimeMS := odList[0].RealEnterMS(), int64(0)
 	for _, od := range odList {
-		maxTimeMS = max(od.ExitAt, maxTimeMS)
+		maxTimeMS = max(od.RealExitMS(), maxTimeMS)
 	}
 	gapMS := (maxTimeMS - minTimeMS) / int64(num)
 	for _, od := range odList {
-		startIdx := int((od.EnterAt - minTimeMS) / gapMS)
+		startIdx := int((od.RealEnterMS() - minTimeMS) / gapMS)
 		endPos := len(nums)
-		if od.ExitAt > 0 {
-			endPos = int(math.Ceil(float64(od.ExitAt-minTimeMS)/float64(gapMS))) + 1
+		if od.RealExitMS() > 0 {
+			endPos = int(math.Ceil(float64(od.RealExitMS()-minTimeMS)/float64(gapMS))) + 1
 			endPos = min(len(nums), endPos)
 		}
 		for i := startIdx; i < endPos; i++ {

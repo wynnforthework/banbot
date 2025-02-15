@@ -206,9 +206,9 @@ func getStatistics(c *fiber.Ctx) error {
 				continue
 			}
 			odNum += 1
-			durat := od.ExitAt - od.EnterAt
+			durat := od.RealExitMS() - od.RealEnterMS()
 			if durat < 0 {
-				durat = curMS - od.EnterAt
+				durat = curMS - od.RealEnterMS()
 			}
 			totalDuration += durat / 1000
 			profitSum += od.Profit
@@ -230,7 +230,7 @@ func getStatistics(c *fiber.Ctx) error {
 				doneProfitSum += od.Profit
 				doneProfitRateSum += od.ProfitRate
 				doneTotalCost += od.EnterCost()
-				curDayMS := utils2.AlignTfMSecs(od.EnterAt, dayMSecs)
+				curDayMS := utils2.AlignTfMSecs(od.RealEnterMS(), dayMSecs)
 				if curDay == 0 || curDay == curDayMS {
 					dayProfitSum += od.Profit
 				} else {
@@ -250,8 +250,8 @@ func getStatistics(c *fiber.Ctx) error {
 
 		firstEntMs, lastEntMs := int64(0), int64(0)
 		if odNum > 0 {
-			firstEntMs = orders[0].EnterAt
-			lastEntMs = orders[len(orders)-1].EnterAt
+			firstEntMs = orders[0].RealEnterMS()
+			lastEntMs = orders[len(orders)-1].RealEnterMS()
 		}
 
 		expProfit, expRatio := utils.CalcExpectancy(dayProfits)
@@ -364,7 +364,7 @@ func getOrders(c *fiber.Ctx) error {
 			})
 		}
 		sort.Slice(odList, func(i, j int) bool {
-			return odList[i].EnterAt > odList[j].EnterAt
+			return odList[i].RealEnterMS() > odList[j].RealEnterMS()
 		})
 		return c.JSON(fiber.Map{
 			"data": odList,
@@ -744,20 +744,20 @@ func getPerformance(c *fiber.Ctx) error {
 		} else if data.GroupBy == "month" {
 			tfMSecs := int64(utils2.TFToSecs("1M") * 1000)
 			odKey = func(od *ormo.InOutOrder) string {
-				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
-				return btime.ToDateStr(dateMS, "2006-01")
+				dateMS := utils2.AlignTfMSecs(od.RealEnterMS(), tfMSecs)
+				return btime.ToDateStrLoc(dateMS, "2006-01")
 			}
 		} else if data.GroupBy == "week" {
 			tfMSecs := int64(utils2.TFToSecs("1w") * 1000)
 			odKey = func(od *ormo.InOutOrder) string {
-				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
-				return btime.ToDateStr(dateMS, "2006-01-02")
+				dateMS := utils2.AlignTfMSecs(od.RealEnterMS(), tfMSecs)
+				return btime.ToDateStrLoc(dateMS, "2006-01-02")
 			}
 		} else if data.GroupBy == "day" {
 			tfMSecs := int64(utils2.TFToSecs("1d") * 1000)
 			odKey = func(od *ormo.InOutOrder) string {
-				dateMS := utils2.AlignTfMSecs(od.EnterAt, tfMSecs)
-				return btime.ToDateStr(dateMS, "2006-01-02")
+				dateMS := utils2.AlignTfMSecs(od.RealEnterMS(), tfMSecs)
+				return btime.ToDateStrLoc(dateMS, "2006-01-02")
 			}
 		} else {
 			return c.JSON(fiber.Map{"code": 400, "msg": "unsupport group type: " + data.GroupBy})
@@ -783,7 +783,7 @@ func groupOrders(orders []*ormo.InOutOrder, odKey func(od *ormo.InOutOrder) stri
 			gp = &GroupItem{Key: key}
 			itemMap[key] = gp
 		}
-		holdHours := float64(od.ExitAt-od.EnterAt) / hourMSecs
+		holdHours := float64(od.RealExitMS()-od.RealEnterMS()) / hourMSecs
 		gp.CloseNum += 1
 		gp.ProfitSum += od.Profit
 		gp.TotalCost += od.EnterCost()

@@ -244,7 +244,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 		exOrder.CreateAt = updateTime
 	}
 	if exOrder.OrderType == banexg.OdTypeLimit && updateTime-od.EnterAt < 60000 {
-		// 以限价单入场，但很快成交的话，认为是市价单成交If you enter the market with a limit order but the transaction is completed quickly, it will be considered a market order.
+		// 以限价单入场，但很快成交的话，认为是市价单成交If the limit order is filled quickly, it will be considered a market order.
 		exOrder.OrderType = banexg.OdTypeMarket
 	}
 	if exOrder.Filled == 0 {

@@ -351,12 +351,8 @@ func ExportKlines(args *config.CmdArgs, prg utils.PrgCB) *errs.Error {
 			return errs.NewMsg(errs.CodeParamInvalid, "invalid timeRange: %v", args.TimeRange)
 		}
 	}
-	loc, err := args.ParseTimeZone()
-	if err != nil {
-		return err
-	}
-	startStr := btime.ToTime(start).In(loc).Format(core.DefaultDateFmt)
-	endStr := btime.ToTime(stop).In(loc).Format(core.DefaultDateFmt)
+	startStr := btime.ToDateStrLoc(start, core.DefaultDateFmt)
+	endStr := btime.ToDateStrLoc(stop, core.DefaultDateFmt)
 	log.Info("export kline", zap.Strings("tf", args.TimeFrames), zap.String("dt", startStr+" - "+endStr),
 		zap.String("adj", args.AdjType), zap.Int("num", len(args.Pairs)))
 	names, err := data.FindPathNames(args.OutPath, ".zip")
@@ -394,7 +390,7 @@ func ExportKlines(args *config.CmdArgs, prg utils.PrgCB) *errs.Error {
 				return err
 			}
 			klines = orm.ApplyAdj(adjs, klines, adjVal, 0, 0)
-			rows := utils.KlineToStr(klines, loc)
+			rows := utils.KlineToStr(klines, btime.LocShow)
 			path := filepath.Join(args.OutPath, fmt.Sprintf("%s_%s.csv", clean, tf))
 			err = utils.WriteCsvFile(path, rows, true)
 			if err != nil {
@@ -503,10 +499,6 @@ func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
-	loc, err := args.ParseTimeZone()
-	if err != nil {
-		return err
-	}
 	for _, symbol := range args.Pairs {
 		log.Info("handle", zap.String("symbol", symbol))
 		exs, err := orm.GetExSymbolCur(symbol)
@@ -522,7 +514,7 @@ func ExportAdjFactors(args *config.CmdArgs) *errs.Error {
 		})
 		rows := make([][]string, 0, len(facs))
 		for _, f := range facs {
-			dateStr := btime.ToTime(f.StartMs).In(loc).Format(core.DefaultDateFmt)
+			dateStr := btime.ToDateStrLoc(f.StartMs, core.DefaultDateFmt)
 			subCode := ""
 			if f.SubID > 0 {
 				it := orm.GetSymbolByID(f.SubID)

@@ -37,6 +37,7 @@ var configData []byte
 var configLocalData []byte
 
 func SetupComs(args *config.CmdArgs) *errs.Error {
+	args.Init()
 	errs.PrintErr = utils.PrintErr
 	ctx, cancel := context.WithCancel(context.Background())
 	core.Ctx = ctx

@@ -23,6 +23,8 @@ func RunTradeClose(args []string) error {
 	parser := flag.NewFlagSet("", flag.ExitOnError)
 	var accountStr, pairStr, stratStr string
 	var isExg bool
+	var configs config.ArrString
+	parser.Var(&configs, "config", "config path to use, Multiple -config options may be used")
 	parser.StringVar(&accountStr, "account", "", "accounts to exit")
 	parser.StringVar(&pairStr, "pair", "", "pairs to exit")
 	parser.StringVar(&stratStr, "strat", "", "strats to exit")
@@ -30,6 +32,13 @@ func RunTradeClose(args []string) error {
 	err_ := parser.Parse(args)
 	if err_ != nil {
 		return err_
+	}
+	err := config.LoadConfig(&config.CmdArgs{
+		Configs:  configs,
+		LogLevel: "info",
+	})
+	if err != nil {
+		return err
 	}
 
 	// 解析命令行参数
@@ -39,7 +48,7 @@ func RunTradeClose(args []string) error {
 
 	// 初始化订单管理器
 	core.SetRunMode(core.RunModeLive)
-	err := biz.SetupComsExg(&config.CmdArgs{LogLevel: "info"})
+	err = biz.SetupComsExg(&config.CmdArgs{LogLevel: "info"})
 	if err != nil {
 		return err
 	}

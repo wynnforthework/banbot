@@ -31,8 +31,6 @@ type CmdArgs struct {
 	WithSpider    bool
 	Medium        string
 	MaxPoolSize   int
-	CPUProfile    bool
-	MemProfile    bool
 	InPath        string
 	PrgOut        string
 	OutPath       string
@@ -53,4 +51,5 @@ type CmdArgs struct {
 	RunEveryTF    string  // run once every n timeframe
 	BatchSize     int
 	Separate      bool // Used for backtesting. When true, the strategy combination is tested separately. 用于回测，true时策略组合单独测试
+	Inited        bool
 }

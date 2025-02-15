@@ -172,7 +172,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 		if od.Status >= ormo.InOutStatusFullExit {
 			continue
 		}
-		lastEntMS = max(lastEntMS, od.EnterAt)
+		lastEntMS = max(lastEntMS, od.RealEnterMS())
 		err = o.restoreInOutOrder(od, exgOdMap)
 		if err != nil {
 			log.Error("restoreInOutOrder fail", zap.String("key", od.Key()), zap.Error(err))

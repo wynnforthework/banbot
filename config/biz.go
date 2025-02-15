@@ -69,6 +69,7 @@ GetConfig get config from args
 args: NoDefault, Configs, TimeRange, MaxPoolSize, StakeAmount, StakePct, TimeFrames, Pairs
 */
 func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
+	args.Init()
 	var paths []string
 	var res Config
 	if !args.NoDefault {
@@ -281,7 +282,7 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 			Items: make(map[string]map[string]interface{}),
 		}
 	}
-	err := initExgAccs()
+	err := initExgAccs(args)
 	if err != nil {
 		return err
 	}
@@ -350,8 +351,14 @@ func GetAccLeverage(account string) float64 {
 	}
 }
 
-func initExgAccs() *errs.Error {
-	if Exchange.Name == "china" {
+func initExgAccs(args *CmdArgs) *errs.Error {
+	loc, err := args.parseTimeZone()
+	if err != nil {
+		return err
+	}
+	if loc != nil {
+		btime.LocShow = loc
+	} else if Exchange.Name == "china" {
 		btime.LocShow, _ = time.LoadLocation("Asia/Shanghai")
 	} else {
 		btime.LocShow = btime.UTCLocale

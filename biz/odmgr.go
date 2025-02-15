@@ -521,7 +521,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.E
 			return res
 		}
 		// Last entry time ascending 最后按入场时间升序
-		return int((a.EnterAt - b.EnterAt) / 1000)
+		return int((a.RealEnterMS() - b.RealEnterMS()) / 1000)
 	})
 	var result []*ormo.InOutOrder
 	var part *ormo.InOutOrder

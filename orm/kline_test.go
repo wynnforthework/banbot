@@ -11,7 +11,6 @@ import (
 
 func initApp() *errs.Error {
 	var args config.CmdArgs
-	args.Init()
 	err := config.LoadConfig(&args)
 	if err != nil {
 		return err

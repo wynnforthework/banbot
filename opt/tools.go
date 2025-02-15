@@ -113,7 +113,7 @@ func CompareExgBTOrders(args []string) error {
 	for _, iod := range btOrders {
 		tfMSecs := int64(utils2.TFToSecs(iod.Timeframe) * 1000)
 		tfMSecsFlt := float64(tfMSecs)
-		entFixMS := utils2.AlignTfMSecs(iod.EnterAt, tfMSecs)
+		entFixMS := utils2.AlignTfMSecs(iod.RealEnterMS(), tfMSecs)
 		exgOds, _ := pairExgOds[iod.Symbol]
 		if skipUnHitBt && len(exgOds) == 0 {
 			continue
@@ -126,7 +126,7 @@ func CompareExgBTOrders(args []string) error {
 		// 查找是否有匹配的交易所订单
 		var matches []*ormo.InOutOrder
 		for _, exod := range exgOds {
-			if exod.Short == iod.Short && math.Abs(float64(exod.EnterAt-entFixMS)) < tfMSecsFlt {
+			if exod.Short == iod.Short && math.Abs(float64(exod.RealEnterMS()-entFixMS)) < tfMSecsFlt {
 				amtRate2 := exod.Enter.Filled / iod.Enter.Filled
 				if math.Abs(amtRate2-1) <= amtRate {
 					matches = append(matches, exod)
@@ -136,8 +136,8 @@ func CompareExgBTOrders(args []string) error {
 		var matOd *ormo.InOutOrder
 		if len(matches) > 1 {
 			slices.SortFunc(matches, func(a, b *ormo.InOutOrder) int {
-				diffA := math.Abs(float64(a.ExitAt-iod.ExitAt) / 1000)
-				diffB := math.Abs(float64(b.ExitAt-iod.ExitAt) / 1000)
+				diffA := math.Abs(float64(a.RealExitMS()-iod.RealExitMS()) / 1000)
+				diffB := math.Abs(float64(b.RealExitMS()-iod.RealExitMS()) / 1000)
 				return int(diffA - diffB)
 			})
 		}
@@ -155,8 +155,8 @@ func CompareExgBTOrders(args []string) error {
 		if matOd == nil {
 			// There is no corresponding record for backtesting orders
 			// 回测订单没有对应记录
-			entMSStr := btime.ToDateStr(iod.EnterAt, "")
-			exitMSStr := btime.ToDateStr(iod.ExitAt, "")
+			entMSStr := btime.ToDateStrLoc(iod.RealEnterMS(), "")
+			exitMSStr := btime.ToDateStrLoc(iod.RealExitMS(), "")
 			entPriceStr := strconv.FormatFloat(iod.Enter.Price, 'f', 6, 64)
 			amtStr := strconv.FormatFloat(iod.Enter.Filled+iod.Exit.Filled, 'f', 6, 64)
 			feeStr := strconv.FormatFloat(iod.Enter.Fee+iod.Exit.Fee, 'f', 6, 64)
@@ -172,15 +172,15 @@ func CompareExgBTOrders(args []string) error {
 			if matOd.Exit == nil {
 				matOd.Exit = &ormo.ExOrder{}
 			}
-			entMSStr := btime.ToDateStr(matOd.EnterAt, "")
-			exitMSStr := btime.ToDateStr(matOd.ExitAt, "")
+			entMSStr := btime.ToDateStrLoc(matOd.RealEnterMS(), "")
+			exitMSStr := btime.ToDateStrLoc(matOd.RealExitMS(), "")
 			entPriceStr := strconv.FormatFloat(matOd.Enter.Average, 'f', 6, 64)
 			amtStr := strconv.FormatFloat(matOd.Enter.Filled+matOd.Exit.Filled, 'f', 6, 64)
 			feeStr := strconv.FormatFloat(matOd.Enter.Fee+matOd.Exit.Fee, 'f', 6, 64)
 			profitStr := strconv.FormatFloat(matOd.Profit, 'f', 6, 64)
 			exitPriceStr := strconv.FormatFloat(matOd.Exit.Average, 'f', 6, 64)
-			entDelay := matOd.EnterAt - iod.EnterAt
-			exitDelay := matOd.ExitAt - iod.ExitAt
+			entDelay := matOd.RealEnterMS() - iod.RealEnterMS()
+			exitDelay := matOd.RealExitMS() - iod.RealExitMS()
 			entDelayStr := strconv.FormatInt(entDelay/1000, 10)
 			exitDelayStr := strconv.FormatInt(exitDelay/1000, 10)
 			priceDf := (matOd.Enter.Average - iod.Enter.Average) - (matOd.Exit.Average - iod.Exit.Average)
@@ -223,8 +223,8 @@ func CompareExgBTOrders(args []string) error {
 			if iod.Exit == nil {
 				iod.Exit = &ormo.ExOrder{}
 			}
-			entMSStr := btime.ToDateStr(iod.EnterAt, "")
-			exitMSStr := btime.ToDateStr(iod.ExitAt, "")
+			entMSStr := btime.ToDateStrLoc(iod.RealEnterMS(), "")
+			exitMSStr := btime.ToDateStrLoc(iod.RealExitMS(), "")
 			entPriceStr := strconv.FormatFloat(iod.Enter.Average, 'f', 6, 64)
 			amtStr := strconv.FormatFloat(iod.Enter.Filled+iod.Exit.Filled, 'f', 6, 64)
 			feeStr := strconv.FormatFloat(iod.Enter.Fee+iod.Exit.Fee, 'f', 6, 64)

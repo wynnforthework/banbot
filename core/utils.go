@@ -93,9 +93,11 @@ func SplitSymbol(pair string) (string, string, string, string) {
 		settle, ident := "", ""
 		if len(parts) > 2 {
 			settle = parts[2]
-		}
-		if len(parts) > 3 {
-			ident = parts[3]
+			if len(parts) > 3 {
+				ident = parts[3]
+			}
+		} else if len(parts) < 2 {
+			return parts[0], "", "", ""
 		}
 		splitCache[pair] = [4]string{parts[0], parts[1], settle, ident}
 	}
