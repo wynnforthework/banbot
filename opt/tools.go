@@ -36,16 +36,17 @@ Compare the exchange export order records with the backtest order records.
 对比交易所导出订单记录和回测订单记录。
 */
 func CompareExgBTOrders(args []string) error {
+	core.SetRunMode(core.RunModeLive)
 	err := biz.SetupComs(&config.CmdArgs{})
 	if err != nil {
 		return err
 	}
-	var exgPath, btPath, exgName, botName string
+	var exgPath, btPath, botName, account string
 	var amtRate float64
 	var skipUnHitBt bool
 	var sub = flag.NewFlagSet("cmp", flag.ExitOnError)
-	sub.StringVar(&exgName, "exg", "binance", "exchange name")
 	sub.StringVar(&botName, "bot-name", "", "botName for live trade")
+	sub.StringVar(&account, "account", "", "account for api-key to fetch exchange orders")
 	sub.StringVar(&exgPath, "exg-path", "", "exchange order xlsx file")
 	sub.StringVar(&btPath, "bt-path", "", "backTest order file")
 	sub.Float64Var(&amtRate, "amt-rate", 0.1, "amt rate threshold, 0~1")
@@ -54,10 +55,10 @@ func CompareExgBTOrders(args []string) error {
 	if err_ != nil {
 		return err_
 	}
-	if exgPath == "" || btPath == "" || botName == "" {
-		return errors.New("`exg-path` `bt-path` bot-name is required")
+	if exgPath == "" && account == "" || btPath == "" || botName == "" {
+		return errors.New("`exg-path/account` `bt-path` bot-name is required")
 	}
-	btOrders, startMS, endMS, err_ := readBackTestOrders(btPath)
+	btOrders, pairNums, startMS, endMS, err_ := readBackTestOrders(btPath)
 	if err_ != nil {
 		return err_
 	}
@@ -73,18 +74,7 @@ func CompareExgBTOrders(args []string) error {
 	if err != nil {
 		return err
 	}
-	f, err_ := excelize.OpenFile(exgPath)
-	if err_ != nil {
-		return err_
-	}
-	defer f.Close()
-	var exgOrders []*banexg.Order
-	switch exgName {
-	case "binance":
-		exgOrders, err = readBinanceOrders(f, exchange, startMS, endMS, botName)
-	default:
-		return errors.New("unsupport exchange: " + exgName)
-	}
+	exgOrders, err := loadExgOrders(exgPath, account, botName, exchange, startMS, endMS, pairNums)
 	if err != nil {
 		return err
 	}
@@ -243,22 +233,63 @@ func CompareExgBTOrders(args []string) error {
 	return DumpOrdersCSV(exgOdList, outPath)
 }
 
-func readBackTestOrders(path string) ([]*ormo.InOutOrder, int64, int64, error) {
+func loadExgOrders(path, account, botName string, exchange banexg.BanExchange, startMS, endMS int64, pairNums map[string]int) ([]*banexg.Order, *errs.Error) {
+	var err *errs.Error
+	var exgOrders []*banexg.Order
+	if path != "" {
+		f, err_ := excelize.OpenFile(path)
+		if err_ != nil {
+			return nil, errs.New(errs.CodeIOReadFail, err_)
+		}
+		defer f.Close()
+		exgID := exchange.Info().ID
+		switch exgID {
+		case "binance":
+			exgOrders, err = readBinanceOrders(f, exchange, startMS, endMS, botName)
+		default:
+			return nil, errs.NewMsg(errs.CodeParamInvalid, "unsupport exchange: "+exgID)
+		}
+		return exgOrders, nil
+	}
+	// load exchange orders by api
+	var orders []*banexg.Order
+	for pair := range pairNums {
+		offsetMS := startMS - 1000
+		for offsetMS < endMS {
+			orders, err = exchange.FetchOrders(pair, offsetMS, 500, map[string]interface{}{
+				banexg.ParamAccount: account,
+			})
+			if err != nil {
+				return nil, err
+			}
+			if len(orders) > 0 {
+				exgOrders = append(exgOrders, orders...)
+				offsetMS = orders[len(orders)-1].Timestamp + 1
+			} else {
+				break
+			}
+		}
+	}
+	return exgOrders, nil
+}
+
+func readBackTestOrders(path string) ([]*ormo.InOutOrder, map[string]int, int64, int64, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, nil, 0, 0, err
 	}
 	if info.IsDir() {
 		path = filepath.Join(path, "orders.gob")
 	} else if !strings.HasSuffix(path, ".gob") {
-		return nil, 0, 0, errors.New("orders.gob path is required")
+		return nil, nil, 0, 0, errors.New("orders.gob path is required")
 	}
 	orders, err2 := ormo.LoadOrdersGob(path)
 	if err2 != nil {
-		return nil, 0, 0, err2
+		return nil, nil, 0, 0, err2
 	}
 	var startMS, endMS int64
 	var maxTfSecs int
+	var pairNums = make(map[string]int)
 	for _, od := range orders {
 		tfSecs := utils2.TFToSecs(od.Timeframe)
 		if tfSecs > maxTfSecs {
@@ -270,11 +301,13 @@ func readBackTestOrders(path string) ([]*ormo.InOutOrder, int64, int64, error) {
 		if od.Exit != nil && od.Exit.UpdateAt > endMS {
 			endMS = od.Exit.UpdateAt
 		}
+		num, _ := pairNums[od.Symbol]
+		pairNums[od.Symbol] = num + 1
 	}
 	// Move the end time back by 2 bars to prevent the exchange order section from being filtered
 	// 将结束时间，往后推移2个bar，防止交易所订单部分被过滤
 	endMS += int64(maxTfSecs*1000) * 2
-	return orders, startMS, endMS, nil
+	return orders, pairNums, startMS, endMS, nil
 }
 
 /*
