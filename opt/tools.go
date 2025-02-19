@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/banbox/banbot/utils"
 	"math"
 	"os"
 	"path/filepath"
@@ -36,15 +37,12 @@ Compare the exchange export order records with the backtest order records.
 对比交易所导出订单记录和回测订单记录。
 */
 func CompareExgBTOrders(args []string) error {
-	core.SetRunMode(core.RunModeLive)
-	err := biz.SetupComs(&config.CmdArgs{})
-	if err != nil {
-		return err
-	}
 	var exgPath, btPath, botName, account string
 	var amtRate float64
 	var skipUnHitBt bool
+	var configPaths config.ArrString
 	var sub = flag.NewFlagSet("cmp", flag.ExitOnError)
+	sub.Var(&configPaths, "config", "config path to use, Multiple -config options may be used")
 	sub.StringVar(&botName, "bot-name", "", "botName for live trade")
 	sub.StringVar(&account, "account", "", "account for api-key to fetch exchange orders")
 	sub.StringVar(&exgPath, "exg-path", "", "exchange order xlsx file")
@@ -57,6 +55,11 @@ func CompareExgBTOrders(args []string) error {
 	}
 	if exgPath == "" && account == "" || btPath == "" || botName == "" {
 		return errors.New("`exg-path/account` `bt-path` bot-name is required")
+	}
+	core.SetRunMode(core.RunModeLive)
+	err := biz.SetupComs(&config.CmdArgs{Configs: configPaths})
+	if err != nil {
+		return err
 	}
 	btOrders, pairNums, startMS, endMS, err_ := readBackTestOrders(btPath)
 	if err_ != nil {
@@ -74,13 +77,27 @@ func CompareExgBTOrders(args []string) error {
 	if err != nil {
 		return err
 	}
-	exgOrders, err := loadExgOrders(exgPath, account, botName, exchange, startMS, endMS, pairNums)
+	outGobPath := fmt.Sprintf("%s/exg_orders.gob", btPath)
+	exgOrders := make([]*banexg.Order, 0)
+	if !utils.Exists(outGobPath) {
+		exgOrders, err = loadExgOrders(exgPath, account, botName, exchange, startMS, endMS, pairNums)
+		if err != nil {
+			return err
+		}
+		if len(exgOrders) == 0 {
+			return errors.New("no exchange orders to compare")
+		}
+		for _, o := range exgOrders {
+			o.Info = nil
+		}
+		err = utils.EncodeGob(outGobPath, exgOrders)
+	} else {
+		err = utils.DecodeGobFile(outGobPath, &exgOrders)
+	}
 	if err != nil {
 		return err
 	}
-	if len(exgOrders) == 0 {
-		return errors.New("no exchange orders to compare")
-	}
+	log.Info("loaded exchange orders", zap.Int("num", len(exgOrders)))
 	pairExgOds := buildExgOrders(exgOrders, botName)
 	exgOdList := make([]*ormo.InOutOrder, 0)
 	for _, odList := range pairExgOds {

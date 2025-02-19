@@ -466,10 +466,33 @@ func (o *LocalOrderMgr) ExitAndFill(sess *ormo.Queries, orders []*ormo.InOutOrde
 }
 
 func (o *LocalOrderMgr) CleanUp() *errs.Error {
-	err := o.exitAndFill(nil, &strat.ExitReq{
-		Tag:  core.ExitTagBotStop,
-		Dirt: core.OdDirtBoth,
-	}, nil)
+	exitReq := &strat.ExitReq{
+		Tag:   core.ExitTagBotStop,
+		Dirt:  core.OdDirtBoth,
+		Force: true,
+	}
+	err := o.exitAndFill(nil, exitReq, nil)
+	if err != nil {
+		return err
+	}
+	openOds, lock := ormo.GetOpenODs(o.Account)
+	lock.Lock()
+	openOdList := utils.ValsOfMap(openOds)
+	lock.Unlock()
+	if len(openOdList) > 0 {
+		exitOds := make([]*ormo.InOutOrder, 0, len(openOdList))
+		var iod *ormo.InOutOrder
+		for _, od := range openOdList {
+			iod, err = o.exitOrder(nil, od, exitReq)
+			if err != nil {
+				break
+			}
+			exitOds = append(exitOds, iod)
+		}
+		if err == nil {
+			_, err = o.fillPendingOrders(exitOds, nil)
+		}
+	}
 	if err != nil {
 		return err
 	}

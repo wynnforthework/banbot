@@ -817,7 +817,7 @@ func (r *BTResult) calcMeasures(num int) *errs.Error {
 	if len(p.Real) <= 1 {
 		return nil
 	}
-	step := len(p.Real) / num
+	step := max(1, len(p.Real)/num)
 	prevVal := p.Real[0]
 	inReturns := make([]float64, 0, num)
 	for i := step; i < len(p.Real); i += step {
@@ -921,7 +921,7 @@ func DumpEnterTagCumProfits(path string, odList []*ormo.InOutOrder, xNum int) *e
 	labels, dsList, err := CalcGroupCumProfits(odList, func(o *ormo.InOutOrder) string {
 		return fmt.Sprintf("%v:%v", o.Strategy, o.EnterTag)
 	}, xNum)
-	if err != nil {
+	if err != nil || len(dsList) == 0 {
 		return err
 	}
 	title := "Strategy Enter Tag Cum Profits"
@@ -997,6 +997,9 @@ calculate cumulative profit curve data for orders (obtain K-line and calculate r
 生成订单累计利润曲线数据（获取K线，计算实时持仓累计利润）
 */
 func CalcGroupCumProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrder) string, xNum int) ([]string, []*ChartDs, *errs.Error) {
+	if len(odList) == 0 {
+		return nil, nil, nil
+	}
 	groups := make(map[string]map[string][]*ormo.InOutOrder)
 	minTimeMS, maxTimeMS := int64(math.MaxInt64), int64(0)
 	for _, od := range odList {
@@ -1012,7 +1015,7 @@ func CalcGroupCumProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrd
 		maxTimeMS = max(maxTimeMS, od.Exit.CreateAt)
 	}
 	unitSecs := int((maxTimeMS-minTimeMS)/1000) / xNum
-	tf := utils.RoundSecsTF(unitSecs)
+	tf := utils.RoundSecsTF(max(unitSecs, 60))
 	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	startMS := utils2.AlignTfMSecs(minTimeMS, tfMSecs)
 	endMS := utils2.AlignTfMSecs(maxTimeMS, tfMSecs) + tfMSecs

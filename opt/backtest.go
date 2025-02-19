@@ -499,8 +499,10 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		odMap, lock := ormo.GetOpenODs(config.DefAcc)
 		lock.Lock()
 		for _, od := range odMap {
-			if od.Status >= ormo.InOutStatusPartEnter {
+			if od.Status >= ormo.InOutStatusPartEnter && od.ExitTag == "" {
 				relayOpens[od.KeyAlign()] = od
+			} else {
+				relayDones[od.KeyAlign()] = od
 			}
 		}
 		lock.Unlock()
