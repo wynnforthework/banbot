@@ -508,6 +508,7 @@
   "draw_multi_orders": "显示多个订单",
   "edit_note": "编辑备注",
   "enter_note": "请输入备注内容",
+  "basic": "概要",
 
   "cfg_name": "机器人名称，用于在消息通知中区分不同的机器人",
   "cfg_env": "运行环境，prod代表生产网络，test代表测试网络（币安测试网），dry_run代表模拟环境",

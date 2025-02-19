@@ -27,7 +27,7 @@ func InitTask(showLog bool, outDir string) *errs.Error {
 		}
 		return nil
 	}
-	orm.SetDbPath(orm.DbTrades, filepath.Join(outDir, "orders.db"))
+	orm.SetDbPath(orm.DbTrades, filepath.Join(outDir, fmt.Sprintf("orders_%s.db", config.Name)))
 	q, conn, err := Conn(orm.DbTrades, true)
 	if err != nil {
 		return err

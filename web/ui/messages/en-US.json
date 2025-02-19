@@ -508,6 +508,7 @@
     "draw_multi_orders": "show multiple orders",
     "edit_note": "edit note",
     "enter_note": "please input note content",
+    "basic": "basic",
 
     "cfg_name": "Bot name, used to distinguish different bots in message notifications",
     "cfg_env": "Running environment, prod represents production network, test represents test network (Binance testnet), dry_run represents simulation",

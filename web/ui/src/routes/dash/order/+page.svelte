@@ -333,7 +333,7 @@
             <tr>
               <th class="bg-base-200/30 font-medium text-sm">ID</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.pair()}</th>
-              <th class="bg-base-200/30 font-medium text-sm">{m.timeframe()}/{m.side()}/{m.leverage()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.basic()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.enter_time()}({curTZ()})</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.enter_tag()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.enter_price()}</th>
@@ -354,7 +354,7 @@
                 <td>{order.enter_tag}</td>
                 <td>{getFirstValid([order.enter?.average, order.enter?.price, order.init_price]).toFixed(7)}</td>
                 <td class="text-sm">{fmtDateStr(order.exit_at)}</td>
-                <td>{order.exit_tag}</td>
+                <td>{order.strategy}:{order.exit_tag}</td>
                 <td>{(order.profit_rate * 100).toFixed(1)}%</td>
                 <td>{order.profit.toFixed(5)}</td>
                 <td>
