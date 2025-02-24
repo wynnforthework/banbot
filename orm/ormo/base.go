@@ -55,10 +55,12 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
 	}
 	mOpenLock.Lock()
 	val, ok := accOpenODs[account]
-	lock, _ := lockOpenMap[account]
 	if !ok {
 		val = make(map[int64]*InOutOrder)
 		accOpenODs[account] = val
+	}
+	lock, ok2 := lockOpenMap[account]
+	if !ok2 {
 		lock = &sync.Mutex{}
 		lockOpenMap[account] = lock
 	}

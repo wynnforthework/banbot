@@ -13,7 +13,7 @@ var (
 	Versions    = make(map[string]int)                             // stratName: int 策略版本号
 	Envs        = make(map[string]*ta.BarEnv)                      // pair_tf: BarEnv
 	AccJobs     = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID]StratJob
-	AccInfoJobs = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID]StratJob 额外订阅
+	AccInfoJobs = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID_pair]StratJob 额外订阅
 	PairStrats  = make(map[string]map[string]*TradeStrat)          // pair:[stratID]TradeStrat 所有的订阅策略
 	ForbidJobs  = make(map[string]map[string]bool)                 // pair_tf: [stratID] occupy
 

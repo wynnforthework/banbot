@@ -80,9 +80,7 @@
                   <th class="font-medium">{m.role()}</th>
                   <th class="font-medium">{m.status()}</th>
                   <th class="font-medium text-right">{m.today_done()}</th>
-                  <th class="font-medium text-right">{m.today_done_profit()}</th>
-                  <th class="font-medium text-right">{m.open_num()}</th>
-                  <th class="font-medium text-right">{m.upol_profit()}</th>
+                  <th class="font-medium text-right">{m.hold_pos()}</th>
                   <th class="font-medium">{m.actions()}</th>
                 </tr>
               </thead>
@@ -91,7 +89,7 @@
                   <tr class="hover:bg-base-200/50">
                     <td>
                       <div class="tooltip tooltip-right" data-tip={acc.url}>
-                        <span class="font-mono text-sm">{acc.account}</span>
+                        <span class="font-mono text-sm">{acc.name}/{acc.account}</span>
                       </div>
                     </td>
                     <td class="text-sm">{acc.role}</td>
@@ -100,10 +98,8 @@
                         {acc.running ? m.running() : m.stopped()}
                       </span>
                     </td>
-                    <td class="text-right font-mono text-sm">{acc.dayDoneNum}</td>
-                    <td class="text-right font-mono text-sm">{acc.dayDonePft?.toFixed(2)}</td>
-                    <td class="text-right font-mono text-sm">{acc.dayOpenNum}</td>
-                    <td class="text-right font-mono text-sm">{acc.dayOpenPft?.toFixed(2)}</td>
+                    <td class="text-right font-mono text-sm">{acc.dayDonePft?.toFixed(2)}[{acc.dayDoneNum}]</td>
+                    <td class="text-right font-mono text-sm">{acc.dayOpenPft?.toFixed(2)}[{acc.dayOpenNum}]</td>
                     <td>
                       <a class="btn btn-xs btn-primary" href="/dash/board" onclick={() => viewAccount(acc)}>
                         {m.view()}

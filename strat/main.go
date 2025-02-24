@@ -407,7 +407,8 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 					items = make(map[string]*StratJob)
 					infoJobs[jobKey] = items
 				}
-				items[stgy.Name] = job
+				// 这里需要stratID+pair作为键，否则多个品种订阅同一个额外品种数据时，只记录了最后一个
+				items[strings.Join([]string{stgy.Name, exs.Symbol}, "_")] = job
 			}
 		}
 	}

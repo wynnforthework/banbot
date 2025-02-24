@@ -29,7 +29,7 @@ func Run(args []string) error {
 	f.IntVar(&ag.Port, "port", 8000, "port to listen")
 	f.StringVar(&ag.Host, "host", "127.0.0.1", "bind host ip")
 	f.StringVar(&ag.LogLevel, "level", "info", "log level")
-	f.StringVar(&ag.TimeZone, "tz", "utc", "timezone")
+	f.StringVar(&ag.TimeZone, "tz", "", "timezone")
 	f.StringVar(&ag.DataDir, "datadir", "", "Path to data dir.")
 	f.Var(&ag.Configs, "config", "config path to use, Multiple -config options may be used")
 	f.StringVar(&ag.LogFile, "logfile", "", "log file path, default: system temp dir")
