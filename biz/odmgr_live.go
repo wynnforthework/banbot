@@ -1121,7 +1121,9 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 		od.DirtyExit = true
 	}
 	subOd.UpdateAt = trade.Timestamp
-	subOd.Amount = trade.Amount
+	if subOd.Amount == 0 {
+		subOd.Amount = trade.Amount
+	}
 	state := trade.State
 	if state == banexg.OdStatusFilled || state == banexg.OdStatusPartFilled {
 		odStatus := ormo.OdStatusPartOK
@@ -1439,7 +1441,9 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *ormo.InOutOrder, isEnter bool, res *
 	o.lockExgIdMap.Unlock()
 	if o.hasNewTrades(res) && subOd.UpdateAt <= res.Timestamp {
 		subOd.UpdateAt = res.Timestamp
-		subOd.Amount = res.Amount
+		if subOd.Amount == 0 {
+			subOd.Amount = res.Amount
+		}
 		if res.Filled > 0 {
 			fillPrice := subOd.Price
 			if res.Average > 0 {

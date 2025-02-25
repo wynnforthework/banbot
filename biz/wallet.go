@@ -80,11 +80,19 @@ func GetWallets(account string) *BanWallets {
 func (iw *ItemWallet) Total(withUpol bool) float64 {
 	iw.lock.Lock()
 	sumVal := iw.Available
-	for _, v := range iw.Pendings {
-		sumVal += v
+	if allVal, ok := iw.Pendings["*"]; ok {
+		sumVal += allVal
+	} else {
+		for _, v := range iw.Pendings {
+			sumVal += v
+		}
 	}
-	for _, v := range iw.Frozens {
-		sumVal += v
+	if allVal, ok := iw.Frozens["*"]; ok {
+		sumVal += allVal
+	} else {
+		for _, v := range iw.Frozens {
+			sumVal += v
+		}
 	}
 	if withUpol {
 		sumVal += iw.UnrealizedPOL
@@ -903,7 +911,9 @@ func UpdateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 		record.lock.Lock()
 		if core.IsContract {
 			record.Pendings["*"] = it.Used
+			record.Frozens["*"] = 0
 		} else {
+			record.Pendings["*"] = 0
 			record.Frozens["*"] = it.Used
 		}
 		record.lock.Unlock()
@@ -916,7 +926,7 @@ func UpdateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 			Code:  coin,
 			Free:  it.Free,
 			Used:  it.Used,
-			Total: record.Total(false) * coinPrice,
+			Total: it.Total * coinPrice,
 		})
 	}
 	// Update single billing amount
