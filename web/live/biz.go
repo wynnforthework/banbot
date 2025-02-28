@@ -2,8 +2,10 @@ package live
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/banbox/banbot/opt"
+	"github.com/banbox/banexg/binance"
 	"math"
 	"slices"
 	"sort"
@@ -48,6 +50,8 @@ func regApiBiz(api fiber.Router) {
 	api.Get("/config", getConfig)
 	api.Get("/stg_jobs", getStratJobs)
 	api.Get("/performance", getPerformance)
+	api.Post("/start_down_trade", postStartDownTrade)
+	api.Get("/get_down_trade", getDownTrade)
 	api.Get("/group_sta", getGroupSta)
 	api.Get("/log", getLog)
 	api.Get("/bot_info", getBotInfo)
@@ -893,6 +897,78 @@ func getGroupSta(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"data": staList,
 		})
+	})
+}
+
+func postStartDownTrade(c *fiber.Ctx) error {
+	type DownArgs struct {
+		StartTime string `json:"startTime" validate:"required"`
+		EndTime   string `json:"endTime" validate:"required"`
+		Source    string `json:"source" validate:"required"`
+	}
+	var data = new(DownArgs)
+	if err_ := base.VerifyArg(c, data, base.ArgBody); err_ != nil {
+		return err_
+	}
+	startMS, err_ := btime.ParseTimeMS(data.StartTime)
+	if err_ != nil {
+		return err_
+	}
+	endMS, err_ := btime.ParseTimeMS(data.EndTime)
+	if err_ != nil {
+		return err_
+	}
+	if exg.Default.Info().ID != "binance" {
+		return errors.New("exchange not support")
+	}
+	method := binance.MethodFapiPrivateGetOrderAsyn
+	if data.Source == "income" {
+		method = binance.MethodFapiPrivateGetIncomeAsyn
+	} else if data.Source == "trade" {
+		method = binance.MethodFapiPrivateGetTradeAsyn
+	}
+	return wrapAccount(c, func(acc string) error {
+		rsp, err := exg.Default.Call(method, map[string]interface{}{
+			banexg.ParamAccount: acc,
+			"startTime":         startMS,
+			"endTime":           endMS,
+			"timestamp":         btime.UTCStamp(),
+		})
+		if err != nil {
+			return err
+		}
+		return c.Type("json").SendString(rsp.Content)
+	})
+}
+
+func getDownTrade(c *fiber.Ctx) error {
+	type DownArgs struct {
+		ID     string `query:"id" validate:"required"`
+		Source string `query:"source" validate:"required"`
+	}
+	var data = new(DownArgs)
+	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
+		return err_
+	}
+	if exg.Default.Info().ID != "binance" {
+		return errors.New("exchange not support")
+	}
+	method := binance.MethodFapiPrivateGetOrderAsynId
+	if data.Source == "income" {
+		method = binance.MethodFapiPrivateGetIncomeAsynId
+	} else if data.Source == "trade" {
+		method = binance.MethodFapiPrivateGetTradeAsynId
+	}
+	return wrapAccount(c, func(acc string) error {
+		rsp, err := exg.Default.Call(method, map[string]interface{}{
+			banexg.ParamAccount: acc,
+			"downloadId":        data.ID,
+			"timestamp":         btime.UTCStamp(),
+		})
+		if err != nil {
+			return err
+		}
+		return c.Type("json").SendString(rsp.Content)
 	})
 }
 

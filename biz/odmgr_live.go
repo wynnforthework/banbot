@@ -17,6 +17,7 @@ import (
 	"github.com/banbox/banta"
 	"go.uber.org/zap"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -104,6 +105,110 @@ func newLiveOrderMgr(account string, callBack func(od *ormo.InOutOrder, isEnter 
 }
 
 /*
+SyncLocalOrders 将交易所仓位和本地仓位对比，关闭本地多余仓位对应订单
+
+定期执行，用于解决币安偶发止损成交但状态为expired导致本地订单未更新问题。
+*/
+func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
+	// 获取交易所所有持仓
+	posList, err := exg.Default.FetchAccountPositions(nil, map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// 将持仓按symbol分组,并区分多空方向
+	posMap := make(map[string]map[bool]*banexg.Position)
+	for _, pos := range posList {
+		if pos.Contracts <= AmtDust {
+			continue
+		}
+		if _, ok := posMap[pos.Symbol]; !ok {
+			posMap[pos.Symbol] = make(map[bool]*banexg.Position)
+		}
+		isShort := pos.Side == banexg.PosSideShort
+		posMap[pos.Symbol][isShort] = pos
+	}
+
+	// 按symbol分组本地订单
+	openOds, lock := ormo.GetOpenODs(o.Account)
+	lock.Lock()
+	odMap := make(map[string]map[bool][]*ormo.InOutOrder)
+	for _, od := range openOds {
+		if _, ok := odMap[od.Symbol]; !ok {
+			odMap[od.Symbol] = make(map[bool][]*ormo.InOutOrder)
+		}
+		odMap[od.Symbol][od.Short] = append(odMap[od.Symbol][od.Short], od)
+	}
+	lock.Unlock()
+
+	// 对每个symbol的多空方向进行检查
+	var closedList []*ormo.InOutOrder
+	for symbol, sideOds := range odMap {
+		pos, hasPair := posMap[symbol]
+		for isShort, ods := range sideOds {
+			var posAmt float64
+			if hasPair {
+				if p, ok := pos[isShort]; ok {
+					posAmt = p.Contracts
+				}
+			}
+
+			// 计算本地订单总量
+			var localAmt float64
+			for _, od := range ods {
+				localAmt += od.HoldAmount()
+			}
+
+			// 如果本地订单量大于实际持仓量,需要关闭部分订单
+			if localAmt > posAmt*1.002 {
+				// 按数量降序排序
+				sort.Slice(ods, func(i, j int) bool {
+					amtI := ods[i].HoldAmount()
+					amtJ := ods[j].HoldAmount()
+					return amtI > amtJ
+				})
+				overAmt := localAmt - posAmt
+				dustAmt := overAmt * 0.001
+
+				// 逐个关闭订单直到数量匹配
+				var closeOds []string
+				for _, od := range ods {
+					if overAmt < dustAmt {
+						break
+					}
+					odAmt := od.HoldAmount()
+					if odAmt < AmtDust {
+						continue
+					}
+
+					part := od
+					if odAmt > overAmt*1.01 {
+						part = od.CutPart(overAmt, 0)
+					}
+					closeAmt := part.HoldAmount()
+					err = part.LocalExit(core.ExitTagNoMatch, 0, "", "")
+					if err != nil {
+						log.Error("force exit order fail", zap.String("key", part.Key()), zap.Error(err))
+						continue
+					}
+
+					overAmt -= closeAmt
+					closeOds = append(closeOds, part.Key())
+					closedList = append(closedList, part)
+					strat.FireOdChange(o.Account, part, strat.OdChgExitFill)
+				}
+				log.Warn("close extra local open orders", zap.String("pair", symbol),
+					zap.Float64("ExtraTotal", localAmt-posAmt), zap.Float64("ExtraLeft", overAmt),
+					zap.Int("odNum", len(closeOds)), zap.Strings("orders", closeOds))
+			}
+		}
+	}
+	return closedList, nil
+}
+
+/*
 SyncExgOrders
 Synchronize the latest local orders of the exchange
 
@@ -115,7 +220,7 @@ If there are open orders locally:
 Get the last time of the local order as the start time, and query all subsequent orders through the fetch_orders interface.
 Determine the current status of open orders from the exchange order records: closed, partially closed, unclosed
 For redundant positions, treat them as new orders opened by the user and create new order tracking.
-将交易所最新状态本地订单进行同步
+将交易所最新状态本地订单进行同步，机器人启动时初始化
 
 	先通过fetch_account_positions抓取交易所所有币的仓位情况。
 	如果本地没有未平仓订单：

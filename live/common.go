@@ -13,10 +13,12 @@ import (
 	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/rpc"
 	"github.com/banbox/banbot/utils"
+	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
 	"slices"
 	"strconv"
+	"time"
 )
 
 var (
@@ -134,6 +136,43 @@ func CronCheckTriggerOds() {
 	_, err_ := core.Cron.AddFunc("15 * * * * *", biz.VerifyTriggerOds)
 	if err_ != nil {
 		log.Error("add VerifyTriggerOds fail", zap.Error(err_))
+	}
+}
+
+func LoopBalancePositions() {
+	ticker := time.NewTicker(time.Duration(config.AccountPullSecs) * time.Second)
+	core.ExitCalls = append(core.ExitCalls, ticker.Stop)
+	for {
+		select {
+		case <-ticker.C:
+			updateBalancePos()
+		}
+	}
+}
+
+func updateBalancePos() {
+	for account := range config.Accounts {
+		odList, lock := ormo.GetOpenODs(account)
+		lock.Lock()
+		odNum := len(odList)
+		lock.Unlock()
+		if odNum == 0 {
+			continue
+		}
+		odMgr := biz.GetLiveOdMgr(account)
+		_, err := odMgr.SyncLocalOrders()
+		if err != nil {
+			log.Error("SyncLocalOrders fail", zap.String("acc", account), zap.Error(err))
+		}
+		wallet := biz.GetWallets(account)
+		rsp, err := exg.Default.FetchBalance(map[string]interface{}{
+			banexg.ParamAccount: account,
+		})
+		if err != nil {
+			log.Error("UpdateBalance fail", zap.String("acc", account), zap.Error(err))
+		} else {
+			biz.UpdateWalletByBalances(wallet, rsp)
+		}
 	}
 }
 

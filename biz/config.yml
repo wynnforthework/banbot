@@ -3,6 +3,7 @@ env: prod
 leverage: 2
 limit_vol_secs: 5
 put_limit_secs: 120
+account_pull_secs: 60
 market_type: spot
 contract_type: swap
 odbook_ttl: 1000

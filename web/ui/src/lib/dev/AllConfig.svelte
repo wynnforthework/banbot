@@ -10,6 +10,7 @@ env: prod  # ${m.cfg_env()}
 leverage: 2  # ${m.cfg_leverage()}
 limit_vol_secs: 5  # ${m.cfg_limit_vol_secs()}
 put_limit_secs: 120  # ${m.cfg_put_limit_secs()}
+account_pull_secs: 60  # ${m.cfg_account_pull_secs()}
 market_type: spot  # ${m.cfg_market_type()}
 contract_type: swap  # ${m.cfg_contract_type()}
 odbook_ttl: 1000  # ${m.cfg_odbook_ttl()}

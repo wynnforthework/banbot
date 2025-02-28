@@ -29,6 +29,7 @@
     { path: '/dash/order', icon: 'number-list', text: m.order() },
     { path: '/dash/rebate', icon: 'dollar', text: m.rebate() },
     { path: '/dash/setting', icon: 'setting', text: m.config() },
+    { path: '/dash/tool', icon: 'tool', text: m.tools() },
     { path: '/dash/log', icon: 'document-text', text: m.logs() }
   ];
 

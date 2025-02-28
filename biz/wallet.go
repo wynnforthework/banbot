@@ -947,6 +947,10 @@ func UpdateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 	}
 }
 
+/*
+WatchLiveBalances
+币安推送的余额经常不够及时导致不准确，推荐定期主动拉取更新
+*/
 func WatchLiveBalances() {
 	for account := range config.Accounts {
 		wallets := GetWallets(account)

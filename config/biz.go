@@ -176,6 +176,10 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	if PutLimitSecs == 0 {
 		PutLimitSecs = 120
 	}
+	AccountPullSecs = c.AccountPullSecs
+	if AccountPullSecs == 0 {
+		AccountPullSecs = 60
+	}
 	core.ExgName = c.Exchange.Name
 	core.Market = c.MarketType
 	if core.Market == banexg.MarketSpot || core.Market == banexg.MarketMargin {
@@ -535,6 +539,7 @@ func (c *Config) Clone() *Config {
 		Leverage:         c.Leverage,
 		LimitVolSecs:     c.LimitVolSecs,
 		PutLimitSecs:     c.PutLimitSecs,
+		AccountPullSecs:  c.AccountPullSecs,
 		MarketType:       c.MarketType,
 		ContractType:     c.ContractType,
 		OdBookTtl:        c.OdBookTtl,

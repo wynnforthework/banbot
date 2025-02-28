@@ -16,6 +16,7 @@ var (
 	Leverage         float64
 	LimitVolSecs     int // How long the limit order is expected to wait for execution, in seconds 限价单预期等待多长时间成交，单位秒
 	PutLimitSecs     int // Only limit orders executed within this expected time will be submitted to the exchange. 在此预期时间内成交的限价单，才提交到交易所
+	AccountPullSecs  int
 	OdBookTtl        int64
 	StopEnterBars    int // The entry limit order will be canceled if it is not filled after the number of candles. 入场限价单超过多少个蜡烛未成交则取消
 	OrderType        string
@@ -79,6 +80,7 @@ type Config struct {
 	Leverage         float64                           `yaml:"leverage,omitempty" mapstructure:"leverage"`
 	LimitVolSecs     int                               `yaml:"limit_vol_secs,omitempty" mapstructure:"limit_vol_secs"`
 	PutLimitSecs     int                               `yaml:"put_limit_secs,omitempty" mapstructure:"put_limit_secs"`
+	AccountPullSecs  int                               `yaml:"account_pull_secs,omitempty" mapstructure:"account_pull_secs"`
 	MarketType       string                            `yaml:"market_type,omitempty" mapstructure:"market_type"`
 	ContractType     string                            `yaml:"contract_type,omitempty" mapstructure:"contract_type"`
 	OdBookTtl        int64                             `yaml:"odbook_ttl,omitempty" mapstructure:"odbook_ttl"`

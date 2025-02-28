@@ -104,24 +104,29 @@ func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
 	dataLen := uint32(len(data))
 	lenBt := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBt, dataLen)
-	_, err_ := c.Conn.Write(lenBt)
-	if err_ != nil {
-		c.Ready = false
-		errCode, errType := getErrType(err_)
-		if c.DoConnect != nil && errCode == core.ErrNetConnect {
-			log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
-			c.connect()
-			return c.Write(data, true)
+	if c.Conn != nil {
+		_, err_ := c.Conn.Write(lenBt)
+		if err_ != nil {
+			c.Ready = false
+			errCode, errType := getErrType(err_)
+			if c.DoConnect != nil && errCode == core.ErrNetConnect {
+				log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
+				c.connect()
+				return c.Write(data, true)
+			}
+			return errs.New(errCode, err_)
 		}
-		return errs.New(errCode, err_)
+		if c.Conn != nil {
+			_, err_ = c.Conn.Write(data)
+			if err_ != nil {
+				c.Ready = false
+				errCode, _ := getErrType(err_)
+				return errs.New(errCode, err_)
+			}
+			return nil
+		}
 	}
-	_, err_ = c.Conn.Write(data)
-	if err_ != nil {
-		c.Ready = false
-		errCode, _ := getErrType(err_)
-		return errs.New(errCode, err_)
-	}
-	return nil
+	return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
 }
 
 func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
