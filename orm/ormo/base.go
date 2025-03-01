@@ -73,10 +73,12 @@ func GetTriggerODs(account string) (map[string]map[int64]*InOutOrder, *sync.Mute
 		account = config.DefAcc
 	}
 	val, ok := accTriggerODs[account]
-	lock, _ := lockTriggerMap[account]
 	if !ok {
 		val = make(map[string]map[int64]*InOutOrder)
 		accTriggerODs[account] = val
+	}
+	lock, ok2 := lockTriggerMap[account]
+	if !ok2 {
 		lock = &sync.Mutex{}
 		lockTriggerMap[account] = lock
 	}
