@@ -832,7 +832,8 @@ func (r *BTResult) calcMeasures(num int) *errs.Error {
 	dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
 	// 计算一年包含交易单位数量：365 / 单个交易单位包含天数
 	// 单个交易单位包含天数 = 总交易天数 / 交易单位总数
-	periods := len(p.Real) * 365 / int((r.EndMS-r.StartMS)/dayMSecs)
+	// 一年包含交易单位数量 = 交易单位总数 * 365 / 总交易天数
+	periods := len(inReturns) * 365 / int((r.EndMS-r.StartMS)/dayMSecs)
 	sharpe, sortino, err := calcMeasures(inReturns, periods)
 	if err != nil {
 		return err
