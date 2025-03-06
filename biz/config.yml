@@ -20,7 +20,8 @@ low_cost_action: ignore
 bt_net_cost: 15
 relay_sim_unfinish: false
 order_bar_max: 500
-timerange: '20230701-20250101'
+time_start: '20230701'
+time_end: '20250101'
 wallet_amounts:
   USDT: 3000
 stake_currency: [USDT]

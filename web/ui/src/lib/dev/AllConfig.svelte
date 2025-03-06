@@ -38,7 +38,8 @@ fatal_stop:  # ${m.cfg_fatal_stop()}
   '180': 0.2  # ${m.cfg_fatal_stop_180()}
   '30': 0.3  # ${m.cfg_fatal_stop_30()}
 fatal_stop_hours: 8  # ${m.cfg_fatal_stop_hours()}
-timerange: "20230701-20230808"  # ${m.cfg_timerange()}
+time_start: "20240701"  # ${m.cfg_time_start()}
+time_end: "20250701"
 run_timeframes: [5m]  # ${m.cfg_run_timeframes()}
 run_policy:  # ${m.cfg_run_policy()}
   - name: Demo  # ${m.cfg_run_policy_name()}

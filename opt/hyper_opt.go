@@ -329,7 +329,8 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 				return nil
 			}
 			defer os.Remove(cfgFile.Name())
-			cfgFile.WriteString(fmt.Sprintf("timerange: \"%s-%s\"\n", startStr, endStr))
+			cfgFile.WriteString(fmt.Sprintf("time_start: \"%s\"\n", startStr))
+			cfgFile.WriteString(fmt.Sprintf("time_end: \"%s\"\n", endStr))
 			cfgFile.WriteString("run_policy:\n")
 			cfgFile.WriteString(pol.ToYaml())
 			cfgFile.Close()

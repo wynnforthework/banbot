@@ -546,7 +546,7 @@
     "cfg_fatal_stop_180": "20% loss in 3 hours",
     "cfg_fatal_stop_30": "30% loss in half an hour",
     "cfg_fatal_stop_hours": "Prohibits order placement for this many hours when global stop loss is triggered; default is 8",
-    "cfg_timerange": "candle data range used for backtesting",
+    "cfg_time_start": "K-line start time, supports timestamp, date, date-time, etc., used for backtesting, data export, etc.",
     "cfg_run_timeframes": "All allowed timeframes for the bot. The strategy will choose the most suitable minimum timeframe; this setting is lower priority than run_policy",
     "cfg_run_policy": "The strategy to run, multiple strategies can run simultaneously or a strategy can be run with different parameters",
     "cfg_run_policy_name": "Strategy name",

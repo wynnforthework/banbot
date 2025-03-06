@@ -19,6 +19,8 @@ type CmdArgs struct {
 	NoDefault     bool
 	LogLevel      string
 	TimeRange     string
+	TimeStart     string
+	TimeEnd       string
 	RawTimeFrames string
 	TimeFrames    []string
 	StakeAmount   float64

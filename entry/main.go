@@ -215,7 +215,11 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) error
 		case "with_spider":
 			cmd.BoolVar(&args.WithSpider, "spider", false, "start spider if not running")
 		case "timerange":
-			cmd.StringVar(&args.TimeRange, "timerange", "", "Specify what timerange of data to use")
+			cmd.StringVar(&args.TimeRange, "timerange", "", "set timerange")
+		case "timestart":
+			cmd.StringVar(&args.TimeStart, "timestart", "", "set start time, allow multiple formats")
+		case "timeend":
+			cmd.StringVar(&args.TimeEnd, "timeend", "", "set end time, timestart is required")
 		case "timeframes":
 			cmd.StringVar(&args.RawTimeFrames, "timeframes", "", "comma-seperated timeframes to use")
 		case "medium":

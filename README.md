@@ -38,7 +38,7 @@ docker run -d --name timescaledb -p 127.0.0.1:5432:5432 \
 ```
 
 #### 2. start banbot 
-create your `/root/config.yaml`:
+create your `/root/config.yml`:
 ```yaml
 accounts:
   user1:  # you can change this

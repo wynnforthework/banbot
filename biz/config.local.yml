@@ -1,4 +1,5 @@
-timerange: "20230701-20250101"
+time_start: "20230701"
+time_end: "20250101"
 pairs: ['ETH/USDT']
 run_policy:
   - name: ma:demo

@@ -345,12 +345,6 @@ func ExportKlines(args *config.CmdArgs, prg utils.PrgCB) *errs.Error {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
 	start, stop := config.TimeRange.StartMS, config.TimeRange.EndMS
-	if args.TimeRange != "" {
-		start, stop, err_ = config.ParseTimeRange(args.TimeRange)
-		if err_ != nil {
-			return errs.NewMsg(errs.CodeParamInvalid, "invalid timeRange: %v", args.TimeRange)
-		}
-	}
 	startStr := btime.ToDateStrLoc(start, core.DefaultDateFmt)
 	endStr := btime.ToDateStrLoc(stop, core.DefaultDateFmt)
 	log.Info("export kline", zap.Strings("tf", args.TimeFrames), zap.String("dt", startStr+" - "+endStr),

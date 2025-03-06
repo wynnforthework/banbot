@@ -113,7 +113,10 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 	if err != nil {
 		return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "decode Config Fail")
 	}
-	res.Apply(args)
+	err = res.Apply(args)
+	if err != nil {
+		return nil, errs.New(errs.CodeRunTime, err)
+	}
 	return &res, nil
 }
 
@@ -135,14 +138,38 @@ func ParseConfig(path string) (*Config, *errs.Error) {
 	return &res, nil
 }
 
-func (c *Config) Apply(args *CmdArgs) {
+func (c *Config) Apply(args *CmdArgs) error {
 	if args.TimeRange != "" {
 		c.TimeRangeRaw = args.TimeRange
+	}
+	if args.TimeStart != "" {
+		c.TimeStart = args.TimeStart
+		c.TimeEnd = args.TimeEnd
 	}
 	if args.MaxPoolSize > 0 {
 		c.Database.MaxPoolSize = args.MaxPoolSize
 	}
-	start, stop, _ := ParseTimeRange(c.TimeRangeRaw)
+	var start, stop = int64(0), int64(0)
+	var err error
+	if c.TimeStart != "" {
+		start, err = btime.ParseTimeMS(c.TimeStart)
+		if err != nil {
+			return err
+		}
+		if c.TimeEnd != "" {
+			stop, err = btime.ParseTimeMS(c.TimeEnd)
+			if err != nil {
+				return err
+			}
+		} else {
+			stop = btime.UTCStamp()
+		}
+	} else {
+		start, stop, err = ParseTimeRange(c.TimeRangeRaw)
+		if err != nil {
+			return err
+		}
+	}
 	c.TimeRange = &TimeTuple{start, stop}
 	if args.StakeAmount > 0 {
 		c.StakeAmount = args.StakeAmount
@@ -156,6 +183,7 @@ func (c *Config) Apply(args *CmdArgs) {
 	if len(args.Pairs) > 0 {
 		c.Pairs = args.Pairs
 	}
+	return nil
 }
 
 func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
@@ -567,6 +595,8 @@ func (c *Config) Clone() *Config {
 		FatalStop:        c.FatalStop,
 		FatalStopHours:   c.FatalStopHours,
 		TimeRangeRaw:     c.TimeRangeRaw,
+		TimeStart:        c.TimeStart,
+		TimeEnd:          c.TimeEnd,
 		TimeRange:        c.TimeRange,
 		RunTimeframes:    c.RunTimeframes,
 		KlineSource:      c.KlineSource,

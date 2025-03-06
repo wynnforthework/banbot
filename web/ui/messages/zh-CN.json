@@ -546,7 +546,7 @@
   "cfg_fatal_stop_180": "3小时内亏损20%",
   "cfg_fatal_stop_30": "半小时内亏损30%",
   "cfg_fatal_stop_hours": "触发全局止损后禁止下单的小时数，默认为8",
-  "cfg_timerange": "回测使用的K线数据范围",
+  "cfg_time_start": "K线起始时间，支持时间戳、日期、日期时间等，用于回测、数据导出等",
   "cfg_run_timeframes": "机器人允许的所有时间周期，策略会选择最合适的最小时间周期，此设置优先级低于run_policy",
   "cfg_run_policy": "要运行的策略，可以同时运行多个策略或一个策略使用不同参数运行",
   "cfg_run_policy_name": "策略名称",

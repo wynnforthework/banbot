@@ -108,6 +108,8 @@ type Config struct {
 	FatalStop        map[string]float64                `yaml:"fatal_stop,omitempty" mapstructure:"fatal_stop"`
 	FatalStopHours   int                               `yaml:"fatal_stop_hours,omitempty" mapstructure:"fatal_stop_hours"`
 	TimeRangeRaw     string                            `yaml:"timerange,omitempty" mapstructure:"timerange"`
+	TimeStart        string                            `yaml:"time_start,omitempty" mapstructure:"time_start"`
+	TimeEnd          string                            `yaml:"time_end,omitempty" mapstructure:"time_end"`
 	TimeRange        *TimeTuple                        `yaml:"-" json:"-" mapstructure:"-"`
 	RunTimeframes    []string                          `yaml:"run_timeframes,omitempty,flow" mapstructure:"run_timeframes"`
 	KlineSource      string                            `yaml:"kline_source,omitempty" mapstructure:"kline_source"`

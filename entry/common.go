@@ -73,7 +73,7 @@ func init() {
 	AddCmdJob(&CmdJob{
 		Name:    "backtest",
 		Run:     RunBackTest,
-		Options: []string{"out", "timerange", "stake_amount", "pairs", "prg", "separate"},
+		Options: []string{"out", "timerange", "timestart", "timeend", "stake_amount", "pairs", "prg", "separate"},
 		Help:    "backtest with strategies and data",
 	})
 	AddCmdJob(&CmdJob{
@@ -127,7 +127,7 @@ func init() {
 		Name:    "down",
 		Parent:  "kline",
 		Run:     RunDownData,
-		Options: []string{"timerange", "pairs", "timeframes", "medium"},
+		Options: []string{"timerange", "timestart", "timeend", "pairs", "timeframes", "medium"},
 		Help:    "download kline data from exchange",
 	})
 	AddCmdJob(&CmdJob{
