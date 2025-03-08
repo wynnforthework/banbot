@@ -72,6 +72,9 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	if contractType != "" {
 		options[banexg.OptContractType] = contractType
 	}
+	if core.RunEnv == core.RunEnvTest {
+		options[banexg.OptEnv] = core.RunEnv
+	}
 	return bex.New(name, options)
 }
 

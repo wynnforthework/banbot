@@ -214,7 +214,7 @@ func RunFormatTick(args *config.CmdArgs) *errs.Error {
 		}
 		items := make([][]string, 0)
 		for _, row := range rows {
-			if len(row) < 15 {
+			if len(row) < 13 {
 				log.Error("columns invalid", zap.Int("num", len(row)), zap.String("name", inPath))
 				continue
 			}
@@ -222,7 +222,8 @@ func RunFormatTick(args *config.CmdArgs) *errs.Error {
 				continue
 			}
 			// TradingDay,InstrumentID,UpdateTime,UpdateMillisec,LastPrice,Volume,BidPrice1,BidVolume1,
-			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
+			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest
+			// 24年之前15列，之后13列，最后两列是：UpperLimitPrice,LowerLimitPrice
 			dateStr := row[0] + " " + row[2]
 			timeObj, err_ := time.ParseInLocation(layout, dateStr, loc)
 			if err_ != nil {
@@ -278,6 +279,9 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	if err_ := utils.EnsureDir(args.OutPath, 0755); err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
 	var dirPath = names[0]
 	names = names[1:]
 	if timeMsMin > 0 || timeMsMax > 0 {
@@ -299,9 +303,9 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 		var symbol string
 		var timeMS int64
 		var arr [5]float64
-		if len(row) == 15 {
+		if len(row) >= 13 && len(row[0]) == 8 && len(row[2]) == 8 {
 			// TradingDay,InstrumentID,UpdateTime,UpdateMillisec,LastPrice,Volume,BidPrice1,BidVolume1,
-			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
+			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,[UpperLimitPrice,LowerLimitPrice]
 			bidPrice1, _ := strconv.ParseFloat(row[6], 64)
 			askPrice1, _ := strconv.ParseFloat(row[8], 64)
 			avgPrice, _ := strconv.ParseFloat(row[10], 64)
@@ -324,9 +328,12 @@ func build1mWithTicks(args *config.CmdArgs) *errs.Error {
 			arr = [5]float64{price, volume, avgPrice, turnOver, openInt}
 		} else {
 			// InstrumentID,Time,LastPrice,Volume,BidPrice1,BidVolume1,
-			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,UpperLimitPrice,LowerLimitPrice
+			// AskPrice1,AskVolume1,AveragePrice,Turnover,OpenInterest,[UpperLimitPrice,LowerLimitPrice]
 			symbol = row[0]
 			timeMS, _ = strconv.ParseInt(row[1], 10, 64)
+			if timeMS == 0 {
+				return "", 0, [5]float64{0, 0, 0, 0, 0}
+			}
 			price, _ := strconv.ParseFloat(row[2], 64)
 			volume, _ := strconv.ParseFloat(row[3], 64)
 			avgPrice, _ := strconv.ParseFloat(row[8], 64)

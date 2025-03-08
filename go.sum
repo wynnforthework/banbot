@@ -5,6 +5,7 @@ github.com/anyongjin/go-bayesopt v1.0.1 h1:JxB7VwoJ2Hfo9jdbSqPvBAV4rW7JmXMaD1CE+
 github.com/anyongjin/go-bayesopt v1.0.1/go.mod h1:Z6cIBXt3vp2jzaJgRvueDVcREXkxOfWRcWtq2PqSeG8=
 github.com/banbox/banexg v0.2.14 h1:iBuQE1Yuw8atTePsNBFYqr0MLiVQZGFAFNCSxkg/o6c=
 github.com/banbox/banexg v0.2.14/go.mod h1:UG9WW08DkFjq16AuVWV2gP5vW3l8bgbb+DdoKWI7zNQ=
+github.com/banbox/banexg v0.2.15/go.mod h1:UG9WW08DkFjq16AuVWV2gP5vW3l8bgbb+DdoKWI7zNQ=
 github.com/banbox/banta v0.2.0 h1:fXdPHrPBDi3PQTV14pm84yBKIH2teB/3LQ9BUpTmIhI=
 github.com/banbox/banta v0.2.0/go.mod h1:+9PG7f4QZtfpJfKpGp7aToOUg2ByatDosHjjvGFjaVc=
 github.com/blend/go-sdk v2.0.0+incompatible/go.mod h1:3GUb0YsHFNTJ6hsJTpzdmCUl05o8HisKjx5OAlzYKdw=
