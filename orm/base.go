@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"github.com/banbox/banbot/exg"
 	utils2 "github.com/banbox/banbot/utils"
 	"net"
 	"runtime"
@@ -116,6 +117,10 @@ func Setup() *errs.Error {
 		return err2
 	}
 	defer conn.Release()
+	_, err2 = LoadMarkets(exg.Default, false)
+	if err2 != nil {
+		return err2
+	}
 	return sess.UpdatePendingIns()
 }
 

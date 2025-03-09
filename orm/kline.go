@@ -372,12 +372,7 @@ func GetAlignOff(sid int32, toTfMSecs int64) int64 {
 		alignOffs[sid] = data
 	}
 	exs := GetSymbolByID(sid)
-	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
-	if err != nil {
-		log.Warn(fmt.Sprintf("get exchange fail: %s %s", exs.Exchange, exs.Market))
-		return 0
-	}
-	offMS := int64(exg.GetAlignOff(exchange.Info().ID, int(toTfMSecs/1000)) * 1000)
+	offMS := int64(exg.GetAlignOff(exs.Exchange, int(toTfMSecs/1000)) * 1000)
 	data[toTfMSecs] = offMS
 	return offMS
 }
@@ -878,6 +873,8 @@ func (q *Queries) updateKHoles(sid int32, timeFrame string, startMS, endMS int64
 			} else {
 				// NoData不一致(前true后false)，且当前有超出
 				h.Start = prev.Stop
+				merged = append(merged, h)
+				prev = h
 			}
 		}
 	}
@@ -1750,11 +1747,20 @@ func calcChinaAdjFactors(args *config.CmdArgs) *errs.Error {
 }
 
 func calcCnFutureFactors(sess *Queries, args *config.CmdArgs) *errs.Error {
+	err_ := utils.EnsureDir(args.OutPath, 0755)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
 	items := GetExSymbols("china", banexg.MarketLinear)
 	exsList := utils.ValsOfMap(items)
 	sort.Slice(exsList, func(i, j int) bool {
 		return exsList[i].Symbol < exsList[j].Symbol
 	})
+	var allows = make(map[string]bool)
+	for _, key := range args.Pairs {
+		parts := utils2.SplitParts(key)
+		allows[parts[0].Val] = true
+	}
 	var err *errs.Error
 	// Save the daily trading volume of each contract for the current variety, used to find the main contract
 	// 保存当前品种日线各个合约的成交量，用于寻找主力合约
@@ -1775,6 +1781,10 @@ func calcCnFutureFactors(sess *Queries, args *config.CmdArgs) *errs.Error {
 				// 跳过000, 888, 999这些特殊后缀
 				continue
 			}
+		}
+		if _, ok := allows[parts[0].Val]; len(allows) > 0 && !ok {
+			// 跳过未选中的
+			continue
 		}
 		if lastCode != parts[0].Val {
 			err = saveAdjFactors(dateSidVols, lastCode, lastExs, sess, args.OutPath)

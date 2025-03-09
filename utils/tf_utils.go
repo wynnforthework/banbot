@@ -32,8 +32,8 @@ offMS: 对齐时间的偏移
 */
 func BuildOHLCV(arr []*banexg.Kline, toTFMSecs int64, preFire float64, resOHLCV []*banexg.Kline, fromTFMS, offMS int64) ([]*banexg.Kline, bool) {
 	_, offset := utils.GetTfAlignOrigin(int(toTFMSecs / 1000))
-	alignOffMS := int64(offset*1000) + offMS
-	offsetMS := int64(float64(toTFMSecs) * preFire)
+	alignOffMS := int64(offset * 1000)
+	offsetMS := int64(float64(toTFMSecs)*preFire) + offMS
 	subNum := len(arr)
 	if fromTFMS == 0 && subNum >= 2 {
 		fromTFMS = arr[subNum-1].Time - arr[subNum-2].Time

@@ -138,6 +138,13 @@ func init() {
 		Help:    "load kline data from zip/csv files",
 	})
 	AddCmdJob(&CmdJob{
+		Name:    "agg",
+		Parent:  "kline",
+		Run:     AggKlineBigs,
+		Options: []string{"pairs", "timeframes"},
+		Help:    "agg kline for big timeframes",
+	})
+	AddCmdJob(&CmdJob{
 		Name:    "export",
 		Parent:  "kline",
 		Run:     runExportData,
@@ -162,7 +169,7 @@ func init() {
 		Name:    "adj_calc",
 		Parent:  "kline",
 		Run:     RunKlineAdjFactors,
-		Options: []string{"out"},
+		Options: []string{"out", "pairs"},
 		Help:    "recalculate adjust factors",
 	})
 	AddCmdJob(&CmdJob{

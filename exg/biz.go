@@ -179,8 +179,9 @@ func GetAlignOff(exgName string, tfSecs int) int {
 		return 0
 	}
 	if exgName == "china" {
-		// 中国市场，期货夜盘属于第二天，夜盘一般21点开始，当日收盘一般15点，取中间18，即偏移6个小时得到日线
-		return -21600
+		// 中国市场，期货夜盘属于次日日线数据，夜盘一般21点开始，当日收盘一般15点，取中间18，即推迟6个小时
+		// 又考虑时差8小时，累计推迟14小时
+		return 50400
 	}
 	return 0
 }

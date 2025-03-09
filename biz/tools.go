@@ -36,7 +36,6 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 	if err != nil {
 		return err
 	}
-	exInfo := exchange.Info()
 	yearStr := strings.Split(filepath.Base(inPath), ".")[0]
 	year, _ := strconv.Atoi(yearStr)
 	mar, err := exchange.MapMarket(cleanName, year)
@@ -223,33 +222,108 @@ func LoadZipKline(inPath string, fid int, file *zip.File, arg interface{}) *errs
 	endDt := btime.ToDateStr(endMS, "")
 	log.Info("insert", zap.String("symbol", exs.Symbol), zap.Int32("sid", exs.ID),
 		zap.Int("num", len(klines)), zap.String("start", startDt), zap.String("end", endDt))
-	// 这里不自动归集，因有些bar成交量为0，不可使用数据库默认的归集策略；应调用BuildOHLCVOff归集
-	// There is no automatic aggregation here, because some bar volumes are 0, and the database default aggregation strategy cannot be used; BuildOHLCVOff aggregation should be called
+	// 这里不可使用数据库默认的归集策略，因有些bar成交量为0；应调用BuildOHLCVOff归集
+	// the database default aggregation strategy cannot be used here, because some bar volumes are 0; BuildOHLCVOff aggregation should be called
 	num, err := sess.InsertKLinesAuto(timeFrame, exs.ID, klines, false)
 	if err == nil && num > 0 {
 		// insert data for big timeframes 插入更大周期
-		aggList := orm.GetKlineAggs()
-		klines1m := klines
-		for _, agg := range aggList[1:] {
-			if agg.MSecs <= tfMSecs {
-				continue
-			}
-			offMS := int64(exg.GetAlignOff(exInfo.ID, int(agg.MSecs/1000)) * 1000)
-			klines, _ = utils.BuildOHLCV(klines1m, agg.MSecs, 0, nil, tfMSecs, offMS)
-			if len(klines) == 0 {
-				continue
-			}
-			num, err = sess.InsertKLinesAuto(agg.TimeFrame, exs.ID, klines, false)
-			if err != nil {
-				log.Error("insert kline fail", zap.String("id", mar.ID),
-					zap.String("tf", agg.TimeFrame), zap.Error(err))
-			}
-			if num == 0 {
-				break
-			}
-		}
+		return aggBigKlines(sess, klines, tfMSecs, exs)
 	}
 	return err
+}
+
+func aggBigKlines(sess *orm.Queries, klines []*banexg.Kline, tfMSecs int64, exs *orm.ExSymbol) *errs.Error {
+	if len(klines) == 0 {
+		return nil
+	}
+	aggList := orm.GetKlineAggs()
+	klines1m := klines
+	var err *errs.Error
+	var num int64
+	for _, agg := range aggList[1:] {
+		if agg.MSecs <= tfMSecs {
+			continue
+		}
+		offMS := int64(exg.GetAlignOff(exs.Exchange, int(agg.MSecs/1000)) * 1000)
+		klines, _ = utils.BuildOHLCV(klines1m, agg.MSecs, 0, nil, tfMSecs, offMS)
+		if len(klines) == 0 {
+			continue
+		}
+		endMs := klines[len(klines)-1].Time + agg.MSecs
+		err = sess.DelKLines(exs.ID, agg.TimeFrame, klines[0].Time, endMs)
+		if err != nil {
+			return err
+		}
+		num, err = sess.InsertKLinesAuto(agg.TimeFrame, exs.ID, klines, false)
+		if err != nil {
+			return err
+		}
+		if num == 0 {
+			break
+		}
+	}
+	return nil
+}
+
+func AggBigKlines(args *config.CmdArgs) *errs.Error {
+	minTF := "1m"
+	if len(args.TimeFrames) > 0 {
+		minTF = args.TimeFrames[0]
+	}
+	log.Info("try agg timeFrames above " + minTF)
+	pairs := args.Pairs
+	if len(pairs) == 0 && len(config.Pairs) > 0 {
+		pairs = config.Pairs
+	}
+	exsMap := orm.GetExSymbolMap(core.ExgName, core.Market)
+	if len(pairs) == 0 {
+		if !utils.ReadConfirm([]string{
+			fmt.Sprintf("agg for %v symbols, input `y` to continue", len(exsMap)),
+		}, "y", "n", true) {
+			return nil
+		}
+	} else {
+		keeps := make(map[string]*orm.ExSymbol)
+		for _, pair := range pairs {
+			exs, ok := exsMap[pair]
+			if !ok {
+				return errs.NewMsg(errs.CodeParamInvalid, "%v is invalid", pair)
+			}
+			keeps[pair] = exs
+		}
+		exsMap = keeps
+	}
+	ctx := context.Background()
+	sess, conn, err := orm.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	minMSecs := int64(utils2.TFToSecs(minTF) * 1000)
+	yearMSecs := int64(utils2.TFToSecs("1y") * 1000)
+	startMS, endMS := config.TimeRange.StartMS, config.TimeRange.EndMS
+	firstEndMS := utils2.AlignTfMSecs(startMS+yearMSecs, yearMSecs)
+	pBar := utils.NewPrgBar(len(exsMap), "aggTf")
+	defer pBar.Close()
+	for _, exs := range exsMap {
+		pBar.Add(1)
+		curStartMS, curEndMS := startMS, firstEndMS
+		for curStartMS < endMS {
+			bars, err := sess.QueryOHLCV(exs.ID, minTF, curStartMS, curEndMS, 0, false)
+			if err != nil {
+				return err
+			}
+			if len(bars) > 0 {
+				err = aggBigKlines(sess, bars, minMSecs, exs)
+				if err != nil {
+					return err
+				}
+			}
+			curStartMS = curEndMS
+			curEndMS += yearMSecs
+		}
+	}
+	return nil
 }
 
 func LoadCalendars(args *config.CmdArgs) *errs.Error {

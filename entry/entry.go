@@ -187,6 +187,14 @@ func LoadKLinesToDB(args *config.CmdArgs) *errs.Error {
 	return nil
 }
 
+func AggKlineBigs(args *config.CmdArgs) *errs.Error {
+	err := biz.SetupComsExg(args)
+	if err != nil {
+		return err
+	}
+	return biz.AggBigKlines(args)
+}
+
 func runInit(args *config.CmdArgs) *errs.Error {
 	errs.PrintErr = utils.PrintErr
 	err := biz.InitDataDir()
