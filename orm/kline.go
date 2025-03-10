@@ -1771,6 +1771,7 @@ func calcCnFutureFactors(sess *Queries, args *config.CmdArgs) *errs.Error {
 	// 对所有期货标的，按顺序获取日K，并按时间记录
 	var pBar = utils.NewPrgBar(len(exsList), "future")
 	defer pBar.Close()
+	dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
 	for _, exs := range exsList {
 		pBar.Add(1)
 		parts := utils2.SplitParts(exs.Symbol)
@@ -1800,10 +1801,11 @@ func calcCnFutureFactors(sess *Queries, args *config.CmdArgs) *errs.Error {
 			return err
 		}
 		for _, k := range klines {
-			vols, _ := dateSidVols[k.Time]
+			barTime := utils2.AlignTfMSecs(k.Time, dayMSecs)
+			vols, _ := dateSidVols[barTime]
 			if vols == nil {
 				vols = make(map[int32]*banexg.Kline)
-				dateSidVols[k.Time] = vols
+				dateSidVols[barTime] = vols
 			}
 			vols[exs.ID] = k
 		}
@@ -1865,7 +1867,7 @@ func saveAdjFactors(data map[int64]map[int32]*banexg.Kline, pCode string, pExs *
 		vol, hold = findMaxVols(vols)
 		// When the trading volume and position of the main force are not at their maximum, it is necessary to give up the main force
 		// 当主力的成交量和持仓量都不为最大，需让出主力
-		if vol.Sid != lastSid && hold.Sid != lastSid {
+		if vol.Sid != lastSid && hold.Sid != lastSid && len(vols) > 1 {
 			tgt := hold
 			if exs.ExgReal == "CFFEX" {
 				tgt = vol
