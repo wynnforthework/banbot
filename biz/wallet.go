@@ -77,9 +77,21 @@ func GetWallets(account string) *BanWallets {
 	return val
 }
 
+// Total: Available+Pendings+Frozens+[UnrealizedPOL]
 func (iw *ItemWallet) Total(withUpol bool) float64 {
+	sumVal := iw.Used()
 	iw.lock.Lock()
-	sumVal := iw.Available
+	sumVal += iw.Available
+	if withUpol {
+		sumVal += iw.UnrealizedPOL
+	}
+	iw.lock.Unlock()
+	return sumVal
+}
+
+func (iw *ItemWallet) Used() float64 {
+	iw.lock.Lock()
+	sumVal := float64(0)
 	if allVal, ok := iw.Pendings["*"]; ok {
 		sumVal += allVal
 	} else {
@@ -93,9 +105,6 @@ func (iw *ItemWallet) Total(withUpol bool) float64 {
 		for _, v := range iw.Frozens {
 			sumVal += v
 		}
-	}
-	if withUpol {
-		sumVal += iw.UnrealizedPOL
 	}
 	iw.lock.Unlock()
 	return sumVal
@@ -926,6 +935,7 @@ func UpdateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 			Code:  coin,
 			Free:  it.Free,
 			Used:  it.Used,
+			UPol:  it.UPol,
 			Total: it.Total * coinPrice,
 		})
 	}
@@ -937,13 +947,13 @@ func UpdateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 	})
 	var msgList []string
 	for _, it := range items {
-		msgList = append(msgList, fmt.Sprintf("%s: %.5f/%.5f", it.Code, it.Free, it.Used))
+		msgList = append(msgList, fmt.Sprintf("%s: %.5f/%.5f/%.5f", it.Code, it.Free, it.Used, it.UPol))
 	}
 	if len(skips) > 0 {
 		log.Info(fmt.Sprintf("update balance skips: %s", strings.Join(skips, "  ")))
 	}
 	if len(msgList) > 0 {
-		log.Info(fmt.Sprintf("update balances %s: %s", wallets.Account, strings.Join(msgList, "  ")))
+		log.Debug(fmt.Sprintf("update balances %s: %s", wallets.Account, strings.Join(msgList, "  ")))
 	}
 }
 

@@ -287,9 +287,8 @@
           <div class="badge badge-md gap-1.5 py-2.5 px-3 bg-base-200/70 text-base-content border-none">
             <span class="font-medium text-sm">{item.symbol}</span>
             <span class="text-primary text-sm font-mono">{item.free.toFixed(6)}</span>
-            {#if item.used > 0}
-              <span class="text-info text-sm font-mono">/ {item.used.toFixed(6)}</span>
-            {/if}
+            <span class="text-info text-sm font-mono">/ {item.used.toFixed(6)}</span>
+            <span class="text-info text-sm font-mono">/ {item.upol.toFixed(6)}</span>
           </div>
         {/each}
       </div>

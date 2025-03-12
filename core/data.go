@@ -32,6 +32,7 @@ var (
 	JobPerfs      = make(map[string]*JobPerf)          // stagy_pair_tf: JobPerf Record the billing amount ratio of the task. If the winning rate is low, the billing amount should be reduced. 记录任务的开单金额比率，胜率低的要减少开单金额
 	StratPerfSta  = make(map[string]*PerfSta)          // stagy: Job任务状态
 	LastBarMs     int64                                // The end time of the last bar received, a 13-digit timestamp 上次收到bar的结束时间，13位时间戳
+	LastCopiedMs  int64                                // 上次收到爬虫进程推送k线的时间戳
 	OdBooks       = map[string]*banexg.OrderBook{}     // Cache all order books received from crawler 缓存所有从爬虫收到的订单簿
 	NumTaCache    = 1500                               // The number of historical values cached during indicator calculation, default 1500 指标计算时缓存的历史值数量，默认1500
 	Cron          = cron.New(cron.WithSeconds())       // Use cron to run tasks regularly 使用cron定时运行任务
@@ -42,8 +43,8 @@ var (
 	MemProfile bool
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "0.2.3"
-	UIVersion = "0.2.3"
+	Version   = "0.2.4"
+	UIVersion = "0.2.4"
 	LogFile   string
 	DevDbPath string
 )

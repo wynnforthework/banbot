@@ -833,16 +833,19 @@ func (r *BTResult) calcMeasures(num int) *errs.Error {
 	// 计算一年包含交易单位数量：365 / 单个交易单位包含天数
 	// 单个交易单位包含天数 = 总交易天数 / 交易单位总数
 	// 一年包含交易单位数量 = 交易单位总数 * 365 / 总交易天数
-	periods := len(inReturns) * 365 / int((r.EndMS-r.StartMS)/dayMSecs)
-	sharpe, sortino, err := calcMeasures(inReturns, periods)
-	if err != nil {
-		return err
-	}
-	if !math.IsNaN(sharpe) && !math.IsInf(sharpe, 0) {
-		r.SharpeRatio = sharpe
-	}
-	if !math.IsNaN(sortino) && !math.IsInf(sortino, 0) {
-		r.SortinoRatio = sortino
+	days := int((r.EndMS - r.StartMS) / dayMSecs)
+	if days > 0 {
+		periods := len(inReturns) * 365 / days
+		sharpe, sortino, err := calcMeasures(inReturns, periods)
+		if err != nil {
+			return err
+		}
+		if !math.IsNaN(sharpe) && !math.IsInf(sharpe, 0) {
+			r.SharpeRatio = sharpe
+		}
+		if !math.IsNaN(sortino) && !math.IsInf(sortino, 0) {
+			r.SortinoRatio = sortino
+		}
 	}
 	return nil
 }

@@ -74,8 +74,28 @@ func CronFatalLossCheck() {
 }
 
 func CronKlineDelays() {
+	logDelay := func(msgText string) {
+		curMS := btime.TimeMS()
+		log.Warn(msgText)
+		if curMS-lastNotifyDelay > 600000 {
+			// Delay reminders are sent every 10 minutes
+			// 10 分钟发送一次延迟提醒
+			lastNotifyDelay = curMS
+			rpc.SendMsg(map[string]interface{}{
+				"type":   rpc.MsgTypeException,
+				"status": msgText,
+			})
+		}
+	}
 	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {
 		curMS := btime.TimeMS()
+		delaySecs := int((curMS - core.LastCopiedMs) / 1000)
+		if delaySecs > 120 {
+			// It should be received every minute, alert if haven't been received for more than 2 minutes
+			// 应该每分钟都能收到，超过2分钟未收到爬虫推送报警
+			logDelay("Listen to the spider kline timeout!")
+			return
+		}
 		var fails = make(map[string][]string)
 		for pair, wait := range core.PairCopiedMs {
 			if wait[0]+wait[1]*2 > curMS {
@@ -87,17 +107,7 @@ func CronKlineDelays() {
 		}
 		if len(fails) > 0 {
 			failText := core.GroupByPairQuotes(fails)
-			msgText := "Listen to the spider kline timeout:" + failText
-			log.Warn(msgText)
-			if curMS-lastNotifyDelay > 600000 {
-				// Delay reminders are sent every 10 minutes
-				// 10 分钟发送一次延迟提醒
-				lastNotifyDelay = curMS
-				rpc.SendMsg(map[string]interface{}{
-					"type":   rpc.MsgTypeException,
-					"status": msgText,
-				})
-			}
+			logDelay("Listen to the spider kline timeout:" + failText)
 		}
 	})
 	if err_ != nil {

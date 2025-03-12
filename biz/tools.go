@@ -348,8 +348,14 @@ func LoadCalendars(args *config.CmdArgs) *errs.Error {
 	dateList := make([][2]int64, 0)
 	dtLay := "2006-01-02"
 	for _, row := range rows {
-		startMS := btime.ParseTimeMSBy(dtLay, row[1])
-		stopMS := btime.ParseTimeMSBy(dtLay, row[2])
+		startMS, err_ := btime.ParseTimeMSBy(dtLay, row[1])
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+		stopMS, err_ := btime.ParseTimeMSBy(dtLay, row[2])
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
 		if lastExg == "" {
 			lastExg = row[0]
 		}

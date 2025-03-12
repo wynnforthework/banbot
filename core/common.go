@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -261,4 +262,36 @@ func MarshalYaml(v any) ([]byte, error) {
 	err := enc.Encode(v)
 	_ = enc.Close()
 	return buf.Bytes(), err
+}
+
+func CountDigit(text string) int {
+	count := 0
+	for _, c := range text {
+		if unicode.IsDigit(c) {
+			count += 1
+		}
+	}
+	return count
+}
+
+func SplitDigits(s string) []string {
+	var result []string
+	var currentDigits strings.Builder
+
+	for _, char := range s {
+		if unicode.IsDigit(char) {
+			currentDigits.WriteRune(char)
+		} else {
+			if currentDigits.Len() > 0 {
+				result = append(result, currentDigits.String())
+				currentDigits.Reset()
+			}
+		}
+	}
+
+	if currentDigits.Len() > 0 {
+		result = append(result, currentDigits.String())
+	}
+
+	return result
 }

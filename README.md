@@ -32,7 +32,8 @@ banbot support exchanges powered by [banexg](https://github/banbox/banexg):
 ![image](https://www.banbot.site/uidev.gif)
 #### 1. start timescaledb
 ```bash
-docker run -d --name timescaledb -p 127.0.0.1:5432:5432 \
+docker network create mynet
+docker run -d --name timescaledb --network mynet -p 127.0.0.1:5432:5432 \
   -v /opt/pgdata:/var/lib/postgresql/data \
   -e POSTGRES_PASSWORD=123 timescale/timescaledb:latest-pg17
 ```
@@ -46,13 +47,11 @@ accounts:
       prod:
         api_key: your_api_key_here
         api_secret: your_secret_here
-#database:
-#  url: postgresql://postgres:123@[host.docker.internal]:5432/ban
+database:
+  url: postgresql://postgres:123@[timescaledb]:5432/ban
 ```
-> banbot docker use `postgresql://postgres:123@[host.docker.internal]:5432/ban`, you can set `database.url` in the config to change it.
 ```bash
-docker run -d --name banbot -p 8000:8000 -v /root:/root\
-  --add-host=host.docker.internal:host-gateway banbot/banbot:latest -config /root/config.yml
+docker run -d --name banbot -p 8000:8000 --network mynet -v /root:/root banbot/banbot:latest -config /root/config.yml
 ```
 
 ### Document

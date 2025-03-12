@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/utils"
@@ -110,7 +111,7 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since,
 			AlignOffMS: int64(exg.GetAlignOff(exgID, tfSecs) * 1000)}
 		// 尽早启动延迟监听
-		core.SetPairMs(j.Symbol, j.Since, int64(tfSecs*1000))
+		btime.SetPairMs(j.Symbol, j.Since, int64(tfSecs*1000))
 	}
 	err = w.SendMsg("subscribe", tags)
 	if err != nil {
@@ -176,7 +177,7 @@ func (w *KLineWatcher) onSpiderBar(key string, data []byte) {
 	lastBarMS := bars.Arr[len(bars.Arr)-1].Time
 	tfMSecs := int64(bars.TFSecs * 1000)
 	nextBarMS := lastBarMS + tfMSecs
-	core.SetPairMs(pair, nextBarMS, tfMSecs)
+	btime.SetPairMs(pair, nextBarMS, tfMSecs)
 	var msg = &KLineMsg{
 		NotifyKLines: bars,
 		ExgName:      exgName,

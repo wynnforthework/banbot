@@ -106,8 +106,8 @@ func walletItems(wallet *biz.BanWallets) []map[string]interface{} {
 			"total":      total,
 			"upol":       item.UnrealizedPOL,
 			"free":       item.Available,
-			"used":       total - item.Available,
-			"total_fiat": item.FiatValue(true),
+			"used":       item.Used(),
+			"total_fiat": total * core.GetPrice(coin),
 		})
 	}
 	return items

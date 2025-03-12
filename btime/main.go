@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/core"
 	"strconv"
+	"strings"
 	"time"
-	"unicode"
 )
 
 var (
@@ -93,48 +93,129 @@ Supported forms:
 将时间字符串转为13位毫秒时间戳
 支持的形式：
 2006
+200601
 20060102
+2006-01-02
 10-digit timestamp
 13-digit timestamp
 2006-01-02 15:04
 2006-01-02 15:04:05
 */
 func ParseTimeMS(timeStr string) (int64, error) {
-	textLen := len(timeStr)
-	digitNum := CountDigit(timeStr)
-	if textLen == 4 && digitNum == 4 {
-		return ParseTimeMSBy("2006", timeStr), nil
-	} else if textLen == 6 && digitNum == 6 {
-		return ParseTimeMSBy("200601", timeStr), nil
-	} else if textLen == 8 && digitNum == 8 {
-		return ParseTimeMSBy("20060102", timeStr), nil
-	} else if textLen == 10 && digitNum == 10 {
-		// 10位时间戳
-		secs, err := strconv.ParseInt(timeStr, 10, 64)
-		if err != nil {
-			panic(err)
+	timeStr = strings.TrimSpace(timeStr)
+	digitNum := core.CountDigit(timeStr)
+	arr := core.SplitDigits(timeStr)
+	// 处理时间戳格式
+	if len(arr) == 1 {
+		if digitNum == 10 {
+			// 10位时间戳(秒)
+			secs, err := strconv.ParseInt(timeStr, 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return secs * 1000, nil
+		} else if digitNum == 13 {
+			// 13位时间戳(毫秒)
+			msecs, err := strconv.ParseInt(timeStr, 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return msecs, nil
 		}
-		return secs * int64(1000), nil
-	} else if textLen == 13 && digitNum == 13 {
-		msecs, err := strconv.ParseInt(timeStr, 10, 64)
-		if err != nil {
-			panic(err)
-		}
-		return msecs, nil
-	} else if textLen == 16 && digitNum == 12 {
-		return ParseTimeMSBy("2006-01-02 15:04", timeStr), nil
-	} else if textLen == 19 && digitNum == 14 {
-		return ParseTimeMSBy(core.DefaultDateFmt, timeStr), nil
 	}
-	return 0, fmt.Errorf("unSupport date fmt: %s", timeStr)
+
+	// 处理年份格式
+	if len(arr) == 1 && digitNum == 4 {
+		// 仅年份: 2006
+		return ParseTimeMSBy("2006", timeStr)
+	}
+
+	// 处理年月格式
+	if digitNum == 6 {
+		if len(arr) == 1 {
+			// 紧凑年月: 200601
+			return ParseTimeMSBy("200601", timeStr)
+		} else if len(arr) == 2 {
+			// 确保年在前
+			if len(arr[0]) == 4 {
+				return ParseTimeMSBy("200601", arr[0]+arr[1])
+			} else if len(arr[1]) == 4 {
+				return ParseTimeMSBy("200601", arr[1]+arr[0])
+			}
+		}
+	}
+
+	// 处理年月日格式
+	if digitNum == 8 {
+		if len(arr) == 1 {
+			// 紧凑年月日: 20060102
+			return ParseTimeMSBy("20060102", timeStr)
+		} else if len(arr) == 3 {
+			// 确保按年月日顺序连接
+			if len(arr[0]) == 4 { // 年在前: 2006 01 02
+				return ParseTimeMSBy("20060102", arr[0]+arr[1]+arr[2])
+			}
+		}
+	}
+
+	// 处理年月日时分格式
+	if digitNum == 12 {
+		if len(arr) == 1 {
+			// 紧凑年月日时分: 200601021504
+			return ParseTimeMSBy("200601021504", timeStr)
+		} else if len(arr) == 5 {
+			// 2006 01 02 15 04
+			if len(arr[0]) == 4 { // 年在前
+				return ParseTimeMSBy("200601021504", arr[0]+arr[1]+arr[2]+arr[3]+arr[4])
+			}
+		}
+	}
+
+	// 处理年月日时分秒格式
+	if digitNum == 14 {
+		if len(arr) == 1 {
+			// 紧凑年月日时分秒: 20060102150405
+			return ParseTimeMSBy("20060102150405", timeStr)
+		} else if len(arr) == 6 {
+			// 2006 01 02 15 04 05
+			if len(arr[0]) == 4 { // 年在前
+				return ParseTimeMSBy("20060102150405", arr[0]+arr[1]+arr[2]+arr[3]+arr[4]+arr[5])
+			}
+		}
+	}
+
+	// 特殊情况：年月日之间有分隔符
+	if len(arr) == 3 && len(arr[0]) == 4 {
+		// 日期部分: 2006-01-02 或 2006/01/02
+		dateStr := arr[0] + arr[1] + arr[2]
+
+		// 检查是否有时间部分
+		timeParts := strings.Split(timeStr, " ")
+		if len(timeParts) > 1 {
+			timeArr := core.SplitDigits(timeParts[1])
+
+			if len(timeArr) == 2 {
+				// 时分: 15:04
+				return ParseTimeMSBy("200601021504", dateStr+timeArr[0]+timeArr[1])
+			} else if len(timeArr) == 3 {
+				// 时分秒: 15:04:05
+				return ParseTimeMSBy("20060102150405", dateStr+timeArr[0]+timeArr[1]+timeArr[2])
+			}
+		} else {
+			// 只有日期部分
+			return ParseTimeMSBy("20060102", dateStr)
+		}
+	}
+
+	return 0, fmt.Errorf("unsupported date format: %s", timeStr)
 }
 
-func ParseTimeMSBy(layout, timeStr string) int64 {
+func ParseTimeMSBy(layout, timeStr string) (int64, error) {
 	t, err := time.Parse(layout, timeStr)
 	if err != nil {
-		panic(fmt.Errorf("parse %s fail: %s", layout, timeStr))
+		return 0, err
 	}
-	return t.UnixMilli()
+	return t.UnixMilli(), nil
 }
 
 /*
@@ -173,12 +254,13 @@ func ToTime(timestamp int64) time.Time {
 	return t
 }
 
-func CountDigit(text string) int {
-	count := 0
-	for _, c := range text {
-		if unicode.IsDigit(c) {
-			count += 1
-		}
-	}
-	return count
+/*
+SetPairMs
+update LastBarMs/wait interval from spider
+更新bot端从爬虫收到的标的最新时间和等待间隔
+*/
+func SetPairMs(pair string, barMS, waitMS int64) {
+	core.PairCopiedMs[pair] = [2]int64{barMS, waitMS}
+	core.LastBarMs = max(core.LastBarMs, barMS)
+	core.LastCopiedMs = TimeMS()
 }
