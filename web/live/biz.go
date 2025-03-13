@@ -375,7 +375,9 @@ func getOrders(c *fiber.Ctx) error {
 		})
 	}
 	getExgOrders := func(acc string) error {
-		orders, err := exg.Default.FetchOrders(data.Symbols, data.StartMs, data.Limit, nil)
+		orders, err := exg.Default.FetchOrders(data.Symbols, data.StartMs, data.Limit, map[string]interface{}{
+			banexg.ParamAccount: acc,
+		})
 		if err != nil {
 			return err
 		}
@@ -391,7 +393,9 @@ func getOrders(c *fiber.Ctx) error {
 		if data.Symbols != "" {
 			symbols = strings.Split(data.Symbols, ",")
 		}
-		posList, err := exg.Default.FetchPositions(symbols, nil)
+		posList, err := exg.Default.FetchPositions(symbols, map[string]interface{}{
+			banexg.ParamAccount: acc,
+		})
 		if err != nil {
 			return err
 		}
@@ -526,51 +530,55 @@ func postClosePos(c *fiber.Ctx) error {
 	if err := base.VerifyArg(c, data, base.ArgBody); err != nil {
 		return err
 	}
-	var reqs []*CloseArgs
-	if data.Symbol == "all" {
-		posList, err := exg.Default.FetchPositions(nil, nil)
-		if err != nil {
-			return err
-		}
-		for _, p := range posList {
-			reqs = append(reqs, &CloseArgs{
-				Symbol:    p.Symbol,
-				Side:      p.Side,
-				Amount:    p.Contracts,
-				OrderType: banexg.OdTypeMarket,
+	return wrapAccount(c, func(acc string) error {
+		var reqs []*CloseArgs
+		if data.Symbol == "all" {
+			posList, err := exg.Default.FetchPositions(nil, map[string]interface{}{
+				banexg.ParamAccount: acc,
 			})
+			if err != nil {
+				return err
+			}
+			for _, p := range posList {
+				reqs = append(reqs, &CloseArgs{
+					Symbol:    p.Symbol,
+					Side:      p.Side,
+					Amount:    p.Contracts,
+					OrderType: banexg.OdTypeMarket,
+				})
+			}
+		} else {
+			reqs = append(reqs, data)
 		}
-	} else {
-		reqs = append(reqs, data)
-	}
-	closeNum, doneNum := 0, 0
-	for _, q := range reqs {
-		side := "sell"
-		if q.Side == "short" {
-			side = "buy"
-		}
-		params := map[string]interface{}{}
-		if banexg.IsContract(core.Market) {
-			posSide := "LONG"
+		closeNum, doneNum := 0, 0
+		for _, q := range reqs {
+			side := "sell"
 			if q.Side == "short" {
-				posSide = "SHORT"
+				side = "buy"
 			}
-			params["positionSide"] = posSide
-		}
-		res, err := exg.Default.CreateOrder(q.Symbol, q.OrderType, side, q.Amount, q.Price, params)
-		if err != nil {
-			return err
-		}
-		if res.ID != "" {
-			closeNum += 1
-			if res.Filled == res.Amount {
-				doneNum += 1
+			params := map[string]interface{}{}
+			if banexg.IsContract(core.Market) {
+				posSide := "LONG"
+				if q.Side == "short" {
+					posSide = "SHORT"
+				}
+				params["positionSide"] = posSide
+			}
+			res, err := exg.Default.CreateOrder(q.Symbol, q.OrderType, side, q.Amount, q.Price, params)
+			if err != nil {
+				return err
+			}
+			if res.ID != "" {
+				closeNum += 1
+				if res.Filled == res.Amount {
+					doneNum += 1
+				}
 			}
 		}
-	}
-	return c.JSON(fiber.Map{
-		"closeNum": closeNum,
-		"doneNum":  doneNum,
+		return c.JSON(fiber.Map{
+			"closeNum": closeNum,
+			"doneNum":  doneNum,
+		})
 	})
 }
 
@@ -586,7 +594,9 @@ func getIncomes(c *fiber.Ctx) error {
 		return err
 	}
 	return wrapAccount(c, func(acc string) error {
-		items, err := exg.Default.FetchIncomeHistory(data.InType, data.Symbol, data.StartTime, data.Limit, nil)
+		items, err := exg.Default.FetchIncomeHistory(data.InType, data.Symbol, data.StartTime, data.Limit, map[string]interface{}{
+			banexg.ParamAccount: acc,
+		})
 		if err != nil {
 			return err
 		}
@@ -1007,7 +1017,7 @@ func getBotInfo(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"cpuPct":       percent[0],
 			"ramPct":       v.UsedPercent,
-			"lastProcess":  core.LastBarMs,
+			"lastProcess":  core.LastCopiedMs,
 			"allowTradeAt": stopUntil,
 		})
 	})

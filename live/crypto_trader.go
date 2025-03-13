@@ -155,7 +155,7 @@ func (t *CryptoTrader) startJobs() {
 	CronCheckTriggerOds()
 	// Regularly update balance and synchronize exchange positions with local orders
 	// 定期更新余额，同步交易所持仓到本地订单
-	LoopBalancePositions()
+	StartLoopBalancePositions()
 	core.Cron.Start()
 }
 

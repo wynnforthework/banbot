@@ -337,9 +337,9 @@
               <th class="bg-base-200/30 font-medium text-sm">{m.enter_time()}({curTZ()})</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.enter_tag()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.enter_price()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.amount()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.exit_time()}({curTZ()})</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.exit_tag()}</th>
-              <th class="bg-base-200/30 font-medium text-sm">{m.profit_rate()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.profit()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.actions()}</th>
             </tr>
@@ -350,12 +350,12 @@
                 <td class="text-sm font-mono">{order.id}</td>
                 <td class="text-sm font-mono">{order.symbol}</td>
                 <td>{order.timeframe}/{order.short ? m.short() : m.long()}/{order.leverage}</td>
-                <td class="text-sm">{fmtDateStr(order.enter_at)}</td>
-                <td>{order.enter_tag}</td>
+                <td class="text-sm">{fmtDateStr(getFirstValid([order.enter?.update_at, order.enter?.create_at, order.enter_at]))}</td>
+                <td>{order.strategy}:{order.enter_tag}</td>
                 <td>{getFirstValid([order.enter?.average, order.enter?.price, order.init_price]).toFixed(7)}</td>
-                <td class="text-sm">{fmtDateStr(order.exit_at)}</td>
-                <td>{order.strategy}:{order.exit_tag}</td>
-                <td>{(order.profit_rate * 100).toFixed(1)}%</td>
+                <td>{getFirstValid([order.enter?.amount, 0]).toFixed(7)}</td>
+                <td class="text-sm">{fmtDateStr(getFirstValid([order.exit?.update_at, order.exit?.create_at, order.exit_at]))}</td>
+                <td>{order.exit_tag}</td>
                 <td>{order.profit.toFixed(5)}</td>
                 <td>
                   <div class="flex gap-2">
@@ -418,7 +418,7 @@
               <th class="bg-base-200/30 font-medium text-sm">{m.time()}({curTZ()})</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.side()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.entry_price()}</th>
-              <th class="bg-base-200/30 font-medium text-sm">{m.mark_price()}</th>
+              <th class="bg-base-200/30 font-medium text-sm">{m.amount()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.notional()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.leverage()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.unrealized_pnl()}</th>
@@ -433,7 +433,7 @@
                 <td>{fmtDateStr(pos.timestamp)}</td>
                 <td>{pos.side === 'long' ? m.long() : m.short()}</td>
                 <td>{pos.entryPrice?.toFixed(4)}</td>
-                <td>{pos.markPrice?.toFixed(4)}</td>
+                <td>{pos.contracts?.toFixed(4)}</td>
                 <td>{pos.notional?.toFixed(4)}</td>
                 <td>{pos.leverage}x</td>
                 <td class={pos.unrealizedPnl >= 0 ? 'text-success' : 'text-error'}>

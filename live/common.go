@@ -149,15 +149,17 @@ func CronCheckTriggerOds() {
 	}
 }
 
-func LoopBalancePositions() {
-	ticker := time.NewTicker(time.Duration(config.AccountPullSecs) * time.Second)
-	core.ExitCalls = append(core.ExitCalls, ticker.Stop)
-	for {
-		select {
-		case <-ticker.C:
-			updateBalancePos()
+func StartLoopBalancePositions() {
+	go func() {
+		ticker := time.NewTicker(time.Duration(config.AccountPullSecs) * time.Second)
+		core.ExitCalls = append(core.ExitCalls, ticker.Stop)
+		for {
+			select {
+			case <-ticker.C:
+				updateBalancePos()
+			}
 		}
-	}
+	}()
 }
 
 func updateBalancePos() {
