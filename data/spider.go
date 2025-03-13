@@ -1,7 +1,6 @@
 package data
 
 import (
-	"context"
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/exg"
@@ -82,22 +81,18 @@ type SaveKline struct {
 	Sid       int32
 	TimeFrame string
 	Arr       []*banexg.Kline
-	SkipFirst bool
 	MsgAction string
 }
 
-func fillPrevHole(sess *orm.Queries, save *SaveKline) (int64, *errs.Error) {
-	if save.SkipFirst {
-		save.Arr = save.Arr[1:]
-	}
+func fillPrevHole(sess *orm.Queries, save *SaveKline, bars []*banexg.Kline) (int64, *errs.Error) {
 	_, endMS := sess.GetKlineRange(save.Sid, save.TimeFrame)
-	if len(save.Arr) == 0 {
+	if len(bars) == 0 {
 		return endMS, nil
 	}
 	initMutex.Lock()
 	initSids[save.Sid] = true
 	initMutex.Unlock()
-	fetchEndMS := save.Arr[0].Time
+	fetchEndMS := bars[0].Time
 
 	var err *errs.Error
 	if endMS == 0 || fetchEndMS <= endMS {
@@ -165,80 +160,19 @@ func consumeWriteQ(workNum int) {
 			}
 		}
 	}
-	hourStamps := make(map[int32]int64)
-	hourLock := sync.Mutex{}
-	hourMSecs := int64(utils2.TFToSecs("1h") * 1000)
+	mntSta := newPeriodSta("1m")
+	hourSta := newPeriodSta("1h")
 	for save := range writeQ {
 		setOne()
 		go func(job *SaveKline) {
 			defer func() {
 				<-guard
 			}()
-			ctx := context.Background()
-			sess, conn, err := orm.Conn(ctx)
-			if err == nil {
-				defer conn.Release()
-				var addBars = job.Arr
-				initMutex.Lock()
-				_, ok := initSids[job.Sid]
-				initMutex.Unlock()
-				if !ok {
-					var nextMS int64
-					nextMS, err = fillPrevHole(sess, job)
-					var cutIdx = 0
-					for i, bar := range job.Arr {
-						if bar.Time < nextMS {
-							cutIdx = i + 1
-						} else {
-							break
-						}
-					}
-					addBars = job.Arr[cutIdx:]
-				}
-				if err == nil && len(addBars) > 0 {
-					_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, addBars, true)
-					// 下载1h及以上周期K线数据
-					hourLock.Lock()
-					// 上一个小时对齐时间戳
-					lastMS, _ := hourStamps[job.Sid]
-					if lastMS == 0 {
-						kinfos, _ := sess.FindKInfos(ctx, job.Sid)
-						for _, kinfo := range kinfos {
-							if kinfo.Timeframe == "1h" {
-								lastMS = kinfo.Stop - hourMSecs
-								break
-							}
-						}
-					}
-					hourAlign := utils2.AlignTfMSecs(btime.TimeMS(), hourMSecs)
-					if lastMS == 0 {
-						lastMS = hourAlign - hourMSecs
-					}
-					if hourAlign > lastMS {
-						hourStamps[job.Sid] = hourAlign
-					}
-					hourLock.Unlock()
-					if hourAlign > lastMS {
-						exs := orm.GetSymbolByID(job.Sid)
-						if exs == nil {
-							log.Error("sid not found in cache", zap.Int32("sid", job.Sid))
-						} else {
-							var exchange banexg.BanExchange
-							exchange, err = exg.GetWith(exs.Exchange, exs.Market, "")
-							if err == nil {
-								_, err = sess.DownOHLCV2DB(exchange, exs, "1h", lastMS, hourAlign, nil)
-							}
-						}
-					}
-				}
-			}
-			if err != nil {
-				log.Error("consumeWriteQ: fail", zap.Int32("sid", job.Sid), zap.Error(err))
-			}
+			tfSecs := utils2.TFToSecs(job.TimeFrame)
+			trySaveKlines(job, tfSecs, mntSta, hourSta)
 			// After the K-line is written to the database, a message will be sent to notify the robot to avoid repeated insertion of K-line
 			// 写入K线到数据库后，才发消息通知机器人，避免重复插入K线
-			tfSecs := utils2.TFToSecs(job.TimeFrame)
-			err = Spider.Broadcast(&utils.IOMsg{
+			err := Spider.Broadcast(&utils.IOMsg{
 				Action: job.MsgAction,
 				Data: NotifyKLines{
 					TFSecs:   tfSecs,
@@ -585,7 +519,6 @@ func (m *Miner) watchKLines(pairs []string) {
 				Sid:       state.Sid,
 				TimeFrame: curTF,
 				Arr:       finishes,
-				SkipFirst: false,
 				MsgAction: prefix + pair,
 			}
 		}

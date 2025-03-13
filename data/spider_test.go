@@ -1,12 +1,14 @@
 package data
 
 import (
+	"context"
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	utils2 "github.com/banbox/banexg/utils"
@@ -15,12 +17,18 @@ import (
 
 func TestWatchOhlcv(t *testing.T) {
 	core.SetRunMode(core.RunModeLive)
+	err := initApp()
+	if err != nil {
+		panic(err)
+	}
 	client, err := NewKlineWatcher("127.0.0.1:6789")
 	if err != nil {
 		panic(err)
 	}
-	err = client.WatchJobs("binance", banexg.MarketLinear, "ohlcv", WatchJob{
-		Symbol:    "BTC/USDT:USDT",
+	market, pair := banexg.MarketSpot, "BTC/USDT"
+	// market, pair := banexg.MarketLinear, "BTC/USDT:USDT"
+	err = client.WatchJobs("binance", market, "ohlcv", WatchJob{
+		Symbol:    pair,
 		TimeFrame: "1m",
 	})
 	if err != nil {
@@ -35,6 +43,10 @@ func TestWatchOhlcv(t *testing.T) {
 func initApp() *errs.Error {
 	var args config.CmdArgs
 	args.Init()
+	errs.PrintErr = utils.PrintErr
+	ctx, cancel := context.WithCancel(context.Background())
+	core.Ctx = ctx
+	core.StopAll = cancel
 	err := config.LoadConfig(&args)
 	if err != nil {
 		return err

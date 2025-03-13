@@ -140,7 +140,8 @@ func getSymbolVols(symbols []string, tf string, num int, endMS int64) ([]SymbolV
 				total += k.Close * k.Volume
 			}
 			vol := total / float64(len(klines))
-			price := klines[len(klines)-1].Close
+			// 已倒序，选择第一个最近价格；此价格可能不是实时最新价格，但为保持品种刷新历史一致性，应固定使用此价格
+			price := klines[0].Close
 			symbolVols = append(symbolVols, SymbolVol{symbol, vol, price})
 		}
 	}
