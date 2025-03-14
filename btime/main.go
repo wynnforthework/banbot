@@ -3,6 +3,7 @@ package btime
 import (
 	"fmt"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banexg/bntp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ Get 10-digit second-level floating point number
 获取10位秒级浮点数
 */
 func UTCTime() float64 {
-	return float64(time.Now().UnixNano()) / float64(time.Second)
+	return float64(bntp.UTCStamp()) / 1000
 }
 
 /*
@@ -33,7 +34,7 @@ Get 13-digit millisecond timestamp
 获取13位毫秒时间戳
 */
 func UTCStamp() int64 {
-	return time.Now().UnixMilli()
+	return bntp.UTCStamp()
 }
 
 /*
@@ -82,7 +83,7 @@ func Now() *time.Time {
 		}
 		return MSToTime(CurTimeMS)
 	}
-	res := time.Now().In(UTCLocale)
+	res := bntp.Now().In(UTCLocale)
 	return &res
 }
 

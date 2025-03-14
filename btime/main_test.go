@@ -2,12 +2,13 @@ package btime
 
 import (
 	"fmt"
+	"github.com/banbox/banexg/bntp"
 	"testing"
 	"time"
 )
 
 func TestNow(t *testing.T) {
-	tm := time.Now()
+	tm := bntp.Now()
 	fmt.Printf("time: %v", tm.Unix())
 }
 

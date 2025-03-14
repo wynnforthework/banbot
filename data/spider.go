@@ -12,7 +12,6 @@ import (
 	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -72,9 +71,7 @@ func getCheckInterval(tfSecs int) float64 {
 /** *******************************  Spider 爬虫部分   ****************************
  */
 var (
-	initSids  = map[int32]bool{} // Mark whether the SID has been initialized or not 标记sid是否已初始化数据
-	initMutex sync.Mutex         // Prevent initSids from concurrent reads and writes 防止出现initSids并发读和写
-	writeQ    = make(chan *SaveKline, 1000)
+	writeQ = make(chan *SaveKline, 1000)
 )
 
 type SaveKline struct {
@@ -82,65 +79,6 @@ type SaveKline struct {
 	TimeFrame string
 	Arr       []*banexg.Kline
 	MsgAction string
-}
-
-func fillPrevHole(sess *orm.Queries, save *SaveKline, bars []*banexg.Kline) (int64, *errs.Error) {
-	_, endMS := sess.GetKlineRange(save.Sid, save.TimeFrame)
-	if len(bars) == 0 {
-		return endMS, nil
-	}
-	initMutex.Lock()
-	initSids[save.Sid] = true
-	initMutex.Unlock()
-	fetchEndMS := bars[0].Time
-
-	var err *errs.Error
-	if endMS == 0 || fetchEndMS <= endMS {
-		// The new coin has no historical data, or the current bar and the inserted data are continuous, and the subsequent new bar can be directly inserted
-		// 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
-		log.Info("first fetch ok", zap.Int32("sid", save.Sid), zap.Int64("end", endMS))
-		return endMS, nil
-	}
-	exs := orm.GetSymbolByID(save.Sid)
-	tfMSecs := int64(utils2.TFToSecs(save.TimeFrame) * 1000)
-	tryCount := 0
-	log.Debug("start first fetch", zap.String("pair", exs.Symbol), zap.Int64("s", endMS), zap.Int64("e", fetchEndMS))
-	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
-	if err != nil {
-		return endMS, err
-	}
-	var newEndMS = endMS
-	var saveNum int
-	for tryCount <= 5 {
-		tryCount += 1
-		saveNum, err = sess.DownOHLCV2DB(exchange, exs, save.TimeFrame, endMS, fetchEndMS, nil)
-		if err != nil {
-			_, endMS = sess.GetKlineRange(save.Sid, save.TimeFrame)
-			return endMS, err
-		}
-		saveBars, err := sess.QueryOHLCV(exs.ID, save.TimeFrame, 0, 0, 1, false)
-		if err != nil {
-			_, endMS = sess.GetKlineRange(save.Sid, save.TimeFrame)
-			return endMS, err
-		}
-		var lastMS = int64(0)
-		if len(saveBars) > 0 {
-			lastMS = saveBars[len(saveBars)-1].Time
-			newEndMS = lastMS + tfMSecs
-		}
-		if newEndMS >= fetchEndMS {
-			break
-		} else {
-			//If the latest bar is not obtained, wait for 2s to try again (the request ohlcv may not be obtained at the end of 1M)
-			//如果未成功获取最新的bar，等待2s重试（1m刚结束时请求ohlcv可能取不到）
-			log.Info("query first fail, wait 2s", zap.String("pair", exs.Symbol),
-				zap.Int("ins", saveNum), zap.Int64("last", lastMS))
-			time.Sleep(time.Second * 2)
-		}
-	}
-	log.Info("first fetch ok", zap.String("pair", exs.Symbol), zap.Int64("s", endMS),
-		zap.Int64("e", fetchEndMS))
-	return newEndMS, nil
 }
 
 func consumeWriteQ(workNum int) {
@@ -344,7 +282,7 @@ func (m *Miner) watchTrades(pairs []string) {
 }
 
 func (m *Miner) watchPrices() {
-	if m.IsWatchPrice {
+	if m.IsWatchPrice || !m.exchange.IsContract(m.Market) {
 		return
 	}
 	out, err := m.exchange.WatchMarkPrices(nil, map[string]interface{}{
@@ -528,6 +466,7 @@ func (m *Miner) watchKLines(pairs []string) {
 	}
 
 	// 处理ws推送的K线数据
+	pricePrefix := fmt.Sprintf("price_%s_%s", m.ExgName, m.Market)
 	go func() {
 		defer func() {
 			m.KlineReady = false
@@ -543,10 +482,12 @@ func (m *Miner) watchKLines(pairs []string) {
 			cache := map[string][]*banexg.Kline{}
 			curKey := fmt.Sprintf("%s_%s", first.Symbol, first.TimeFrame)
 			cache[curKey] = []*banexg.Kline{&first.Kline}
+			prices := map[string]float64{first.Symbol: first.Close}
 		readCache:
 			for {
 				select {
 				case val := <-out:
+					prices[val.Symbol] = val.Close
 					valKey := fmt.Sprintf("%s_%s", val.Symbol, val.TimeFrame)
 					arr, _ := cache[valKey]
 					if len(arr) > 0 && arr[len(arr)-1].Time == val.Time {
@@ -556,6 +497,16 @@ func (m *Miner) watchKLines(pairs []string) {
 					}
 				default:
 					break readCache
+				}
+			}
+			if tfSecs < 60 {
+				// 对于现货，无全市场价格推送，从kline获取发送
+				err = m.spider.Broadcast(&utils.IOMsg{
+					Action: pricePrefix,
+					Data:   prices,
+				})
+				if err != nil {
+					log.Error("broadCast price fail", zap.String("key", pricePrefix), zap.Error(err))
 				}
 			}
 			for key, arr := range cache {

@@ -1,12 +1,10 @@
 module github.com/banbox/banbot
 
-go 1.22.0
-
-toolchain go1.23.0
+go 1.23.0
 
 require (
 	github.com/anyongjin/go-bayesopt v1.0.1
-	github.com/banbox/banexg v0.2.15
+	github.com/banbox/banexg v0.2.16
 	github.com/banbox/banta v0.2.0
 	github.com/c-bata/goptuna v0.9.0
 	github.com/dgraph-io/ristretto v0.2.0
@@ -20,7 +18,7 @@ require (
 	github.com/shopspring/decimal v1.4.0
 	github.com/xuri/excelize/v2 v2.9.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/text v0.22.0
+	golang.org/x/text v0.23.0
 	gonum.org/v1/gonum v0.15.1
 	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.5
@@ -43,6 +41,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/beevik/ntp v1.4.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.8.2 // indirect
@@ -84,12 +83,12 @@ require (
 	github.com/xuri/nfp v0.0.0-20250111060730-82a408b9aa71 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/exp v0.0.0-20250207012021-f9890c6ad9f3 // indirect
-	golang.org/x/net v0.34.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/term v0.29.0 // indirect
+	golang.org/x/net v0.37.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/term v0.30.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250204164813-702378808489 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

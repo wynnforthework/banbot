@@ -229,9 +229,7 @@ func (w *KLineWatcher) onPriceUpdate(key string, data []byte) {
 		log.Warn("onPriceUpdate receive invalid msg", zap.String("raw", string(data)), zap.Error(err))
 		return
 	}
-	for pair, price := range msg {
-		core.SetPrice(pair, price)
-	}
+	core.SetPrices(msg)
 }
 
 func (w *KLineWatcher) onTrades(key string, data []byte) {

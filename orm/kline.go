@@ -507,13 +507,15 @@ InsertKLines
 Only batch insert K-lines. To update associated information simultaneously, please use InsertKLinesAuto
 只批量插入K线，如需同时更新关联信息，请使用InsertKLinesAuto
 */
-func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline) (int64, *errs.Error) {
+func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline, delOnDump bool) (int64, *errs.Error) {
 	arrLen := len(arr)
 	if arrLen == 0 {
 		return 0, nil
 	}
+	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
+	startMS, endMS := arr[0].Time, arr[arrLen-1].Time+tfMSecs
 	log.Debug("insert klines", zap.String("tf", timeFrame), zap.Int32("sid", sid),
-		zap.Int("num", arrLen), zap.Int64("start", arr[0].Time), zap.Int64("end", arr[arrLen-1].Time))
+		zap.Int("num", arrLen), zap.Int64("start", startMS), zap.Int64("end", endMS))
 	tblName := "kline_" + timeFrame
 	var adds = make([]*KlineSid, arrLen)
 	for i, v := range arr {
@@ -529,6 +531,13 @@ func (q *Queries) InsertKLines(timeFrame string, sid int32, arr []*banexg.Kline)
 		var pgErr *pgconn.PgError
 		if errors.As(err_, &pgErr) {
 			if pgErr.Code == "23505" {
+				if delOnDump {
+					// 报错插入重复数据，删除重试
+					err := q.DelKLines(sid, timeFrame, startMS, endMS)
+					if err == nil {
+						return q.InsertKLines(timeFrame, sid, arr, false)
+					}
+				}
 				return 0, NewDbErr(core.ErrDbUniqueViolation, err_)
 			}
 		}
@@ -560,7 +569,7 @@ func (q *Queries) InsertKLinesAuto(timeFrame string, sid int32, arr []*banexg.Kl
 	if err != nil || insId == 0 {
 		return 0, err
 	}
-	num, err := q.InsertKLines(timeFrame, sid, arr)
+	num, err := q.InsertKLines(timeFrame, sid, arr, true)
 	if err != nil {
 		return num, err
 	}

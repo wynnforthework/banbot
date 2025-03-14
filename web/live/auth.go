@@ -1,6 +1,7 @@
 package live
 
 import (
+	"github.com/banbox/banexg/bntp"
 	"strings"
 	"time"
 
@@ -68,7 +69,7 @@ type AuthClaims struct {
 }
 
 func createAuthToken(user string, secret string, expHours float64) (string, error) {
-	now := time.Now()
+	now := bntp.Now()
 	claims := AuthClaims{
 		User: user,
 		RegisteredClaims: jwt.RegisteredClaims{

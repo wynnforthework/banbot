@@ -3,6 +3,7 @@ package rpc
 import (
 	"errors"
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
@@ -135,7 +136,7 @@ func TrySendExc(cacheKey string, content string) {
 	lockExcKey.Lock()
 	lastMS, ok := keyLastMap[cacheKey]
 	lockExcKey.Unlock()
-	curMS := time.Now().UnixMilli()
+	curMS := btime.UTCStamp()
 	waitMS := int64(0)
 	if !ok || curMS-lastMS > keyIntv {
 		// The distance from the last time has exceeded the interval, send immediately

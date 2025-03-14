@@ -47,12 +47,6 @@ func SetBarPrice(pair string, price float64) {
 	lockBarPrices.Unlock()
 }
 
-func SetPrice(pair string, price float64) {
-	lockPrices.Lock()
-	setDataPrice(prices, pair, price)
-	lockPrices.Unlock()
-}
-
 func IsPriceEmpty() bool {
 	lockPrices.RLock()
 	lockBarPrices.RLock()

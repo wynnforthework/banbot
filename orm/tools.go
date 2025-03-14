@@ -872,7 +872,7 @@ func tryInsertKlines(sess *Queries, tf string, sid int32, klines []*banexg.Kline
 			return err
 		}
 	}
-	_, err := sess.InsertKLines(tf, sid, klines)
+	_, err := sess.InsertKLines(tf, sid, klines, true)
 	return err
 }
 

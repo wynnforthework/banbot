@@ -11,6 +11,7 @@ import (
 	utils2 "github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"sync"
+	"time"
 )
 
 type periodSta struct {
@@ -33,12 +34,9 @@ func (p *periodSta) alignAndLast(sess *orm.Queries, sid int32, tf string, curMS 
 	// 上一个小时对齐时间戳
 	lastMS, _ := p.stamps[sid]
 	if lastMS == 0 {
-		kinfos, _ := sess.FindKInfos(context.Background(), sid)
-		for _, kinfo := range kinfos {
-			if kinfo.Timeframe == tf {
-				lastMS = kinfo.Stop - p.msecs
-				break
-			}
+		_, kinfoEnd := sess.GetKlineRange(sid, tf)
+		if kinfoEnd > 0 {
+			lastMS = kinfoEnd - p.msecs
 		}
 	}
 	hourAlign := utils2.AlignTfMSecs(curMS, p.msecs)
@@ -61,31 +59,45 @@ func (p *periodSta) reset(sid int32, timeMS int64) {
 func trySaveKlines(job *SaveKline, tfSecs int, mntSta *periodSta, hourSta *periodSta) {
 	ctx := context.Background()
 	sess, conn, err := orm.Conn(ctx)
+	sid := job.Sid
 	if err == nil {
 		defer conn.Release()
 		var addBars = job.Arr
 		endMS := addBars[len(addBars)-1].Time + int64(tfSecs*1000)
+		savedNewBars := false
 		if tfSecs < 60 {
 			// 最小保存1m级别k线
-			mntAlign, prevMS := mntSta.alignAndLast(sess, job.Sid, "1m", endMS)
+			mntAlign, prevMS := mntSta.alignAndLast(sess, sid, "1m", endMS)
 			if mntAlign <= prevMS {
 				// 未出现新的1m完成k线
 				return
 			}
-			addBars, err = downSidKline(sess, job.Sid, "1m", prevMS, mntAlign)
+			var newEndMS int64
+			newEndMS, err = downKlineTo(sess, sid, "1m", prevMS, mntAlign)
 			if err != nil {
-				mntSta.reset(job.Sid, prevMS)
-				log.Error("down kline 1m fail", zap.Int32("sid", job.Sid), zap.Error(err))
+				mntSta.reset(sid, newEndMS)
+				log.Error("down kline 1m fail", zap.Int32("sid", sid), zap.Error(err))
 				return
+			} else if newEndMS < mntAlign {
+				log.Warn("down kline 1m insufficient", zap.Int32("sid", sid),
+					zap.Int64("exp", mntAlign), zap.Int64("end", newEndMS))
 			}
+			savedNewBars = newEndMS > prevMS
 		} else {
 			// 1m级别，可直接入库
-			initMutex.Lock()
-			_, ok := initSids[job.Sid]
-			initMutex.Unlock()
-			if !ok {
-				var nextMS int64
-				nextMS, err = fillPrevHole(sess, job, addBars)
+			expEndMS := addBars[0].Time
+			var nextMS int64
+			mntAlign, prevMS := mntSta.alignAndLast(sess, sid, "1m", expEndMS)
+			if mntAlign > prevMS {
+				// 有缺口，需要先下载缺失部分
+				nextMS, err = downKlineTo(sess, sid, job.TimeFrame, prevMS, expEndMS)
+				if nextMS < expEndMS {
+					log.Warn("fetch lack 1m bad", zap.Int32("sid", sid), zap.Int64("end", endMS),
+						zap.Int64("expEnd", expEndMS))
+				}
+			}
+			if nextMS > expEndMS {
+				// 待插入的k线头部有冗余
 				var cutIdx = 0
 				for i, bar := range addBars {
 					if bar.Time < nextMS {
@@ -97,39 +109,76 @@ func trySaveKlines(job *SaveKline, tfSecs int, mntSta *periodSta, hourSta *perio
 				addBars = addBars[cutIdx:]
 			}
 			if err == nil && len(addBars) > 0 {
-				_, err = sess.InsertKLinesAuto(job.TimeFrame, job.Sid, addBars, true)
+				_, err = sess.InsertKLinesAuto(job.TimeFrame, sid, addBars, true)
+				if err == nil {
+					savedNewBars = true
+					mntSta.reset(sid, endMS)
+				}
 			}
 		}
-		if err == nil && len(addBars) > 0 {
+		if err == nil && savedNewBars {
 			// 下载1h及以上周期K线数据
-			hourAlign, lastMS := hourSta.alignAndLast(sess, job.Sid, "1h", endMS)
+			hourAlign, lastMS := hourSta.alignAndLast(sess, sid, "1h", endMS)
 			if hourAlign > lastMS {
-				_, err = downSidKline(sess, job.Sid, "1h", lastMS, hourAlign)
+				_, err = downKlineTo(sess, sid, "1h", lastMS, hourAlign)
 			}
 		}
 	}
 	if err != nil {
-		log.Error("consumeWriteQ: fail", zap.Int32("sid", job.Sid), zap.Error(err))
+		log.Error("consumeWriteQ: fail", zap.Int32("sid", sid), zap.Error(err))
 	}
 }
 
-func downSidKline(sess *orm.Queries, sid int32, tf string, startMs int64, endMs int64) ([]*banexg.Kline, *errs.Error) {
+func downKlineTo(sess *orm.Queries, sid int32, tf string, oldEndMS, toEndMS int64) (int64, *errs.Error) {
+	if oldEndMS == 0 {
+		_, oldEndMS = sess.GetKlineRange(sid, tf)
+	}
+
 	var err *errs.Error
-	var num int
+	if oldEndMS == 0 || toEndMS <= oldEndMS {
+		// The new coin has no historical data, or the current bar and the inserted data are continuous, and the subsequent new bar can be directly inserted
+		// 新的币无历史数据、或当前bar和已插入数据连续，直接插入后续新bar即可
+		return oldEndMS, nil
+	}
 	exs := orm.GetSymbolByID(sid)
-	if exs == nil {
-		log.Error("sid not found in cache", zap.Int32("sid", sid))
-	} else {
-		var exchange banexg.BanExchange
-		exchange, err = exg.GetWith(exs.Exchange, exs.Market, "")
-		if err == nil {
-			num, err = sess.DownOHLCV2DB(exchange, exs, tf, startMs, endMs, nil)
-			if err == nil && num > 0 {
-				return sess.QueryOHLCV(sid, tf, startMs, endMs, 0, false)
-			}
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+	tryCount := 0
+	exchange, err := exg.GetWith(exs.Exchange, exs.Market, "")
+	if err != nil {
+		return oldEndMS, err
+	}
+	var newEndMS = oldEndMS
+	var saveNum int
+	for tryCount <= 5 {
+		tryCount += 1
+		saveNum, err = sess.DownOHLCV2DB(exchange, exs, tf, oldEndMS, toEndMS, nil)
+		if err != nil {
+			_, oldEndMS = sess.GetKlineRange(sid, tf)
+			return oldEndMS, err
+		}
+		saveBars, err := sess.QueryOHLCV(exs.ID, tf, 0, 0, 1, false)
+		if err != nil {
+			_, oldEndMS = sess.GetKlineRange(sid, tf)
+			return oldEndMS, err
+		}
+		var lastMS = int64(0)
+		if len(saveBars) > 0 {
+			lastMS = saveBars[len(saveBars)-1].Time
+			newEndMS = lastMS + tfMSecs
+		}
+		if newEndMS >= toEndMS {
+			break
+		} else {
+			//If the latest bar is not obtained, wait for 2s to try again
+			//如果未成功获取最新的bar，等待2s重试
+			log.Warn("downKlineTo not complete, wait 2s, Your system time may be inaccurate, "+
+				"you may need delete ban_ntp.json in Temp directory and retry",
+				zap.String("pair", exs.Symbol), zap.Int("ins", saveNum),
+				zap.Int64("last", lastMS), zap.Int64("newEnd", newEndMS))
+			time.Sleep(time.Second * 2)
 		}
 	}
-	return nil, err
+	return newEndMS, nil
 }
 
 /*
