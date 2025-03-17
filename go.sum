@@ -1,15 +1,14 @@
 github.com/ajstarks/svgo v0.0.0-20180226025133-644b8db467af/go.mod h1:K08gAheRH3/J6wwsYMMT4xOr94bZjxIelGM0+d/wbFw=
 github.com/andybalholm/brotli v1.1.1 h1:PR2pgnyFznKEugtsUo0xLdDop5SKXd5Qf5ysW+7XdTA=
 github.com/andybalholm/brotli v1.1.1/go.mod h1:05ib4cKhjx3OQYUY22hTVd34Bc8upXjOLL2rKwwZBoA=
-github.com/anyongjin/go-bayesopt v1.0.1 h1:JxB7VwoJ2Hfo9jdbSqPvBAV4rW7JmXMaD1CE+leands=
-github.com/anyongjin/go-bayesopt v1.0.1/go.mod h1:Z6cIBXt3vp2jzaJgRvueDVcREXkxOfWRcWtq2PqSeG8=
+github.com/anyongjin/go-bayesopt v1.0.2 h1:845NHAdxk4x1FxeOS5McoaWO33ZfE2AR434j9lnEHAM=
+github.com/anyongjin/go-bayesopt v1.0.2/go.mod h1:KB64n3O9sPBql6pPnOKh0w8bnOSG1TIMNb+9c/9iQs0=
 github.com/banbox/banexg v0.2.16 h1:asvceHpxhPgOCqihQFrxxCDlYyq8pQAiQ3RJMqjiOr8=
 github.com/banbox/banexg v0.2.16/go.mod h1:TlATmKsFt80GscSjgfPq2M6K/u72RAKiHw5guozPdfw=
 github.com/banbox/banta v0.2.0 h1:fXdPHrPBDi3PQTV14pm84yBKIH2teB/3LQ9BUpTmIhI=
 github.com/banbox/banta v0.2.0/go.mod h1:+9PG7f4QZtfpJfKpGp7aToOUg2ByatDosHjjvGFjaVc=
 github.com/beevik/ntp v1.4.3 h1:PlbTvE5NNy4QHmA4Mg57n7mcFTmr1W1j3gcK7L1lqho=
 github.com/beevik/ntp v1.4.3/go.mod h1:Unr8Zg+2dRn7d8bHFuehIMSvvUYssHMxW3Q5Nx4RW5Q=
-github.com/blend/go-sdk v2.0.0+incompatible/go.mod h1:3GUb0YsHFNTJ6hsJTpzdmCUl05o8HisKjx5OAlzYKdw=
 github.com/c-bata/goptuna v0.9.0 h1:JUO13AVxM4YmO9/NMoaNWegfwaM4wAlkrQ+oN/fgfrg=
 github.com/c-bata/goptuna v0.9.0/go.mod h1:X2UFBRhqjEI+x2xw/LbaGRaFa/TRBH9w8QjknAaEavo=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -178,8 +177,6 @@ github.com/valyala/fasthttp v1.58.0 h1:GGB2dWxSbEprU9j0iMJHgdKYJVDyjrOwF9RE59PbR
 github.com/valyala/fasthttp v1.58.0/go.mod h1:SYXvHHaFp7QZHGKSHmoMipInhrI5StHrhDTYVEjK/Kw=
 github.com/valyala/tcplisten v1.0.0 h1:rBHj/Xf+E1tRGZyWIWwJDiRY0zc1Js+CV5DqwacVSA8=
 github.com/valyala/tcplisten v1.0.0/go.mod h1:T0xQ8SeCZGxckz9qRXTfG43PvQ/mcWh7FwZEA7Ioqkc=
-github.com/wcharczuk/go-chart v2.0.1+incompatible h1:0pz39ZAycJFF7ju/1mepnk26RLVLBCWz1STcD3doU0A=
-github.com/wcharczuk/go-chart v2.0.1+incompatible/go.mod h1:PF5tmL4EIx/7Wf+hEkpCqYi5He4u90sw+0+6FhrryuE=
 github.com/wcharczuk/go-chart/v2 v2.1.0/go.mod h1:yx7MvAVNcP/kN9lKXM/NTce4au4DFN99j6i1OwDclNA=
 github.com/xuri/efp v0.0.0-20241211021726-c4e992084aa6 h1:8m6DWBG+dlFNbx5ynvrE7NgI+Y7OlZVMVTpayoW+rCc=
 github.com/xuri/efp v0.0.0-20241211021726-c4e992084aa6/go.mod h1:ybY/Jr0T0GTCnYjKqmdwxyxn2BQf2RcQIIvex5QldPI=

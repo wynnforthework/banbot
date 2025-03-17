@@ -3,7 +3,7 @@ module github.com/banbox/banbot
 go 1.23.0
 
 require (
-	github.com/anyongjin/go-bayesopt v1.0.1
+	github.com/anyongjin/go-bayesopt v1.0.2
 	github.com/banbox/banexg v0.2.16
 	github.com/banbox/banta v0.2.0
 	github.com/c-bata/goptuna v0.9.0
