@@ -246,6 +246,10 @@ func EnsureSymbols(symbols []*ExSymbol, exchanges ...string) *errs.Error {
 	}
 	_, err_ := sess.AddSymbols(context.Background(), argList)
 	if err_ != nil {
+		errMsg := err_.Error()
+		if strings.Contains(errMsg, "SQLSTATE 22001") {
+			log.Error("save fail, data too lang", zap.Error(err_), zap.Any("data", argList))
+		}
 		return NewDbErr(core.ErrDbExecFail, err_)
 	}
 	for exgId := range exgNames {

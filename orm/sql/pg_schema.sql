@@ -59,7 +59,7 @@ CREATE TABLE "public"."exsymbol"
     "exchange"  varchar(50) not null,
     "exg_real"  varchar(50) not null,
     "market"    varchar(20) not null,
-    "symbol"    varchar(20) not null,
+    "symbol"    varchar(50) not null,
     "combined"  boolean     not null default false,
     "list_ms"   int8      default 0  not null,
     "delist_ms" int8      default 0  not null
