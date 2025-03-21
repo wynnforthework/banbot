@@ -96,17 +96,21 @@ func Run(args []string) error {
 	}
 
 	// 启动k线监听和websocket推送
-	go base.RunReceiver()
+	//go base.RunReceiver()
 
 	bindUrl := fmt.Sprintf("%s:%v", ag.Host, ag.Port)
 	lang := utils.GetSystemLanguage()
-	openUrl := bindUrl
+	openUrl := "http://" + bindUrl
 	if lang == "zh-CN" {
 		openUrl += "/zh-CN"
 	}
 
 	// 延迟500ms打开浏览器
-	utils.OpenBrowserDelay("http://"+openUrl, 500)
+	if !utils.IsDocker() {
+		utils.OpenBrowserDelay(openUrl, 500)
+	} else {
+		log.Info("please open browser to: " + openUrl)
+	}
 
 	return app.Listen(bindUrl)
 }
