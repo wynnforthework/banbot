@@ -30,6 +30,7 @@ low_cost_action: ignore  # ${m.cfg_low_cost_action()}
 bt_net_cost: 15  # ${m.cfg_bt_net_cost()}
 relay_sim_unfinish: false  # ${m.cfg_relay_sim_unfinish()}
 order_bar_max: 500  # ${m.cfg_order_bar_max()}
+ntp_lang_code: none  # ${m.cfg_ntp_lang_code()}
 wallet_amounts:  # ${m.cfg_wallet_amounts()}
   USDT: 10000
 stake_currency: [USDT, TUSD]  # ${m.cfg_stake_currency()}

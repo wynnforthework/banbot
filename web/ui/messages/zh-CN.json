@@ -539,6 +539,7 @@
   "cfg_bt_net_cost": "回测中的订单延迟，可用于模拟滑点，单位为秒，默认为15",
   "cfg_relay_sim_unfinish": "交易新品种时(回测/实盘)，是否从开始时间未平仓订单接力开始交易",
   "cfg_order_bar_max": "查找开始时间未平仓订单向前模拟最大bar数量",
+  "cfg_ntp_lang_code": "NTP真实时间同步，默认none不启用，支持的代码：zh-CN, zh-HK, zh-TW, ja-JP, ko-KR, zh-SG, global(表示全球ntp服务器：google、apple、facebook...)",
   "cfg_wallet_amounts": "钱包余额，用于回测使用",
   "cfg_stake_currency": "限制交易对计价币种",
   "cfg_fatal_stop": "全局止损，总亏损达到这些限制时禁止下单",

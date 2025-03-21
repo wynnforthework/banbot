@@ -255,6 +255,10 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 		BTNetCost = 15
 	}
 	RelaySimUnFinish = c.RelaySimUnFinish
+	NTPLangCode = c.NTPLangCode
+	if NTPLangCode == "" {
+		NTPLangCode = "none"
+	}
 	OrderBarMax = c.OrderBarMax
 	if OrderBarMax == 0 {
 		OrderBarMax = 500

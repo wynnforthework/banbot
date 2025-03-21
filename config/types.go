@@ -32,6 +32,7 @@ var (
 	LowCostAction    string  // Actions taken when stake amount less than the minimum amount 花费不足最小金额时的动作：ignore, keep
 	BTNetCost        float64 // Order placement delay during backtesting, simulated slippage, unit seconds 回测时下单延迟，模拟滑点，单位秒
 	RelaySimUnFinish bool    // 交易新品种时(回测/实盘)，是否从开始时间未平仓订单接力开始交易
+	NTPLangCode      string  // NTP真实时间同步所用langCode，默认none不启用
 	OrderBarMax      int     // 查找开始时间未平仓订单向前模拟最大bar数量
 	MaxOpenOrders    int
 	MaxSimulOpen     int
@@ -99,6 +100,7 @@ type Config struct {
 	LowCostAction    string                            `yaml:"low_cost_action,omitempty" mapstructure:"low_cost_action"`
 	BTNetCost        float64                           `yaml:"bt_net_cost,omitempty" mapstructure:"bt_net_cost"`
 	RelaySimUnFinish bool                              `yaml:"relay_sim_unfinish,omitempty" mapstructure:"relay_sim_unfinish"`
+	NTPLangCode      string                            `yaml:"ntp_lang_code,omitempty" mapstructure:"ntp_lang_code"`
 	OrderBarMax      int                               `yaml:"order_bar_max,omitempty" mapstructure:"order_bar_max"`
 	MaxOpenOrders    int                               `yaml:"max_open_orders,omitempty" mapstructure:"max_open_orders"`
 	MaxSimulOpen     int                               `yaml:"max_simul_open,omitempty" mapstructure:"max_simul_open"`

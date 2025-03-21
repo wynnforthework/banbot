@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/bex"
+	"github.com/banbox/banexg/bntp"
 	"github.com/banbox/banexg/errs"
 	"github.com/go-viper/mapstructure/v2"
 	"time"
@@ -19,6 +20,9 @@ func Setup() *errs.Error {
 	exgCfg := config.Exchange
 	if exgCfg == nil {
 		return errs.NewMsg(core.ErrBadConfig, "exchange is required")
+	}
+	if config.NTPLangCode != "" {
+		bntp.LangCode = config.NTPLangCode
 	}
 	var err *errs.Error
 	Default, err = GetWith(exgCfg.Name, core.Market, core.ContractType)
