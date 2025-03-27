@@ -24,10 +24,15 @@ import (
 )
 
 func Run(args []string) error {
+	isDocker := utils.IsDocker()
 	var ag = &CmdArgs{}
 	var f = flag.NewFlagSet("web", flag.ExitOnError)
 	f.IntVar(&ag.Port, "port", 8000, "port to listen")
-	f.StringVar(&ag.Host, "host", "127.0.0.1", "bind host ip")
+	defHost := "127.0.0.1"
+	if isDocker {
+		defHost = "0.0.0.0"
+	}
+	f.StringVar(&ag.Host, "host", defHost, "bind host ip")
 	f.StringVar(&ag.LogLevel, "level", "info", "log level")
 	f.StringVar(&ag.TimeZone, "tz", "", "timezone")
 	f.StringVar(&ag.DataDir, "datadir", "", "Path to data dir.")
@@ -106,7 +111,7 @@ func Run(args []string) error {
 	}
 
 	// 延迟500ms打开浏览器
-	if !utils.IsDocker() {
+	if !isDocker {
 		utils.OpenBrowserDelay(openUrl, 500)
 	} else {
 		log.Info("please open browser to: " + openUrl)

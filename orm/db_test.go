@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"fmt"
+	"github.com/banbox/banbot/config"
 	"github.com/jackc/pgx/v5"
 	"testing"
 )
@@ -23,4 +24,20 @@ func TestDb(t *testing.T) {
 		return
 	}
 	fmt.Printf("loaded %d goods", len(symbols))
+}
+
+func TestDbMigration(t *testing.T) {
+	var args config.CmdArgs
+	err := config.LoadConfig(&args)
+	if err != nil {
+		panic(err)
+	}
+	pool, err = pgConnPool()
+	if err != nil {
+		panic(err)
+	}
+	err = runMigrations(context.Background(), pool)
+	if err != nil {
+		panic(err)
+	}
 }

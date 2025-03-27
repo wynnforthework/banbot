@@ -6,12 +6,14 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
-	"github.com/banbox/banbot/exg"
-	utils2 "github.com/banbox/banbot/utils"
 	"net"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/banbox/banbot/exg"
+	utils2 "github.com/banbox/banbot/utils"
 
 	"github.com/jackc/pgx/v5/pgconn"
 
@@ -44,6 +46,20 @@ var ddlPg1 string
 
 //go:embed sql/pg_schema2.sql
 var ddlPg2 string
+
+//go:embed sql/pg_migrations.sql
+var ddlMigrations string
+
+var ddlDbConf = `DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'dbconf') THEN
+        CREATE TABLE dbconf (
+            key varchar(50) PRIMARY KEY not null,
+            value text not null
+        );
+        INSERT INTO dbconf (key,value) VALUES ('schema_version', '0');
+    END IF;
+END $$;`
 
 var (
 	DbTrades = "trades"
@@ -90,21 +106,10 @@ func Setup() *errs.Error {
 			return NewDbErr(core.ErrDbReadFail, err)
 		}
 	} else {
-		// 检查public.khole表是否存在no_data字段，如果不存在则插入此字段
-		row = pool.QueryRow(ctx, `
-			SELECT COUNT(*) FROM information_schema.columns 
-			WHERE table_name = 'khole' AND column_name = 'no_data'`)
-		var noDataExists int
-		err = row.Scan(&noDataExists)
-		if err != nil {
-			return NewDbErr(core.ErrDbReadFail, err)
-		}
-		if noDataExists == 0 {
-			_, err = pool.Exec(ctx, "ALTER TABLE public.khole ADD COLUMN no_data BOOLEAN DEFAULT FALSE")
-			if err != nil {
-				return NewDbErr(core.ErrDbReadFail, err)
-			}
-			log.Info("added no_data column to khole table")
+		// 执行数据库迁移
+		err2 = runMigrations(ctx, pool)
+		if err2 != nil {
+			return err2
 		}
 	}
 	log.Info("connect db ok", zap.String("url", utils2.MaskDBUrl(dbCfg.Url)), zap.Int("pool", dbCfg.MaxPoolSize))
@@ -356,4 +361,88 @@ func NewDbErr(code int, err_ error) *errs.Error {
 		}
 	}
 	return errs.New(code, err_)
+}
+
+// 执行数据库迁移
+func runMigrations(ctx context.Context, pool *pgxpool.Pool) *errs.Error {
+	// 1. 检查dbconf表是否存在
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'dbconf')`).Scan(&exists)
+	if err != nil {
+		return NewDbErr(core.ErrDbReadFail, err)
+	}
+
+	// 2. 如果表不存在，执行第一个迁移脚本创建表
+	if !exists {
+		_, err = pool.Exec(ctx, ddlDbConf)
+		if err != nil {
+			return NewDbErr(core.ErrDbExecFail, err)
+		}
+	}
+
+	// 3. 获取当前版本
+	var currentVersion int
+	err = pool.QueryRow(ctx, "SELECT value::int FROM dbconf WHERE key = 'schema_version'").Scan(&currentVersion)
+	if err != nil && !strings.Contains(err.Error(), "no rows") {
+		return NewDbErr(core.ErrDbReadFail, err)
+	}
+
+	// 4. 解析迁移脚本
+	migrations := strings.Split(ddlMigrations, "-- version")
+	initVersion := currentVersion
+
+	for _, migration := range migrations {
+		if strings.TrimSpace(migration) == "" {
+			continue
+		}
+
+		// 提取版本号
+		lines := strings.SplitN(migration, "\n", 2)
+		if len(lines) < 2 {
+			continue
+		}
+		versionStr := strings.TrimSpace(lines[0])
+		version, err := strconv.Atoi(versionStr)
+		if err != nil {
+			log.Warn("invalid migration version", zap.String("version", versionStr))
+			continue
+		}
+		if version <= currentVersion {
+			continue
+		}
+
+		// 在事务中执行迁移
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return NewDbErr(core.ErrDbExecFail, err)
+		}
+
+		// 执行迁移脚本
+		_, err = tx.Exec(ctx, lines[1])
+		if err != nil {
+			tx.Rollback(ctx)
+			return NewDbErr(core.ErrDbExecFail, err)
+		}
+
+		// 更新版本号
+		_, err = tx.Exec(ctx, "UPDATE dbconf SET value = $1 WHERE key = 'schema_version'", versionStr)
+		if err != nil {
+			tx.Rollback(ctx)
+			return NewDbErr(core.ErrDbExecFail, err)
+		}
+
+		// 提交事务
+		err = tx.Commit(ctx)
+		if err != nil {
+			return NewDbErr(core.ErrDbExecFail, err)
+		}
+
+		currentVersion = version
+	}
+
+	if initVersion < currentVersion {
+		log.Info("database migration completed", zap.Int("from", initVersion), zap.Int("to", currentVersion))
+	}
+	return nil
 }
