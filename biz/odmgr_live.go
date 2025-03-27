@@ -155,18 +155,29 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 				}
 			}
 
+			// 过滤重复订单
+			var checkKeys = make(map[string]bool)
+			var curOds = make([]*ormo.InOutOrder, 0, len(ods))
+			for _, od := range ods {
+				key := od.Key()
+				if _, ok := checkKeys[key]; !ok {
+					curOds = append(curOds, od)
+					checkKeys[key] = true
+				}
+			}
+
 			// 计算本地订单总量
 			var localAmt float64
-			for _, od := range ods {
+			for _, od := range curOds {
 				localAmt += od.HoldAmount()
 			}
 
 			// 如果本地订单量大于实际持仓量,需要关闭部分订单
 			if localAmt > posAmt*1.002 {
 				// 按数量降序排序
-				sort.Slice(ods, func(i, j int) bool {
-					amtI := ods[i].HoldAmount()
-					amtJ := ods[j].HoldAmount()
+				sort.Slice(curOds, func(i, j int) bool {
+					amtI := curOds[i].HoldAmount()
+					amtJ := curOds[j].HoldAmount()
 					return amtI > amtJ
 				})
 				overAmt := localAmt - posAmt
@@ -174,7 +185,7 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 
 				// 逐个关闭订单直到数量匹配
 				var closeOds []string
-				for _, od := range ods {
+				for _, od := range curOds {
 					if overAmt < dustAmt {
 						break
 					}
@@ -201,6 +212,7 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 				}
 				log.Warn("close extra local open orders", zap.String("pair", symbol),
 					zap.Float64("ExtraTotal", localAmt-posAmt), zap.Float64("ExtraLeft", overAmt),
+					zap.Float64("localAmt", localAmt), zap.Float64("exgAmt", posAmt),
 					zap.Int("odNum", len(closeOds)), zap.Strings("orders", closeOds))
 			}
 		}

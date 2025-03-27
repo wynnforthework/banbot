@@ -150,6 +150,9 @@ func CronCheckTriggerOds() {
 }
 
 func StartLoopBalancePositions() {
+	for account := range config.Accounts {
+		updateAccBalance(account)
+	}
 	go func() {
 		ticker := time.NewTicker(time.Duration(config.AccountPullSecs) * time.Second)
 		core.ExitCalls = append(core.ExitCalls, ticker.Stop)
@@ -176,15 +179,19 @@ func updateBalancePos() {
 		if err != nil {
 			log.Error("SyncLocalOrders fail", zap.String("acc", account), zap.Error(err))
 		}
-		wallet := biz.GetWallets(account)
-		rsp, err := exg.Default.FetchBalance(map[string]interface{}{
-			banexg.ParamAccount: account,
-		})
-		if err != nil {
-			log.Error("UpdateBalance fail", zap.String("acc", account), zap.Error(err))
-		} else {
-			biz.UpdateWalletByBalances(wallet, rsp)
-		}
+		updateAccBalance(account)
+	}
+}
+
+func updateAccBalance(account string) {
+	wallet := biz.GetWallets(account)
+	rsp, err := exg.Default.FetchBalance(map[string]interface{}{
+		banexg.ParamAccount: account,
+	})
+	if err != nil {
+		log.Error("UpdateBalance fail", zap.String("acc", account), zap.Error(err))
+	} else {
+		biz.UpdateWalletByBalances(wallet, rsp)
 	}
 }
 
