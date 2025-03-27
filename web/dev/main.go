@@ -111,10 +111,10 @@ func Run(args []string) error {
 	}
 
 	// 延迟500ms打开浏览器
-	if !isDocker {
-		utils.OpenBrowserDelay(openUrl, 500)
-	} else {
+	if isDocker {
 		log.Info("please open browser to: " + openUrl)
+	} else {
+		utils.OpenBrowserDelay(openUrl, 500)
 	}
 
 	return app.Listen(bindUrl)

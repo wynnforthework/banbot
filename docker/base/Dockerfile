@@ -1,7 +1,7 @@
 FROM banbase
 
-ENV BanDataDir=/ban/data \
-    BanStratDir=/ban/strats
+ENV BanDataDir=/ban/data
+ENV BanStratDir=/ban/strats
 
 WORKDIR /ban/strats
 
@@ -11,9 +11,7 @@ RUN git reset --hard HEAD && git pull origin main && \
     go build -o ../bot
 
 
-WORKDIR /ban
-RUN chmod +x bot && \
-    ./bot init
+RUN chmod +x /ban/bot && /ban/bot init
 
 EXPOSE 8000 8001
 
