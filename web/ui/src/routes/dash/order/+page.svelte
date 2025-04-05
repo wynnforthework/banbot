@@ -8,7 +8,7 @@
   import { fmtDateStr, toUTCStamp, curTZ } from '$lib/dateutil';
   import { OrderDetail, type InOutOrder } from '$lib/order';
   import {getFirstValid} from "$lib/common";
-  import { pagination } from '@/lib/snippets.svelte';
+  import { pagination } from '$lib/snippets.svelte';
 
   let tabName = $state('bot'); // bot/exchange/position
   let banodList = $state<InOutOrder[]>([]);
@@ -249,7 +249,7 @@
       <div class="flex gap-2 items-center">
         <!-- 添加每页大小控制 -->
         <select 
-          class="select select-sm select-bordered focus:outline-none w-36 text-sm"
+          class="select select-sm focus:outline-none w-36 text-sm"
           bind:value={pageSize}
           onchange={() => loadData(1)}
         >
@@ -284,44 +284,42 @@
 
     <!-- Search Form -->
     {#if tabName !== 'position'}
-      <div class="form-control">
-        <div class="flex flex-wrap gap-4">
-          {#if tabName === 'bot'}
-            <select class="select select-sm select-bordered focus:outline-none text-sm" bind:value={search.status}>
-              <option value="">{m.all()}</option>
-              <option value="open">{m.pos_opened()}</option>
-              <option value="his">{m.closed()}</option>
-            </select>
-          {/if}
+      <div class="flex flex-wrap gap-4">
+        {#if tabName === 'bot'}
+          <select class="select select-sm focus:outline-none text-sm" bind:value={search.status}>
+            <option value="">{m.all()}</option>
+            <option value="open">{m.pos_opened()}</option>
+            <option value="his">{m.closed()}</option>
+          </select>
+        {/if}
 
-          <input type="text" class="input input-sm input-bordered focus:outline-none text-sm font-mono" placeholder={m.symbol()} bind:value={search.symbols} 
-            required={tabName !== 'bot'} />
+        <input type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.symbol()} bind:value={search.symbols}
+          required={tabName !== 'bot'} />
 
-          <input type="text" class="input input-sm input-bordered focus:outline-none text-sm font-mono" placeholder="20231012" bind:value={search.startMs} />
+        <input type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder="20231012" bind:value={search.startMs} />
 
-          {#if tabName === 'bot'}
-            <input type="text" class="input input-sm input-bordered focus:outline-none text-sm font-mono" placeholder="20231012" bind:value={search.stopMs} />
-          {:else}
-            <input type="number" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={limitSize} />
-          {/if}
+        {#if tabName === 'bot'}
+          <input type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder="20231012" bind:value={search.stopMs} />
+        {:else}
+          <input type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={limitSize} />
+        {/if}
 
-          <button 
-            class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" 
-            onclick={() => {
-              if (tabName !== 'bot' && !search.symbols) {
-                alerts.addAlert('error', m.symbol_required());
-                return;
-              }
-              loadData(1);
-            }}
-          >
-            {m.search()}
-          </button>
+        <button 
+          class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" 
+          onclick={() => {
+            if (tabName !== 'bot' && !search.symbols) {
+              alerts.addAlert('error', m.symbol_required());
+              return;
+            }
+            loadData(1);
+          }}
+        >
+          {m.search()}
+        </button>
 
-          {#if exFilter}
-            <span class="text-info">{exFilter}</span>
-          {/if}
-        </div>
+        {#if exFilter}
+          <span class="text-info">{exFilter}</span>
+        {/if}
       </div>
     {/if}
 
@@ -475,91 +473,73 @@
 
 <Modal title={m.open_order()} bind:show={showOpenOrder} width={800} buttons={[]}>
   <div class="space-y-4 p-4">
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.pair()}</label>
-        <input type="text" class="input input-sm input-bordered focus:outline-none text-sm font-mono" placeholder={m.enter_symbol_placeholder()} bind:value={openOd.pair} />
-      </div>
-    </div>
+    <fieldset class="fieldset">
+      <label class="label" for="pair">{m.pair()}</label>
+      <input id="pair" type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.enter_symbol_placeholder()} bind:value={openOd.pair} />
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.side()}</label>
-        <div class="flex gap-4 flex-1">
-          <label class="label cursor-pointer">
-            <input type="radio" class="radio" bind:group={openOd.side} value="long" />
-            <span class="label-text ml-2">{m.long()}</span>
-          </label>
-          <label class="label cursor-pointer">
-            <input type="radio" class="radio" bind:group={openOd.side} value="short" />
-            <span class="label-text ml-2">{m.short()}</span>
-          </label>
-        </div>
+    <fieldset class="fieldset">
+      <label class="label">{m.side()}</label>
+      <div class="flex gap-4 flex-1">
+        <label class="label cursor-pointer">
+          <input type="radio" class="radio" bind:group={openOd.side} value="long" />
+          <span class="ml-2">{m.long()}</span>
+        </label>
+        <label class="label cursor-pointer">
+          <input type="radio" class="radio" bind:group={openOd.side} value="short" />
+          <span class="ml-2">{m.short()}</span>
+        </label>
       </div>
-    </div>
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.order_type()}</label>
-        <div class="flex gap-4 flex-1">
-          <label class="label cursor-pointer">
-            <input type="radio" class="radio" bind:group={openOd.orderType} value="market" />
-            <span class="label-text ml-2">{m.market_order()}</span>
-          </label>
-          <label class="label cursor-pointer">
-            <input type="radio" class="radio" bind:group={openOd.orderType} value="limit" />
-            <span class="label-text ml-2">{m.limit_order()}</span>
-          </label>
-        </div>
+    <fieldset class="fieldset">
+      <label class="label">{m.order_type()}</label>
+      <div class="flex gap-4 flex-1">
+        <label class="label cursor-pointer">
+          <input type="radio" class="radio" bind:group={openOd.orderType} value="market" />
+          <span class="ml-2">{m.market_order()}</span>
+        </label>
+        <label class="label cursor-pointer">
+          <input type="radio" class="radio" bind:group={openOd.orderType} value="limit" />
+          <span class="ml-2">{m.limit_order()}</span>
+        </label>
       </div>
-    </div>
+    </fieldset>
 
     {#if openOd.orderType === 'limit'}
-      <div class="form-control">
-        <div class="flex items-center gap-4">
-          <label class="label w-24 whitespace-nowrap">{m.price()}</label>
-          <input type="number" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={openOd.price} step="0.00000001" />
-        </div>
-      </div>
+      <fieldset class="fieldset">
+        <label class="label" for="price">{m.price()}</label>
+        <input id="price" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.price} step="0.00000001" />
+      </fieldset>
 
-      <div class="form-control">
-        <div class="flex items-center gap-4">
-          <label class="label w-24 whitespace-nowrap">{m.stop_loss_price()}</label>
-          <input type="number" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={openOd.stopLossPrice} step="0.00000001" />
-        </div>
-      </div>
+      <fieldset class="fieldset">
+        <label class="label" for="stopLossPrice">{m.stop_loss_price()}</label>
+        <input id="stopLossPrice" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.stopLossPrice} step="0.00000001" />
+      </fieldset>
     {/if}
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.enter_cost()}</label>
-        <div class="input-group">
-          <input type="number" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={openOd.enterCost} step="0.00000001" />
-          <span class="input-group-addon">{getQuoteCode(openOd.pair)}</span>
-        </div>
+    <fieldset class="fieldset">
+      <label class="label" for="enterCost">{m.enter_cost()}</label>
+      <div class="input-group">
+        <input id="enterCost" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.enterCost} step="0.00000001" />
+        <span class="input-group-addon">{getQuoteCode(openOd.pair)}</span>
       </div>
-    </div>
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.enter_tag()}</label>
-        <input type="text" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={openOd.enterTag} />
-      </div>
-    </div>
+    <fieldset class="fieldset">
+      <label class="label" for="enterTag">{m.enter_tag()}</label>
+      <input id="enterTag" type="text" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.enterTag} />
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.leverage()}</label>
-        <input type="number" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={openOd.leverage} min="1" max="200" step="1" />
-      </div>
-    </div>
+    <fieldset class="fieldset">
+      <label class="label" for="leverage">{m.leverage()}</label>
+      <input id="leverage" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.leverage} min="1" max="200" step="1" />
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.strategy()}</label>
-        <input type="text" class="input input-sm input-bordered focus:outline-none text-sm font-mono" placeholder={m.enter_strategy_placeholder()} bind:value={openOd.strategy} />
-      </div>
-    </div>
+    <fieldset class="fieldset">
+      <label class="label" for="strategy">{m.strategy()}</label>
+      <input id="strategy" type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.enter_strategy_placeholder()} bind:value={openOd.strategy} />
+    </fieldset>
 
     <div class="flex justify-end mt-4">
       <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" disabled={!openOd.pair || !openOd.enterCost} onclick={doOpenOrder}>
@@ -574,51 +554,41 @@
 
 <Modal title={m.close_position()} bind:show={showCloseExg} width={800} buttons={[]}>
   <div class="space-y-4 p-4">
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.pair()}</label>
-        <input type="text" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={closeExgPos.symbol} disabled />
-      </div>
-    </div>
+    <fieldset class="fieldset">
+      <label class="label" for="symbol">{m.pair()}</label>
+      <input id="symbol" type="text" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.symbol} disabled />
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.close_amount()}</label>
-        <input type="number" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={closeExgPos.amount} step="0.00000001" />
-      </div>
-    </div>
+    <fieldset class="fieldset">
+      <label class="label" for="amount">{m.close_amount()}</label>
+      <input id="amount" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.amount} step="0.00000001" />
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{closeExgPos.percent}%</label>
-        <input type="range" min="0" max="100" class="range range-primary range-sm" bind:value={closeExgPos.percent} 
-          onchange={() => onPosAmountChg(closeExgPos.percent)} />
-      </div>
-    </div>
+    <fieldset class="fieldset">
+      <label class="label" for="percent">{closeExgPos.percent}%</label>
+      <input id="percent" type="range" min="0" max="100" class="range range-primary range-sm" bind:value={closeExgPos.percent} 
+        onchange={() => onPosAmountChg(closeExgPos.percent)} />
+    </fieldset>
 
-    <div class="form-control">
-      <div class="flex items-center gap-4">
-        <label class="label w-24 whitespace-nowrap">{m.order_type()}</label>
-        <div class="flex gap-4 flex-1">
-          <label class="label cursor-pointer">
-            <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="market" />
-            <span class="label-text ml-2">{m.market_order()}</span>
-          </label>
-          <label class="label cursor-pointer">
-            <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="limit" />
-            <span class="label-text ml-2">{m.limit_order()}</span>
-          </label>
-        </div>
+    <fieldset class="fieldset">
+      <label class="label">{m.order_type()}</label>
+      <div class="flex gap-4 flex-1">
+        <label class="label cursor-pointer">
+          <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="market" />
+          <span class="ml-2">{m.market_order()}</span>
+        </label>
+        <label class="label cursor-pointer">
+          <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="limit" />
+          <span class="ml-2">{m.limit_order()}</span>
+        </label>
       </div>
-    </div>
+    </fieldset>
 
     {#if closeExgPos.orderType === 'limit'}
-      <div class="form-control">
-        <div class="flex items-center gap-4">
-          <label class="label w-24 whitespace-nowrap">{m.price()}</label>
-          <input type="number" class="input input-sm input-bordered focus:outline-none text-sm font-mono" bind:value={closeExgPos.price} step="0.00000001" />
-        </div>
-      </div>
+      <fieldset class="fieldset">
+        <label class="label" for="limitPrice">{m.price()}</label>
+        <input id="limitPrice" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.price} step="0.00000001" />
+      </fieldset>
     {/if}
 
     <div class="flex justify-end mt-4">

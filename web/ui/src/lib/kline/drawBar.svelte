@@ -107,21 +107,21 @@ export function addOverlay(data: any){
   const overlayClass = overlayMap[data.name] ?? {}
   const defData = {
     groupId: GROUP_ID,
-    onDrawEnd: (event: OverlayEvent) => {
+    onDrawEnd: (event: OverlayEvent<any>) => {
       if(overlayClass.onDrawEnd){
         overlayClass.onDrawEnd(event)
       }
       editOverlay(event.overlay)
       return true
     },
-    onPressedMoving: (event: OverlayEvent) => {
+    onPressedMoving: (event: OverlayEvent<any>) => {
       if(overlayClass.onPressedMoving){
         overlayClass.onPressedMoving(event)
       }
       moved = true;
       return false
     },
-    onPressedMoveEnd: (event: OverlayEvent) => {
+    onPressedMoveEnd: (event: OverlayEvent<any>) => {
       if(overlayClass.onPressedMoveEnd){
         overlayClass.onPressedMoveEnd(event)
       }
@@ -130,21 +130,21 @@ export function addOverlay(data: any){
       editOverlay(event.overlay)
       return true
     },
-    onSelected: (event: OverlayEvent) => {
+    onSelected: (event: OverlayEvent<any>) => {
       if(overlayClass.onSelected){
         overlayClass.onSelected(event)
       }
       selectDraw = event.overlay.id
       return true;
     },
-    onDeselected: (event: OverlayEvent) => {
+    onDeselected: (event: OverlayEvent<any>) => {
       if(overlayClass.onDeselected){
         overlayClass.onDeselected(event)
       }
       selectDraw = ''
       return true;
     },
-    onRemoved: (event: OverlayEvent) => {
+    onRemoved: (event: OverlayEvent<any>) => {
       if(overlayClass.onRemoved){
         overlayClass.onRemoved(event)
       }
@@ -158,7 +158,7 @@ export function addOverlay(data: any){
   // 合并时保留原有的事件处理器
   const layId = $chart?.createOverlay(_.mergeWith({}, defData, data, (objValue, srcValue, key) => {
     if (key.startsWith('on') && objValue && srcValue) {
-      return (event: OverlayEvent) => {
+      return (event: OverlayEvent<any>) => {
         srcValue(event)
         return objValue(event)
       }

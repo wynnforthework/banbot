@@ -25,7 +25,7 @@
 <Modal title={m.timezone()} width={400} bind:show={show} click={handleConfirm}>
   <div class="flex justify-center items-center min-h-[70px]">
     <select 
-      class="select select-bordered w-[70%]"
+      class="select w-[70%]"
       value={$save.timezone}
       onchange={handleTimezoneChange}
     >

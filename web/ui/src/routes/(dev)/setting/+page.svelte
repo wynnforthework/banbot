@@ -1,19 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getApi, postApi } from '@/lib/netio';
+  import { getApi, postApi } from '$lib/netio';
   import * as m from '$lib/paraglide/messages.js';
   import { alerts } from "$lib/stores/alerts";
   import Icon from '$lib/Icon.svelte';
-  import CodeMirror from '@/lib/dev/CodeMirror.svelte';
+  import CodeMirror from '$lib/dev/CodeMirror.svelte';
   import { oneDark } from '@codemirror/theme-one-dark';
   import { type Extension } from '@codemirror/state';
   import {site} from '$lib/stores/site';
-  import {page} from '$app/stores';
+  import { page } from '$app/state'
   import {modals} from '$lib/stores/modals';
-  import { availableLanguageTags, languageTag } from "$lib/paraglide/runtime.js"
-  import { i18n } from '$lib/i18n';
+  import { localizeHref, locales, getLocale } from "$lib/paraglide/runtime.js"
   import { goto } from '$app/navigation'
-  import { getTimezoneSelectOptions, setTimezone, curTZ } from '@/lib/dateutil';
+  import { getTimezoneSelectOptions, setTimezone, curTZ } from '$lib/dateutil';
 
   let activeTab = $state('config.local.yml');
   let theme: Extension | null = $state(oneDark);
@@ -29,14 +28,14 @@
   let selectedArch = $state('');
   let isBuilding = $state(false);
   let buildOk = $state(false);
-  let selectedLang = $state<string>(languageTag());
+  let selectedLang = $state<string>(getLocale());
 
   // 时区相关状态
   let timezoneOptions = getTimezoneSelectOptions();
   let selectedTimezone = $state(curTZ().toLowerCase());
 
   onMount(() => {
-    const tab = $page.url.searchParams.get('tab');
+    const tab = page.url.searchParams.get('tab');
     if(tab){
       activePage = tab
     }
@@ -167,8 +166,8 @@
   async function switchLanguage(lang: string) {
     if (lang === selectedLang) return;
     selectedLang = lang;
-    const path = $site.path || '/';
-    await goto(i18n.resolveRoute(path, lang as any));
+    const path = page.url.pathname || '/';
+    await goto(localizeHref(path, {locale: lang}));
   }
 
   async function handleTimezoneChange(timezone: string) {
@@ -188,27 +187,27 @@
   <div class="flex gap-6">
     <!-- 左侧菜单 -->
     <div class="w-[15%]">
-      <ul class="menu bg-base-200 rounded-box">
+      <ul class="menu w-full bg-base-200 rounded-box">
         <li>
-          <button class:active={activePage === 'config'} 
+          <button class:menu-active={activePage === 'config'}
             onclick={() => setActivePage('config')}>
             <Icon name="config" />{m.global_config()}
           </button>
         </li>
         <li>
-          <button class:active={activePage === 'build'}
+          <button class:menu-active={activePage === 'build'}
             onclick={() => setActivePage('build')}>
             <Icon name="play" />{m.build()}
           </button>
         </li>
         <li>
-          <button class:active={activePage === 'language'}
+          <button class:menu-active={activePage === 'language'}
             onclick={() => setActivePage('language')}>
             <Icon name="language" />{m.language()}
           </button>
         </li>
         <li>
-          <button class:active={activePage === 'timezone'}
+          <button class:menu-active={activePage === 'timezone'}
             onclick={() => setActivePage('timezone')}>
             <Icon name="clock" />{m.timezone()}
           </button>
@@ -225,12 +224,10 @@
           <div class="flex justify-between items-start mb-4">
             <div>
               <!-- 配置文件选择tabs -->
-              <div class="tabs tabs-boxed">
+              <div class="tabs tabs-box tabs-sm">
                 {#each Object.keys(tabs) as tab}
-                  <button class="tab" class:tab-active={activeTab === tab}
-                    onclick={() => activeTab = tab}>
-                    {tab}
-                  </button>
+                  <input type="radio" class="tab" aria-label={tab} checked={activeTab === tab}
+                    onclick={() => activeTab = tab}/>
                 {/each}
               </div>
               <!-- 说明文字 -->
@@ -336,7 +333,7 @@
             </div>
             <div class="flex-1">
               <div class="flex flex-wrap gap-2">
-                {#each availableLanguageTags as lang}
+                {#each locales as lang}
                   <label class="label cursor-pointer">
                     <input type="radio" name="lang" class="radio radio-primary"
                       checked={selectedLang === lang}

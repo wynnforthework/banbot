@@ -219,10 +219,10 @@
 
   {#if customLoad}
     <div class="w-[150px] p-0">
-      <input bind:value={$save.dateStart} placeholder="%Y%m%d" class="input input-bordered w-full"/>
+      <input bind:value={$save.dateStart} placeholder="%Y%m%d" class="input w-full"/>
     </div>
     <span class="w-[150px] ml-0 p-0">
-      <input bind:value={$save.dateEnd} placeholder="%Y%m%d" class="input input-bordered w-full"/>
+      <input bind:value={$save.dateEnd} placeholder="%Y%m%d" class="input w-full"/>
     </span>
     <span class="p-0 m-0">
       <button class="btn btn-primary w-[70px] {loadBtnAnimating ? 'bump-animation' : ''}" 

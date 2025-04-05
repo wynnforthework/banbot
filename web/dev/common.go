@@ -519,6 +519,10 @@ func MergeConfig(inText string, skips ...string) (string, error) {
 		tmp.WriteString(inText)
 		paths = append(paths, tmp.Name())
 	}
+	return MergeConfigPaths(paths, skips...)
+}
+
+func MergeConfigPaths(paths []string, skips ...string) (string, error) {
 	var content string
 	var err error
 	if len(paths) > 1 {

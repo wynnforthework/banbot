@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as m from '$lib/paraglide/messages.js'
-  import { languageTag } from '$lib/paraglide/runtime.js'
+  import { getLocale, localizeHref } from '$lib/paraglide/runtime.js'
 </script>
 
 <main class="flex-1 flex items-center justify-center">
@@ -20,7 +20,7 @@
           <h3 class="step-title text-xl font-bold w-[13rem]">{m.compile()}</h3>
           <div class="content-block flex-1 p-6 bg-base-200 rounded-lg">
             <p>{m.trade_compile()}</p>
-            <a href="/setting?tab=build" class="btn btn-primary mt-2 btn-outline btn-sm">
+            <a href={localizeHref("/setting?tab=build")} class="btn btn-primary mt-2 btn-outline btn-sm">
               {m.go_compile()}
             </a>
           </div>
@@ -54,7 +54,7 @@
           <h3 class="step-title text-xl font-bold w-[13rem]">{m.edit_config()}</h3>
           <div class="content-block flex-1 p-6 bg-base-200 rounded-lg">
             <p>{m.trade_edit_config_desc()}</p>
-            <a href="https://www.banbot.site/en-US/guide/configuration.html" target="_blank" class="btn btn-primary mt-2 btn-outline btn-sm">{m.document()}</a>
+            <a href="https://docs.banbot.site/{getLocale()}/guide/configuration.html" target="_blank" class="btn btn-primary mt-2 btn-outline btn-sm">{m.document()}</a>
           </div>
         </div>
       </div>
@@ -90,7 +90,7 @@
       </div>
     </div>
     <div class="flex mt-7 justify-center">
-      <a class="link" href="https://www.banbot.site/{languageTag()}/guide/live_trading" target="_blank">{m.document()}</a>
+      <a class="link" href="https://docs.banbot.site/{getLocale()}/guide/live_trading" target="_blank">{m.document()}</a>
     </div>
   </div>
 </main>

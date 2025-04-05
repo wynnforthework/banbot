@@ -50,7 +50,7 @@
         <div class="flex justify-center items-center gap-2 text-sm text-base-content/70">
           <span>{m.dash_help()}</span>
           <a class="link link-primary hover:link-accent transition-colors duration-200" 
-             href="https://www.banbot.site/">{m.our_doc()}</a>
+             href="https://docs.banbot.site/">{m.our_doc()}</a>
         </div>
       </div>
     </div>
@@ -101,7 +101,7 @@
                     <td class="text-right font-mono text-sm">{acc.dayDonePft?.toFixed(2)}[{acc.dayDoneNum}]</td>
                     <td class="text-right font-mono text-sm">{acc.dayOpenPft?.toFixed(2)}[{acc.dayOpenNum}]</td>
                     <td>
-                      <a class="btn btn-xs btn-primary" href="/dash/board" onclick={() => viewAccount(acc)}>
+                      <a class="btn btn-xs btn-primary" href={localizeHref("/dash/board")} onclick={() => viewAccount(acc)}>
                         {m.view()}
                       </a>
                     </td>

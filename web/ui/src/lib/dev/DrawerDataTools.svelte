@@ -176,27 +176,23 @@
            onclick={() => setActiveTab('correct')}>{m.correct()}</a>
       </div>
 
-      <div class="form-control gap-4">
+      <div class="gap-4">
         {#if activeTab === 'export'}
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.export_dir()}</span>
-            </label>
-            <input type="text" class="input input-bordered" bind:value={form.exportDir} />
-          </div>
+          <fieldset class="fieldset">
+            <label class="label" for="exportDir">{m.export_dir()}</label>
+            <input id="exportDir" type="text" class="input w-full" placeholder={m.tip_export_data_dir()} bind:value={form.exportDir} />
+          </fieldset>
 
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.concurrency()}</span>
-            </label>
-            <input type="number" class="input input-bordered" bind:value={form.concurrency} min="1" max="30"/>
-          </div>
+          <fieldset class="fieldset">
+            <label class="label" for="concurrency">{m.concurrency()}</label>
+            <input id="concurrency" type="number" class="input" bind:value={form.concurrency} min="1" max="30"/>
+          </fieldset>
 
-          <div class="form-control">
+          <fieldset class="fieldset">
             <div class="h-[400px]">
-              <CodeMirror bind:this={editor} change={(v: string) => form.yamlConfig = v} {theme}/>
+              <CodeMirror bind:this={editor} change={(v) => form.yamlConfig = v} {theme}/>
             </div>
-          </div>
+          </fieldset>
 
           <div role="alert" class="alert">
             <Icon name="info"/>
@@ -205,19 +201,15 @@
         {/if}
 
         {#if activeTab === 'import'}
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.import_dir()}</span>
-            </label>
-            <input type="text" class="input input-bordered" bind:value={form.importDir} />
-          </div>
+          <fieldset class="fieldset">
+            <label class="label" for="importDir">{m.import_dir()}</label>
+            <input id="importDir" type="text" class="input w-full" placeholder={m.tip_import_data_dir()} bind:value={form.importDir} />
+          </fieldset>
 
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.concurrency()}</span>
-            </label>
-            <input type="number" class="input input-bordered" bind:value={form.concurrency} min="1" max="30"/>
-          </div>
+          <fieldset class="fieldset">
+            <label class="label" for="importConcurrency">{m.concurrency()}</label>
+            <input id="importConcurrency" type="number" class="input" bind:value={form.concurrency} min="1" max="30"/>
+          </fieldset>
 
           <div role="alert" class="alert">
             <Icon name="info"/>
@@ -227,52 +219,42 @@
 
         {#if ['download', 'purge', 'correct'].includes(activeTab)}
           <div class="flex gap-4">
-            <div class="form-control flex-1">
-              <label class="label">
-                <span class="label-text">{m.exchange()}</span>
-              </label>
-              <select class="select select-bordered" required bind:value={form.exchange}>
+            <fieldset class="fieldset flex-1">
+              <label class="label" for="exchange">{m.exchange()}</label>
+              <select id="exchange" class="select" required bind:value={form.exchange}>
                 {#each exchanges as exchange}
                   <option value={exchange}>{exchange}</option>
                 {/each}
               </select>
-            </div>
+            </fieldset>
 
             {#if form.exchange == 'china'}
-            <div class="form-control flex-1">
-              <label class="label">
-                <span class="label-text">{m.exg_real()}</span>
-              </label>
-              <input type="text" class="input input-bordered" bind:value={form.exgReal} />
-            </div>
+            <fieldset class="fieldset flex-1">
+              <label class="label" for="exgReal">{m.exg_real()}</label>
+              <input id="exgReal" type="text" class="input" bind:value={form.exgReal} />
+            </fieldset>
             {/if}
           </div>
 
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.market()}</span>
-            </label>
-            <select class="select select-bordered" required bind:value={form.market}>
+          <fieldset class="fieldset">
+            <label class="label" for="market">{m.market()}</label>
+            <select id="market" class="select" required bind:value={form.market}>
               <option value="">{m.any()}</option>
               {#each markets as market}
                 <option value={market}>{market}</option>
               {/each}
             </select>
-          </div>
+          </fieldset>
 
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.symbols_default_all()}</span>
-            </label>
+          <fieldset class="fieldset">
+            <label class="label" for="symbols">{m.symbols_default_all()}</label>
             <SuggestTags bind:values={form.symbols} items={symbols} allowAny={true} />
-          </div>
+          </fieldset>
         {/if}
 
         {#if ['download', 'purge'].includes(activeTab)}
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.periods()}</span>
-            </label>
+          <fieldset class="fieldset">
+            <legend>{m.periods()}</legend>
             <div class="flex flex-wrap gap-2">
               {#each periods as period}
                 <label class="label cursor-pointer">
@@ -286,27 +268,24 @@
                 </label>
               {/each}
             </div>
-          </div>
-        {/if}
+            <label class="label" for="symbols">{m.timeframe_save_desc()}</label>
+          </fieldset>
 
-        {#if ['download', 'purge'].includes(activeTab)}
-          <div class="form-control">
-            <label class="label">
-              <span class="label-text">{m.time_range()}</span>
-            </label>
+          <fieldset class="fieldset">
+            <legend>{m.time_range()}</legend>
             <div class="flex gap-2">
               <input 
                 type="datetime-local" 
-                class="input input-bordered w-full" 
+                class="input w-full"
                 bind:value={form.startTime}
               />
               <input 
                 type="datetime-local" 
-                class="input input-bordered w-full" 
+                class="input w-full"
                 bind:value={form.endTime}
               />
             </div>
-          </div>
+          </fieldset>
         {/if}
 
         <button class="btn btn-primary mt-4" onclick={handleExecute}>

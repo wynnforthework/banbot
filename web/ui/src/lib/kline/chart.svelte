@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {page} from '$app/stores';
+  import {page} from '$app/state';
   import {onMount, setContext} from 'svelte';
   import * as kc from 'klinecharts';
   import {type Nullable} from 'klinecharts';
@@ -116,7 +116,7 @@
           to = getUTCStamp()
         }
       }
-      const strategy = $page.url.searchParams.get('strategy');
+      const strategy = page.url.searchParams.get('strategy');
       datafeed.getHistoryKLineData({
         symbol: $save.symbol, 
         period: $save.period, 
@@ -170,7 +170,7 @@
     const chartObj = $chart;
     if (!chartObj) return
     $ctx.loadingKLine = true
-    const strategy = $page.url.searchParams.get('strategy');
+    const strategy = page.url.searchParams.get('strategy');
     console.debug('loadKlineRange', {symbol, period, start_ms, stop_ms, strategy})
     const kdata = await datafeed.getHistoryKLineData({
       symbol, period, from: start_ms, to: stop_ms, strategy

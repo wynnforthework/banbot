@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import Icon from '$lib/Icon.svelte';
   import {ctx, save, acc, loadAccounts} from '$lib/dash/store';
   import type { BotAccount, BotTicket } from '$lib/dash/types';
@@ -8,7 +8,7 @@
   import { loadBotAccounts } from '$lib/dash/store';
   import AddBot from '$lib/dash/AddBot.svelte';
   import Modal from '$lib/kline/Modal.svelte';
-  import {site} from '@/lib/stores/site'
+  import {site} from '$lib/stores/site'
 	
   let { children } = $props();
   let collapsed = $state(false);
@@ -60,15 +60,15 @@
 <div class="flex flex-1" onclick={() => $ctx.clickPage += 1}>
   <aside class="bg-base-200 text-base-content shadow-lg {collapsed ? 'w-16' : 'w-64 min-w-[200px]'} transition-all duration-300 border-r border-base-300">
     <div class="py-3 px-4 flex justify-center items-center border-b border-base-300">
-      <a href="/dash" class="text-lg font-semibold hover:text-primary transition-colors">{collapsed ? 'Ban' : 'Banbot'}</a>
+      <a href={localizeHref("/dash")} class="text-lg font-semibold hover:text-primary transition-colors">{collapsed ? 'Ban' : 'Banbot'}</a>
     </div>
     
-    <ul class="menu menu-vertical py-2 px-1.5 gap-1">
+    <ul class="menu w-full menu-vertical py-2 px-1.5 gap-1">
       {#each menuItems as {path, icon, text}}
         <li>
           <a 
             href={path} 
-            class="rounded-md transition-all duration-200 {$page.url.pathname.includes(path) ? 'bg-primary text-primary-content font-medium shadow-sm hover:bg-primary' : 'hover:bg-primary/20 hover:text-primary'}"
+            class="rounded-md transition-all duration-200 {page.url.pathname.includes(path) ? 'bg-primary text-primary-content font-medium shadow-sm hover:bg-primary' : 'hover:bg-primary/20 hover:text-primary'}"
           >
             <Icon name={icon} class="w-4 h-4" />
             {#if !collapsed}
@@ -89,7 +89,7 @@
       </div>
       
       <div class="navbar-center">
-        <ul class="menu menu-horizontal px-1">
+        <ul class="menu w-full menu-horizontal px-1">
           <li>
             <details class="dropdown">
               <summary class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200">{$acc.name+'/'+$acc.account}</summary>
@@ -111,7 +111,7 @@
       </div>
       
       <div class="navbar-end gap-1.5">
-        <a href="/dash" class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200">{m.bot_list()}</a>
+        <a href={localizeHref("/dash")} class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200">{m.bot_list()}</a>
         <button class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200" onclick={() => showAddBot = true}>{m.add_bot()}</button>
       </div>
     </header>

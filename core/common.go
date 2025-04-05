@@ -31,11 +31,11 @@ func Setup() *errs.Error {
 	return nil
 }
 
-func GetCacheVal[T any](key string, defVal T) T {
-	numObj, hasNum := Cache.Get(key)
-	if hasNum {
-		if numVal, ok := numObj.(T); ok {
-			return numVal
+func GetCacheVal[T any](key interface{}, defVal T) T {
+	obj, has := Cache.Get(key)
+	if has {
+		if val, ok := obj.(T); ok {
+			return val
 		}
 	}
 	return defVal

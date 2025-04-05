@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
-  import { getApi } from '@/lib/netio';
+  import { getApi } from '$lib/netio';
   import type { ExSymbol } from '$lib/dev/common';
   import * as m from '$lib/paraglide/messages.js';
   import { alerts } from "$lib/stores/alerts";
@@ -10,7 +10,7 @@
   import Icon from '$lib/Icon.svelte';
   import Icon2 from '$lib/kline/Icon.svelte';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
-  import { pagination } from '@/lib/snippets.svelte';
+  import { pagination } from '$lib/snippets.svelte';
 
   let symbol = $state<ExSymbol | null>(null);
   let kinfos = $state<any[]>([]);
@@ -32,7 +32,7 @@
   let total = $state(0);
 
   onMount(() => {
-    id = $page.url.searchParams.get('id') || '';
+    id = page.url.searchParams.get('id') || '';
     loadSymbolInfo();
   });
 
@@ -174,29 +174,29 @@
   <div class="flex gap-6">
     <!-- 左侧菜单 -->
     <div class="w-[15%]">
-      <ul class="menu bg-base-200 rounded-box">
+      <ul class="menu w-full bg-base-200 rounded-box">
         <li>
-          <button class:active={activeTab === 'kinfos'} onclick={() => setMenuItem('kinfos')}>
+          <button class:menu-active={activeTab === 'kinfos'} onclick={() => setMenuItem('kinfos')}>
             <Icon name="info" />
             {m.kline_range()}
           </button>
         </li>
         {#if symbol?.combined}
           <li>
-            <button class:active={activeTab === 'adjs'} onclick={() => setMenuItem('adjs')}>
+            <button class:menu-active={activeTab === 'adjs'} onclick={() => setMenuItem('adjs')}>
               <Icon2 name="indicator" />
               {m.adj_factor()}
             </button>
           </li>
         {/if}
         <li>
-          <button class:active={activeTab === 'gaps'} onclick={() => setMenuItem('gaps')}>
+          <button class:menu-active={activeTab === 'gaps'} onclick={() => setMenuItem('gaps')}>
             <Icon name="link-slash" />
             {m.gaps()}
           </button>
         </li>
         <li>
-          <button class:active={activeTab === 'data'} onclick={() => setMenuItem('data')}>
+          <button class:menu-active={activeTab === 'data'} onclick={() => setMenuItem('data')}>
             <Icon name="chart-bar" />
             {m.data()}
           </button>
@@ -233,8 +233,8 @@
       {:else if activeTab === 'adjs'}
         <!-- 复权因子过滤器 -->
         <div class="flex gap-4 mb-4">
-          <input type="date" class="input input-bordered" bind:value={startDate} />
-          <input type="date" class="input input-bordered" bind:value={endDate} />
+          <input type="date" class="input" bind:value={startDate} />
+          <input type="date" class="input" bind:value={endDate} />
         </div>
 
         <!-- 复权因子列表 -->
@@ -260,14 +260,14 @@
       {:else if activeTab === 'gaps' || activeTab === 'data'}
         <!-- 过滤器 -->
         <div class="flex gap-4 mb-4">
-          <select class="select select-bordered" bind:value={timeframe}>
+          <select class="select" bind:value={timeframe}>
             <option value="">{m.timeframe()}</option>
             {#each getTimeframes() as tf}
               <option value={tf}>{tf}</option>
             {/each}
           </select>
-          <input type="date" class="input input-bordered" bind:value={startDate} />
-          <input type="date" class="input input-bordered" bind:value={endDate} />
+          <input type="date" class="input" bind:value={startDate} />
+          <input type="date" class="input" bind:value={endDate} />
           <button class="btn btn-primary" onclick={() => {
             if(activeTab === 'gaps') loadGaps();
             else loadData();

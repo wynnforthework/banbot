@@ -1,20 +1,20 @@
 <script lang="ts">
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
-  import { getApi } from '@/lib/netio';
+  import { getApi } from '$lib/netio';
   import { alerts } from "$lib/stores/alerts";
   import CodeMirror from '$lib/dev/CodeMirror.svelte';
   import { oneDark } from '@codemirror/theme-one-dark';
   import type { Extension } from '@codemirror/state';
   import * as m from '$lib/paraglide/messages.js';
-  import Chart from '$lib/kline/Chart.svelte';
+  import Chart from '$lib/kline/chart.svelte';
   import { site } from '$lib/stores/site';
   import { showPairs } from '$lib/dev/common';
   import type { BacktestDetail, BackTestTask, ExSymbol } from '$lib/dev/common';
   import { OrderDetail, type InOutOrder } from '$lib/order';
   import { TreeView, type Tree, type Node, buildTree } from '$lib/treeview';
 	import { writable } from 'svelte/store';
-  import RangeSlider from '@/lib/dev/RangeSlider.svelte';
+  import RangeSlider from '$lib/dev/RangeSlider.svelte';
   import { ChartCtx, ChartSave } from '$lib/kline/chart';
   import { persisted } from 'svelte-persisted-store';
   import { makePeriod } from '$lib/kline/coms';
@@ -22,7 +22,7 @@
   import { fmtDateStr, fmtDuration, curTZ } from '$lib/dateutil';
   import type { OverlayCreate } from 'klinecharts';
   import type { TradeInfo } from '$lib/kline/types';
-  import { pagination, orderCard } from '@/lib/snippets.svelte';
+  import { pagination, orderCard } from '$lib/snippets.svelte';
   import {getFirstValid} from "$lib/common";
 
   let id = $state('');
@@ -85,7 +85,7 @@
   let activeGroupTab = $state('pairs'); // 添加分组tab状态
 
   onMount(async () => {
-    id = $page.url.searchParams.get('id') || '';
+    id = page.url.searchParams.get('id') || '';
     await loadDetail();
     if(task?.status !== 3) {
       setActiveTab('logs');
@@ -471,10 +471,10 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
   <div class="flex gap-4 flex-1">
     <!-- 左侧导航 -->
     <div class="w-[13%] flex-shrink-0">
-      <ul class="menu bg-base-200 rounded-box">
+      <ul class="menu w-full bg-base-200 rounded-box">
         {#each navItems as item}
           <li>
-            <button class:active={activeTab === item.id} onclick={() => setActiveTab(item.id)}>
+            <button class:menu-active={activeTab === item.id} onclick={() => setActiveTab(item.id)}>
               {item.label}
             </button>
           </li>
@@ -482,26 +482,26 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
       </ul>
       {#if activeTab == 'analysis'}
       <div class="flex flex-col gap-3 bg-base-200 mt-4 p-4 rounded-box">
-        <div class="form-control">
-          <input type="text" placeholder={m.symbol()} class="input input-sm input-bordered w-full"
-            bind:value={symbol} onchange={loadOrders}
+        <fieldset class="fieldset">
+          <input id="symbol" type="text" class="input w-full"
+            bind:value={symbol} onchange={loadOrders} placeholder={m.symbol()}
           />
-        </div>
-        <div class="form-control">
-          <input type="text" placeholder={m.strategy()} class="input input-sm input-bordered w-full"
-            bind:value={strategy} onchange={loadOrders}
+        </fieldset>
+        <fieldset class="fieldset">
+          <input id="strategy" type="text" class="input w-full"
+            bind:value={strategy} onchange={loadOrders} placeholder={m.strategy()}
           />
-        </div>
-        <div class="form-control">
-          <input type="text" placeholder={m.enter_tag()} class="input input-sm input-bordered w-full"
-            bind:value={enterTag} onchange={loadOrders}
+        </fieldset>
+        <fieldset class="fieldset">
+          <input id="enterTag" type="text" class="input w-full"
+            bind:value={enterTag} onchange={loadOrders} placeholder={m.enter_tag()}
           />
-        </div>
-        <div class="form-control">
-          <input type="text" placeholder={m.exit_tag()} class="input input-sm input-bordered w-full"
-            bind:value={exitTag} onchange={loadOrders}
+        </fieldset>
+        <fieldset class="fieldset">
+          <input id="exitTag" type="text" class="input w-full"
+            bind:value={exitTag} onchange={loadOrders} placeholder={m.exit_tag()}
           />
-        </div>
+        </fieldset>
         <button class="btn btn-sm btn-primary mt-2" onclick={loadOrders}>
           {m.load_orders()}
         </button>
@@ -527,7 +527,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
       {#if activeTab === 'overview' && detail}
         {#if task?.status == 3}
         <!-- 重要统计信息 -->
-        <div class="stats stats-vertical lg:stats-horizontal shadow mb-6">
+        <div class="stats bg-base-100 stats-vertical lg:stats-horizontal shadow mb-6">
           {@render statCard(
             m.init_amount(),
             'text-success',
@@ -772,16 +772,16 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         <div class="flex flex-col gap-4 flex-1">
           <!-- 过滤器 -->
           <div class="flex flex-wrap gap-4">
-            <input type="text" placeholder={m.symbol()} class="input input-bordered w-32"
+            <input type="text" placeholder={m.symbol()} class="input w-32"
               bind:value={symbol} onchange={loadOrders}
             />
-            <input type="text" placeholder={m.strategy()} class="input input-bordered w-32"
+            <input type="text" placeholder={m.strategy()} class="input w-32"
               bind:value={strategy} onchange={loadOrders}
             />
-            <input type="text" placeholder={m.enter_tag()} class="input input-bordered w-32"
+            <input type="text" placeholder={m.enter_tag()} class="input w-32"
               bind:value={enterTag} onchange={loadOrders}
             />
-            <input type="text" placeholder={m.exit_tag()} class="input input-bordered w-32"
+            <input type="text" placeholder={m.exit_tag()} class="input w-32"
               bind:value={exitTag} onchange={loadOrders}
             />
           </div>

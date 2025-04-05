@@ -4,6 +4,7 @@
   import { oneDark } from '@codemirror/theme-one-dark';
   import type { Extension } from '@codemirror/state';
   import { onMount } from 'svelte';
+  import {getLocale} from "$lib/paraglide/runtime";
 
   const cfgYml = `name: local  # ${m.cfg_name()}
 env: prod  # ${m.cfg_env()}
@@ -22,6 +23,7 @@ margin_add_rate: 0.66  # ${m.cfg_margin_add_rate()}
 stake_amount: 15  # ${m.cfg_stake_amount()}
 stake_pct: 50  # ${m.cfg_stake_pct()}
 max_stake_amt: 5000  # ${m.cfg_max_stake_amount()}
+draw_balance_over: 0  # ${m.cfg_draw_balance_over()}
 charge_on_bomb: false # ${m.cfg_charge_on_bomb()}
 take_over_strat: ma:demo # ${m.cfg_take_over_strat()}
 open_vol_rate: 1  # ${m.cfg_open_vol_rate()}
@@ -200,5 +202,5 @@ api_server:  # ${m.cfg_api_server()}
   <h3 class="text-lg font-semibold">{m.full_config()}</h3>
   <label for="config-drawer" class="btn btn-sm btn-circle">✕</label>
 </div>
-<a href="https://www.banbot.site/en/configuration.html" target="_blank" class="link">{m.doc_config()}</a>
+<a href="https://docs.banbot.site/{getLocale()}/guide/configuration.html" target="_blank" class="link">{m.doc_config()}</a>
 <CodeMirror bind:this={editor} {theme} editable={false}/>

@@ -101,7 +101,7 @@
               <td class="text-sm font-mono text-right">{row.profitSum.toFixed(5)}</td>
               <td class="text-sm font-mono text-right">{(row.profitPct * 100).toFixed(1)}%</td>
               <td>
-                <a href="/dash/kline?pair={row.key}" class="btn btn-xs bg-primary/90 hover:bg-primary text-primary-content border-none">
+                <a href={localizeHref("/dash/kline?pair="+row.key)} class="btn btn-xs bg-primary/90 hover:bg-primary text-primary-content border-none">
                   {m.kline()}
                 </a>
               </td>
@@ -152,25 +152,27 @@
 
       <!-- Search Form -->
       <div class="flex flex-wrap gap-4 items-center">
-        <div class="form-control flex-row items-center gap-2">
-          <label class="label-text text-sm text-base-content/70 whitespace-nowrap">{m.start_time()}</label>
+        <fieldset class="fieldset">
+          <label class="label" for="startTime">{m.start_time()}</label>
           <input 
+            id="startTime"
             type="text" 
-            class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
+            class="input input-sm focus:outline-none w-36 text-sm font-mono"
             placeholder="20231012"
             bind:value={search.startTime}
           />
-        </div>
+        </fieldset>
         
-        <div class="form-control flex-row items-center gap-2">
-          <label class="label-text text-sm text-base-content/70 whitespace-nowrap">{m.end_time()}</label>
+        <fieldset class="fieldset">
+          <label class="label" for="endTime">{m.end_time()}</label>
           <input 
+            id="endTime"
             type="text" 
-            class="input input-sm input-bordered focus:outline-none w-36 text-sm font-mono" 
+            class="input input-sm focus:outline-none w-36 text-sm font-mono"
             placeholder="20231012"
             bind:value={search.stopTime}
           />
-        </div>
+        </fieldset>
         
         <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" onclick={loadData}>
           {m.search()}

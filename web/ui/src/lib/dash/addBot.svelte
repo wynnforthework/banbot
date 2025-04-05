@@ -87,41 +87,44 @@
 
 <div class="max-w-md mx-auto">
   <form onsubmit={handleSubmit} class="space-y-4">
-    <div class="form-control">
-      <label class="label">
-        <span class="label-text">{m.bot_url()}</span>
+    <fieldset class="fieldset">
+      <label class="label" for="bot_url">
+        <span>{m.bot_url()}</span>
       </label>
       <input
+        id="bot_url"
         type="text"
         bind:value={model.url}
         placeholder={urlPlaceholder}
-        class="input input-bordered w-full"
+        class="input w-full"
       />
-    </div>
+    </fieldset>
 
-    <div class="form-control">
-      <label class="label">
-        <span class="label-text">{m.user_name()}</span>
+    <fieldset class="fieldset">
+      <label class="label" for="user_name">
+        <span>{m.user_name()}</span>
       </label>
       <input
+        id="user_name"
         type="text"
         bind:value={model.user_name}
         placeholder={m.input_username()}
-        class="input input-bordered w-full"
+        class="input w-full"
       />
-    </div>
+    </fieldset>
 
-    <div class="form-control">
-      <label class="label">
-          <span class="label-text">{m.password()}</span>
+    <fieldset class="fieldset">
+      <label class="label" for="password">
+        <span>{m.password()}</span>
       </label>
       <input
+        id="password"
         type="password"
         bind:value={model.password}
         placeholder={m.input_password()}
-        class="input input-bordered w-full"
+        class="input w-full"
       />
-    </div>
+    </fieldset>
 
     <button
       type="submit"

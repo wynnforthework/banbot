@@ -9,7 +9,6 @@ class SiteState {
   apiReadyCbs: (() => void)[] = []
   heavyName: string = ''
   heavyProgress: number = 0
-  path: string = ''
   loading: boolean = false
 }
 

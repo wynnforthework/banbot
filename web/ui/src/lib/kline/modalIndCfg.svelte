@@ -21,7 +21,7 @@
     fields.splice(0, fields.length);
     fields = IndFieldsMap[$ctx.editIndName] || [];
     if (fields.length === 0) return;
-    let inds = $chart?.getIndicators({name: $ctx.editIndName}).get($ctx.editPaneId) ?? [];
+    let inds = $chart?.getIndicators({name: $ctx.editIndName, paneId: $ctx.editPaneId}) ?? [];
     if (inds.length > 0) {
       inds[0].calcParams.forEach((v, i) => {
         fields[i].default = v
@@ -44,8 +44,9 @@
     console.log('overrideIndicator', $ctx.editIndName, $ctx.editPaneId, result)
     $chart?.overrideIndicator({
       name: $ctx.editIndName,
-      calcParams: result
-    }, $ctx.editPaneId);
+      calcParams: result,
+      paneId: $ctx.editPaneId,
+    });
 
     save.update(s => {
       s.saveInds[`${$ctx.editPaneId}_${$ctx.editIndName}`] = {
@@ -68,7 +69,7 @@
     <div class="grid grid-cols-5 gap-5 mt-5">
       {#each fields as field, i}
         <span class="col-span-2 text-base-content/70 flex items-center justify-center">{field.title}</span>
-        <input name={`param-${i}`} type="number" class="col-span-3 input input-bordered w-full" value={field.default}/>
+        <input name={`param-${i}`} type="number" class="col-span-3 input w-full" value={field.default}/>
       {/each}
     </div>
   {/if}

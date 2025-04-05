@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  import Chart from '$lib/kline/Chart.svelte';
+  import { page } from '$app/state';
+  import Chart from '$lib/kline/chart.svelte';
   import { getAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import type { OverlayCreate } from 'klinecharts';
@@ -14,7 +14,7 @@
   import RangeSlider from '$lib/dev/RangeSlider.svelte';
   import type { InOutOrder, OdGroup } from '$lib/order/types';
   import type { TradeInfo } from '$lib/kline/types';
-  import { pagination, orderCard } from '@/lib/snippets.svelte';
+  import { pagination, orderCard } from '$lib/snippets.svelte';
   import {makePeriod} from "$lib/kline/coms";
   import type {ExSymbol} from "$lib/dev/common";
   import {OrderDetail} from "$lib/order";
@@ -70,7 +70,7 @@
   let kc: Chart;
 
   onMount(() => {
-    let pair = $page.url.searchParams.get('pair');
+    let pair = page.url.searchParams.get('pair');
     if(pair){
       search.symbol = pair;
     }
@@ -361,24 +361,30 @@ ${m.holding()}: ${fmtDuration(td.exit_at - enterMS)}`;
     <div class="card bg-base-100 shrink-0">
       <div class="card-body p-0">
         <div class="flex flex-col gap-3">
-          <div class="form-control">
-            <input type="text" class="input input-sm input-bordered" placeholder={m.symbol()} bind:value={search.symbol}/>
-          </div>
-          <div class="form-control">
-            <input type="text" class="input input-sm input-bordered" placeholder={m.strategy()} bind:value={search.strategy}/>
-          </div>
-          <div class="form-control">
-            <input type="text" class="input input-sm input-bordered" placeholder={m.enter_tag()} bind:value={search.enterTag}/>
-          </div>
-          <div class="form-control">
-            <input type="text" class="input input-sm input-bordered" placeholder={m.exit_tag()} bind:value={search.exitTag}/>
-          </div>
-          <div class="form-control">
-            <input type="text" class="input input-sm input-bordered" placeholder={m.start_time()} bind:value={search.startTime}/>
-          </div>
-          <div class="form-control">
-            <input type="text" class="input input-sm input-bordered" placeholder={m.end_time()} bind:value={search.endTime}/>
-          </div>
+          <fieldset class="fieldset">
+            <label class="label" for="klineSymbol">{m.symbol()}</label>
+            <input id="klineSymbol" type="text" class="input" bind:value={search.symbol}/>
+          </fieldset>
+          <fieldset class="fieldset">
+            <label class="label" for="klineStrategy">{m.strategy()}</label>
+            <input id="klineStrategy" type="text" class="input" bind:value={search.strategy}/>
+          </fieldset>
+          <fieldset class="fieldset">
+            <label class="label" for="klineEnterTag">{m.enter_tag()}</label>
+            <input id="klineEnterTag" type="text" class="input" bind:value={search.enterTag}/>
+          </fieldset>
+          <fieldset class="fieldset">
+            <label class="label" for="klineExitTag">{m.exit_tag()}</label>
+            <input id="klineExitTag" type="text" class="input" bind:value={search.exitTag}/>
+          </fieldset>
+          <fieldset class="fieldset">
+            <label class="label" for="klineStartTime">{m.start_time()}</label>
+            <input id="klineStartTime" type="text" class="input" bind:value={search.startTime}/>
+          </fieldset>
+          <fieldset class="fieldset">
+            <label class="label" for="klineEndTime">{m.end_time()}</label>
+            <input id="klineEndTime" type="text" class="input" bind:value={search.endTime}/>
+          </fieldset>
           <button class="btn btn-sm btn-primary mt-2" onclick={loadGroupStats}>
             {m.search()}
           </button>

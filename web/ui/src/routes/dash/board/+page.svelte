@@ -4,7 +4,7 @@
   import { getAccApi, postAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import { acc, loadAccounts } from '$lib/dash/store';
-  import { fmtDateStr, fmtDateStrTZ, getUTCStamp } from '@/lib/dateutil';
+  import { fmtDateStr, fmtDateStrTZ, getUTCStamp } from '$lib/dateutil';
   import Icon from '$lib/Icon.svelte';
 
   interface BalanceItem{
@@ -222,7 +222,7 @@
           <span class="join-item px-3 py-2 flex items-center bg-base-200/50 text-sm text-base-content/70">
             {m.delay_hours()}
           </span>
-          <input type="number" class="input input-sm input-bordered join-item w-20 focus:outline-none text-sm" 
+          <input type="number" class="input input-sm join-item w-20 focus:outline-none text-sm"
                  bind:value={delayHours}
                  min="0" max="9999" step="0.1"/>
           <button class="btn btn-sm join-item hover:bg-primary hover:text-primary-content transition-colors" onclick={saveAllowEntry}>
@@ -277,7 +277,7 @@
     <div class="card-body p-4">
       <h2 class="card-title text-lg font-medium mb-3">
         {m.wallet_balance()}
-        <Icon name="refresh" class="cursor-pointer" onclick={refreshWallet}/>
+        <Icon name="refresh" class="size-6 cursor-pointer" onclick={refreshWallet}/>
       </h2>
       {#if data.balanceItems.length > 1}
         <div class="text-base font-medium mb-3 text-primary">{m.total()}: {data.balanceTotal.toFixed(4)}</div>

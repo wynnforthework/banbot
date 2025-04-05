@@ -54,7 +54,7 @@ export function drawTagFigure(viewKlines: TagData[], ctx: CanvasRenderingContext
  * 绘制云端指标
  * @param drawArgs
  */
-export function drawCloudInd (drawArgs: IndicatorDrawParams<unknown>) {
+export function drawCloudInd (drawArgs: IndicatorDrawParams<unknown, any, any>) {
   const ind_name = drawArgs.indicator.name
   if (ind_name == 'ChanLun') {
     return drawChanlun(drawArgs)
@@ -66,7 +66,7 @@ export function drawCloudInd (drawArgs: IndicatorDrawParams<unknown>) {
 /**
  * 绘制缠论的线条
  */
-export function drawChanlun({ctx, indicator, chart, xAxis, yAxis}: IndicatorDrawParams<unknown>): boolean {
+export function drawChanlun({ctx, indicator, chart, xAxis, yAxis}: IndicatorDrawParams<unknown, any, any>): boolean {
   // 指标计算结果
   const result = indicator.result;
   if (!result || !result.length) return true
@@ -102,7 +102,7 @@ export function drawChanlun({ctx, indicator, chart, xAxis, yAxis}: IndicatorDraw
  * @param xAxis
  * @param yAxis
  */
-export function drawFigures({ctx, chart, indicator, xAxis, yAxis}: IndicatorDrawParams<unknown>){
+export function drawFigures({ctx, chart, indicator, xAxis, yAxis}: IndicatorDrawParams<unknown, any, any>){
   const defaultStyles = (chart as any).getChartStore().getStyles().indicator
   const upColor = kc.utils.formatValue(indicator.styles, 'bars[0].upColor', (defaultStyles.bars)[0].upColor) as string
   const downColor = kc.utils.formatValue(indicator.styles, 'bars[0].downColor', (defaultStyles.bars)[0].downColor) as string

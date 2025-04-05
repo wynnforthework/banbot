@@ -1,46 +1,33 @@
 <script lang="ts">
-	import { ParaglideJS } from '@inlang/paraglide-sveltekit'
-	import { i18n } from '$lib/i18n.js'
 	import { alerts } from '$lib/stores/alerts';
 	import Alert from '$lib/Alert.svelte';
 	import Modal from '$lib/kline/Modal.svelte';
 	import { modals } from '$lib/stores/modals';
 	import { setTimezone } from '$lib/dateutil';
-	import {site} from '@/lib/stores/site';
-	import { page } from '$app/stores'
-	import { derived } from 'svelte/store';
+	import {site} from '$lib/stores/site';
+	import "../style.css";
 
 	let { children } = $props();
 	setTimezone('UTC')
-    import "tailwindcss/tailwind.css";
 
-	const path = derived(page, ($page) => $page.url.pathname);
-	path.subscribe((new_val) => {
-		site.update((s) => {
-			s.path = i18n.route(new_val);
-			return s;
-		});
-	});
 </script>
 
-<ParaglideJS {i18n}>
-  {#if $site.loading}
-    <div class="fixed inset-0 bg-white bg-opacity-20 z-50 flex items-center justify-center">
-      <span class="loading loading-spinner loading-lg"></span>
-    </div>
-  {/if}
-	<!-- 添加alerts显示区域 -->
-	<div class="alerts-container z-[1000]">
-		{#each $alerts as alert (alert.id)}
-			<Alert type={alert.type} text={alert.text}/>
-		{/each}
-	</div>
-	{#each $modals as modal (modal.id)}
-		<Modal title={modal.title} buttons={modal.buttons} show={true} center={true}
-			click={(tag) => modal.resolve(tag)}>{@html modal.text}</Modal>
+{#if $site.loading}
+<div class="fixed inset-0 bg-white bg-opacity-20 z-50 flex items-center justify-center">
+  <span class="loading loading-spinner loading-lg"></span>
+</div>
+{/if}
+<!-- 添加alerts显示区域 -->
+<div class="alerts-container z-[1000]">
+	{#each $alerts as alert (alert.id)}
+		<Alert type={alert.type} text={alert.text}/>
 	{/each}
-	{@render children()}
-</ParaglideJS>
+</div>
+{#each $modals as modal (modal.id)}
+	<Modal title={modal.title} buttons={modal.buttons} show={true} center={true}
+		click={(tag) => modal.resolve(tag)}>{@html modal.text}</Modal>
+{/each}
+{@render children()}
 
 <style global>
   .alerts-container {

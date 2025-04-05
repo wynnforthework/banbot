@@ -3,6 +3,7 @@ package entry
 import (
 	"fmt"
 	"github.com/banbox/banbot/live"
+	"github.com/banbox/banbot/strat"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/config"
@@ -258,6 +259,12 @@ func init() {
 		Parent: "tool",
 		RunRaw: opt.CompareExgBTOrders,
 		Help:   "compare exchange orders with backtest",
+	})
+	AddCmdJob(&CmdJob{
+		Name:   "list_strats",
+		Parent: "tool",
+		RunRaw: strat.ListStrats,
+		Help:   "list registered strategies",
 	})
 
 	AddCmdJob(&CmdJob{

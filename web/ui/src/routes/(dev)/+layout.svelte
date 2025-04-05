@@ -1,20 +1,21 @@
 <script lang="ts">
   import * as m from '$lib/paraglide/messages.js'
-  import Icon from '@/lib/Icon.svelte';
-  import {page} from '$app/stores';
+  import Icon from '$lib/Icon.svelte';
+  import {page} from '$app/state';
   let { children } = $props();
-  import {site} from '@/lib/stores/site';
+  import {site} from '$lib/stores/site';
   import {dev} from '$app/environment';
-  import {initWsConn} from '@/lib/dev/websocket';
+  import {initWsConn} from '$lib/dev/websocket';
   import {browser} from '$app/environment';
-  import {alerts} from '@/lib/stores/alerts';
-  import { postApi, getApi } from '@/lib/netio';
-  
+  import {alerts} from '$lib/stores/alerts';
+  import { postApi, getApi } from '$lib/netio';
+  import {localizeHref} from "$lib/paraglide/runtime";
+
   const menuItems = [
-    { href: '/strategy', icon: 'code', label: m.strategy() },
-    { href: '/backtest', icon: 'calculate', label: m.backtest() },
-    { href: '/data', icon: 'chart-bar', label: m.data() },
-    { href: '/trade', icon: 'banknotes', label: m.live_trading() },
+    { href: '/strategy', icon: 'code', label: m.strategy(), tag: '/strategy' },
+    { href: '/backtest/new', icon: 'calculate', label: m.backtest(), tag: '/backtest' },
+    { href: '/data', icon: 'chart-bar', label: m.data(), tag: '/data' },
+    { href: '/trade', icon: 'banknotes', label: m.live_trading(), tag: '/trade' },
     //{ href: '/tools', icon: 'tool', label: m.tools() },
     //{ href: '/optimize', icon: 'cpu', label: m.optimize() },
   ];
@@ -76,7 +77,9 @@
 <div class="flex flex-col min-h-screen">
   <div class="navbar bg-base-100 shadow-md py-0 relative">
     <div class="navbar-start">
-      <a href="/" class="btn btn-ghost text-xl">Banbot</a>
+      <a href={localizeHref("/")} class="text-xl font-bold text-primary">
+        <img src="/banbot.png" alt="logo" class="w-24 h-10 object-contain"/>
+      </a>
     </div>
     
     <div class="navbar-center">
@@ -85,10 +88,10 @@
         <div tabindex="0" role="button" class="btn btn-ghost">
           <Icon name="horz3"/>
         </div>
-        <ul tabindex="0" class="menu menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow">
-          {#each menuItems as {href, icon, label}}
+        <ul tabindex="0" class="menu w-full menu-sm dropdown-content bg-base-100 rounded-box z-[1] mt-3 w-52 p-2 shadow">
+          {#each menuItems as {href, icon, label, tag}}
             <li>
-              <a href={href} class="py-3" class:text-primary={$site.path?.includes(href)}>
+              <a href={href} class="py-3" class:text-primary={page.url.pathname.includes(tag)}>
                 <Icon name={icon}/>{label}
               </a>
             </li>
@@ -97,10 +100,10 @@
       </div>
       
       <!-- 桌面端的水平菜单 -->
-      <ul class="menu menu-horizontal px-1 hidden lg:flex">
-        {#each menuItems as {href, icon, label}}
+      <ul class="menu w-full menu-horizontal px-1 hidden lg:flex">
+        {#each menuItems as {href, icon, label, tag}}
           <li>
-            <a href={href} class:text-primary={$site.path?.includes(href)}>
+            <a href={href} class:text-primary={page.url.pathname.includes(tag)}>
               <Icon name={icon}/>{label}
             </a>
           </li>
@@ -111,11 +114,11 @@
     <div class="navbar-end">
       <div class="tooltip tooltip-bottom" data-tip={m.build()}>
         <button class="btn btn-ghost btn-circle" class:animate-spin={$site.building} onclick={clickRefresh}>
-          <Icon name="refresh" class={$site.compileNeed ? 'gradient' : ''}/>
+          <Icon name="refresh" class={$site.compileNeed ? 'gradient size-6' : 'size-6'}/>
         </button>
       </div>
       <div class="tooltip tooltip-bottom" data-tip={m.setting()}>
-        <a href="/setting" class="btn btn-ghost btn-circle">
+        <a href={localizeHref("/setting")} class="btn btn-ghost btn-circle">
           <Icon name="setting"/>
         </a>
       </div>

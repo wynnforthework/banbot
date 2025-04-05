@@ -122,9 +122,11 @@ func Setup() *errs.Error {
 		return err2
 	}
 	defer conn.Release()
-	_, err2 = LoadMarkets(exg.Default, false)
-	if err2 != nil {
-		return err2
+	if exg.Default != nil {
+		_, err2 = LoadMarkets(exg.Default, false)
+		if err2 != nil {
+			return err2
+		}
 	}
 	return sess.UpdatePendingIns()
 }

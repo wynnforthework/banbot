@@ -6,7 +6,8 @@
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
   import { exchanges, markets } from '$lib/common';
   import {curTZ, fmtDateStr} from '$lib/dateutil';
-  import { pagination } from '@/lib/snippets.svelte';
+  import { pagination } from '$lib/snippets.svelte';
+  import {localizeHref} from "$lib/paraglide/runtime";
 
   // 状态变量
   let symbols: ExSymbol[] = $state([]);
@@ -66,7 +67,7 @@
     <div class="flex justify-between items-center mb-4">
         <div class="flex gap-4">
             <select
-                class="select select-bordered w-full max-w-xs"
+                class="select w-full"
                 bind:value={selectedExchange}
                 onchange={applyFilters}
             >
@@ -77,7 +78,7 @@
             </select>
 
             <select
-                class="select select-bordered w-full max-w-xs"
+                class="select w-full"
                 bind:value={selectedMarket}
                 onchange={applyFilters}
             >
@@ -90,14 +91,14 @@
             <input
                 type="text"
                 placeholder={m.search_symbol()}
-                class="input input-bordered w-full max-w-lg"
+                class="input w-full max-w-lg"
                 bind:value={symbolFilter}
                 oninput={applyFilters}
             />
         </div>
 
         <div class="flex items-center gap-2">
-            <a href="/kline" target="_blank" class="btn btn-primary btn-outline m-1">{m.kline()}</a>
+            <a href={localizeHref("/kline")} target="_blank" class="btn btn-primary btn-outline m-1">{m.kline()}</a>
             <button class="btn btn-primary m-1" onclick={toggleDrawer}>{m.tools()}</button>
         </div>
     </div>
@@ -119,7 +120,7 @@
             </thead>
             <tbody>
                 {#each symbols as symbol}
-                    <tr class="hover">
+                    <tr class="hover:bg-base-300">
                         <td>{symbol.id}</td>
                         <td>{symbol.exchange}</td>
                         <td>{symbol.exg_real}</td>
@@ -140,4 +141,4 @@
     {@render pagination(totalCount, pageSize, currentPage, i => {currentPage = i}, i => {pageSize = i})}
 </div>
 
-<DrawerDataTools exchanges={exchanges} markets={markets} bind:show={isDrawerOpen} />
+<DrawerDataTools bind:show={isDrawerOpen} />

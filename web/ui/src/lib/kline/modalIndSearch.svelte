@@ -66,8 +66,8 @@
       createTooltipDataSource: ({ indicator }) => {
         const icon_ids = [indicator.visible ? 1: 0, 2, 3];
         const styles = chartObj.getStyles().indicator.tooltip;
-        const icons = icon_ids.map(i => styles.icons[i])
-        return { icons }
+        const features = icon_ids.map(i => styles.features[i])
+        return { features }
       }
     }, isStack, paneOptions)
     if(!ind_id)return null
@@ -97,17 +97,17 @@
 
   const initDone = derived(ctx, ($ctx) => $ctx.initDone);
   initDone.subscribe((new_val) => {
-    $chart?.subscribeAction(ActionType.OnTooltipIconClick, data => {
-      console.log('OnTooltipIconClick', data)
+    $chart?.subscribeAction(ActionType.OnCandleTooltipFeatureClick, data => {
+      console.log('OnCandleTooltipFeatureClick', data)
       const item = data as {indicatorName: string, paneId: string, iconId: string}
       if (item.indicatorName) {
         switch (item.iconId) {
           case 'visible': {
-            $chart?.overrideIndicator({ name: item.indicatorName, visible: true }, item.paneId)
+            $chart?.overrideIndicator({ name: item.indicatorName, visible: true, paneId: item.paneId })
             break
           }
           case 'invisible': {
-            $chart?.overrideIndicator({ name: item.indicatorName, visible: false }, item.paneId)
+            $chart?.overrideIndicator({ name: item.indicatorName, visible: false, paneId: item.paneId })
             break
           }
           case 'setting': {
@@ -130,7 +130,7 @@
   <div class="flex flex-col gap-4">
     <input
       type="text"
-      class="input input-bordered w-full"
+      class="input w-full"
       placeholder={m.search()}
       bind:value={keyword}
     />

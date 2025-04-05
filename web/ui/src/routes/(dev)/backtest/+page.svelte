@@ -8,9 +8,9 @@
   import { showPairs } from '$lib/dev/common';
   import { fmtDateStr } from '$lib/dateutil';
   import {addListener} from '$lib/dev/websocket';
-  import { i18n } from '$lib/i18n';
   import {site} from "$lib/stores/site";
   import Icon from "$lib/Icon.svelte";
+  import {localizeHref} from "$lib/paraglide/runtime";
 
   let tasks = $state<BtTask[]>([]);
   let strats = $state<string[]>([]);
@@ -148,7 +148,7 @@ Error: ${task.info}`
     if(!task.path) {
       alerts.addAlert('warning', m.bt_result_not_exist());
     }else{
-      goto(i18n.resolveRoute(`/backtest/item?id=${task.id}`))
+      goto(localizeHref(`/backtest/item?id=${task.id}`))
     }
   }
 
@@ -237,21 +237,21 @@ Error: ${task.info}`
 <div class="container mx-auto max-w-[1500px] px-4 py-6">
   <div class="flex justify-between items-center mb-6">
     <div class="flex gap-4">
-      <select class="select select-bordered" bind:value={selectedStrat}>
+      <select class="select" bind:value={selectedStrat}>
         <option value="">{m.all_strats()}</option>
         {#each strats as strat}
           <option value={strat}>{strat}</option>
         {/each}
       </select>
 
-      <select class="select select-bordered" bind:value={selectedPeriod}>
+      <select class="select" bind:value={selectedPeriod}>
         <option value="">{m.all_periods()}</option>
         {#each periods as period}
           <option value={period}>{period}</option>
         {/each}
       </select>
 
-      <select class="select select-bordered" bind:value={selectedRange}>
+      <select class="select" bind:value={selectedRange}>
         <option value={null}>{m.all_ranges()}</option>
         {#each ranges as range}
           <option value={range}>{range}</option>
@@ -271,7 +271,7 @@ Error: ${task.info}`
         {isMultiSelect ? m.exit_select() : m.multi_select()}
       </button>
       {#if !isMultiSelect}
-        <a class="btn btn-primary" href="/backtest/new">{m.run_backtest()}</a>
+        <a class="btn btn-primary" href={localizeHref("/backtest/new")}>{m.run_backtest()}</a>
       {:else if compareUrl}
         <a class="btn btn-primary" href={compareUrl} target="_blank">{m.compare_assets()}</a>
       {/if}
@@ -300,7 +300,7 @@ Error: ${task.info}`
             {#if task.status === 3}
               <div class="text-2xl font-bold">{task.profitRate.toFixed(1)}%</div>
             {:else if task.status === 4}
-              <Icon name="alert" class="text-red-700"/>
+              <Icon name="alert" class="size-6 text-red-700"/>
             {:else}
               {#if task.status === 1}
                 <div class="badge badge-lg badge-neutral">{m.pending()}</div>

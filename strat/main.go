@@ -1,6 +1,7 @@
 package strat
 
 import (
+	"flag"
 	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -8,11 +9,13 @@ import (
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
+	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
 	"go.uber.org/zap"
+	"sort"
 	"strings"
 )
 
@@ -470,4 +473,27 @@ func getPolicyPairs(pol *config.RunPolicyConfig, pairs []string) ([]string, *err
 		}
 	}
 	return pairs, nil
+}
+
+func ListStrats(args []string) error {
+	var prefix string
+	var sub = flag.NewFlagSet("cmp", flag.ExitOnError)
+	sub.StringVar(&prefix, "prefix", "", "prefix to filter")
+	err_ := sub.Parse(args)
+	if err_ != nil {
+		return err_
+	}
+	arr := utils.KeysOfMap(StratMake)
+	if prefix != "" {
+		filtered := make([]string, 0, len(arr))
+		for _, code := range arr {
+			if strings.HasPrefix(code, prefix) {
+				filtered = append(filtered, code)
+			}
+		}
+		arr = filtered
+	}
+	sort.Strings(arr)
+	fmt.Println(strings.Join(arr, "\n"))
+	return nil
 }

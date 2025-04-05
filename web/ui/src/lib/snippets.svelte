@@ -23,7 +23,7 @@
   <div class="flex justify-between items-center">
     <div class="flex items-center gap-2">
       <span>{m.page_size()}: </span>
-      <input type="number" class="input input-bordered input-sm w-20" value={pageSize} onchange={e => onPageSizeChange(Number(e.currentTarget.value))} />
+      <input type="number" class="input input-sm w-20" value={pageSize} onchange={e => onPageSizeChange(Number(e.currentTarget.value))} />
     </div>
     <div class="join">
       <button class="join-item btn btn-sm" disabled={currentPage === 1}

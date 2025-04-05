@@ -1,5 +1,5 @@
 import * as kc from 'klinecharts';
-import type {CandleTooltipCustomCallbackData, CandleStyle} from 'klinecharts';
+import type {CandleStyle} from 'klinecharts';
 import type {BarArr, Period, Timespan} from "./types";
 import {TFToSecs, formatDate, dateTimeFormat} from "../dateutil";
 import * as m from '$lib/paraglide/messages.js'
@@ -8,7 +8,6 @@ import * as m from '$lib/paraglide/messages.js'
 export const formatPrecision = kc.utils.formatPrecision
 export const formatThousands = kc.utils.formatThousands
 export const formatBigNumber = kc.utils.formatBigNumber
-const TooltipIconPosition = kc.TooltipIconPosition
 
 const _periods: Record<string, Period> = {}
 // 有些周期需要对齐到指定的日期，下面应该按tfsecs从大到小排序
@@ -72,7 +71,7 @@ export const AllPeriods: Period[] = [
 function getIconTool(id: string, icon: string, color: string, ){
   return{
     id,
-    position: TooltipIconPosition.Middle,
+    position: 'middle',
     marginLeft: 8,
     marginTop: 2,
     marginRight: 0,
@@ -81,13 +80,16 @@ function getIconTool(id: string, icon: string, color: string, ){
     paddingTop: 0,
     paddingRight: 0,
     paddingBottom: 0,
-    icon,
-    fontFamily: 'icomoon',
     size: 14,
     color: color,
     activeColor: color,
     backgroundColor: 'transparent',
-    activeBackgroundColor: 'rgba(22, 119, 255, 0.15)'
+    activeBackgroundColor: 'rgba(22, 119, 255, 0.15)',
+    type: 'iconFont',
+    iconFont: {
+      content: icon,
+      family: 'icomoon'
+    }
   }
 }
 
@@ -105,7 +107,7 @@ export function getThemeStyles(theme: string): Record<string, any> {
         low: {show: true},
       },
       tooltip: {
-        custom: function (data: CandleTooltipCustomCallbackData, styles: CandleStyle) {
+        custom: function (data: any, styles: CandleStyle) {
           const defVal = styles.tooltip.defaultValue
           const current = data.current
           const prevClose = data.prev?.close ?? current.close
@@ -136,7 +138,7 @@ export function getThemeStyles(theme: string): Record<string, any> {
         show: true,
       },
       tooltip: {
-        icons: [
+        features: [
           getIconTool('visible', '\ue903', color),
           getIconTool('invisible', '\ue901', color),
           getIconTool('setting', '\ue902', color),

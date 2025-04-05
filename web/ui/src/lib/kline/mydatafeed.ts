@@ -1,6 +1,6 @@
 import type {Datafeed, SymbolInfo, BarArr, DatafeedWatchCallback, KData, GetKlineArgs} from './types';
 import {getApi} from "../netio";
-import {site} from "@/lib/stores/site";
+import {site} from "$lib/stores/site";
 import {get} from "svelte/store";
 
 export default class MyDatafeed implements Datafeed {

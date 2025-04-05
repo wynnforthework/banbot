@@ -1,4 +1,4 @@
-import { site } from "@/lib/stores/site";
+import { site } from "$lib/stores/site";
 import { get } from "svelte/store";
 
 let ws: WebSocket | undefined;

@@ -11,14 +11,21 @@
 
 </script>
 
-<div class="form-control">
-  <div class="flex items-center gap-4">
-    <label class="label w-28 whitespace-nowrap text-sm">{label}</label>
-    {#if editable}
-      <input type="text" class="input input-bordered input-sm flex-1" 
-        bind:value={value}/>
-    {:else}
-      <div class="p-2 text-sm">{value}</div>
-    {/if}
-  </div>
-</div> 
+<fieldset class="fieldset">
+  {#if editable}
+    <label class="label flex items-center gap-4" for="field-input">
+      <span class="w-28 whitespace-nowrap text-sm">{label}</span>
+    </label>
+    <input 
+      id="field-input"
+      type="text" 
+      class="input input-sm w-full"
+      bind:value={value}
+    />
+  {:else}
+    <label class="label flex items-center gap-4">
+      <span class="w-28 whitespace-nowrap text-sm">{label}</span>
+      <span class="p-2 text-sm">{value}</span>
+    </label>
+  {/if}
+</fieldset> 

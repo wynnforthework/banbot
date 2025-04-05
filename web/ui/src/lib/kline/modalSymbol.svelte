@@ -34,7 +34,7 @@
 </script>
 
 <Modal {title} width=460 bind:show={show}>
-  <label class="input input-bordered flex items-center gap-2 my-5 h-10">
+  <label class="input flex items-center gap-2 my-5 h-10">
     <input 
       type="text" 
       class="grow text-base" 

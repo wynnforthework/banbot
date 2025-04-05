@@ -3,16 +3,15 @@
   import { TreeView, type Tree, type Node, buildTree } from '$lib/treeview';
   import Icon from '$lib/Icon.svelte';
   import * as m from '$lib/paraglide/messages.js'
-	import { getApi, postApi } from '@/lib/netio';
-	import { writable } from 'svelte/store';
+  import { getApi, postApi } from '$lib/netio';
+  import { writable } from 'svelte/store';
   import { type Writable } from 'svelte/store';
   import { alerts } from '$lib/stores/alerts';
   import { modals } from '$lib/stores/modals';
-  import CodeMirror from '@/lib/dev/CodeMirror.svelte';
+  import CodeMirror from '$lib/dev/CodeMirror.svelte';
   import { type Extension } from '@codemirror/state';
   import {oneDark} from '@codemirror/theme-one-dark';
-  import { site } from '@/lib/stores/site';
-  import { page } from '$app/stores';
+  import { site } from '$lib/stores/site';
 
   interface FileOp {
     op: string;
@@ -384,20 +383,21 @@
 
 </script>
 
-<div class="flex h-full">
+<div class="flex h-svh">
   <!-- 左侧面板 -->
-  <div class="w-1/5 border-r border-base-300 flex flex-col p-4">
+  <div class="w-1/5 border-r border-base-300 flex flex-col p-4 overflow-y-auto">
     <!-- 搜索框 -->
-    <div class="form-control w-full mb-4">
-      <div class="input input-bordered flex items-center gap-2">
+    <fieldset class="fieldset mb-4">
+      <div class="input flex items-center gap-2">
         <input 
           type="text" 
+          id="search"
           placeholder={m.search()} 
           class="grow bg-transparent border-none outline-none p-0"
           bind:value={searchText}
         />
       </div>
-    </div>
+    </fieldset>
     
     <!-- 树形视图 -->
     <div class="flex-1 overflow-y-auto flex flex-col">
@@ -413,7 +413,7 @@
   </div>
 
   <!-- 右侧内容 -->
-  <div class="w-4/5 flex flex-col">
+  <div class="w-4/5 flex flex-col overflow-y-auto">
     <!-- 编辑器始终渲染，但通过CSS控制显示/隐藏 -->
     <div class="flex-1 flex flex-col" class:hidden={$tabs.length === 0}>
       <div class="tabs-container border-b border-base-300">
@@ -468,7 +468,7 @@
             </button>
           {:else}
             <div class="join w-full">
-              <label class="input input-bordered gap-1 flex items-center w-full !outline-none">
+              <label class="input gap-1 flex items-center w-full !outline-none">
                 {#if foldName}{foldName}:{/if}
                 <input bind:this={strategyNameInput} type="text" placeholder={strategyNameTip} />
               </label>

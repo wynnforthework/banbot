@@ -1,3 +1,5 @@
+src/lib/paraglide/*
+
 yarn-error.log
 .svelte-kit
 .vscode

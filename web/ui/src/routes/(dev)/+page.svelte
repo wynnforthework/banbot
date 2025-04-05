@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as m from '$lib/paraglide/messages.js'
-  import Icon from '@/lib/Icon.svelte'
+  import Icon from '$lib/Icon.svelte'
   
   let showQRCode = $state(false)
 </script>
@@ -10,7 +10,7 @@
     <div class="text-center mb-16">
       <p class="text-xl mb-2">
         {m.need_help_doc()}
-        <a class="text-blue-500 hover:text-blue-600" href="https://www.banbot.site">
+        <a class="text-blue-500 hover:text-blue-600" href="https://docs.banbot.site">
           {m.document()}
         </a>
       </p>
@@ -23,7 +23,7 @@
         </div>
         <div>
           <h3 class="font-semibold text-lg mb-2">
-            <a href="https://www.banbot.site" target="_blank">{m.document()}</a>
+            <a href="https://docs.banbot.site" target="_blank">{m.document()}</a>
           </h3>
           <p class="text-gray-600">
             {m.doc_desc()}

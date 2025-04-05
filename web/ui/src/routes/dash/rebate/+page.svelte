@@ -106,68 +106,62 @@
     <div class="card-body p-4">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <!-- Income Type -->
-        <div class="form-control">
-          <label class="label py-1">
-            <span class="label-text text-sm font-medium text-base-content/70">{m.income_type()}</span>
-          </label>
-          <select class="select select-sm select-bordered focus:outline-none w-full" bind:value={searchData.intype}>
+        <fieldset class="fieldset">
+          <label class="label" for="incomeType">{m.income_type()}</label>
+          <select id="incomeType" class="select" bind:value={searchData.intype}>
             {#each incomeTypes as type}
               <option value={type.value}>{type.label}</option>
             {/each}
           </select>
-        </div>
+        </fieldset>
 
         <!-- Account -->
-        <div class="form-control">
-          <label class="label py-1">
-            <span class="label-text text-sm font-medium text-base-content/70">{m.account()}</span>
-          </label>
+        <fieldset class="fieldset">
+          <label class="label" for="account">{m.account()}</label>
           <input 
+            id="account"
             type="text" 
-            class="input input-sm input-bordered focus:outline-none" 
+            class="input"
             bind:value={searchData.account}
           />
-        </div>
+        </fieldset>
 
         <!-- Symbol -->
-        <div class="form-control">
-          <label class="label py-1">
-            <span class="label-text text-sm font-medium text-base-content/70">{m.symbol()}</span>
-          </label>
+        <fieldset class="fieldset">
+          <label class="label" for="symbol">{m.symbol()}</label>
           <input 
+            id="symbol"
             type="text" 
-            class="input input-sm input-bordered focus:outline-none" 
+            class="input"
             bind:value={searchData.symbol}
           />
-        </div>
+        </fieldset>
 
         <!-- Start Time -->
-        <div class="form-control">
-          <label class="label py-1">
-            <span class="label-text text-sm font-medium text-base-content/70">{m.start_time()}</span>
-          </label>
+        <fieldset class="fieldset">
+          <label class="label" for="startTime">{m.start_time()}</label>
           <input 
+            id="startTime"
             type="text" 
-            class="input input-sm input-bordered focus:outline-none" 
+            class="input"
             placeholder="20231012"
             bind:value={searchData.startTime}
           />
-        </div>
+        </fieldset>
 
         <!-- Limit -->
-        <div class="form-control">
-          <label class="label py-1">
-            <span class="label-text text-sm font-medium text-base-content/70">{m.limit()}</span>
-          </label>
+        <fieldset class="fieldset">
+          <label class="label" for="limit">{m.limit()}</label>
           <input 
+            id="limit"
             type="number" 
-            class="input input-sm input-bordered focus:outline-none" 
+            class="input"
             bind:value={searchData.limit}
           />
-        </div>
+        </fieldset>
 
         <!-- Search Button -->
-        <div class="form-control justify-end">
+        <div class="flex justify-end items-end">
           <button 
             class="btn btn-sm bg-primary hover:bg-primary-focus text-primary-content border-none shadow-sm mt-6"
             onclick={loadData}

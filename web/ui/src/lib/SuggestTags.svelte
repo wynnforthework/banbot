@@ -92,7 +92,7 @@
 
   {#if showSuggestions && (suggestions.length > 0 || (allowAny && inputValue))}
     <div class="absolute z-50 w-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300">
-      <ul class="menu p-0">
+      <ul class="menu w-full p-0">
         {#each suggestions as suggestion, index}
           <li>
             <button

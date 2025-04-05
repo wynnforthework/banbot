@@ -56,11 +56,12 @@ func regApiDev(api fiber.Router) {
 	api.Post("/file_op", handleFileOp)
 	api.Post("/new_strat", handleNewStrat)
 	api.Get("/text", getText)
+	api.Get("/texts", getTexts)
 	api.Post("/save_text", saveText)
 	api.Get("/build_envs", getBuildEnvs)
 	api.Post("/build", handleBuild)
 	api.Get("/logs", getLogs)
-	api.Get("/default_cfg", getDefaultCfg)
+	api.Get("/available_strats", getAvailableStrats)
 	api.Post("/run_backtest", handleRunBacktest)
 	api.Get("/bt_detail", getBtDetail)
 	api.Get("/bt_orders", getBtOrders)
@@ -257,6 +258,38 @@ func getText(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"data": content,
 	})
+}
+
+func getTexts(c *fiber.Ctx) error {
+	type TextArgs struct {
+		Paths []string `query:"paths" validate:"required"`
+	}
+
+	var args = new(TextArgs)
+	err := base.VerifyArg(c, args, base.ArgQuery)
+	if err != nil {
+		return err
+	}
+
+	contents := make(map[string]string)
+	var realPath string
+	for _, path := range args.Paths {
+		realPath, err = parsePath(path)
+		if err != nil {
+			return err
+		}
+		if !utils.Exists(realPath) {
+			continue
+		}
+
+		content, err2 := utils.ReadTextFile(realPath)
+		if err2 != nil {
+			return err2
+		}
+		contents[path] = content
+	}
+
+	return c.JSON(contents)
 }
 
 func saveText(c *fiber.Ctx) error {
@@ -595,23 +628,28 @@ func getBtOptions(c *fiber.Ctx) error {
 	})
 }
 
-func getDefaultCfg(c *fiber.Ctx) error {
-	skips := []string{"name", "env", "webhook", "rpc_channels", "api_server"}
-	content, err := MergeConfig("", skips...)
+func getAvailableStrats(c *fiber.Ctx) error {
+	exePath, err := os.Executable()
 	if err != nil {
 		return err
 	}
+	cmd := exec.Command(exePath, "tool", "list_strats")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("execute command failed: %v", err)
+	}
+	arr := strings.Split(strings.TrimSpace(string(output)), "\n")
 	return c.JSON(fiber.Map{
-		"data": content,
+		"data": arr,
 	})
 }
 
 // handleRunBacktest 处理回测请求
 func handleRunBacktest(c *fiber.Ctx) error {
 	type RunBtArgs struct {
-		Separate bool   `json:"separate"`
-		Config   string `json:"config" validate:"required"`
-		DupMode  string `json:"dupMode"`
+		Separate bool              `json:"separate"`
+		Configs  map[string]string `json:"configs" validate:"required"`
+		DupMode  string            `json:"dupMode"`
 	}
 
 	var args = new(RunBtArgs)
@@ -628,7 +666,28 @@ func handleRunBacktest(c *fiber.Ctx) error {
 	defer os.Remove(tmpPath)
 
 	// 写入配置内容
-	if _, err = tmpFile.WriteString(args.Config); err != nil {
+	var realPath string
+	var paths []string
+	for path, text := range args.Configs {
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		realPath, err = parsePath(path)
+		if err != nil {
+			return err
+		}
+		err2 := utils.WriteFile(realPath, []byte(text))
+		if err2 != nil {
+			return err2
+		}
+		paths = append(paths, realPath)
+	}
+	skips := []string{"name", "env", "webhook", "rpc_channels", "api_server"}
+	content, err := MergeConfigPaths(paths, skips...)
+	if err != nil {
+		return err
+	}
+	if _, err = tmpFile.WriteString(content); err != nil {
 		return err
 	}
 	tmpFile.Close()
@@ -724,7 +783,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 			}
 		}
 	}
-	if err = os.WriteFile(cfgPath, []byte(args.Config), 0644); err != nil {
+	if err = os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
 		return err
 	}
 

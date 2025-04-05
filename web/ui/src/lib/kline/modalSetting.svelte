@@ -161,7 +161,7 @@
       <span class="text-base-content/70 text-right">{m[item.text]?.()}</span>
       {#if item.component === 'select'}
         <select 
-          class="select select-bordered select-sm w-full"
+          class="select select-sm w-full"
           value={tmp.get(item.key)}
           onchange={(e) => update(item.key, e.currentTarget.value)}
         >

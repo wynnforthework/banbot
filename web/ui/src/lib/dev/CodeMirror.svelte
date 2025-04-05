@@ -58,7 +58,7 @@
         reconfigure?: (view: EditorView) => void;
     } = $props();
 
-    let element: HTMLDivElement | null = $state(null);
+    let element: HTMLDivElement | undefined = $state(undefined);
     let view: EditorView;
     let value = $state('');
     let lang: LanguageSupport | undefined = $state(go());
