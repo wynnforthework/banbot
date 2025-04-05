@@ -97,10 +97,7 @@
 
   async function saveAllowEntry() {
     const secs = delayHours * 3600;
-    const rsp = await getAccApi('/delay_entry', {
-      method: 'POST',
-      body: JSON.stringify({secs})
-    });
+    const rsp = await postAccApi('/delay_entry', {secs});
     
     if(rsp.code === 200 && rsp.allowTradeAt) {
       data.allowTradeAt = rsp.allowTradeAt;

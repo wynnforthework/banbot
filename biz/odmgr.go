@@ -132,6 +132,7 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		if core.LiveMode {
 			log.Warn("any enter forbid", pairZapField)
 		}
+		strat.AddAccFailOpens(o.Account, strat.FailOpenNoEntry, len(enters))
 		return nil
 	}
 	if core.LiveMode {
@@ -139,6 +140,7 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		// 实盘订单提交到交易所，检查延迟不能超过80%
 		rate := float64(curMS-env.TimeStop) / float64(env.TimeStop-env.TimeStart)
 		if rate > 0.8 {
+			strat.AddAccFailOpens(o.Account, strat.FailOpenBarTooLate, len(enters))
 			return nil
 		}
 	}
@@ -154,9 +156,13 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 	if acc != nil && acc.MaxOpenOrders > 0 {
 		maxOpenNum = acc.MaxOpenOrders
 	}
-	enters = checkOrderNum(enters, len(openOds), maxOpenNum, "max_open_orders")
+	orgNum := len(enters)
+	enters = checkOrderNum(enters, orgNum, maxOpenNum, "max_open_orders")
 	if len(enters) > 0 && config.MaxSimulOpen > 0 {
 		enters = checkOrderNum(enters, o.simulOpen, config.MaxSimulOpen, "max_simul_open")
+	}
+	if orgNum > len(enters) {
+		strat.AddAccFailOpens(o.Account, strat.FailOpenNumLimit, orgNum-len(enters))
 	}
 	if len(enters) == 0 {
 		lock.Unlock()
@@ -169,6 +175,7 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		num, _ := stratOdNum[od.Strategy]
 		stratOdNum[od.Strategy] = num + 1
 	}
+	skipNum := 0
 	res := make([]*strat.EnterReq, 0, len(enters))
 	for _, req := range enters {
 		num, _ := stratOdNum[req.StratName]
@@ -176,9 +183,11 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		pol := strat.Get(env.Symbol, req.StratName).Policy
 		if pol != nil {
 			if pol.MaxOpen > 0 && num >= pol.MaxOpen {
+				skipNum += 1
 				continue
 			}
 			if pol.MaxSimulOpen > 0 && simulNum >= pol.MaxSimulOpen {
+				skipNum += 1
 				continue
 			}
 		}
@@ -188,6 +197,9 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		res = append(res, req)
 	}
 	lock.Unlock()
+	if skipNum > 0 {
+		strat.AddAccFailOpens(o.Account, strat.FailOpenNumLimitPol, skipNum)
+	}
 	return res
 }
 

@@ -122,6 +122,7 @@ func postRefreshWallet(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
+		log.Info("RefreshWallet", zap.String("acc", account), zap.Any("rsp", rsp))
 		biz.UpdateWalletByBalances(wallet, rsp)
 		return c.JSON(fiber.Map{
 			"items": walletItems(wallet),

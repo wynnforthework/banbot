@@ -47,7 +47,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	resetJobs()
 	pairTfWarms := make(Warms)
 	// 记录每个账户下，每个策略的任务数量，防止超过账户要求数量
-	accLimits := newAccStratLimits()
+	accLimits, maxJobNum := newAccStratLimits()
 	for _, pol := range config.RunPolicy {
 		stgy := New(pol)
 		polID := pol.ID()
@@ -57,7 +57,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		Versions[stgy.Name] = stgy.Version
 		stgyMaxNum := pol.MaxPair
 		if stgyMaxNum == 0 {
-			stgyMaxNum = 999
+			stgyMaxNum = maxJobNum
 		}
 		holdNum := 0
 		failTfScores := make(map[string]map[string]float64)
@@ -88,6 +88,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			jobType := JobForbidType(exs.Symbol, tf, polID)
 			if jobType > 0 {
 				if jobType > 1 {
+					// 任务禁止，但增加占位
 					holdNum += 1
 					for acc := range config.Accounts {
 						accLimits.tryAdd(acc, polID)

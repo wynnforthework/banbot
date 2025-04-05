@@ -35,4 +35,8 @@ var (
 	FailOpenNanNum         = "NanNum"
 	FailOpenBadStopLoss    = "BadStopLoss"
 	FailOpenBadTakeProfit  = "BadTakeProfit"
+	FailOpenBarTooLate     = "BarTooLate"
+	FailOpenNoEntry        = "NoEntry"
+	FailOpenNumLimit       = "NumLimit"
+	FailOpenNumLimitPol    = "NumLimitPol"
 )

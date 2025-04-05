@@ -537,6 +537,10 @@ func GetJobKeys() map[string]map[string]bool {
 }
 
 func AddAccFailOpen(acc, tag string) {
+	AddAccFailOpens(acc, tag, 1)
+}
+
+func AddAccFailOpens(acc, tag string, num int) {
 	lockAccFailOpen.Lock()
 	tagMap, ok1 := accFailOpens[acc]
 	if !ok1 {
@@ -544,7 +548,7 @@ func AddAccFailOpen(acc, tag string) {
 		accFailOpens[acc] = tagMap
 	}
 	count, _ := tagMap[tag]
-	tagMap[tag] = count + 1
+	tagMap[tag] = count + num
 	lockAccFailOpen.Unlock()
 }
 
@@ -566,15 +570,24 @@ func DumpAccFailOpens() string {
 	return b.String()
 }
 
-func newAccStratLimits() accStratLimits {
+func newAccStratLimits() (accStratLimits, int) {
 	res := make(accStratLimits)
+	maxJobNum := 1
 	for acc, cfg := range config.Accounts {
 		res[acc] = &stgLimits{
 			limit:  cfg.MaxPair,
 			strats: make(map[string]int),
 		}
+		if cfg.MaxPair == 0 {
+			maxJobNum = 0
+		} else if maxJobNum > 0 && cfg.MaxPair > maxJobNum {
+			maxJobNum = cfg.MaxPair
+		}
 	}
-	return res
+	if maxJobNum == 0 {
+		maxJobNum = 999
+	}
+	return res, maxJobNum
 }
 
 /*

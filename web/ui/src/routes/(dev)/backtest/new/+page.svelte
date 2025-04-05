@@ -22,6 +22,14 @@
   let activeTab = $state('');
   let tabs: Record<string, string> = $state({});
   let strats: string[] = $state([]);
+  let searchQuery = $state('');
+
+  let filteredStrats: string[] = $derived.by(() => {
+    if (!searchQuery) return strats;
+    return strats.filter(strat => 
+      strat.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
 
   onMount(async () => {
     let rsp = await getApi('/dev/available_strats');
@@ -127,8 +135,11 @@ click={clickDuplicate} center={true} width={600}>
         <!-- 左侧策略列表 -->
         <div class="w-[15%] bg-base-200 rounded-lg p-3">
           <h2 class="text-lg font-bold mb-2 text-primary">{m.registered_strats()}</h2>
+          <div class="mb-3">
+            <input type="text" placeholder="Search ..." class="input input-sm" bind:value={searchQuery}/>
+          </div>
           <div class="space-y-0.5">
-            {#each strats as strat}
+            {#each filteredStrats as strat}
               <div 
                 class="px-2 py-1 rounded cursor-pointer hover:bg-primary hover:bg-opacity-10 transition-all duration-200 text-sm"
                 onclick={() => copyToClipboard(strat)}

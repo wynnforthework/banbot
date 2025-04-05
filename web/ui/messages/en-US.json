@@ -466,7 +466,7 @@
     "yes": "Yes",
     "live_trading": "Live Trading",
     "global_config": "Global Config",
-    "local_config_desc": "Save configurations that require frequent modifications, which will overwrite items with the same name in config.yml.",
+    "local_config_desc": "Save the configurations that you may frequently modify, which will overwrite items with the same name in config.yml.",
     "global_config_desc": "Save infrequently modified configurations.",
     "build_desc": "Compile the strategy and banbot into a single executable file, you can use this file for live trading, backtesting, optimization, etc.",
     "select_os": "Select OS",

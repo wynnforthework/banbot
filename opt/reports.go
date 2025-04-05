@@ -62,6 +62,8 @@ type BTResult struct {
 	TotFee          float64    `json:"totFee"`
 	TotProfitPct    float64    `json:"totProfitPct"`
 	WinRatePct      float64    `json:"winRatePct"`
+	FinBalance      float64    `json:"finBalance"`
+	FinWithdraw     float64    `json:"finWithdraw"`
 	SharpeRatio     float64    `json:"sharpeRatio"`
 	SortinoRatio    float64    `json:"sortinoRatio"`
 }
@@ -144,6 +146,7 @@ func (r *BTResult) printBtResult() {
 	}
 	b.WriteString(r.textMetrics(orders))
 	log.Info("BackTest Reports:\n" + b.String())
+	log.Info("BackTest Saved", zap.String("at", r.OutDir))
 
 	r.dumpBtFiles()
 }
@@ -209,6 +212,9 @@ func (r *BTResult) Collect() {
 		r.groupByEnters(orders)
 		r.groupByExits(orders)
 	}
+	wallets := biz.GetWallets(config.DefAcc)
+	r.FinBalance = wallets.AvaLegal(nil)
+	r.FinWithdraw = wallets.GetWithdrawLegal(nil)
 	err := r.calcMeasures(30)
 	if err != nil {
 		log.Warn("calc sharpe/sortino fail", zap.Error(err))
@@ -228,11 +234,8 @@ func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 	table.Append([]string{"Max Open Orders", strconv.Itoa(r.MaxOpenOrders)})
 	table.Append([]string{"Total Orders/BarNum", fmt.Sprintf("%v/%v", len(orders), r.BarNum)})
 	table.Append([]string{"Total Investment", strconv.FormatFloat(r.TotalInvest, 'f', 0, 64)})
-	wallets := biz.GetWallets(config.DefAcc)
-	finBalance := wallets.AvaLegal(nil)
-	table.Append([]string{"Final Balance", strconv.FormatFloat(finBalance, 'f', 2, 64)})
-	finWithDraw := wallets.GetWithdrawLegal(nil)
-	table.Append([]string{"Final WithDraw", strconv.FormatFloat(finWithDraw, 'f', 2, 64)})
+	table.Append([]string{"Final Balance", strconv.FormatFloat(r.FinBalance, 'f', 2, 64)})
+	table.Append([]string{"Final WithDraw", strconv.FormatFloat(r.FinWithdraw, 'f', 2, 64)})
 	table.Append([]string{"Absolute Profit", strconv.FormatFloat(r.TotProfit, 'f', 2, 64)})
 	totProfitPct := strconv.FormatFloat(r.TotProfitPct, 'f', 1, 64)
 	table.Append([]string{"Total Profit %", totProfitPct + "%"})
