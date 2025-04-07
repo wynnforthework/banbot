@@ -4,6 +4,9 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/csv"
+	"encoding/gob"
+	"errors"
+	"flag"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -884,4 +887,246 @@ func RunHistKline(args *RunHistArgs) *errs.Error {
 		args.OnEnvEnd(nil, nil)
 	}
 	return err
+}
+
+func DownExgOrders(args []string) error {
+	var exchange, market, account, pairs string
+	var timeStart, timeEnd string
+	var configPaths config.ArrString
+	var sub = flag.NewFlagSet("cmp", flag.ExitOnError)
+	sub.Var(&configPaths, "config", "config path to use, Multiple -config options may be used")
+	sub.StringVar(&account, "account", "", "account for api-key to fetch exchange orders")
+	sub.StringVar(&exchange, "exchange", "", "exchange id")
+	sub.StringVar(&market, "market", "", "spot/linear/inverse/option")
+	sub.StringVar(&timeStart, "timestart", "", "set start time, allow multiple formats")
+	sub.StringVar(&timeEnd, "timeend", "", "set start time, allow multiple formats")
+	sub.StringVar(&pairs, "pairs", "", "symbols, comma separated")
+	err_ := sub.Parse(args)
+	if err_ != nil {
+		return err_
+	}
+	core.SetRunMode(core.RunModeLive)
+	err := SetupComs(&config.CmdArgs{Configs: configPaths})
+	if err != nil {
+		return err
+	}
+	if exchange == "" {
+		exchange = core.ExgName
+	}
+	if market == "" {
+		market = core.Market
+	}
+	if pairs == "" {
+		pairs = strings.Join(config.Pairs, ",")
+	}
+	if timeStart == "" || timeEnd == "" {
+		return errors.New("timestart or timeend is required")
+	}
+	if account == "" || pairs == "" {
+		return errors.New("`account` or `pairs` is required")
+	}
+	save, err := GetExgOrderSet(account, exchange, market)
+	if err != nil {
+		return err
+	}
+	startMS, err_ := btime.ParseTimeMS(timeStart)
+	if err_ != nil {
+		return err_
+	}
+	endMS, err_ := btime.ParseTimeMS(timeEnd)
+	if err_ != nil {
+		return err_
+	}
+	pairArr := strings.Split(pairs, ",")
+	err = save.Download(startMS, endMS, pairArr)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type PairOrders struct {
+	Symbol  string
+	Orders  []*banexg.Order
+	StartMS int64
+	EndMS   int64
+}
+
+type ExgOrderSet struct {
+	Account  string
+	Name     string
+	Market   string
+	Data     map[string]*PairOrders
+	path     string
+	exchange banexg.BanExchange
+}
+
+func GetExgOrderSet(account, exgName, market string) (*ExgOrderSet, *errs.Error) {
+	acc := config.Accounts[account]
+	accHash := acc.GetApiSecret().APIKey[:5]
+	fname := fmt.Sprintf("%s_%s_%s_%s.gob", exgName, market, account, accHash)
+	orderDir := filepath.Join(config.GetDataDir(), "exgOrders")
+	err := utils.EnsureDir(orderDir, 0755)
+	if err != nil {
+		return nil, errs.New(errs.CodeIOWriteFail, err)
+	}
+	path := filepath.Join(orderDir, fname)
+	var save = ExgOrderSet{
+		Account: account,
+		Name:    exgName,
+		Market:  market,
+		Data:    make(map[string]*PairOrders),
+		path:    path,
+	}
+	_ = utils.DecodeGobFile(path, &save)
+	exchange, err2 := exg.GetWith(exgName, market, "")
+	if err2 != nil {
+		return nil, err2
+	}
+	save.exchange = exchange
+	return &save, nil
+}
+
+// Download 下载指定时间范围内的订单记录
+func (s *ExgOrderSet) Download(startMS, endMS int64, pairs []string) *errs.Error {
+	if len(pairs) == 0 {
+		return errs.NewMsg(errs.CodeParamRequired, "pairs is required")
+	}
+	if startMS >= endMS || startMS <= 0 {
+		return errs.NewMsg(errs.CodeParamInvalid, "startMS must < endMS")
+	}
+	curMS := btime.UTCStamp()
+	startMS = max(startMS, curMS-int64(utils2.TFToSecs("1y")*1000))
+	endMS = min(curMS-60000, endMS)
+
+	// 检查每个交易对的本地数据范围
+	var needSave = false
+	for _, pair := range pairs {
+		old, _ := s.Data[pair]
+		if old == nil {
+			old = &PairOrders{}
+			s.Data[pair] = old
+		}
+		var oldStart, oldEnd = old.StartMS, old.EndMS
+
+		var downloadRanges [][2]int64
+		if oldStart == 0 {
+			// 本地无数据，下载整个区间
+			downloadRanges = append(downloadRanges, [2]int64{startMS, endMS})
+		} else {
+			// 检查是否需要下载前部分
+			if startMS < oldStart {
+				downloadRanges = append(downloadRanges, [2]int64{startMS, oldStart})
+			}
+			// 检查是否需要下载后部分
+			if endMS > oldEnd {
+				downloadRanges = append(downloadRanges, [2]int64{oldEnd, endMS})
+			}
+		}
+		if len(downloadRanges) == 0 {
+			continue
+		}
+
+		// 执行下载
+		for _, r := range downloadRanges {
+			start, end := r[0], r[1]
+			offsetMS := start
+			for offsetMS < end {
+				newOrders, err := s.exchange.FetchOrders(pair, offsetMS, 500, map[string]interface{}{
+					banexg.ParamAccount: s.Account,
+				})
+				if err != nil {
+					return err
+				}
+				if len(newOrders) == 0 {
+					break
+				}
+
+				// 合并新订单到本地缓存
+				old.Orders = append(old.Orders, newOrders...)
+				offsetMS = newOrders[len(newOrders)-1].Timestamp + 1
+				needSave = true
+
+				startStr := btime.ToDateStr(start, "")
+				endStr := btime.ToDateStr(end, "")
+				log.Info("download orders",
+					zap.String("pair", pair),
+					zap.String("range", fmt.Sprintf("%s - %s", startStr, endStr)),
+					zap.Int("num", len(newOrders)))
+			}
+		}
+
+		// 确保订单按时间排序
+		if len(old.Orders) > 0 {
+			sort.Slice(old.Orders, func(i, j int) bool {
+				return old.Orders[i].Timestamp < old.Orders[j].Timestamp
+			})
+		}
+		if old.StartMS == 0 || old.StartMS > startMS {
+			old.StartMS = startMS
+			needSave = true
+		}
+		if old.EndMS < endMS {
+			old.EndMS = endMS
+			needSave = true
+		}
+	}
+
+	// 保存到本地文件
+	if needSave {
+		gob.Register(map[string]interface{}{})
+		return utils.EncodeGob(s.path, s)
+	}
+	return nil
+}
+
+// Get 获取指定时间范围和交易对的订单记录
+func (s *ExgOrderSet) Get(startMS, endMS int64, pairs []string, botName string) (map[string][]*banexg.Order, *errs.Error) {
+	if startMS >= endMS {
+		return nil, errs.NewMsg(errs.CodeParamInvalid, "startMS must < endMS")
+	}
+	result := make(map[string][]*banexg.Order)
+
+	// 如果未指定交易对，使用所有已缓存的交易对
+	if len(pairs) == 0 {
+		pairs = make([]string, 0, len(s.Data))
+		for pair := range s.Data {
+			pairs = append(pairs, pair)
+		}
+	}
+
+	// 遍历每个交易对，提取符合时间范围的订单
+	for _, pair := range pairs {
+		obj, exists := s.Data[pair]
+		if !exists {
+			continue
+		}
+		orders := obj.Orders
+
+		// 二分查找开始位置
+		startIdx := sort.Search(len(orders), func(i int) bool {
+			return orders[i].Timestamp >= startMS
+		})
+
+		// 二分查找结束位置
+		endIdx := sort.Search(len(orders), func(i int) bool {
+			return orders[i].Timestamp > endMS
+		})
+
+		if startIdx < endIdx {
+			var exgOrders []*banexg.Order
+			if botName != "" {
+				for _, od := range orders[startIdx:endIdx] {
+					if strings.HasPrefix(od.ClientOrderID, botName) {
+						exgOrders = append(exgOrders, od)
+					}
+				}
+			} else {
+				exgOrders = orders[startIdx:endIdx]
+			}
+			result[pair] = exgOrders
+		}
+	}
+
+	return result, nil
 }

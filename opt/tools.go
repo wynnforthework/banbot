@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -27,7 +26,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/xuri/excelize/v2"
 	"go.uber.org/zap"
 )
 
@@ -37,7 +35,7 @@ Compare the exchange export order records with the backtest order records.
 对比交易所导出订单记录和回测订单记录。
 */
 func CompareExgBTOrders(args []string) error {
-	var exgPath, btPath, botName, account string
+	var btPath, botName, account string
 	var amtRate float64
 	var skipUnHitBt bool
 	var configPaths config.ArrString
@@ -45,7 +43,6 @@ func CompareExgBTOrders(args []string) error {
 	sub.Var(&configPaths, "config", "config path to use, Multiple -config options may be used")
 	sub.StringVar(&botName, "bot-name", "", "botName for live trade")
 	sub.StringVar(&account, "account", "", "account for api-key to fetch exchange orders")
-	sub.StringVar(&exgPath, "exg-path", "", "exchange order xlsx file")
 	sub.StringVar(&btPath, "bt-path", "", "backTest order file")
 	sub.Float64Var(&amtRate, "amt-rate", 0.1, "amt rate threshold, 0~1")
 	sub.BoolVar(&skipUnHitBt, "skip-unhit", true, "skip unhit pairs for backtest order")
@@ -53,7 +50,7 @@ func CompareExgBTOrders(args []string) error {
 	if err_ != nil {
 		return err_
 	}
-	if exgPath == "" && account == "" || btPath == "" || botName == "" {
+	if account == "" || btPath == "" || botName == "" {
 		return errors.New("`exg-path/account` `bt-path` bot-name is required")
 	}
 	core.SetRunMode(core.RunModeLive)
@@ -77,25 +74,14 @@ func CompareExgBTOrders(args []string) error {
 	if err != nil {
 		return err
 	}
-	outGobPath := fmt.Sprintf("%s/exg_orders.gob", btPath)
+	outDir := filepath.Join(config.GetDataDir(), "exgOrders")
 	exgOrders := make([]*banexg.Order, 0)
-	if !utils.Exists(outGobPath) {
-		exgOrders, err = loadExgOrders(exgPath, account, botName, exchange, startMS, endMS, pairNums)
-		if err != nil {
-			return err
-		}
-		if len(exgOrders) == 0 {
-			return errors.New("no exchange orders to compare")
-		}
-		for _, o := range exgOrders {
-			o.Info = nil
-		}
-		err = utils.EncodeGob(outGobPath, exgOrders)
-	} else {
-		err = utils.DecodeGobFile(outGobPath, &exgOrders)
-	}
+	exgOrders, err = loadExgOrders(account, botName, exs.Exchange, exs.Market, startMS, endMS, pairNums)
 	if err != nil {
 		return err
+	}
+	if len(exgOrders) == 0 {
+		return errors.New("no exchange orders to compare")
 	}
 	log.Info("loaded exchange orders", zap.Int("num", len(exgOrders)))
 	pairExgOds := buildExgOrders(exgOrders, botName)
@@ -103,7 +89,7 @@ func CompareExgBTOrders(args []string) error {
 	for _, odList := range pairExgOds {
 		exgOdList = append(exgOdList, odList...)
 	}
-	outPath := fmt.Sprintf("%s/cmp_orders.csv", filepath.Dir(exgPath))
+	outPath := fmt.Sprintf("%s/cmp_orders.csv", outDir)
 	file, err_ := os.Create(outPath)
 	if err_ != nil {
 		return err_
@@ -245,48 +231,60 @@ func CompareExgBTOrders(args []string) error {
 		}
 	}
 	log.Info("dump compare result", zap.String("at", outPath))
-	outPath = fmt.Sprintf("%s/exg_orders.csv", filepath.Dir(exgPath))
+	// write raw exchange orders
+	outPath = fmt.Sprintf("%s/exg_orders_raw.csv", outDir)
+	rows := make([][]string, 0, len(exgOrders)+1)
+	rows = append(rows, []string{"symbol", "orderId", "dateTime", "status", "type", "timeInForce", "pos", "side",
+		"price", "average", "amount", "filled", "cost", "reduceOnly", "fee"})
+	for _, od := range exgOrders {
+		price := strconv.FormatFloat(od.Price, 'f', -1, 64)
+		average := strconv.FormatFloat(od.Average, 'f', -1, 64)
+		amount := strconv.FormatFloat(od.Amount, 'f', -1, 64)
+		filled := strconv.FormatFloat(od.Filled, 'f', -1, 64)
+		cost := strconv.FormatFloat(od.Cost, 'f', -1, 64)
+		reduceOnly := strconv.FormatBool(od.ReduceOnly)
+		feeStr := ""
+		if od.Fee != nil {
+			feeStr = fmt.Sprintf("%s: %.2f", od.Fee.Currency, od.Fee.Cost)
+		}
+		rows = append(rows, []string{
+			od.Symbol, od.ClientOrderID, od.Datetime, od.Status, od.Type,
+			od.TimeInForce, od.PositionSide, od.Side,
+			price, average, amount, filled, cost, reduceOnly, feeStr,
+		})
+	}
+	err = utils.WriteCsvFile(outPath, rows, false)
+	if err != nil {
+		return err
+	}
+	log.Info("dump exchange raw orders", zap.String("at", outPath))
+	outPath = fmt.Sprintf("%s/exg_orders.csv", outDir)
 	log.Info("dump exchange orders", zap.String("at", outPath))
 	return DumpOrdersCSV(exgOdList, outPath)
 }
 
-func loadExgOrders(path, account, botName string, exchange banexg.BanExchange, startMS, endMS int64, pairNums map[string]int) ([]*banexg.Order, *errs.Error) {
-	var err *errs.Error
+func loadExgOrders(account, botName, exgName, market string, startMS, endMS int64, pairNums map[string]int) ([]*banexg.Order, *errs.Error) {
+	save, err := biz.GetExgOrderSet(account, exgName, market)
+	if err != nil {
+		return nil, err
+	}
+	pairs := utils.KeysOfMap(pairNums)
+	err = save.Download(startMS, endMS, pairs)
+	if err != nil {
+		return nil, err
+	}
+	var pairOrders map[string][]*banexg.Order
+	pairOrders, err = save.Get(startMS, endMS, pairs, botName)
+	if err != nil {
+		return nil, err
+	}
 	var exgOrders []*banexg.Order
-	if path != "" {
-		f, err_ := excelize.OpenFile(path)
-		if err_ != nil {
-			return nil, errs.New(errs.CodeIOReadFail, err_)
-		}
-		defer f.Close()
-		exgID := exchange.Info().ID
-		switch exgID {
-		case "binance":
-			exgOrders, err = readBinanceOrders(f, exchange, startMS, endMS, botName)
-		default:
-			return nil, errs.NewMsg(errs.CodeParamInvalid, "unsupport exchange: "+exgID)
-		}
-		return exgOrders, nil
+	for _, odList := range pairOrders {
+		exgOrders = append(exgOrders, odList...)
 	}
-	// load exchange orders by api
-	var orders []*banexg.Order
-	for pair := range pairNums {
-		offsetMS := startMS - 1000
-		for offsetMS < endMS {
-			orders, err = exchange.FetchOrders(pair, offsetMS, 500, map[string]interface{}{
-				banexg.ParamAccount: account,
-			})
-			if err != nil {
-				return nil, err
-			}
-			if len(orders) > 0 {
-				exgOrders = append(exgOrders, orders...)
-				offsetMS = orders[len(orders)-1].Timestamp + 1
-			} else {
-				break
-			}
-		}
-	}
+	sort.Slice(exgOrders, func(i, j int) bool {
+		return exgOrders[i].Timestamp < exgOrders[j].Timestamp
+	})
 	return exgOrders, nil
 }
 
@@ -305,6 +303,7 @@ func readBackTestOrders(path string) ([]*ormo.InOutOrder, map[string]int, int64,
 		return nil, nil, 0, 0, err2
 	}
 	var startMS, endMS int64
+	var startTFSecs int
 	var maxTfSecs int
 	var pairNums = make(map[string]int)
 	for _, od := range orders {
@@ -314,6 +313,7 @@ func readBackTestOrders(path string) ([]*ormo.InOutOrder, map[string]int, int64,
 		}
 		if startMS == 0 || od.Enter.CreateAt < startMS {
 			startMS = od.Enter.CreateAt
+			startTFSecs = tfSecs
 		}
 		if od.Exit != nil && od.Exit.UpdateAt > endMS {
 			endMS = od.Exit.UpdateAt
@@ -321,6 +321,8 @@ func readBackTestOrders(path string) ([]*ormo.InOutOrder, map[string]int, int64,
 		num, _ := pairNums[od.Symbol]
 		pairNums[od.Symbol] = num + 1
 	}
+	// 初始时间向前移动半个周期，防止部分订单未记录
+	startMS -= int64(startTFSecs * 500)
 	// Move the end time back by 2 bars to prevent the exchange order section from being filtered
 	// 将结束时间，往后推移2个bar，防止交易所订单部分被过滤
 	endMS += int64(maxTfSecs*1000) * 2
@@ -532,126 +534,6 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo
 	}
 
 	return jobMap
-}
-
-func readBinanceOrders(f *excelize.File, exchange banexg.BanExchange, start, stop int64, botName string) ([]*banexg.Order, *errs.Error) {
-	// TODO go-i18n
-	rowId := 1 // 首个从第2行开始
-	sheet := "sheet1"
-	colEnd := 'M'
-	var res = make([]*banexg.Order, 0, 20)
-	var order *banexg.Order
-	markets := exchange.GetCurMarkets()
-	if len(markets) == 0 {
-		exInfo := exchange.Info()
-		return res, errs.NewMsg(errs.CodeParamInvalid, "no markets for %v.%v", exInfo.ID, exInfo.MarketType)
-	}
-	idMap := make(map[string]string)
-	for symbol, mar := range markets {
-		idMap[mar.ID] = symbol
-	}
-	reNonAl := regexp.MustCompile("[a-zA-Z\u4e00-\u9fa5]+")
-	for {
-		rowId += 1
-		rowTxt := strconv.Itoa(rowId)
-		// 读取当前行到字典
-		row := make(map[string]string)
-		for char := 'A'; char <= colEnd; char++ {
-			col := string(char)
-			text, err_ := f.GetCellValue(sheet, col+rowTxt)
-			if err_ != nil {
-				log.Error("read cell fail", zap.String("loc", col+rowTxt), zap.Error(err_))
-				continue
-			}
-			row[col] = text
-		}
-		textA, _ := row["A"]
-		textB, _ := row["B"]
-		if textA == "" && textB == "" {
-			break
-		}
-		if strings.HasPrefix(textA, "20") {
-			// 开始新的订单
-			if order != nil {
-				res = append(res, order)
-				order = nil
-			}
-			stateStr, _ := row["K"]
-			if stateStr == "已撤销" || stateStr == "已过期" {
-				continue
-			}
-			createMS, err_ := btime.ParseTimeMS(textA)
-			if err_ != nil {
-				return nil, errs.NewMsg(errs.CodeRunTime, "A%d time format error: %v", rowId, err_)
-			}
-			alignMS := int64(math.Round(float64(createMS)/60000)) * 60000
-			clientID, _ := row["C"]
-			if alignMS < start || alignMS >= stop && strings.HasPrefix(clientID, botName) {
-				// 允许截止时间之后的非机器人订单，用于平仓
-				continue
-			}
-			marketID, _ := row["D"]
-			symbol, _ := idMap[marketID]
-			side, _ := row["E"]
-			if side == "卖出" {
-				side = banexg.OdSideSell
-			} else {
-				side = banexg.OdSideBuy
-			}
-			priceStr, _ := row["F"]
-			price, _ := strconv.ParseFloat(priceStr, 64)
-			amountStr, _ := row["G"]
-			amount, _ := strconv.ParseFloat(amountStr, 64)
-			averageStr, _ := row["H"]
-			average, _ := strconv.ParseFloat(averageStr, 64)
-			filledStr, _ := row["I"]
-			filled, _ := strconv.ParseFloat(filledStr, 64)
-			costStr, _ := row["J"]
-			cost, _ := strconv.ParseFloat(costStr, 64)
-			oidParts := strings.Split(clientID, "_")
-			if len(oidParts) == 3 {
-				clientID = strings.Join(oidParts[:2], "_")
-			}
-			order = &banexg.Order{
-				Timestamp:     createMS,
-				ID:            textB,
-				ClientOrderID: clientID,
-				Symbol:        symbol,
-				Side:          side,
-				Price:         price,
-				Amount:        amount,
-				Average:       average,
-				Filled:        filled,
-				Cost:          cost,
-				Fee:           &banexg.Fee{},
-			}
-			if stateStr == "已成交" {
-				order.Status = banexg.OdStatusFilled
-			} else if stateStr == "开放" {
-				order.Status = banexg.OdStatusOpen
-			} else {
-				log.Error("unknown order state: " + stateStr)
-			}
-		} else if order == nil || strings.Contains(textB, "(UTC)") {
-			continue
-		} else if textA == "" && textB != "" {
-			// 成交记录
-			curMS, err_ := btime.ParseTimeMS(textB)
-			if err_ != nil {
-				return nil, errs.NewMsg(errs.CodeRunTime, "B%d time format error: %v", rowId, err_)
-			}
-			feeStr, _ := row["F"]
-			feeStr = reNonAl.ReplaceAllString(feeStr, "")
-			feeVal, _ := strconv.ParseFloat(feeStr, 64)
-			order.Fee.Cost += feeVal
-			order.LastTradeTimestamp = curMS
-			order.LastUpdateTimestamp = curMS
-		}
-	}
-	if order != nil {
-		res = append(res, order)
-	}
-	return res, nil
 }
 
 type AssetData struct {

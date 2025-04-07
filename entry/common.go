@@ -268,6 +268,12 @@ func init() {
 	})
 
 	AddCmdJob(&CmdJob{
+		Name:   "down_order",
+		Parent: "live",
+		RunRaw: biz.DownExgOrders,
+		Help:   "download exchange order for account in specified exchange",
+	})
+	AddCmdJob(&CmdJob{
 		Name:   "close_order",
 		Parent: "live",
 		RunRaw: live.RunTradeClose,

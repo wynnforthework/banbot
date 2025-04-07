@@ -2,7 +2,6 @@ package dev
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -839,7 +838,7 @@ func parseBtResult(path string) (*opt.BTResult, error) {
 		return nil, fmt.Errorf("read file failed: %v", err)
 	}
 	var res = new(opt.BTResult)
-	err = json.Unmarshal(data, res)
+	err = utils2.Unmarshal(data, res, utils2.JsonNumAuto)
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal json failed: %v", err)
 	}

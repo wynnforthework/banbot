@@ -1,7 +1,7 @@
 package ormu
 
 import (
-	"encoding/json"
+	"github.com/banbox/banexg/utils"
 )
 
 func (t *Task) ToMap() map[string]interface{} {
@@ -29,7 +29,7 @@ func (t *Task) ToMap() map[string]interface{} {
 
 	if t.Info != "" {
 		var infoMap map[string]interface{}
-		if err := json.Unmarshal([]byte(t.Info), &infoMap); err == nil {
+		if err := utils.Unmarshal([]byte(t.Info), &infoMap, utils.JsonNumAuto); err == nil {
 			for k, v := range infoMap {
 				taskMap[k] = v
 			}
