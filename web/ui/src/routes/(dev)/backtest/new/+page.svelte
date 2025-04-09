@@ -78,9 +78,15 @@
     }
 
     // 可以同时开始多个，后端会逐个启动执行
+    const configs: Record<string, string> = {};
+    for (const key in tabs) {
+      if (tabs.hasOwnProperty(key)) {
+        configs[`@${key}`] = tabs[key];
+      }
+    }
     const rsp = await postApi('/dev/run_backtest', {
       separate: separateStrat,
-      configs: tabs,
+      configs: configs,
       dupMode: dupMode
     });
     if (rsp.code === 400 && rsp.msg === "[-18] already_exist") {
