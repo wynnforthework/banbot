@@ -234,12 +234,12 @@ func CalcInd(name string, kline [][]float64, params []float64) (interface{}, err
 			Message: "unsupported indicator: " + name,
 		}
 	}
-	return ind.Calc(kline, params), nil
+	return ind.Calc(kline, params)
 }
 
-func (d *DrawInd) Calc(kline [][]float64, params []float64) []map[string]float64 {
+func (d *DrawInd) Calc(kline [][]float64, params []float64) ([]map[string]float64, error) {
 	if len(kline) < 2 {
-		return nil
+		return nil, nil
 	}
 	tfMSecs := int64(kline[1][0] - kline[0][0])
 	timeFrame := utils2.SecsToTF(int(tfMSecs / 1000))
@@ -267,7 +267,10 @@ func (d *DrawInd) Calc(kline [][]float64, params []float64) []map[string]float64
 		if len(k) > 6 {
 			info = k[6]
 		}
-		env.OnBar(int64(k[0]), k[1], k[2], k[3], k[4], k[5], info)
+		err := env.OnBar(int64(k[0]), k[1], k[2], k[3], k[4], k[5], info)
+		if err != nil {
+			return nil, err
+		}
 		arr := d.doCalc(env, params)
 		data := make(map[string]float64)
 		for i, v := range arr {
@@ -281,7 +284,7 @@ func (d *DrawInd) Calc(kline [][]float64, params []float64) []map[string]float64
 		}
 		res = append(res, data)
 	}
-	return res
+	return res, nil
 }
 
 func (d *DrawInd) ToMap() map[string]interface{} {

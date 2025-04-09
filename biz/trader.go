@@ -3,6 +3,7 @@ package biz
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/banbox/banbot/btime"
@@ -30,14 +31,24 @@ func (t *Trader) OnEnvJobs(bar *orm.InfoKline) (*ta.BarEnv, *errs.Error) {
 		// 额外订阅1h没有对应的env，无需处理
 		return nil, nil
 	}
-	if core.LiveMode && env.TimeStop > bar.Time {
-		// This bar has expired, ignore it, the crawler may push the processed expired bar when starting
-		// 此bar已过期，忽略，启动时爬虫可能会推已处理的过期bar
-		return nil, nil
+	if core.LiveMode {
+		if env.TimeStop > bar.Time {
+			// This bar has expired, ignore it, the crawler may push the processed expired bar when starting
+			// 此bar已过期，忽略，启动时爬虫可能会推已处理的过期bar
+			return nil, nil
+		} else if env.TimeStop < bar.Time {
+			lackNum := int(math.Round(float64(bar.Time-env.TimeStop) / float64(env.TFMSecs)))
+			if lackNum > 0 {
+				log.Warn("taEnv bar lack", zap.Int("num", lackNum), zap.String("env", envKey))
+			}
+		}
 	}
 	// Update BarEnv status
 	// 更新BarEnv状态
-	env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Info)
+	err := env.OnBar(bar.Time, bar.Open, bar.High, bar.Low, bar.Close, bar.Volume, bar.Info)
+	if err != nil {
+		return nil, errs.New(errs.CodeRunTime, err)
+	}
 	return env, nil
 }
 
