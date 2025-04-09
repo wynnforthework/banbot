@@ -866,6 +866,8 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 
 func (o *LiveOrderMgr) ProcessOrders(sess *ormo.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
 	exits []*strat.ExitReq, edits []*ormo.InOutEdit) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
+	log.Info("Process Strategy Signals", zap.String("pair", env.Symbol),
+		zap.Any("enters", enters), zap.Any("exits", exits))
 	ents, extOrders, err := o.OrderMgr.ProcessOrders(sess, env, enters, exits)
 	if err != nil {
 		return ents, extOrders, err

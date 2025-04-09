@@ -24,6 +24,16 @@ import (
 func GetDataDir() string {
 	if DataDir == "" {
 		DataDir = getEnvPath("BanDataDir")
+		if DataDir == "" {
+			panic("env `BanDataDir` or args `-datadir` is required")
+		}
+	}
+	return DataDir
+}
+
+func GetDataDirSafe() string {
+	if DataDir == "" {
+		DataDir = getEnvPath("BanDataDir")
 	}
 	return DataDir
 }

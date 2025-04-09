@@ -25,12 +25,26 @@ func TestWatchOhlcv(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	market, pair := banexg.MarketSpot, "BTC/USDT"
-	// market, pair := banexg.MarketLinear, "BTC/USDT:USDT"
-	err = client.WatchJobs("binance", market, "ohlcv", WatchJob{
-		Symbol:    pair,
-		TimeFrame: "1m",
-	})
+	market, quote := banexg.MarketSpot, "USDT"
+	codes := []string{"BTC", "ETH", "SOL"}
+	jobs := make([]WatchJob, 0, len(codes))
+	for _, code := range codes {
+		var symbol string
+		if market == banexg.MarketSpot {
+			symbol = fmt.Sprintf("%s/%s", code, quote)
+		} else if market == banexg.MarketLinear {
+			symbol = fmt.Sprintf("%s/%s:%s", code, quote, quote)
+		} else if market == banexg.MarketInverse {
+			symbol = fmt.Sprintf("%s/%s:%s", quote, code, quote)
+		} else {
+			panic("unsupported market")
+		}
+		jobs = append(jobs, WatchJob{
+			Symbol:    symbol,
+			TimeFrame: "1m",
+		})
+	}
+	err = client.WatchJobs("binance", market, "ohlcv", jobs...)
 	if err != nil {
 		panic(err)
 	}

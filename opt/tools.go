@@ -76,7 +76,7 @@ func CompareExgBTOrders(args []string) error {
 	}
 	outDir := filepath.Join(config.GetDataDir(), "exgOrders")
 	exgOrders := make([]*banexg.Order, 0)
-	exgOrders, err = loadExgOrders(account, botName, exs.Exchange, exs.Market, startMS, endMS, pairNums)
+	exgOrders, err = loadExgOrders(account, exs.Exchange, exs.Market, startMS, endMS, pairNums)
 	if err != nil {
 		return err
 	}
@@ -263,7 +263,7 @@ func CompareExgBTOrders(args []string) error {
 	return DumpOrdersCSV(exgOdList, outPath)
 }
 
-func loadExgOrders(account, botName, exgName, market string, startMS, endMS int64, pairNums map[string]int) ([]*banexg.Order, *errs.Error) {
+func loadExgOrders(account, exgName, market string, startMS, endMS int64, pairNums map[string]int) ([]*banexg.Order, *errs.Error) {
 	save, err := biz.GetExgOrderSet(account, exgName, market)
 	if err != nil {
 		return nil, err
@@ -274,7 +274,7 @@ func loadExgOrders(account, botName, exgName, market string, startMS, endMS int6
 		return nil, err
 	}
 	var pairOrders map[string][]*banexg.Order
-	pairOrders, err = save.Get(startMS, endMS, pairs, botName)
+	pairOrders, err = save.Get(startMS, endMS, pairs, "")
 	if err != nil {
 		return nil, err
 	}

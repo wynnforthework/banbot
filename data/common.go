@@ -191,21 +191,10 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 		return nil, nil
 	}
 	// 这里NextMS < startMS，出现了bar缺失，查询更新。
-	exs, err := orm.GetExSymbolCur(pair)
-	if err != nil {
-		return nil, err
-	}
-	exchange := exg.Default
-	if !exchange.HasApi(banexg.ApiFetchOHLCV, exs.Market) {
-		// Downloading K lines is currently not allowed, skip
-		// 当前不允许下载K线，跳过
-		j.NextMS = endMS
-		return nil, nil
-	}
 	fetchTF := utils2.SecsToTF(subTfSecs)
 	tfMSecs := int64(j.TFSecs * 1000)
 	bigStartMS := utils2.AlignTfMSecs(j.NextMS, tfMSecs)
-	_, preBars, err := orm.AutoFetchOHLCV(exchange, exs, fetchTF, bigStartMS, startMS, 0, false, nil)
+	_, preBars, err := autoFetchOhlcv(pair, fetchTF, bigStartMS, startMS)
 	if err != nil {
 		return nil, err
 	}
@@ -221,4 +210,18 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 	}
 	j.NextMS = endMS
 	return doneBars, nil
+}
+
+func autoFetchOhlcv(pair, tf string, startMS, endMS int64) ([]*orm.AdjInfo, []*banexg.Kline, *errs.Error) {
+	exs, err := orm.GetExSymbolCur(pair)
+	if err != nil {
+		return nil, nil, err
+	}
+	exchange := exg.Default
+	if !exchange.HasApi(banexg.ApiFetchOHLCV, exs.Market) {
+		// Downloading K lines is currently not allowed, skip
+		// 当前不允许下载K线，跳过
+		return nil, nil, nil
+	}
+	return orm.AutoFetchOHLCV(exchange, exs, tf, startMS, endMS, 0, false, nil)
 }

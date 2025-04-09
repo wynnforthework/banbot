@@ -194,6 +194,12 @@ func (i *InOutOrder) CalcProfit(price float64) float64 {
 	return profitVal
 }
 
+/*
+UpdateProfits
+update Profit&ProfitRate (without leverage)
+因显示订单的时候突出的是amount和cost，是名义价值，没有突出订单保证金，带杠杆的利润率会让人误以为是名义价值基础上的利润率。为避免误解计算利润率不带杠杆，
+需要杠杆的话，乘以Leverage就行
+*/
 func (i *InOutOrder) UpdateProfits(price float64) {
 	profitVal := i.CalcProfit(price)
 	if profitVal == math.MaxFloat64 {

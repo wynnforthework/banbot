@@ -8,8 +8,9 @@
   import { loadBotAccounts } from '$lib/dash/store';
   import AddBot from '$lib/dash/AddBot.svelte';
   import Modal from '$lib/kline/Modal.svelte';
-  import {site} from '$lib/stores/site'
-	
+  import {site} from '$lib/stores/site';
+  import {localizeHref} from "$lib/paraglide/runtime";
+
   let { children } = $props();
   let collapsed = $state(false);
   let showAddBot = $state(false);

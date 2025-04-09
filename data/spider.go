@@ -3,6 +3,7 @@ package data
 import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
@@ -356,8 +357,8 @@ func (m *Miner) watchOdBooks(pairs []string) {
 
 type SubKLineState struct {
 	Sid        int32
-	NextNotify float64
-	ExpectMS   int64
+	LastNotify int64
+	ExpectMS   int64 // next bar start time
 	PrevBar    *banexg.Kline
 }
 
@@ -408,6 +409,15 @@ func (m *Miner) watchKLines(pairs []string) {
 	log.Info("start watch kline", zap.String("exg", m.ExgName), zap.Int("num", len(m.KlinePairs)))
 	prefix := fmt.Sprintf("ohlcv_%s_%s_", m.ExgName, m.Market)
 	unPrefix := "u" + prefix
+	intvMa := core.NewEMA(0.1)
+	// 5s统计更新一次K线全品种平均间隔到intvMa
+	ns := core.NewNumSet(5000, func(stamp int64, data map[string]float64) {
+		var sum float64
+		for _, v := range data {
+			sum += v
+		}
+		intvMa.Update(sum / float64(len(data)))
+	})
 
 	// The candlestick is received, sent to the robot, and saved to the database
 	// 收到K线，发送到机器人，保存到数据库
@@ -420,11 +430,18 @@ func (m *Miner) watchKLines(pairs []string) {
 			log.Warn("no pair state: " + code)
 			return
 		}
-		curTS := btime.Time()
+		curTS := btime.UTCStamp()
 		var err_ *errs.Error
+		var intvMS float64
 		// Send uohlcv subscription messages
 		// 发送uohlcv订阅消息
-		if curTS > state.NextNotify {
+		if curTS > state.LastNotify+900 {
+			// at most 1 K-line message can be sent in 1s
+			// 1s最多发送1次k线消息
+			if state.LastNotify > 0 {
+				intvMS = float64(curTS - state.LastNotify)
+				ns.Update(curTS, key, intvMS)
+			}
 			err_ = m.spider.Broadcast(&utils.IOMsg{
 				Action: unPrefix + pair,
 				Data: NotifyKLines{
@@ -433,9 +450,13 @@ func (m *Miner) watchKLines(pairs []string) {
 					Arr:      arr,
 				},
 			})
-			// A maximum of 1 K-line message can be sent in 1s
-			// 1s最多发送1次k线消息
-			state.NextNotify = curTS + 0.9
+			state.LastNotify = curTS
+		}
+		if intvMa.Age > 3 && intvMS > intvMa.Val*5 {
+			// 间隔超过平均间隔的5倍，认为有缺失（也有可能是交易所数据无变化未推送）
+			log.Warn("ohlcv interval too big, may lost data", zap.String("k", key),
+				zap.Float64("intv", intvMS), zap.Float64("avgIntv", intvMa.Val))
+			state.PrevBar = nil
 		}
 		// Check the completed candlesticks
 		// 检查已完成的k线
@@ -516,11 +537,11 @@ func (m *Miner) watchKLines(pairs []string) {
 	}()
 
 	// 交易所ws可能偶发故障，这里定期检查，通过rest获取k线(约1m一次)
-	delayMS := int64(20000)
-	minMSecs := int64(utils2.TFToSecs("1m") * 1000)
+	delayMS := int64(3000)
+	minMSecs := int64(60000)
 	go func() {
 		for {
-			time.Sleep(time.Millisecond * 3000)
+			time.Sleep(time.Second * 2)
 			curMS := btime.TimeMS()
 			curMinuteMS := utils2.AlignTfMSecs(curMS, minMSecs)
 			if curMS-curMinuteMS < delayMS {

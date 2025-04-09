@@ -55,6 +55,7 @@ LiveFeeder requires preheating for both new trading pairs and new cycles; HistFe
 type Feeder struct {
 	*orm.ExSymbol
 	States   []*PairTFCache
+	hour     *TfKlineLoader
 	WaitBar  *banexg.Kline
 	CallBack FnPairKline
 	OnEnvEnd FuncEnvEnd                 // If the futures main force switches or the stock is ex-rights, the position needs to be closed first 期货主力切换或股票除权，需先平仓
@@ -81,7 +82,7 @@ func (f *Feeder) setWaitBar(bar *banexg.Kline) {
 }
 
 /*
-subTfs
+SubTfs
 Add monitoring to States and return the newly added TimeFrames
 添加监听到States中，返回新增的TimeFrames
 */
@@ -145,6 +146,24 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 	slices.SortFunc(newStates, func(a, b *PairTFCache) int {
 		return a.TFSecs - b.TFSecs
 	})
+	hourSecs := 3600
+	maxTfSecs := newStates[len(newStates)-1].TFSecs
+	if maxTfSecs > hourSecs {
+		// 1h及以上k线，不应从小周期k线归集，否则会有差异，应直接使用数据库从交易所获取的。
+		if _, ok := stateMap["1h"]; !ok {
+			// 当需要1h以上级别数据，但未订阅1h时，需插入1h，以便后续从1h归集
+			sta := &PairTFCache{
+				TimeFrame:  "1h",
+				TFSecs:     hourSecs,
+				AlignOffMS: int64(exg.GetAlignOff(exgID, hourSecs) * 1000),
+			}
+			stateMap["1h"] = sta
+			newStates = utils.ValsOfMap(stateMap)
+			slices.SortFunc(newStates, func(a, b *PairTFCache) int {
+				return a.TFSecs - b.TFSecs
+			})
+		}
+	}
 	secs := make([]int, len(newStates))
 	for i, v := range newStates {
 		secs[i] = v.TFSecs
@@ -157,6 +176,13 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 			minTf := utils2.SecsToTF(minSecs)
 			newStates = append([]*PairTFCache{{TFSecs: minSecs, TimeFrame: minTf}}, newStates...)
 		}
+	}
+	if maxTfSecs >= 3600 {
+		// 使用1h及以上周期数据，额外添加1h的loader
+		// 当使用DBKlineFeeder时，如果最小周期是1h，应将f.hour置为nil
+		f.hour = NewTfKlineLoader(f.ExSymbol, "1h")
+	} else {
+		f.hour = nil
 	}
 	f.States = newStates
 	return adds
@@ -460,6 +486,13 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 	if len(ohlcvs) == 0 {
 		return false, nil
 	}
+	endMS := bars[len(bars)-1].Time + barTfMSecs
+	var hourBars []*banexg.Kline
+	useHour := false
+	if f.hour != nil {
+		useHour = true
+		hourBars = f.hour.ReadTo(endMS, true)
+	}
 	minState, minOhlcvs := state, ohlcvs
 	// 应该按周期从大到小触发
 	if len(f.States) > 1 {
@@ -476,14 +509,29 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		}
 		for i := len(f.States) - 1; i >= 1; i-- {
 			state = f.States[i]
+			if useHour && state.TFSecs >= 3600 {
+				if len(hourBars) == 0 {
+					continue
+				}
+				bars = hourBars
+			} else {
+				bars = ohlcvs
+			}
 			var olds []*banexg.Kline
 			if state.WaitBar != nil {
 				olds = append(olds, state.WaitBar)
 			}
 			bigTfMSecs := int64(state.TFSecs * 1000)
-			curOhlcvs, lastOk := utils.BuildOHLCV(ohlcvs, bigTfMSecs, f.PreFire, olds, staMSecs, state.AlignOffMS)
-			f.onStateOhlcvs(state, curOhlcvs, lastOk)
+			curOhlcvs, lastDone := utils.BuildOHLCV(bars, bigTfMSecs, f.PreFire, olds, staMSecs, state.AlignOffMS)
+			f.onStateOhlcvs(state, curOhlcvs, lastDone)
 		}
+	}
+	if useHour && minState.TFSecs >= 3600 {
+		if len(hourBars) == 0 {
+			return false, nil
+		}
+		minOhlcvs = hourBars
+		lastOk = true
 	}
 	//Subsequence period dimension <= current dimension. When receiving the data sent by the spider, there may be 3 or more ohlcvs
 	//子序列周期维度<=当前维度。当收到spider发送的数据时，这里可能是3个或更多ohlcvs
@@ -519,7 +567,7 @@ type IHistKlineFeeder interface {
 }
 
 /*
-HistKLineFeeder
+DBKlineFeeder
 Historical data feedback device. Is the base class for file feedback and database feedback.
 
 Backtest mode: Read 3K bars each time, and backtest triggers in sequence according to nextMS size.
@@ -527,21 +575,16 @@ Backtest mode: Read 3K bars each time, and backtest triggers in sequence accordi
 
 	回测模式：每次读取3K个bar，按nextMS大小依次回测触发。
 */
-type HistKLineFeeder struct {
+type DBKlineFeeder struct {
 	KlineFeeder
-	TimeRange  *config.TimeTuple
-	rowIdx     int             // The index of the next Bar in the cache, -1 means it has ended 缓存中下一个Bar的索引，-1表示已结束
-	caches     []*banexg.Kline // Cached Bar, fire one by one, reload after reading 缓存的Bar，逐个fire，读取完重新加载
-	nextMS     int64           // The 13-digit millisecond end timestamp of the next bar, math.MaxInt32 indicates the end 下一个bar的结束13位毫秒时间戳，math.MaxInt32表示结束
-	minGapMs   int64           // Minimum number of milliseconds between caches caches中最小的间隔毫秒数
-	setNext    func()
+	*TfKlineLoader
 	TradeTimes [][2]int64 // Trading time 可交易时间
 }
 
 /*
 get the end timestamp of next bar
 */
-func (f *HistKLineFeeder) getNextMS() int64 {
+func (f *DBKlineFeeder) getNextMS() int64 {
 	return f.nextMS
 }
 
@@ -549,45 +592,87 @@ func (f *HistKLineFeeder) getNextMS() int64 {
 Get the current bar for invokeBar; callNext should be called afterwards to set the cursor to the next bar.
 获取当前bar，用于invokeBar；之后应调用callNext设置光标到下一个bar
 */
-func (f *HistKLineFeeder) GetBar() *banexg.Kline {
-	if f.rowIdx < 0 || f.rowIdx >= len(f.caches) {
-		return nil
+func (f *DBKlineFeeder) GetBar() *banexg.Kline {
+	return f.TfKlineLoader.GetBar()
+}
+
+func (f *DBKlineFeeder) SetEndMS(ms int64) {
+	f.EndMS = ms
+	if f.hour != nil {
+		f.hour.EndMS = ms
 	}
-	bar := f.caches[f.rowIdx]
-	return bar
 }
 
-func (f *HistKLineFeeder) SetEndMS(ms int64) {
-	f.TimeRange.EndMS = ms
-}
-
-func (f *HistKLineFeeder) RunBar(bar *banexg.Kline) *errs.Error {
-	_, err := f.onNewBars(f.minGapMs, []*banexg.Kline{bar})
+func (f *DBKlineFeeder) RunBar(bar *banexg.Kline) *errs.Error {
+	_, err := f.onNewBars(f.TFMSecs, []*banexg.Kline{bar})
 	return err
 }
 
-func (f *HistKLineFeeder) CallNext() {
-	f.setNext()
-}
-
-func (f *HistKLineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.PrgBar) (int64, map[string][2]int, *errs.Error) {
-	endMs, skips, err := f.KlineFeeder.WarmTfs(curMS, tfNums, pBar)
-	if err == nil && f.minGapMs != int64(f.States[0].TFSecs*1000) {
-		f.rowIdx = 0
-		f.nextMS = 0
-		f.caches = nil
+func (f *DBKlineFeeder) SetSeek(since int64) {
+	f.TfKlineLoader.SetSeek(since)
+	if f.hour != nil {
+		f.hour.SetSeek(since)
 	}
-	return endMs, skips, err
 }
 
 /*
-DBKlineFeeder
-The database reads the K-line Feeder for backtesting
-数据库读取K线的Feeder，用于回测
+SubTfs
+Add monitoring to States and return the newly added TimeFrames
+添加监听到States中，返回新增的TimeFrames
 */
-type DBKlineFeeder struct {
-	HistKLineFeeder
-	offsetMS int64
+func (f *DBKlineFeeder) SubTfs(timeFrames []string, delOther bool) []string {
+	arr := f.Feeder.SubTfs(timeFrames, delOther)
+	minTF := ""
+	if len(f.States) > 0 {
+		minTF = f.States[0].TimeFrame
+	}
+	if minTF == "1h" {
+		// 已有loader加载1h，将hour置为nil
+		f.hour = nil
+	}
+	f.SetTimeFrame(minTF)
+	return arr
+}
+
+func (f *DBKlineFeeder) CallNext() {
+	f.TfKlineLoader.SetNext()
+	if f.rowIdx > 0 {
+		// 缓存索引移动
+		curMS := f.nextMS - f.TFMSecs
+		if f.adj != nil && curMS >= f.adj.StopMS {
+			old := f.caches[f.rowIdx-1]
+			tf := f.Timeframe
+			f.OnEnvEnd(&banexg.PairTFKline{
+				Symbol:    f.Symbol,
+				TimeFrame: tf,
+				Kline:     *old,
+			}, f.adj)
+			// Warm up again
+			// 重新复权预热
+			_, skips, err := f.WarmTfs(curMS, nil, nil)
+			if err != nil {
+				log.Error("next warm tf fail", zap.Error(err))
+			} else if len(skips) > 0 {
+				log.Warn("warm lacks", zap.String("items", StrWarmLacks(skips)))
+			}
+			f.setAdjIdx()
+		}
+	} else if f.rowIdx == 0 {
+		// 重新加载了数据
+		f.setAdjIdx()
+	}
+}
+
+func (f *DBKlineFeeder) setAdjIdx() {
+	for f.adjIdx < len(f.adjs) {
+		adj := f.adjs[f.adjIdx]
+		if f.nextMS < adj.StopMS {
+			f.adj = adj
+			return
+		}
+		f.adjIdx += 1
+	}
+	f.adj = nil
 }
 
 func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline, showLog bool) (*DBKlineFeeder, *errs.Error) {
@@ -605,17 +690,64 @@ func NewDBKlineFeeder(exs *orm.ExSymbol, callBack FnPairKline, showLog bool) (*D
 		return nil, err
 	}
 	res := &DBKlineFeeder{
-		HistKLineFeeder: HistKLineFeeder{
-			KlineFeeder: *feeder,
-			TimeRange:   config.TimeRange.Clone(),
-			TradeTimes:  tradeTimes,
-		},
+		KlineFeeder:   *feeder,
+		TfKlineLoader: NewTfKlineLoader(exs, ""),
+		TradeTimes:    tradeTimes,
 	}
-	res.setNext = makeSetNext(res)
 	return res, nil
 }
 
-func (f *DBKlineFeeder) SetSeek(since int64) {
+/*
+TfKlineLoader 用于分批加载某个品种的指定周期K线，然后逐个读取的场景
+*/
+type TfKlineLoader struct {
+	*orm.ExSymbol
+	Timeframe string
+	TFMSecs   int64
+
+	EndMS    int64
+	rowIdx   int             // The index of the next Bar in the cache, -1 means it has ended 缓存中下一个Bar的索引，-1表示已结束
+	caches   []*banexg.Kline // Cached Bar, fire one by one, reload after reading 缓存的Bar，逐个fire，读取完重新加载
+	nextMS   int64           // The 13-digit millisecond end timestamp of the next bar, math.MaxInt32 indicates the end 下一个bar的结束13位毫秒时间戳，math.MaxInt32表示结束
+	offsetMS int64
+}
+
+func NewTfKlineLoader(exs *orm.ExSymbol, tf string) *TfKlineLoader {
+	tfMSecs := int64(0)
+	if tf != "" {
+		tfMSecs = int64(utils2.TFToSecs(tf) * 1000)
+	}
+	return &TfKlineLoader{
+		ExSymbol:  exs,
+		Timeframe: tf,
+		TFMSecs:   tfMSecs,
+		EndMS:     config.TimeRange.EndMS,
+	}
+}
+
+func (f *TfKlineLoader) GetBar() *banexg.Kline {
+	if f.rowIdx < 0 || f.rowIdx >= len(f.caches) {
+		return nil
+	}
+	bar := f.caches[f.rowIdx]
+	return bar
+}
+
+func (f *TfKlineLoader) SetSeek(since int64) {
+	f.Reset(since)
+	f.SetNext()
+}
+
+func (f *TfKlineLoader) SetTimeFrame(tf string) {
+	if f.Timeframe == tf {
+		return
+	}
+	f.Timeframe = tf
+	f.TFMSecs = int64(utils2.TFToSecs(tf) * 1000)
+	f.Reset(0)
+}
+
+func (f *TfKlineLoader) Reset(since int64) {
 	if since == 0 {
 		// 这里不能为0，不然会从后往前读取K线，导致缺失
 		since = core.MSMinStamp
@@ -624,7 +756,22 @@ func (f *DBKlineFeeder) SetSeek(since int64) {
 	f.nextMS = 0
 	f.offsetMS = since
 	f.caches = nil
-	f.setNext()
+}
+
+func (f *TfKlineLoader) ReadTo(end int64, force bool) []*banexg.Kline {
+	if force && f.EndMS < end {
+		f.EndMS = end
+	}
+	var result []*banexg.Kline
+	for f.rowIdx >= 0 && f.rowIdx < len(f.caches) {
+		bar := f.caches[f.rowIdx]
+		if bar.Time+f.TFMSecs > end {
+			break
+		}
+		result = append(result, bar)
+		f.SetNext()
+	}
+	return result
 }
 
 /*
@@ -634,11 +781,11 @@ pBar is used for progress update, the total is 1000, and the amount is updated e
 下载指定区间的数据
 pBar 用于进度更新，总和为1000，每次更新此次的量
 */
-func (f *DBKlineFeeder) DownIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error {
-	if len(f.States) == 0 || f.DelistMs > 0 {
+func (f *TfKlineLoader) DownIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error {
+	if f.Timeframe == "" || f.DelistMs > 0 {
 		return nil
 	}
-	downTf, err := orm.GetDownTF(f.States[0].TimeFrame)
+	downTf, err := orm.GetDownTF(f.Timeframe)
 	if err != nil {
 		if pBar != nil {
 			pBar.Add(core.StepTotal)
@@ -657,83 +804,47 @@ func (f *DBKlineFeeder) DownIfNeed(sess *orm.Queries, exchange banexg.BanExchang
 		}
 		defer conn.Release()
 	}
-	_, err = sess.DownOHLCV2DB(exchange, f.ExSymbol, downTf, btime.TimeMS(), f.TimeRange.EndMS, pBar)
+	_, err = sess.DownOHLCV2DB(exchange, f.ExSymbol, downTf, btime.TimeMS(), f.EndMS, pBar)
 	return err
 }
 
-func (f *DBKlineFeeder) setAdjIdx() {
-	for f.adjIdx < len(f.adjs) {
-		adj := f.adjs[f.adjIdx]
-		if f.nextMS < adj.StopMS {
-			f.adj = adj
-			return
-		}
-		f.adjIdx += 1
+func (f *TfKlineLoader) SetNext() {
+	if f.rowIdx+1 < len(f.caches) {
+		f.rowIdx += 1
+		nextStartMS := f.caches[f.rowIdx].Time
+		f.nextMS = nextStartMS + f.TFMSecs
+		return
 	}
-	f.adj = nil
-}
-
-func makeSetNext(f *DBKlineFeeder) func() {
-	return func() {
-		if f.rowIdx+1 < len(f.caches) {
-			f.rowIdx += 1
-			nextStartMS := f.caches[f.rowIdx].Time
-			f.nextMS = nextStartMS + f.minGapMs
-			if f.adj != nil && nextStartMS >= f.adj.StopMS {
-				old := f.caches[f.rowIdx-1]
-				tf := f.States[0].TimeFrame
-				f.OnEnvEnd(&banexg.PairTFKline{
-					Symbol:    f.Symbol,
-					TimeFrame: tf,
-					Kline:     *old,
-				}, f.adj)
-				// Warm up again
-				// 重新复权预热
-				_, skips, err := f.WarmTfs(nextStartMS, nil, nil)
-				if err != nil {
-					log.Error("next warm tf fail", zap.Error(err))
-				} else if len(skips) > 0 {
-					log.Warn("warm lacks", zap.String("items", StrWarmLacks(skips)))
-				}
-				f.setAdjIdx()
-			}
-			return
-		}
-		// After the cache reading is completed, re-read the database
-		// 缓存读取完毕，重新读取数据库
-		state := f.States[0]
-		tfMSecs := int64(state.TFSecs * 1000)
-		sess, conn, err := orm.Conn(nil)
+	// After the cache reading is completed, re-read the database
+	// 缓存读取完毕，重新读取数据库
+	sess, conn, err := orm.Conn(nil)
+	if err != nil {
+		f.rowIdx = -1
+		f.nextMS = math.MaxInt64
+		log.Error("get conn fail while loading kline", zap.Error(err))
+		return
+	}
+	defer conn.Release()
+	endMS := f.EndMS
+	if endMS > 0 && f.nextMS >= endMS {
+		f.rowIdx = -1
+		f.nextMS = math.MaxInt64
+		return
+	}
+	batchSize := 3000
+	_, bars, err := sess.GetOHLCV(f.ExSymbol, f.Timeframe, f.offsetMS, endMS, batchSize, false)
+	if err != nil || len(bars) == 0 {
+		f.rowIdx = -1
+		f.nextMS = math.MaxInt64
 		if err != nil {
-			f.rowIdx = -1
-			f.nextMS = math.MaxInt64
-			log.Error("get conn fail while loading kline", zap.Error(err))
-			return
+			log.Error("load kline fail", zap.Error(err))
 		}
-		defer conn.Release()
-		endMS := f.TimeRange.EndMS
-		if endMS > 0 && f.nextMS >= endMS {
-			f.rowIdx = -1
-			f.nextMS = math.MaxInt64
-			return
-		}
-		batchSize := 3000
-		_, bars, err := sess.GetOHLCV(f.ExSymbol, state.TimeFrame, f.offsetMS, endMS, batchSize, false)
-		if err != nil || len(bars) == 0 {
-			f.rowIdx = -1
-			f.nextMS = math.MaxInt64
-			if err != nil {
-				log.Error("load kline fail", zap.Error(err))
-			}
-			return
-		}
-		f.caches = bars
-		f.rowIdx = 0
-		f.nextMS = bars[0].Time + tfMSecs
-		f.offsetMS = bars[len(bars)-1].Time + tfMSecs
-		f.setAdjIdx()
-		f.minGapMs = tfMSecs
+		return
 	}
+	f.caches = bars
+	f.rowIdx = 0
+	f.nextMS = bars[0].Time + f.TFMSecs
+	f.offsetMS = bars[len(bars)-1].Time + f.TFMSecs
 }
 
 func StrWarmLacks(skips map[string][2]int) string {

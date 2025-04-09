@@ -27,7 +27,8 @@ func (t *Trader) OnEnvJobs(bar *orm.InfoKline) (*ta.BarEnv, *errs.Error) {
 	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
 	env, ok := strat.Envs[envKey]
 	if !ok {
-		return nil, errs.NewMsg(core.ErrBadConfig, "env for %s/%s not found", bar.Symbol, bar.TimeFrame)
+		// 额外订阅1h没有对应的env，无需处理
+		return nil, nil
 	}
 	if core.LiveMode && env.TimeStop > bar.Time {
 		// This bar has expired, ignore it, the crawler may push the processed expired bar when starting

@@ -849,7 +849,7 @@ func RunHistKline(args *RunHistArgs) *errs.Error {
 			return err
 		}
 		holds = append(holds, feeder)
-		feeder.TimeRange.EndMS = args.End
+		feeder.SetEndMS(args.End)
 		feeder.OnEnvEnd = func(bar *banexg.PairTFKline, adj *orm.AdjInfo) {
 			if args.OnEnvEnd != nil {
 				args.OnEnvEnd(bar, adj)
@@ -1028,11 +1028,12 @@ func (s *ExgOrderSet) Download(startMS, endMS int64, pairs []string) *errs.Error
 		}
 
 		// 执行下载
+		var limit = 500
 		for _, r := range downloadRanges {
 			start, end := r[0], r[1]
 			offsetMS := start
 			for offsetMS < end {
-				newOrders, err := s.exchange.FetchOrders(pair, offsetMS, 500, map[string]interface{}{
+				newOrders, err := s.exchange.FetchOrders(pair, offsetMS, limit, map[string]interface{}{
 					banexg.ParamAccount: s.Account,
 				})
 				if err != nil {
@@ -1053,6 +1054,9 @@ func (s *ExgOrderSet) Download(startMS, endMS int64, pairs []string) *errs.Error
 					zap.String("pair", pair),
 					zap.String("range", fmt.Sprintf("%s - %s", startStr, endStr)),
 					zap.Int("num", len(newOrders)))
+				if len(newOrders) < limit {
+					break
+				}
 			}
 		}
 
