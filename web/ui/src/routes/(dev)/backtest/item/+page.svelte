@@ -7,7 +7,7 @@
   import { oneDark } from '@codemirror/theme-one-dark';
   import type { Extension } from '@codemirror/state';
   import * as m from '$lib/paraglide/messages.js';
-  import Chart from '$lib/kline/chart.svelte';
+  import Chart from '$lib/kline/Chart.svelte';
   import { site } from '$lib/stores/site';
   import { showPairs } from '$lib/dev/common';
   import type { BacktestDetail, BackTestTask, ExSymbol } from '$lib/dev/common';

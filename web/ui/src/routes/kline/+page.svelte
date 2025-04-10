@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Chart from "$lib/kline/chart.svelte";
+  import Chart from "$lib/kline/Chart.svelte";
   import { writable } from "svelte/store";
   import { persisted } from "svelte-persisted-store";
   import { ChartCtx, ChartSave } from "$lib/kline/chart";

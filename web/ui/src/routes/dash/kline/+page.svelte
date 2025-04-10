@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import Chart from '$lib/kline/chart.svelte';
+  import Chart from '$lib/kline/Chart.svelte';
   import { getAccApi } from '$lib/netio';
   import { alerts } from '$lib/stores/alerts';
   import type { OverlayCreate } from 'klinecharts';
