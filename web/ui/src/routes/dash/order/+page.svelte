@@ -8,7 +8,7 @@
   import { fmtDateStr, toUTCStamp, curTZ } from '$lib/dateutil';
   import { OrderDetail, type InOutOrder } from '$lib/order';
   import {getFirstValid} from "$lib/common";
-  import { pagination } from '$lib/snippets.svelte';
+  import { pagination } from '$lib/Snippets.svelte';
 
   let tabName = $state('bot'); // bot/exchange/position
   let banodList = $state<InOutOrder[]>([]);

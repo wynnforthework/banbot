@@ -10,7 +10,7 @@
   import Icon from '$lib/Icon.svelte';
   import Icon2 from '$lib/kline/Icon.svelte';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
-  import { pagination } from '$lib/snippets.svelte';
+  import { pagination } from '$lib/Snippets.svelte';
 
   let symbol = $state<ExSymbol | null>(null);
   let kinfos = $state<any[]>([]);

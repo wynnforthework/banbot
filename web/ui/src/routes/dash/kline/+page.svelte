@@ -14,7 +14,7 @@
   import RangeSlider from '$lib/dev/RangeSlider.svelte';
   import type { InOutOrder, OdGroup } from '$lib/order/types';
   import type { TradeInfo } from '$lib/kline/types';
-  import { pagination, orderCard } from '$lib/snippets.svelte';
+  import { pagination, orderCard } from '$lib/Snippets.svelte';
   import {makePeriod} from "$lib/kline/coms";
   import type {ExSymbol} from "$lib/dev/common";
   import {OrderDetail} from "$lib/order";

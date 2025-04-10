@@ -22,7 +22,7 @@
   import { fmtDateStr, fmtDuration, curTZ } from '$lib/dateutil';
   import type { OverlayCreate } from 'klinecharts';
   import type { TradeInfo } from '$lib/kline/types';
-  import { pagination, orderCard } from '$lib/snippets.svelte';
+  import { pagination, orderCard } from '$lib/Snippets.svelte';
   import {getFirstValid} from "$lib/common";
 
   let id = $state('');

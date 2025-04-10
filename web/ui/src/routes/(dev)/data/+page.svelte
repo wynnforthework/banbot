@@ -6,7 +6,7 @@
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
   import { exchanges, markets } from '$lib/common';
   import {curTZ, fmtDateStr} from '$lib/dateutil';
-  import { pagination } from '$lib/snippets.svelte';
+  import { pagination } from '$lib/Snippets.svelte';
   import {localizeHref} from "$lib/paraglide/runtime";
 
   // 状态变量
