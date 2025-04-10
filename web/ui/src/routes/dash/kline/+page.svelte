@@ -360,30 +360,24 @@ ${m.holding()}: ${fmtDuration(td.exit_at - enterMS)}`;
     <!-- 筛选条件 -->
     <div class="card bg-base-100 shrink-0">
       <div class="card-body p-0">
-        <div class="flex flex-col gap-3">
+        <div class="flex flex-col gap-1">
           <fieldset class="fieldset">
-            <label class="label" for="klineSymbol">{m.symbol()}</label>
-            <input id="klineSymbol" type="text" class="input" bind:value={search.symbol}/>
+            <input type="text" class="input input-sm" placeholder={m.symbol()} bind:value={search.symbol}/>
           </fieldset>
           <fieldset class="fieldset">
-            <label class="label" for="klineStrategy">{m.strategy()}</label>
-            <input id="klineStrategy" type="text" class="input" bind:value={search.strategy}/>
+            <input type="text" class="input input-sm" placeholder={m.strategy()} bind:value={search.strategy}/>
           </fieldset>
           <fieldset class="fieldset">
-            <label class="label" for="klineEnterTag">{m.enter_tag()}</label>
-            <input id="klineEnterTag" type="text" class="input" bind:value={search.enterTag}/>
+            <input type="text" class="input input-sm" placeholder={m.enter_tag()} bind:value={search.enterTag}/>
           </fieldset>
           <fieldset class="fieldset">
-            <label class="label" for="klineExitTag">{m.exit_tag()}</label>
-            <input id="klineExitTag" type="text" class="input" bind:value={search.exitTag}/>
+            <input type="text" class="input input-sm" placeholder={m.exit_tag()} bind:value={search.exitTag}/>
           </fieldset>
           <fieldset class="fieldset">
-            <label class="label" for="klineStartTime">{m.start_time()}</label>
-            <input id="klineStartTime" type="text" class="input" bind:value={search.startTime}/>
+            <input type="text" class="input input-sm" placeholder={m.start_time()} bind:value={search.startTime}/>
           </fieldset>
           <fieldset class="fieldset">
-            <label class="label" for="klineEndTime">{m.end_time()}</label>
-            <input id="klineEndTime" type="text" class="input" bind:value={search.endTime}/>
+            <input type="text" class="input input-sm" placeholder={m.end_time()} bind:value={search.endTime}/>
           </fieldset>
           <button class="btn btn-sm btn-primary mt-2" onclick={loadGroupStats}>
             {m.search()}

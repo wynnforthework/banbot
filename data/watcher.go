@@ -110,8 +110,10 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 		pairs = append(pairs, j.Symbol)
 		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since,
 			AlignOffMS: int64(exg.GetAlignOff(exgID, tfSecs) * 1000)}
-		// 尽早启动延迟监听
-		btime.SetPairMs(j.Symbol, j.Since, int64(tfSecs*1000))
+		if j.Since > 0 {
+			// 尽早启动延迟监听
+			btime.SetPairMs(j.Symbol, j.Since, int64(tfSecs*1000))
+		}
 	}
 	err = w.SendMsg("subscribe", tags)
 	if err != nil {
@@ -192,6 +194,18 @@ func (w *KLineWatcher) onSpiderBar(key string, data []byte) {
 		return
 	}
 	log.Debug("spider ohlcv", logFields...)
+	// 记录收到的bar数量
+	core.TfPairHitsLock.Lock()
+	timeFrame := utils2.SecsToTF(bars.TFSecs)
+	hits, ok := core.TfPairHits[timeFrame]
+	if !ok {
+		hits = make(map[string]int)
+		core.TfPairHits[timeFrame] = hits
+	}
+	num, _ := hits[pair]
+	hits[pair] = num + len(bars.Arr)
+	core.TfPairHitsLock.Unlock()
+	// 检测并填充缺失的K线
 	olds, err := job.fillLacks(pair, bars.TFSecs, bars.Arr[0].Time, nextBarMS)
 	if err != nil {
 		log.Error("fillLacks fail", zap.String("pair", pair), zap.Error(err))

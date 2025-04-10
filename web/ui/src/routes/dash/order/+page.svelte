@@ -286,22 +286,22 @@
     {#if tabName !== 'position'}
       <div class="flex flex-wrap gap-4">
         {#if tabName === 'bot'}
-          <select class="select select-sm focus:outline-none text-sm" bind:value={search.status}>
+          <select class="select select-sm focus:outline-none text-sm w-48" bind:value={search.status}>
             <option value="">{m.all()}</option>
             <option value="open">{m.pos_opened()}</option>
             <option value="his">{m.closed()}</option>
           </select>
         {/if}
 
-        <input type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.symbol()} bind:value={search.symbols}
+        <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-48" placeholder={m.symbol()} bind:value={search.symbols}
           required={tabName !== 'bot'} />
 
-        <input type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder="20231012" bind:value={search.startMs} />
+        <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-48" placeholder="20231012" bind:value={search.startMs} />
 
         {#if tabName === 'bot'}
-          <input type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder="20231012" bind:value={search.stopMs} />
+          <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-48" placeholder="20231012" bind:value={search.stopMs} />
         {:else}
-          <input type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={limitSize} />
+          <input type="number" class="input input-sm focus:outline-none text-sm font-mono w-48" bind:value={limitSize} />
         {/if}
 
         <button 

@@ -13,15 +13,10 @@
 
 <fieldset class="fieldset">
   {#if editable}
-    <label class="label flex items-center gap-4" for="field-input">
+    <label class="label flex items-center gap-4">
       <span class="w-28 whitespace-nowrap text-sm">{label}</span>
+      <input type="text" class="input input-sm w-64" bind:value={value}/>
     </label>
-    <input 
-      id="field-input"
-      type="text" 
-      class="input input-sm w-full"
-      bind:value={value}
-    />
   {:else}
     <label class="label flex items-center gap-4">
       <span class="w-28 whitespace-nowrap text-sm">{label}</span>

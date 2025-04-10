@@ -103,67 +103,46 @@
 <div class="flex flex-col gap-4">
   <!-- Search Form -->
   <div class="card bg-base-100">
-    <div class="card-body p-4">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="card-body p-3">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
         <!-- Income Type -->
-        <fieldset class="fieldset">
-          <label class="label" for="incomeType">{m.income_type()}</label>
-          <select id="incomeType" class="select" bind:value={searchData.intype}>
+        <label class="input input-sm flex items-center gap-2">
+          <span class="label-text whitespace-nowrap">{m.income_type()}</span>
+          <select class="flex-1" bind:value={searchData.intype}>
             {#each incomeTypes as type}
               <option value={type.value}>{type.label}</option>
             {/each}
           </select>
-        </fieldset>
+        </label>
 
         <!-- Account -->
-        <fieldset class="fieldset">
-          <label class="label" for="account">{m.account()}</label>
-          <input 
-            id="account"
-            type="text" 
-            class="input"
-            bind:value={searchData.account}
-          />
-        </fieldset>
+        <label class="input input-sm flex items-center gap-2">
+          <span class="label-text whitespace-nowrap">{m.account()}</span>
+          <input type="text" class="flex-1" bind:value={searchData.account}/>
+        </label>
 
         <!-- Symbol -->
-        <fieldset class="fieldset">
-          <label class="label" for="symbol">{m.symbol()}</label>
-          <input 
-            id="symbol"
-            type="text" 
-            class="input"
-            bind:value={searchData.symbol}
-          />
-        </fieldset>
+        <label class="input input-sm flex items-center gap-2">
+          <span class="label-text whitespace-nowrap">{m.symbol()}</span>
+          <input type="text" class="flex-1" bind:value={searchData.symbol}/>
+        </label>
 
         <!-- Start Time -->
-        <fieldset class="fieldset">
-          <label class="label" for="startTime">{m.start_time()}</label>
-          <input 
-            id="startTime"
-            type="text" 
-            class="input"
-            placeholder="20231012"
-            bind:value={searchData.startTime}
-          />
-        </fieldset>
+        <label class="input input-sm flex items-center gap-2">
+          <span class="label-text whitespace-nowrap">{m.start_time()}</span>
+          <input type="text" class="flex-1" placeholder="20231012" bind:value={searchData.startTime}/>
+        </label>
 
         <!-- Limit -->
-        <fieldset class="fieldset">
-          <label class="label" for="limit">{m.limit()}</label>
-          <input 
-            id="limit"
-            type="number" 
-            class="input"
-            bind:value={searchData.limit}
-          />
-        </fieldset>
+        <label class="input input-sm flex items-center gap-2">
+          <span class="label-text whitespace-nowrap">{m.limit()}</span>
+          <input type="number" class="flex-1" bind:value={searchData.limit}/>
+        </label>
 
         <!-- Search Button -->
-        <div class="flex justify-end items-end">
+        <div class="flex">
           <button 
-            class="btn btn-sm bg-primary hover:bg-primary-focus text-primary-content border-none shadow-sm mt-6"
+            class="btn btn-sm bg-primary hover:bg-primary-focus text-primary-content border-none shadow-sm"
             onclick={loadData}
           >
             {m.search()}

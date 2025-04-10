@@ -116,7 +116,8 @@ func CronKlineDelays() {
 }
 
 func CronKlineSummary() {
-	_, err_ := core.Cron.AddFunc("30 1-59/5 * * * *", func() {
+	_, err_ := core.Cron.AddFunc("30 1-59/10 * * * *", func() {
+		core.TfPairHitsLock.Lock()
 		var pairGroups = make(map[string][]string)
 		for tf, tfMap := range core.TfPairHits {
 			hitMap := make(map[int][]string)
@@ -132,8 +133,9 @@ func CronKlineSummary() {
 		}
 		if len(pairGroups) > 0 {
 			staText := core.GroupByPairQuotes(pairGroups)
-			log.Info(fmt.Sprintf("receive bars in 5 mins:\n%s", staText))
+			log.Info(fmt.Sprintf("receive bars in 10 mins:\n%s", staText))
 		}
+		core.TfPairHitsLock.Unlock()
 	})
 	if err_ != nil {
 		log.Error("add Receive Klines Summary fail", zap.Error(err_))

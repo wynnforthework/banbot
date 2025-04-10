@@ -390,6 +390,7 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 		// 加载订阅其他标的信息
 		if stgy.OnPairInfos != nil {
 			infoJobs := GetInfoJobs(account)
+			hasInfoSubs := false
 			for _, s := range stgy.OnPairInfos(job) {
 				pair := s.Pair
 				if pair == "_cur_" {
@@ -404,6 +405,7 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 					}
 					initBarEnv(curExs, s.TimeFrame)
 				}
+				hasInfoSubs = true
 				logWarm(pair, s.TimeFrame, s.WarmupNum)
 				jobKey := strings.Join([]string{pair, s.TimeFrame}, "_")
 				items, ok := infoJobs[jobKey]
@@ -413,6 +415,9 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 				}
 				// 这里需要stratID+pair作为键，否则多个品种订阅同一个额外品种数据时，只记录了最后一个
 				items[strings.Join([]string{stgy.Name, exs.Symbol}, "_")] = job
+			}
+			if hasInfoSubs && stgy.OnInfoBar == nil {
+				panic(fmt.Sprintf("%s: `OnInfoBar` is required for OnPairInfos", stgy.Name))
 			}
 		}
 	}

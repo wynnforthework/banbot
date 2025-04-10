@@ -96,6 +96,7 @@ type StratJob struct {
 	OrderNum      int               // All unfinished order quantities 所有未完成订单数量
 	EnteredNum    int               // The number of fully/part entered orders 已完全/部分入场的订单数量
 	CheckMS       int64             // Last timestamp of signal processing, 13 milliseconds 上次处理信号的时间戳，13位毫秒
+	LastBarMS     int64             // End timestamp of the previous candlestick 上个K线的结束时间戳，13位毫秒
 	MaxOpenLong   int               // Max open number for long position, 0 for any, -1 for disabled 最大开多数量，0不限制，-1禁止开多
 	MaxOpenShort  int               // Max open number for short position, 0 for any, -1 for disabled 最大开空数量，0不限制，-1禁止开空
 	CloseLong     bool              // whether to allow close long position 是否允许平多

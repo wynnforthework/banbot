@@ -262,6 +262,15 @@ func getStatistics(c *fiber.Ctx) error {
 		expProfit, expRatio := utils.CalcExpectancy(dayProfits)
 		initBalance := wallets.TotalLegal(nil, true) - profitSum
 		ddPct, ddVal, _, _, _, _ := utils.CalcMaxDrawDown(dayProfits, initBalance)
+
+		jobs := strat.GetJobs(acc)
+		pairs := make(map[string]bool)
+		tfMap := make(map[string]bool)
+		for key := range jobs {
+			arr := strings.Split(key, "_")
+			pairs[arr[0]] = true
+			tfMap[arr[1]] = true
+		}
 		return c.JSON(fiber.Map{
 			"doneProfitMean":    doneProfitMean,
 			"doneProfitPctMean": doneProfitRateSum / float64(max(1, doneNum)) * 100,
@@ -288,10 +297,10 @@ func getStatistics(c *fiber.Ctx) error {
 			"maxDrawdownVal":    ddVal,
 			"totalCost":         totalCost,
 			"botStartMs":        core.StartAt,
-			"runTfs":            utils.KeysOfMap(core.TFSecs),
+			"runTfs":            utils.KeysOfMap(tfMap),
 			"exchange":          core.ExgName,
 			"market":            core.Market,
-			"pairs":             core.Pairs,
+			"pairs":             utils.KeysOfMap(pairs),
 		})
 	})
 }
@@ -633,11 +642,12 @@ func getConfig(c *fiber.Ctx) error {
 
 func getStratJobs(c *fiber.Ctx) error {
 	type JobItem struct {
-		Pair     string  `json:"pair"`
-		Strategy string  `json:"strategy"`
-		TF       string  `json:"tf"`
-		Price    float64 `json:"price"`
-		OdNum    int     `json:"odNum"`
+		Pair      string  `json:"pair"`
+		Strategy  string  `json:"strategy"`
+		TF        string  `json:"tf"`
+		Price     float64 `json:"price"`
+		OdNum     int     `json:"odNum"`
+		LastBarMS int64   `json:"lastBarMS"`
 	}
 	return wrapAccount(c, func(acc string) error {
 		jobs := strat.GetJobs(acc)
@@ -648,7 +658,7 @@ func getStratJobs(c *fiber.Ctx) error {
 		for pairTF, jobMap := range jobs {
 			arr := strings.Split(pairTF, "_")
 			price := core.GetPriceSafe(arr[0])
-			for stgName := range jobMap {
+			for stgName, job := range jobMap {
 				var odNum = 0
 				for _, od := range openOds {
 					if od.Symbol == arr[0] && od.Timeframe == arr[1] && od.Strategy == stgName {
@@ -656,11 +666,12 @@ func getStratJobs(c *fiber.Ctx) error {
 					}
 				}
 				item := &JobItem{
-					Pair:     arr[0],
-					TF:       arr[1],
-					Strategy: stgName,
-					Price:    price,
-					OdNum:    odNum,
+					Pair:      arr[0],
+					TF:        arr[1],
+					Strategy:  stgName,
+					Price:     price,
+					OdNum:     odNum,
+					LastBarMS: job.LastBarMS,
 				}
 				items = append(items, item)
 			}

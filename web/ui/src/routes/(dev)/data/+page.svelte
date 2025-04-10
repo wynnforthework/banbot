@@ -130,7 +130,7 @@
                         <td>{fmtDateStr(symbol.list_ms)}</td>
                         <td>{fmtDateStr(symbol.delist_ms)}</td>
                         <td>
-                            <a href={`/data/item?id=${symbol.id}`} class="btn btn-xs btn-info btn-outline">{m.details()}</a>
+                            <a href={localizeHref(`/data/item?id=${symbol.id}`)} class="btn btn-xs btn-info btn-outline">{m.details()}</a>
                         </td>
                     </tr>
                 {/each}

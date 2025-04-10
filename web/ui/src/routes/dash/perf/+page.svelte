@@ -3,7 +3,8 @@
   import * as m from '$lib/paraglide/messages';
   import { getAccApi } from '$lib/netio';
   import { fmtDuration } from '$lib/dateutil';
-  import type {OdGroup} from '$lib/order/types'
+  import type {OdGroup} from '$lib/order/types';
+  import {localizeHref} from "$lib/paraglide/runtime";
 
   let tabName = $state('day');
   let dataList = $state<OdGroup[]>([]);
@@ -152,27 +153,24 @@
 
       <!-- Search Form -->
       <div class="flex flex-wrap gap-4 items-center">
-        <fieldset class="fieldset">
-          <label class="label" for="startTime">{m.start_time()}</label>
-          <input 
-            id="startTime"
-            type="text" 
-            class="input input-sm focus:outline-none w-36 text-sm font-mono"
+        <label class="input input-sm focus:outline-none w-56 text-sm font-mono">
+          {m.start_time()}
+          <input
+            type="text"
+            class="grow"
             placeholder="20231012"
             bind:value={search.startTime}
           />
-        </fieldset>
-        
-        <fieldset class="fieldset">
-          <label class="label" for="endTime">{m.end_time()}</label>
-          <input 
-            id="endTime"
-            type="text" 
-            class="input input-sm focus:outline-none w-36 text-sm font-mono"
-            placeholder="20231012"
-            bind:value={search.stopTime}
+        </label>
+        <label class="input input-sm focus:outline-none w-56 text-sm font-mono">
+          {m.end_time()}
+          <input
+                  type="text"
+                  class="grow"
+                  placeholder="20231012"
+                  bind:value={search.stopTime}
           />
-        </fieldset>
+        </label>
         
         <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" onclick={loadData}>
           {m.search()}

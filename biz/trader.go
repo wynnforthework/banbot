@@ -36,7 +36,7 @@ func (t *Trader) OnEnvJobs(bar *orm.InfoKline) (*ta.BarEnv, *errs.Error) {
 			// This bar has expired, ignore it, the crawler may push the processed expired bar when starting
 			// 此bar已过期，忽略，启动时爬虫可能会推已处理的过期bar
 			return nil, nil
-		} else if env.TimeStop < bar.Time {
+		} else if env.TimeStop > 0 && env.TimeStop < bar.Time {
 			lackNum := int(math.Round(float64(bar.Time-env.TimeStop) / float64(env.TFMSecs)))
 			if lackNum > 0 {
 				log.Warn("taEnv bar lack", zap.Int("num", lackNum), zap.String("env", envKey))

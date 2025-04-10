@@ -269,14 +269,6 @@ func (f *Feeder) fireCallBacks(timeFrame string, tfMSecs int64, bars []*banexg.K
 		})
 	}
 	if isLive && !f.isWarmUp {
-		// 记录收到的bar数量
-		hits, ok := core.TfPairHits[timeFrame]
-		if !ok {
-			hits = make(map[string]int)
-			core.TfPairHits[timeFrame] = hits
-		}
-		num, _ := hits[pair]
-		hits[pair] = num + len(bars)
 		// 检查是否延迟
 		lastTime := bars[len(bars)-1].Time
 		delay := btime.TimeMS() - (lastTime + tfMSecs)
@@ -365,12 +357,14 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 	}
 	maxEndMs := int64(0)
 	skips := make(map[string][2]int)
+	hourDone := f.hour == nil
 	for tf, warmNum := range tfNums {
 		tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+		endMS := utils2.AlignTfMSecs(curMS, tfMSecs)
 		if tfMSecs < int64(60000) || warmNum <= 0 {
+			maxEndMs = max(maxEndMs, endMS)
 			continue
 		}
-		endMS := utils2.AlignTfMSecs(curMS, tfMSecs)
 		bars, err := f.getTfKlines(tf, endMS, warmNum, pBar)
 		if err != nil {
 			return 0, nil, err
@@ -383,7 +377,14 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 			skips[fmt.Sprintf("%s_%s", f.Symbol, tf)] = [2]int{warmNum, len(bars)}
 		}
 		curEnd := f.warmTf(tf, bars)
+		if !hourDone && tfMSecs == 3600000 {
+			f.hour.SetSeek(curEnd)
+			hourDone = true
+		}
 		maxEndMs = max(maxEndMs, curEnd)
+	}
+	if !hourDone {
+		f.hour.SetSeek(utils2.AlignTfMSecs(maxEndMs, 3600000))
 	}
 	return maxEndMs, skips, nil
 }
@@ -489,6 +490,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 	endMS := bars[len(bars)-1].Time + barTfMSecs
 	var hourBars []*banexg.Kline
 	useHour := false
+	hourMSecs, hourAlignOff := int64(3600000), int64(0)
 	if f.hour != nil {
 		useHour = true
 		hourBars = f.hour.ReadTo(endMS, true)
@@ -509,11 +511,13 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 		}
 		for i := len(f.States) - 1; i >= 1; i-- {
 			state = f.States[i]
+			srcMSecs, srcAlignOff := staMSecs, state.AlignOffMS
 			if useHour && state.TFSecs >= 3600 {
 				if len(hourBars) == 0 {
 					continue
 				}
 				bars = hourBars
+				srcMSecs, srcAlignOff = hourMSecs, hourAlignOff
 			} else {
 				bars = ohlcvs
 			}
@@ -522,7 +526,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 				olds = append(olds, state.WaitBar)
 			}
 			bigTfMSecs := int64(state.TFSecs * 1000)
-			curOhlcvs, lastDone := utils.BuildOHLCV(bars, bigTfMSecs, f.PreFire, olds, staMSecs, state.AlignOffMS)
+			curOhlcvs, lastDone := utils.BuildOHLCV(bars, bigTfMSecs, f.PreFire, olds, srcMSecs, srcAlignOff)
 			f.onStateOhlcvs(state, curOhlcvs, lastDone)
 		}
 	}
@@ -717,11 +721,19 @@ func NewTfKlineLoader(exs *orm.ExSymbol, tf string) *TfKlineLoader {
 	if tf != "" {
 		tfMSecs = int64(utils2.TFToSecs(tf) * 1000)
 	}
+	endMS := config.TimeRange.EndMS
+	if core.LiveMode {
+		// 实时模式下，EndMS截取为当前对齐时间
+		endMS = btime.UTCStamp()
+		if tfMSecs > 0 {
+			endMS = utils2.AlignTfMSecs(endMS, tfMSecs)
+		}
+	}
 	return &TfKlineLoader{
 		ExSymbol:  exs,
 		Timeframe: tf,
 		TFMSecs:   tfMSecs,
-		EndMS:     config.TimeRange.EndMS,
+		EndMS:     endMS,
 	}
 }
 
@@ -744,6 +756,7 @@ func (f *TfKlineLoader) SetTimeFrame(tf string) {
 	}
 	f.Timeframe = tf
 	f.TFMSecs = int64(utils2.TFToSecs(tf) * 1000)
+	f.EndMS = utils2.AlignTfMSecs(f.EndMS, f.TFMSecs)
 	f.Reset(0)
 }
 
@@ -759,17 +772,29 @@ func (f *TfKlineLoader) Reset(since int64) {
 }
 
 func (f *TfKlineLoader) ReadTo(end int64, force bool) []*banexg.Kline {
+	end = utils2.AlignTfMSecs(end, 3600000)
 	if force && f.EndMS < end {
 		f.EndMS = end
+		if f.nextMS == math.MaxInt64 {
+			f.Reset(f.offsetMS)
+		}
+	}
+	if f.rowIdx >= len(f.caches) {
+		// 缓存为空，未读取完（f.rowIdx >= 0时必定nextMS < math.MaxInt64）
+		f.SetNext()
 	}
 	var result []*banexg.Kline
 	for f.rowIdx >= 0 && f.rowIdx < len(f.caches) {
 		bar := f.caches[f.rowIdx]
-		if bar.Time+f.TFMSecs > end {
+		barEnd := bar.Time + f.TFMSecs
+		if barEnd > end {
 			break
 		}
 		result = append(result, bar)
 		f.SetNext()
+		if barEnd == end {
+			break
+		}
 	}
 	return result
 }
@@ -815,26 +840,31 @@ func (f *TfKlineLoader) SetNext() {
 		f.nextMS = nextStartMS + f.TFMSecs
 		return
 	}
+	// 检查是否还有可读取内容
+	endMS := f.EndMS
+	if endMS > 0 && f.nextMS >= endMS {
+		f.rowIdx = -1
+		// 将nextMS置为math.MaxInt64前，应备份到offsetMS，以便实盘读取更新的k线
+		f.offsetMS = max(f.offsetMS, f.nextMS)
+		f.nextMS = math.MaxInt64
+		return
+	}
 	// After the cache reading is completed, re-read the database
 	// 缓存读取完毕，重新读取数据库
 	sess, conn, err := orm.Conn(nil)
 	if err != nil {
 		f.rowIdx = -1
+		f.offsetMS = max(f.offsetMS, f.nextMS)
 		f.nextMS = math.MaxInt64
 		log.Error("get conn fail while loading kline", zap.Error(err))
 		return
 	}
 	defer conn.Release()
-	endMS := f.EndMS
-	if endMS > 0 && f.nextMS >= endMS {
-		f.rowIdx = -1
-		f.nextMS = math.MaxInt64
-		return
-	}
 	batchSize := 3000
 	_, bars, err := sess.GetOHLCV(f.ExSymbol, f.Timeframe, f.offsetMS, endMS, batchSize, false)
 	if err != nil || len(bars) == 0 {
 		f.rowIdx = -1
+		f.offsetMS = max(f.offsetMS, f.nextMS)
 		f.nextMS = math.MaxInt64
 		if err != nil {
 			log.Error("load kline fail", zap.Error(err))

@@ -212,6 +212,7 @@
   "version": "版本",
   "price": "价格",
   "order_num": "订单数量",
+  "recent_time": "最近时间",
   "page": "页",
   "load_orders_failed": "获取订单失败",
   "open_long": "开多",

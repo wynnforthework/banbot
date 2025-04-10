@@ -219,10 +219,10 @@
           <span class="join-item px-3 py-2 flex items-center bg-base-200/50 text-sm text-base-content/70">
             {m.delay_hours()}
           </span>
-          <input type="number" class="input input-sm join-item w-20 focus:outline-none text-sm"
+          <input type="number" class="input join-item w-20 focus:outline-none text-sm"
                  bind:value={delayHours}
                  min="0" max="9999" step="0.1"/>
-          <button class="btn btn-sm join-item hover:bg-primary hover:text-primary-content transition-colors" onclick={saveAllowEntry}>
+          <button class="btn join-item hover:bg-primary hover:text-primary-content transition-colors" onclick={saveAllowEntry}>
             {m.save()}
           </button>
         </div>

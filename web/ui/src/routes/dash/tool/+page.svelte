@@ -90,20 +90,20 @@
         {#if currentTool === 'download_history'}
           <h2 class="card-title text-lg mb-4">{m.download_history()}</h2>
           <div class="flex gap-4 items-center mb-6">
-            <select class="select select-sm focus:outline-none" bind:value={searchData.source}>
+            <select class="select select-sm focus:outline-none w-36" bind:value={searchData.source}>
               {#each sourceTypes as type}
                 <option value={type.value}>{type.label}</option>
               {/each}
             </select>
             <input 
               type="text"
-              class="input input-sm focus:outline-none text-sm font-mono"
+              class="input input-sm focus:outline-none text-sm font-mono w-56"
               bind:value={searchData.startTime}
               placeholder={m.start_time()}
             />
             <input 
               type="text"
-              class="input input-sm focus:outline-none text-sm font-mono"
+              class="input input-sm focus:outline-none text-sm font-mono w-56"
               bind:value={searchData.endTime}
               placeholder={m.end_time()}
             />
@@ -117,7 +117,7 @@
         {:else if currentTool === 'download_result'}
           <h2 class="card-title text-lg mb-4">{m.get_download_result()}</h2>
           <div class="flex gap-4 items-center mb-6">
-            <select class="select select-sm focus:outline-none" bind:value={searchData.source}>
+            <select class="select select-sm focus:outline-none w-36" bind:value={searchData.source}>
               {#each sourceTypes as type}
                 <option value={type.value}>{type.label}</option>
               {/each}

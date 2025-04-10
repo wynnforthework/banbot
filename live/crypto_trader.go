@@ -132,9 +132,11 @@ func (t *CryptoTrader) orderCB(od *ormo.InOutOrder, isEnter bool) {
 }
 
 func (t *CryptoTrader) startJobs() {
-	// Listen to account order flow, process user orders, and consume order queues
-	// 监听账户订单流、处理用户下单、消费订单队列
-	biz.StartLiveOdMgr()
+	if core.EnvReal {
+		// Listen to account order flow, process user orders, and consume order queues
+		// 监听账户订单流、处理用户下单、消费订单队列
+		biz.StartLiveOdMgr()
+	}
 	// Refresh trading pairs regularly
 	// 定期刷新交易对
 	CronRefreshPairs(t.dp)
@@ -150,12 +152,14 @@ func (t *CryptoTrader) startJobs() {
 	// The timer output is executed every 5 minutes: 01:30 06:30 11:30
 	// 定时输出收到K线情况，每5分钟执行：01:30  06:30  11:30
 	CronKlineSummary()
-	// Check if the limit order submission is triggered at 15th secs of every minute
-	// 每分钟第15s检查是否触发限价单提交
-	CronCheckTriggerOds()
-	// Regularly update balance and synchronize exchange positions with local orders
-	// 定期更新余额，同步交易所持仓到本地订单
-	StartLoopBalancePositions()
+	if core.EnvReal {
+		// Check if the limit order submission is triggered at 15th secs of every minute
+		// 每分钟第15s检查是否触发限价单提交
+		CronCheckTriggerOds()
+		// Regularly update balance and synchronize exchange positions with local orders
+		// 定期更新余额，同步交易所持仓到本地订单
+		StartLoopBalancePositions()
+	}
 	core.Cron.Start()
 }
 

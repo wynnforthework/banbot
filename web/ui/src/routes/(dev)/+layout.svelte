@@ -12,12 +12,12 @@
   import {localizeHref} from "$lib/paraglide/runtime";
 
   const menuItems = [
-    { href: '/strategy', icon: 'code', label: m.strategy(), tag: '/strategy' },
-    { href: '/backtest/new', icon: 'calculate', label: m.backtest(), tag: '/backtest' },
-    { href: '/data', icon: 'chart-bar', label: m.data(), tag: '/data' },
-    { href: '/trade', icon: 'banknotes', label: m.live_trading(), tag: '/trade' },
-    //{ href: '/tools', icon: 'tool', label: m.tools() },
-    //{ href: '/optimize', icon: 'cpu', label: m.optimize() },
+    { href: localizeHref('/strategy'), icon: 'code', label: m.strategy(), tag: '/strategy' },
+    { href: localizeHref('/backtest/new'), icon: 'calculate', label: m.backtest(), tag: '/backtest' },
+    { href: localizeHref('/data'), icon: 'chart-bar', label: m.data(), tag: '/data' },
+    { href: localizeHref('/trade'), icon: 'banknotes', label: m.live_trading(), tag: '/trade' },
+    //{ href: localizeHref('/tools'), icon: 'tool', label: m.tools() },
+    //{ href: localizeHref('/optimize'), icon: 'cpu', label: m.optimize() },
   ];
   
   site.update((s) => {

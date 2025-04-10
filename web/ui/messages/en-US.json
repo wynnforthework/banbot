@@ -212,6 +212,7 @@
     "version": "Version",
     "price": "Price",
     "order_num": "Order Num",
+    "recent_time": "Recent Time",
     "page": "page",
     "load_orders_failed": "Load Orders Failed",
     "open_long": "Open Long",

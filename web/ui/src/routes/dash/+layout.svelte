@@ -23,15 +23,15 @@
   })
   
   const menuItems = [
-    { path: '/dash/board', icon: 'home', text: m.home() },
-    { path: '/dash/strat_job', icon: 'square-stack-3', text: m.strat_job() },
-    { path: '/dash/kline', icon: 'chart-bar', text: m.kline() },
-    { path: '/dash/perf', icon: 'calender', text: m.perf() },
-    { path: '/dash/order', icon: 'number-list', text: m.order() },
-    { path: '/dash/rebate', icon: 'dollar', text: m.rebate() },
-    { path: '/dash/setting', icon: 'setting', text: m.config() },
-    { path: '/dash/tool', icon: 'tool', text: m.tools() },
-    { path: '/dash/log', icon: 'document-text', text: m.logs() }
+    { path: localizeHref('/dash/board'), icon: 'home', text: m.home() },
+    { path: localizeHref('/dash/strat_job'), icon: 'square-stack-3', text: m.strat_job() },
+    { path: localizeHref('/dash/kline'), icon: 'chart-bar', text: m.kline() },
+    { path: localizeHref('/dash/perf'), icon: 'calender', text: m.perf() },
+    { path: localizeHref('/dash/order'), icon: 'number-list', text: m.order() },
+    { path: localizeHref('/dash/rebate'), icon: 'dollar', text: m.rebate() },
+    { path: localizeHref('/dash/setting'), icon: 'setting', text: m.config() },
+    { path: localizeHref('/dash/tool'), icon: 'tool', text: m.tools() },
+    { path: localizeHref('/dash/log'), icon: 'document-text', text: m.logs() }
   ];
 
   function clickAccount(acc: BotAccount) {
@@ -61,7 +61,13 @@
 <div class="flex flex-1" onclick={() => $ctx.clickPage += 1}>
   <aside class="bg-base-200 text-base-content shadow-lg {collapsed ? 'w-16' : 'w-64 min-w-[200px]'} transition-all duration-300 border-r border-base-300">
     <div class="py-3 px-4 flex justify-center items-center border-b border-base-300">
-      <a href={localizeHref("/dash")} class="text-lg font-semibold hover:text-primary transition-colors">{collapsed ? 'Ban' : 'Banbot'}</a>
+      <a href={localizeHref("/dash")} class="text-lg font-semibold hover:text-primary transition-colors">
+        {#if collapsed}
+          <img src="/favicon.png" alt="logo" class="w-10 h-10 object-contain"/>
+        {:else}
+          <img src="/banbot.png" alt="logo" class="w-24 h-10 object-contain"/>
+        {/if}
+      </a>
     </div>
     
     <ul class="menu w-full menu-vertical py-2 px-1.5 gap-1">
@@ -71,7 +77,7 @@
             href={path} 
             class="rounded-md transition-all duration-200 {page.url.pathname.includes(path) ? 'bg-primary text-primary-content font-medium shadow-sm hover:bg-primary' : 'hover:bg-primary/20 hover:text-primary'}"
           >
-            <Icon name={icon} class="w-4 h-4" />
+            <Icon name={icon} class="size-5" />
             {#if !collapsed}
               <span class="ml-1.5 text-sm">{text}</span>
             {/if}

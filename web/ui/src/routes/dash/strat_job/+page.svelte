@@ -3,6 +3,7 @@
   import * as m from '$lib/paraglide/messages';
   import { getAccApi } from '$lib/netio';
   import Modal from '$lib/kline/Modal.svelte';
+  import {curTZ, fmtDateStrTZ} from '$lib/dateutil';
 
   interface StgyVer {
     name: string;
@@ -15,6 +16,7 @@
     tf: string;
     price: number;
     odNum: number;
+    lastBarMS: number;
     args: Array<{title: string, value: any}>;
   }
 
@@ -32,6 +34,7 @@
     tf: '',
     price: 0,
     odNum: 0,
+    lastBarMS: 0,
     args: []
   });
 
@@ -46,11 +49,13 @@
             tfs: new Set([job.tf]),
             price: job.price,
             totalOdNum: job.odNum,
+            lastBarMS: job.lastBarMS,
             strategies: new Set([job.strategy])
           };
         } else {
           acc[job.pair].tfs.add(job.tf);
           acc[job.pair].totalOdNum += job.odNum;
+          acc[job.pair].lastBarMS = Math.max(job.lastBarMS, acc[job.pair].lastBarMS);
           acc[job.pair].strategies.add(job.strategy);
         }
         return acc;
@@ -135,6 +140,7 @@
             <th class="bg-base-200/30 font-medium text-sm">{m.timeframe()}</th>
             <th class="bg-base-200/30 font-medium text-sm text-right">{m.price()}</th>
             <th class="bg-base-200/30 font-medium text-sm text-right">{m.order_num()}</th>
+            <th class="bg-base-200/30 font-medium text-sm text-right">{m.recent_time()}({curTZ()})</th>
             {#if selectedStrategy !== 'all'}
               <th class="bg-base-200/30 font-medium text-sm">{m.settings()}</th>
               <th class="bg-base-200/30 font-medium text-sm">{m.actions()}</th>
@@ -150,6 +156,7 @@
               <td class="text-sm">{item.tf || item.tfs}</td>
               <td class="text-sm font-mono text-right">{item.price}</td>
               <td class="text-sm font-mono text-right">{item.odNum || item.totalOdNum}</td>
+              <td class="text-sm font-mono text-right">{fmtDateStrTZ(item.lastBarMS)}</td>
               {#if selectedStrategy !== 'all'}
                 <td class="text-sm text-base-content/70">{showJobArgs(item)}</td>
                 <td>

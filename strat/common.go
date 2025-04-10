@@ -148,6 +148,7 @@ func (q *ExitReq) Clone() *ExitReq {
 
 func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 	s.CheckMS = btime.TimeMS()
+	s.LastBarMS = s.Env.TimeStop
 	if s.IsWarmUp {
 		s.LongOrders = nil
 		s.ShortOrders = nil
