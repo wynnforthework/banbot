@@ -1,21 +1,43 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getAccApi } from '$lib/netio';
+  import {getAccApi} from '$lib/netio';
   import * as m from '$lib/paraglide/messages';
+  import {alerts} from "$lib/stores/alerts";
 
-  let content = $state('');
+  let logs = $state('');
+  let logStart = $state(-1);
+  let loadingLogs = $state(false);
 
-  async function loadData() {
-    try {
-      const rsp = await getAccApi('/log', { num: 3000 });
-      content = rsp.data ?? 'no data';
-    } catch (err) {
-      console.error('Failed to load logs:', err);
+  async function loadLogs(refresh = false) {
+    if(loadingLogs) return;
+    if(refresh) {
+      logStart = -1;
     }
+    if(logStart === 0) {
+      alerts.addAlert("info", m.no_more_logs());
+      return;
+    }
+    loadingLogs = true;
+    const rsp = await getAccApi('/log', {
+      end: logStart,
+      limit: 20480
+    });
+    loadingLogs = false;
+    if(rsp.code != 200) {
+      console.error('load logs failed', rsp);
+      alerts.addAlert("error", rsp.msg || 'load logs failed');
+      return;
+    }
+    if(refresh) {
+      logs = rsp.data;
+    }else{
+      logs = rsp.data + logs;
+    }
+    logStart = rsp.start;
   }
 
   onMount(() => {
-    loadData();
+    loadLogs(true);
   });
 </script>
 
@@ -23,13 +45,14 @@
   <div class="card-body p-4">
     <div class="flex justify-between items-center mb-3">
       <h2 class="text-xl font-semibold text-base-content">{m.system_logs()}</h2>
-      <button class="btn btn-sm btn-primary" onclick={loadData}>
+      <button class="btn btn-sm btn-primary" onclick={() => loadLogs(true)}>
         {m.refresh()}
       </button>
     </div>
     
     <div class="bg-base-200/50 rounded-lg p-4">
-      <pre class="whitespace-pre-wrap font-mono text-sm text-base-content/80">{content}</pre>
+      <a class="link link-primary link-hover" onclick={() => loadLogs(false)}>{loadingLogs ? m.loading() : m.load_more()}</a>
+      <pre class="whitespace-pre-wrap font-mono text-sm text-base-content/80">{logs}</pre>
     </div>
   </div>
 </div>

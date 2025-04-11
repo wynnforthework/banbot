@@ -398,6 +398,7 @@
   "bt_range": "回测区间",
   "total_invest": "总投资",
   "final_balance": "最终余额",
+  "total_withdraw": "累计提现",
   "time_period": "时间周期",
   "stat_by_pairs": "按品种统计",
   "stat_by_dates": "按日期统计",

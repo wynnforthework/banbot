@@ -122,8 +122,9 @@ func postRefreshWallet(c *fiber.Ctx) error {
 		if err != nil {
 			return err
 		}
-		log.Info("RefreshWallet", zap.String("acc", account), zap.Any("rsp", rsp))
 		biz.UpdateWalletByBalances(wallet, rsp)
+		rsp.Info = nil
+		log.Info("RefreshWallet", zap.String("acc", account), zap.Any("rsp", rsp))
 		return c.JSON(fiber.Map{
 			"items": walletItems(wallet),
 			"total": wallet.FiatValue(true),
@@ -996,23 +997,24 @@ func getDownTrade(c *fiber.Ctx) error {
 
 func getLog(c *fiber.Ctx) error {
 	type LogArgs struct {
-		Num int `query:"num"`
+		End   int64 `query:"end"`   // 结束位置坐标，0表示末尾
+		Limit int64 `query:"limit"` // 读取字节数大小
 	}
-	var data = new(LogArgs)
-	if err_ := base.VerifyArg(c, data, base.ArgQuery); err_ != nil {
+	var args = new(LogArgs)
+	if err_ := base.VerifyArg(c, args, base.ArgQuery); err_ != nil {
 		return err_
 	}
 	if config.Args.Logfile == "" {
 		return c.JSON(fiber.Map{"code": 400, "msg": "no log file"})
 	}
-	if data.Num == 0 {
-		data.Num = 3000
-	}
-	lines, err := utils.ReadLastNLines(config.Args.Logfile, data.Num)
+	data, pos, err := utils.ReadFileTail(config.Args.Logfile, args.Limit, args.End)
 	if err != nil {
 		return err
 	}
-	return c.SendString(strings.Join(lines, "\n"))
+	return c.JSON(fiber.Map{
+		"data":  string(data),
+		"start": pos,
+	})
 }
 
 func getBotInfo(c *fiber.Ctx) error {

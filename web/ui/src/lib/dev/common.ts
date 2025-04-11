@@ -48,6 +48,8 @@ export interface BacktestDetail {
   totCost: number;
   showDrawDownPct: number;
   showDrawDownVal: number;
+  finBalance: number;
+  finWithdraw: number;
 }
 
 export interface BackTestTask {

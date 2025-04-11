@@ -398,6 +398,7 @@
     "bt_range": "Backtest Range",
     "total_invest": "Total Invest",
     "final_balance": "Final Balance",
+    "total_withdraw": "Total Withdraw",
     "time_period": "Time Period",
     "stat_by_pairs": "Stat By Pairs",
     "stat_by_dates": "Stat By Dates",

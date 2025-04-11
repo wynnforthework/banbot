@@ -433,7 +433,7 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[strin
 	} else if !tryOd.Enter {
 		// Close order. It is impossible that it has been submitted to the exchange but not yet completed. It belongs to the previous else if
 		// 平仓订单，这里不可能是已提交到交易所尚未完成，属于上一个else if
-		err = o.tryExitEnter(od)
+		err = o.tryExitPendingEnter(od)
 		if err != nil {
 			return err
 		}
@@ -1371,7 +1371,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 	return nil
 }
 
-func (o *LiveOrderMgr) tryExitEnter(od *ormo.InOutOrder) *errs.Error {
+func (o *LiveOrderMgr) tryExitPendingEnter(od *ormo.InOutOrder) *errs.Error {
 	if od.Enter.Status == ormo.OdStatusClosed {
 		return nil
 	}
@@ -1418,7 +1418,7 @@ func (o *LiveOrderMgr) tryExitEnter(od *ormo.InOutOrder) *errs.Error {
 }
 
 func (o *LiveOrderMgr) execOrderExit(od *ormo.InOutOrder) *errs.Error {
-	err := o.tryExitEnter(od)
+	err := o.tryExitPendingEnter(od)
 	if err != nil {
 		return err
 	}

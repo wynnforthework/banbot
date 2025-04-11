@@ -3,7 +3,6 @@ package dev
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -425,73 +424,21 @@ func handleBuild(c *fiber.Ctx) error {
 func getLogs(c *fiber.Ctx) error {
 	type LogArgs struct {
 		End   int64 `query:"end"`
-		Limit int   `query:"limit"`
+		Limit int64 `query:"limit"`
 	}
 
 	var args = new(LogArgs)
 	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
 		return err
 	}
-	if args.Limit <= 0 {
-		args.Limit = 1000
-	}
 
-	file, err := os.Open(core.LogFile)
+	data, pos, err := utils.ReadFileTail(core.LogFile, args.Limit, args.End)
 	if err != nil {
 		return err
-	}
-	defer file.Close()
-
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	fileSize := fileInfo.Size()
-
-	// 读取日志内容
-	buffer := make([]byte, 4096)
-	var lines []string
-	var pos = fileSize
-	if args.End > 0 && args.End < fileSize {
-		pos = args.End
-	}
-	for len(lines) < args.Limit && pos > 0 {
-		// 计算本次读的大小和位置
-		readSize := int64(len(buffer))
-		if pos < readSize {
-			readSize = pos
-		}
-		pos -= readSize
-
-		// 读取数据
-		_, err = file.Seek(pos, 0)
-		if err != nil {
-			return err
-		}
-		n, err := file.Read(buffer[:readSize])
-		if err != nil && err != io.EOF {
-			return err
-		}
-
-		// 将内容按行分隔
-		content := string(buffer[:n])
-		newLines := strings.Split(content, "\n")
-
-		// 处理跨越读取边界的行
-		if len(lines) > 0 && len(newLines) > 0 {
-			lines[0] = newLines[len(newLines)-1] + lines[0]
-			newLines = newLines[:len(newLines)-1]
-		}
-
-		// 将新行添加到结果中
-		merge := make([]string, 0, len(lines)+len(newLines))
-		merge = append(merge, newLines...)
-		merge = append(merge, lines...)
-		lines = merge
 	}
 
 	return c.JSON(fiber.Map{
-		"data":  strings.Join(lines, "\n"),
+		"data":  string(data),
 		"start": pos,
 	})
 }
@@ -1020,7 +967,7 @@ func getBtLogs(c *fiber.Ctx) error {
 	type LogArgs struct {
 		TaskID int64 `query:"task_id" validate:"required"`
 		End    int64 `query:"end"`
-		Limit  int   `query:"limit"`
+		Limit  int64 `query:"limit"`
 	}
 	var args = new(LogArgs)
 	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
@@ -1040,61 +987,14 @@ func getBtLogs(c *fiber.Ctx) error {
 			"start": 0,
 		})
 	}
-	file, err := os.Open(logPath)
+
+	data, pos, err := utils.ReadFileTail(logPath, args.Limit, args.End)
 	if err != nil {
-		return fmt.Errorf("open log file failed: %v", err)
-	}
-	defer file.Close()
-
-	fileInfo, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("get file info failed: %v", err)
-	}
-	fileSize := fileInfo.Size()
-
-	if args.Limit <= 0 {
-		args.Limit = 1000
-	}
-
-	// 读取日志内容
-	buffer := make([]byte, 4096)
-	var lines []string
-	var pos = fileSize
-	if args.End > 0 && args.End < fileSize {
-		pos = args.End
-	}
-	for len(lines) < args.Limit && pos > 0 {
-		readSize := int64(len(buffer))
-		if pos < readSize {
-			readSize = pos
-		}
-		pos -= readSize
-
-		_, err = file.Seek(pos, 0)
-		if err != nil {
-			return fmt.Errorf("seek file failed: %v", err)
-		}
-		n, err := file.Read(buffer[:readSize])
-		if err != nil && err != io.EOF {
-			return fmt.Errorf("read file failed: %v", err)
-		}
-
-		content := string(buffer[:n])
-		newLines := strings.Split(content, "\n")
-
-		if len(lines) > 0 && len(newLines) > 0 {
-			lines[0] = newLines[len(newLines)-1] + lines[0]
-			newLines = newLines[:len(newLines)-1]
-		}
-
-		merge := make([]string, 0, len(lines)+len(newLines))
-		merge = append(merge, newLines...)
-		merge = append(merge, lines...)
-		lines = merge
+		return fmt.Errorf("read log file failed: %v", err)
 	}
 
 	return c.JSON(fiber.Map{
-		"data":  strings.Join(lines, "\n"),
+		"data":  string(data),
 		"start": pos,
 	})
 }

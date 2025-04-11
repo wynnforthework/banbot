@@ -57,7 +57,6 @@
   // 日志相关状态
   let logs = $state('');
   let logStart = $state(-1);
-  let logLimit = $state(1000);
   let loadingLogs = $state(false);
   let assetsUrl = $derived.by(() => {
     return `${$site.apiHost}/api/dev/bt_html?task_id=${id}&type=assets`;
@@ -159,7 +158,7 @@
     const rsp = await getApi('/dev/bt_logs', {
       task_id: id,
       end: logStart,
-      limit: logLimit
+      limit: 20480
     });
     loadingLogs = false;
     if(rsp.code != 200) {
@@ -573,8 +572,8 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {@render infoCard(m.bt_range() + ` (${curTZ()})`, `${fmtDateStr(detail.startMS)} ~ ${fmtDateStr(detail.endMS)}`)}
           {@render infoCard(
-            `${m.total_invest()}/${m.final_balance()}`,
-            `${task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest)} / ${formatNumber(detail.maxReal)}`
+            `${m.total_invest()}/${m.final_balance()}/${m.total_withdraw()}`,
+            `${task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest)} / ${formatNumber(detail.finBalance)} / ${formatNumber(detail.finWithdraw)}`
           )}
           {@render infoCard(m.tot_fee(), `${formatNumber(detail.totFee)} (${formatPercent(detail.totFee/detail.totProfit*100)})`)}
           {@render infoCard(m.strategy(), task?.strats || '-')}

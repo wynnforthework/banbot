@@ -323,68 +323,117 @@ func KlineToStr(klines []*banexg.Kline, loc *time.Location) [][]string {
 	return rows
 }
 
-func ReadLastNLines(filePath string, lineCount int) ([]string, error) {
+/*
+ReadFileTail 从文件尾部或指定位置从后向前读取
+*/
+func ReadFileTail(filePath string, size int64, end int64) ([]byte, int64, error) {
+	if size <= 0 {
+		size = 10240
+	}
+	offset := end
+	if offset == 0 {
+		offset = -1
+	}
+	return ReadFileRange(filePath, -size, offset)
+}
+
+/*
+ReadFileRange
+Read lineNum lines forward or backward from the file at the specified offset position;
+Offset>=0 indicates the position from head to back. Offset<0 indicates that the position is determined from the tail. (-1 means end)
+LineNum>0 indicates reading backwards from the initial position, while lineNum<0 indicates reading forwards.
+
+对文件按offset指定位置向前或向后读取lineNum行；
+offset>=0表示从头部往后位置。offset<0表示从尾部确定位置。（-1表示末尾）
+lineNum>0表示从初始位置向后读取，lineNum<0表示向前读取。
+*/
+
+func ReadFileRange(filePath string, size int64, offset int64) ([]byte, int64, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer file.Close()
+	return ReadFileObjRange(file, size, offset)
+}
 
-	var result []string
+func ReadFileObjRange(file *os.File, size int64, offset int64) ([]byte, int64, error) {
+	var data []byte
 
 	// 获取文件大小
 	fileInfo, err := file.Stat()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	fileSize := fileInfo.Size()
 
+	var pos = offset
+	if pos < 0 {
+		pos = fileSize + pos + 1
+	}
 	// 设定缓冲区大小和读取偏移量
 	bufferSize := 4096
-	var offset = fileSize
-	var buffer []byte
+	var buffer = make([]byte, bufferSize)
+	dirt := int64(1)
+	if size < 0 {
+		// 负数表示从后往前读取
+		size *= -1
+		dirt = -1
+	}
 
-	var tmp string
-	for offset > 0 && len(result) < lineCount {
-		if int64(bufferSize) > offset {
-			bufferSize = int(offset)
-			offset = 0
-		} else {
-			offset -= int64(bufferSize)
+	for int64(len(data)) < size {
+		if dirt < 0 && pos <= 0 || dirt > 0 && pos >= fileSize {
+			// end to front, pos till 0; front to end, pos to end
+			break
 		}
-
-		buffer = make([]byte, bufferSize)
-		_, err = file.ReadAt(buffer, offset)
-		if err != nil {
-			return nil, err
-		}
-
-		lines := strings.Split(string(buffer), "\n")
-		if len(lines) > 0 {
-			lines[len(lines)-1] += tmp
-			tmp = lines[0]
-			lines = lines[1:]
-		} else {
-			tmp = ""
-		}
-		// 倒序读取行
-		for i := len(lines) - 1; i >= 0; i-- {
-			if len(result) < lineCount {
-				if lines[i] != "" {
-					result = append(result, lines[i])
-				}
+		if dirt < 0 {
+			if int64(bufferSize) > pos {
+				bufferSize = int(pos)
+				pos = 0
 			} else {
-				break
+				pos -= int64(bufferSize)
+			}
+		} else {
+			if pos+int64(bufferSize) > fileSize {
+				bufferSize = int(fileSize - pos)
 			}
 		}
+
+		_, err = file.Seek(pos, 0)
+		if err != nil {
+			return nil, 0, fmt.Errorf("seek file failed: %v", err)
+		}
+		n, err := file.Read(buffer[:bufferSize])
+		if err != nil && err != io.EOF {
+			return nil, 0, fmt.Errorf("read file failed: %v", err)
+		}
+
+		newData := buffer[:n]
+
+		if dirt < 0 {
+			// end to front
+			merge := make([]byte, 0, len(data)+len(newData))
+			merge = append(merge, newData...)
+			merge = append(merge, data...)
+			data = merge
+		} else {
+			// front to end, move pos
+			pos += int64(n)
+			data = append(data, newData...)
+		}
+	}
+	if int64(len(data)) > size {
+		sepId := int64(len(data)) - size
+		if dirt < 0 {
+			pos += sepId
+			data = data[sepId:]
+		} else {
+			pos -= sepId
+			data = data[:size]
+		}
 	}
 
-	// 倒序返回结果
-	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
-		result[i], result[j] = result[j], result[i]
-	}
-
-	return result, nil
+	return data, pos, nil
 }
 
 func ReadCSV(path string) ([][]string, *errs.Error) {

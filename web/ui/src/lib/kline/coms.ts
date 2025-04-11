@@ -4,7 +4,6 @@ import type {BarArr, Period, Timespan} from "./types";
 import {TFToSecs, formatDate, dateTimeFormat} from "../dateutil";
 import * as m from '$lib/paraglide/messages.js'
 
-
 export const formatPrecision = kc.utils.formatPrecision
 export const formatThousands = kc.utils.formatThousands
 export const formatBigNumber = kc.utils.formatBigNumber
