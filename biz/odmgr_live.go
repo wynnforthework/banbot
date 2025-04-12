@@ -1583,8 +1583,9 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *ormo.InOutOrder, isEnter bool, res *
 				subOd.Fee = res.Fee.Cost
 				subOd.FeeType = res.Fee.Currency
 			}
+			subOd.Status = ormo.OdStatusPartOK
 		}
-		if res.Status == "expired" || res.Status == "rejected" || res.Status == "closed" || res.Status == "canceled" {
+		if banexg.IsOrderDone(res.Status) {
 			subOd.Status = ormo.OdStatusClosed
 			if subOd.Filled > 0 && subOd.Average > 0 {
 				subOd.Price = subOd.Average
