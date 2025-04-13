@@ -522,6 +522,10 @@ func JobForbidType(pair, tf, stratName string) int {
 	return 0
 }
 
+/*
+GetJobKeys 获取已订阅的所有策略任务记录
+return map[pair_tf][stratID]bool
+*/
 func GetJobKeys() map[string]map[string]bool {
 	jobs := make(map[string]map[string]bool)
 	for _, jobsMap := range AccJobs {

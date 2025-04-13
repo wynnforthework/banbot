@@ -1004,3 +1004,38 @@ func GetApiUsers() []*UserConfig {
 	}
 	return append(res, APIServer.Users...)
 }
+
+/*
+MergeAccounts 合并当前多个账户为1个，返回合并前的账户。
+用于实盘时单账户回测
+*/
+func MergeAccounts() map[string]*AccountConfig {
+	if len(Accounts) <= 1 {
+		return Accounts
+	}
+	acc := Accounts[DefAcc]
+	merge := &AccountConfig{
+		NoTrade:       acc.NoTrade,
+		MaxPair:       acc.MaxPair,
+		MaxOpenOrders: acc.MaxOpenOrders,
+		RPCChannels:   acc.RPCChannels,
+		APIServer:     acc.APIServer,
+		Exchanges:     acc.Exchanges,
+	}
+	if merge.MaxPair > 0 || merge.MaxOpenOrders > 0 {
+		// 限制品种数量，查找允许的最大数量
+		for _, a := range Accounts {
+			if merge.MaxPair > 0 && a.MaxPair > merge.MaxPair {
+				merge.MaxPair = a.MaxPair
+			}
+			if merge.MaxOpenOrders > 0 && a.MaxOpenOrders > merge.MaxOpenOrders {
+				merge.MaxOpenOrders = a.MaxOpenOrders
+			}
+		}
+	}
+	bakAccs := Accounts
+	Accounts = map[string]*AccountConfig{
+		DefAcc: merge,
+	}
+	return bakAccs
+}

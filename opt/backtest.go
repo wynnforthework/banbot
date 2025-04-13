@@ -454,6 +454,7 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 	backRunMode := core.RunMode
 	core.SetRunMode(core.RunModeBackTest)
 	core.SetRunEnv(core.RunEnv)
+	bakAccs := config.MergeAccounts()
 	// Divide into multiple groups based on the subscription period according to the strategy
 	// 按策略订阅周期划分为多个组
 	groups := strat.RelayPolicyGroups()
@@ -501,7 +502,7 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		for _, od := range odMap {
 			if od.Status >= ormo.InOutStatusPartEnter && od.ExitTag == "" {
 				relayOpens[od.KeyAlign()] = od
-			} else {
+			} else if od.Status >= ormo.InOutStatusFullExit {
 				relayDones[od.KeyAlign()] = od
 			}
 		}
@@ -518,6 +519,7 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 	biz.RestoreVars(backUp)
 	core.SetRunMode(backRunMode)
 	core.SetRunEnv(core.RunEnv)
+	config.Accounts = bakAccs
 	return syncSimOrders(isFirst, relayOpens, relayDones)
 }
 
@@ -599,7 +601,7 @@ func syncSimOrders(isFirst bool, relayOpens, relayDones map[string]*ormo.InOutOr
 					continue
 				}
 			}
-			log.Warn("job not found for", zap.String("key", od.Key()))
+			// 此账户未订阅此策略任务，忽略即可
 		}
 		if len(allowOds) > 0 {
 			err = odMgr.RelayOrders(sess, allowOds)
