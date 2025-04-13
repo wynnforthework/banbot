@@ -95,8 +95,29 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 			}
 		}
 	}
-	if args.Configs != nil {
-		paths = append(paths, args.Configs...)
+	if len(args.Configs) > 0 {
+		if utils2.IsDocker() {
+			// 对于docker中启动，且传入了额外yml配置的，合并写入到config.local.yml，方便WebUI启动回测时保留额外的yml配置
+			items := make([]string, 0, len(args.Configs)+1)
+			localCfgPath := filepath.Join(GetDataDir(), "config.local.yml")
+			if _, err := os.Stat(localCfgPath); err == nil {
+				items = append(items, localCfgPath)
+			}
+			for _, item := range args.Configs {
+				items = append(items, ParsePath(item))
+			}
+			content, err := MergeConfigPaths(items)
+			if err != nil {
+				return nil, errs.New(errs.CodeIOReadFail, err)
+			}
+			err2 := utils2.WriteFile(localCfgPath, []byte(content))
+			if err2 != nil {
+				return nil, err2
+			}
+			args.Configs = nil
+		} else {
+			paths = append(paths, args.Configs...)
+		}
 	}
 	var merged = make(map[string]interface{})
 	for _, path := range paths {
@@ -146,6 +167,25 @@ func ParseConfig(path string) (*Config, *errs.Error) {
 		return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "decode Config Fail")
 	}
 	return &res, nil
+}
+
+func MergeConfigPaths(paths []string, skips ...string) (string, error) {
+	var content string
+	var err error
+	if len(paths) > 1 {
+		content, err = utils2.MergeYamlStr(paths, skips...)
+		if err != nil {
+			return "", err
+		}
+	} else if len(paths) == 1 {
+		var data []byte
+		data, err = os.ReadFile(paths[0])
+		if err != nil {
+			return "", err
+		}
+		content = string(data)
+	}
+	return content, nil
 }
 
 func (c *Config) Apply(args *CmdArgs) error {

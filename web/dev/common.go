@@ -521,24 +521,5 @@ func MergeConfig(inText string, skips ...string) (string, error) {
 		tmp.WriteString(inText)
 		paths = append(paths, tmp.Name())
 	}
-	return MergeConfigPaths(paths, skips...)
-}
-
-func MergeConfigPaths(paths []string, skips ...string) (string, error) {
-	var content string
-	var err error
-	if len(paths) > 1 {
-		content, err = utils2.MergeYamlStr(paths, skips...)
-		if err != nil {
-			return "", err
-		}
-	} else if len(paths) == 1 {
-		var data []byte
-		data, err = os.ReadFile(paths[0])
-		if err != nil {
-			return "", err
-		}
-		content = string(data)
-	}
-	return content, nil
+	return config.MergeConfigPaths(paths, skips...)
 }

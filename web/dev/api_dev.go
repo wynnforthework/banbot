@@ -629,7 +629,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		paths = append(paths, realPath)
 	}
 	skips := []string{"name", "env", "webhook", "rpc_channels", "api_server"}
-	content, err := MergeConfigPaths(paths, skips...)
+	content, err := config.MergeConfigPaths(paths, skips...)
 	if err != nil {
 		return err
 	}
