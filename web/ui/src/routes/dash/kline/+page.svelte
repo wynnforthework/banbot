@@ -111,7 +111,7 @@
       tradeList = rsp.data ?? [];
       total = rsp.total ?? 0;
     } else {
-      alerts.addAlert('error', rsp.msg ?? m.load_orders_failed());
+      alerts.error(rsp.msg ?? m.load_orders_failed());
       return;
     }
     if (tradeList.length > 0 && !clickOrder) {
@@ -187,7 +187,7 @@
     drawOrder = order;
     const exs = exsMap?.[order.sid];
     if (!exs) {
-      alerts.addAlert("error", `symbol ${order.symbol} not found in ${Object.keys(exsMap || {}).length} items`);
+      alerts.error(`symbol ${order.symbol} not found in ${Object.keys(exsMap || {}).length} items`);
       return;
     }
     const period = makePeriod(order.timeframe);
@@ -238,7 +238,7 @@
         pairOrders = rsp.data ?? [];
         fireLoad();
       }else{
-        alerts.addAlert("error", rsp.msg || 'load orders failed');
+        alerts.error(rsp.msg || 'load orders failed');
       }
     });
   }

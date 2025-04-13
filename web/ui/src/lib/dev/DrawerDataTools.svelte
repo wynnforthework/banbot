@@ -80,10 +80,10 @@
       }).then(rsp => {
         if(rsp.code != 200){
           console.error(rsp);
-          alerts.addAlert('error', rsp.msg || 'get symbols failed');
+          alerts.error(rsp.msg || 'get symbols failed');
           return;
         }else if(!rsp.data || rsp.data.length == 0){
-          alerts.addAlert('warning', 'no local symbols found');
+          alerts.warning('no local symbols found');
           return;
         }
         let res: string[] = [];
@@ -98,7 +98,7 @@
 
   async function handleExecute() {
     if ($site.heavyProgress > 0 && $site.heavyProgress < 1){
-      alerts.addAlert("error", m.heavy_task_busy());
+      alerts.error(m.heavy_task_busy());
       return;
     }
     // 构建请求参数
@@ -130,10 +130,10 @@
     }
     if(rsp.code != 200) {
       console.error(rsp);
-      alerts.addAlert('error', rsp.msg || 'Operation failed');
+      alerts.error(rsp.msg || 'Operation failed');
       return;
     }
-    alerts.addAlert('success', 'Started successfully, please check the logs');
+    alerts.success('Started successfully, please check the logs');
     show = false;
   }
 

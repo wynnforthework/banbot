@@ -13,7 +13,7 @@
 
   async function loginOk(info: BotTicket) {
     const num = Object.keys(info.accounts!).length
-    alerts.addAlert('success', `${m.add_bot_ok()}: ${info.name} (${num} accounts)`);
+    alerts.success(`${m.add_bot_ok()}: ${info.name} (${num} accounts)`);
     showAdd = false;
     await loadBotAccounts(info);
   }

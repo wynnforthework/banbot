@@ -97,7 +97,7 @@
   async function loadDetail() {
     const rsp = await getApi('/dev/bt_detail', { task_id: id });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load detail failed');
+      alerts.error(rsp.msg || 'load detail failed');
       return;
     }
     console.log('load task detail', rsp);
@@ -126,7 +126,7 @@
       end_ms: endMS
     });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load orders failed');
+      alerts.error(rsp.msg || 'load orders failed');
       return;
     }
     orders = rsp.orders;
@@ -136,7 +136,7 @@
   async function loadConfig() {
     const rsp = await getApi('/dev/bt_config', { task_id: id });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load config failed');
+      alerts.error(rsp.msg || 'load config failed');
       return;
     }
     configText = rsp.data;
@@ -151,7 +151,7 @@
       logStart = -1;
     }
     if(logStart === 0) {
-      alerts.addAlert("info", m.no_more_logs());
+      alerts.info(m.no_more_logs());
       return;
     }
     loadingLogs = true;
@@ -163,7 +163,7 @@
     loadingLogs = false;
     if(rsp.code != 200) {
       console.error('load logs failed', rsp);
-      alerts.addAlert("error", rsp.msg || 'load logs failed');
+      alerts.error(rsp.msg || 'load logs failed');
       return;
     }
     if(refresh) {
@@ -178,7 +178,7 @@
     const rsp = await getApi('/dev/bt_strat_tree', { task_id: id });
     if(rsp.code != 200) {
       console.error('load strat tree failed', rsp);
-      alerts.addAlert("error", rsp.msg || 'load strat tree failed');
+      alerts.error(rsp.msg || 'load strat tree failed');
       return;
     }
     treeData.set(buildTree(rsp.data, true));
@@ -189,7 +189,7 @@
     if (!event.node.id.endsWith('/')) {
       const rsp = await getApi('/dev/bt_strat_text', { task_id: id, path: event.node.id });
       if(rsp.code != 200) {
-        alerts.addAlert("error", rsp.msg || 'load file content failed');
+        alerts.error(rsp.msg || 'load file content failed');
         return;
       }
       stratCodeContent = rsp.data;
@@ -220,99 +220,49 @@
     drawOrder = order;
     const exs = exsMap?.[order.sid];
     if(!exs) {
-      alerts.addAlert("error", `symbol ${order.symbol} not found in ${Object.keys(exsMap || {}).length} items`);
+      alerts.error(`symbol ${order.symbol} not found in ${Object.keys(exsMap || {}).length} items`);
       return;
     }
     const period = makePeriod(order.timeframe);
     const showStartMS = order.enter_at - period.secs * 1000 * 300;
     const showEndMS = order.exit_at + period.secs * 1000 * 100;
     const dayMs = 24 * 60 * 60 * 1000;
-    function fireLoad(){
-      if(!exs) return;
-      kcSave.update(c => {
-        c.symbol = { market: exs.market, exchange: exs.exchange, ticker: order.symbol, name: order.symbol, shortName: order.symbol };
-        c.period = period;
-        c.dateStart = fmtDateStr(showStartMS, 'YYYYMMDD');
-        c.dateEnd = fmtDateStr(showEndMS + dayMs, 'YYYYMMDD');
-        return c;
-      });
-      kcCtx.update(c => {
-        c.timeStart = showStartMS;
-        c.timeEnd = showEndMS;
-        c.fireOhlcv += 1;
-        return c;
-      });
-    }
     pairOrders = [drawOrder];
-    if(!drawMultiple){
-      fireLoad();
-      return;
-    }
-    // load orders for symbol
-    getApi('/dev/bt_orders', {
-      task_id: id,
-      page: 1,
-      page_size: 100,
-      symbol: order.symbol,
-      start_ms: showStartMS,
-      end_ms: showEndMS
-    }).then(rsp => {
+    kcSave.update(c => {
+      c.symbol = { market: exs.market, exchange: exs.exchange, ticker: order.symbol, name: order.symbol, shortName: order.symbol };
+      c.period = period;
+      c.dateStart = fmtDateStr(showStartMS, 'YYYYMMDD');
+      c.dateEnd = fmtDateStr(showEndMS + dayMs, 'YYYYMMDD');
+      return c;
+    });
+    kcCtx.update(c => {
+      c.timeStart = showStartMS;
+      c.timeEnd = showEndMS;
+      c.fireOhlcv += 1;
+      return c;
+    });
+  }
+
+  async function drawChartOrders(startMS: number, endMS: number){
+    if(!drawOrder || !kc)return
+    const chart = kc.getChart();
+    if (!chart) return;
+    if (drawMultiple){
+      // load orders for specified range
+      const rsp = await getApi('/dev/bt_orders', {
+        task_id: id,
+        page: 1,
+        page_size: 1000,
+        symbol: drawOrder.symbol,
+        start_ms: startMS,
+        end_ms: endMS
+      })
       if(rsp.code != 200) {
-        alerts.addAlert("error", rsp.msg || 'load orders failed');
+        alerts.error(rsp.msg || 'load orders failed');
         return;
       }
       pairOrders = rsp.orders;
-      fireLoad();
-    })
-  }
-
-  function onOrderDetail(order: InOutOrder) {
-    detailOrder = order;
-    showOrderModal = true;
-  }
-
-  function formatPercent(num: number, decimals = 1) {
-    if(!num) return '0%';
-    return num.toFixed(decimals) + '%';
-  }
-
-  function formatDuration(ms: number) {
-    const hours = Math.floor(ms / (3600 * 1000));
-    const minutes = Math.floor((ms % (3600 * 1000)) / (60 * 1000));
-    if(hours > 0) {
-      return `${hours}h${minutes}m`;
     }
-    return `${minutes}m`;
-  }
-
-  const klineLoad = derived(kcCtx, ($ctx) => $ctx.klineLoaded);
-  klineLoad.subscribe(val => {
-    if (!drawOrder || !kc) return;
-    const chart = kc.getChart();
-    if (!chart) return;
-
-    chart.removeOverlay({ groupId: TRADE_GROUP });
-    const klineDatas = chart.getDataList();
-    if (klineDatas.length == 0)return;
-
-    if(pairOrders.length == 0){
-      console.log('no match orders to show')
-      return;
-    }
-
-    // 计算缩放比例
-    const tfMSecs = $kcSave.period.secs * 1000;
-    const range = chart.getVisibleRange();
-    const showStartMS = drawOrder.enter_at - tfMSecs * 20;
-    const showEndMS = drawOrder.exit_at + tfMSecs * 20;
-    const showBarNum = Math.ceil((showEndMS - showStartMS) / tfMSecs);
-    const scale =  (range.to - range.from) / showBarNum;
-    
-    // 执行缩放和定位
-    chart.scrollToTimestamp(showEndMS, 0);
-    setTimeout(() => {
-      chart.zoomAtTimestamp(scale, showEndMS, 0);
-    }, 10);
 
     // 绘制筛选后的订单
     pairOrders.forEach(td => {
@@ -380,6 +330,58 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         } as TradeInfo
       } as OverlayCreate);
     });
+  }
+
+  function onOrderDetail(order: InOutOrder) {
+    detailOrder = order;
+    showOrderModal = true;
+  }
+
+  function formatPercent(num: number, decimals = 1) {
+    if(!num) return '0%';
+    return num.toFixed(decimals) + '%';
+  }
+
+  function formatDuration(ms: number) {
+    const hours = Math.floor(ms / (3600 * 1000));
+    const minutes = Math.floor((ms % (3600 * 1000)) / (60 * 1000));
+    if(hours > 0) {
+      return `${hours}h${minutes}m`;
+    }
+    return `${minutes}m`;
+  }
+
+  const klineLoad = derived(kcCtx, ($ctx) => $ctx.klineLoaded);
+  klineLoad.subscribe(val => {
+    if (!drawOrder || !kc) return;
+    const chart = kc.getChart();
+    if (!chart) return;
+
+    chart.removeOverlay({ groupId: TRADE_GROUP });
+    const klineDatas = chart.getDataList();
+    if (klineDatas.length == 0)return;
+
+    if(pairOrders.length == 0){
+      console.log('no match orders to show')
+      return;
+    }
+    const startMS = klineDatas[0].timestamp;
+    const endMS = klineDatas[klineDatas.length-1].timestamp;
+    drawChartOrders(startMS, endMS);
+
+    // 计算缩放比例
+    const tfMSecs = $kcSave.period.secs * 1000;
+    const range = chart.getVisibleRange();
+    const showStartMS = drawOrder.enter_at - tfMSecs * 20;
+    const showEndMS = drawOrder.exit_at + tfMSecs * 20;
+    const showBarNum = Math.ceil((showEndMS - showStartMS) / tfMSecs);
+    const scale =  (range.to - range.from) / showBarNum;
+    
+    // 执行缩放和定位
+    chart.scrollToTimestamp(showEndMS, 0);
+    setTimeout(() => {
+      chart.zoomAtTimestamp(scale, showEndMS, 0);
+    }, 10);
   });
 
   interface TableColumn {

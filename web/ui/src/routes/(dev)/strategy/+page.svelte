@@ -160,7 +160,7 @@
     // 处理粘贴操作
     if (key === 'paste') {
       if (!clipboardOp) {
-        alerts.addAlert('error', m.no_paste_src());
+        alerts.error(m.no_paste_src());
         return;
       }
       const operation = clipboardOp.op === 'cut' ? m.cut() : m.copy();
@@ -189,7 +189,7 @@
 
     let rsp = await postApi('/dev/file_op', data);
     if (rsp.code != 200) {
-      alerts.addAlert('error', rsp.msg || 'operation failed');
+      alerts.error(rsp.msg || 'operation failed');
       return;
     }else{
       await refreshTree();
@@ -202,14 +202,14 @@
     window.addEventListener('keydown', async (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        alerts.addAlert('success', m.already_saved());
+        alerts.success(m.already_saved());
       }
     });
   });
 
   onDestroy(() => {
     if ($site.dirtyBin){
-      alerts.addAlert('warning', m.code_modified_need_build(), 2);
+      alerts.warning(m.code_modified_need_build(), 2);
       $site.compileNeed = true;
     }
   });
@@ -282,7 +282,7 @@
     // 检查格式是否为 folder:strategy
     if(!!foldName){
       if(parts.length !== 1) {
-        alerts.addAlert('error', m.only_strat_need());
+        alerts.error(m.only_strat_need());
         return;
       }
       if (treeActive.endsWith('/')) {
@@ -295,13 +295,13 @@
       strategyName = parts[0];
     }else{
       if (parts.length !== 2) {
-        alerts.addAlert('error', m.bad_strat_name());
+        alerts.error(m.bad_strat_name());
         return;
       }
       const [folderName, strategy] = parts;
       // 验证文件夹名和策略名
       if (!namePattern.test(folderName)) {
-        alerts.addAlert('error', m.folder() + ': ' + m.bad_strat_ptn());
+        alerts.error(m.folder() + ': ' + m.bad_strat_ptn());
         return;
       }
 
@@ -310,7 +310,7 @@
         .find(key => key.endsWith(`${folderName}/`));
 
       if (!target) {
-        alerts.addAlert('error', m.folder_not_exist({folder: folderName}));
+        alerts.error(m.folder_not_exist({folder: folderName}));
         return;
       }
       targetFolder = target;
@@ -318,18 +318,18 @@
     }
 
     if (!namePattern.test(strategyName)) {
-      alerts.addAlert('error', m.strategy() + ': ' + m.bad_strat_ptn());
+      alerts.error(m.strategy() + ': ' + m.bad_strat_ptn());
       return;
     }
 
     const rsp = await postApi('/dev/new_strat', {folder: targetFolder, name: strategyName});
 
     if (rsp.code === 200) {
-      alerts.addAlert('success', m.create_strat_ok());
+      alerts.success(m.create_strat_ok());
       await refreshTree();
       await openFile(targetFolder+strategyName+".go");
     } else {
-      alerts.addAlert('error', rsp.msg || 'create strategy failed');
+      alerts.error(rsp.msg || 'create strategy failed');
     }
 
     showCreateInput = false;
@@ -342,7 +342,7 @@
       const rsp = await postApi('/dev/save_text', { path: tab.path, content: value });
       if (rsp.code !== 200) {
         console.error('save file failed', rsp);
-        alerts.addAlert('error', rsp.msg || 'save file failed');
+        alerts.error(rsp.msg || 'save file failed');
       }else{
         if(tab.path.endsWith('.go')){
           $site.dirtyBin = true;

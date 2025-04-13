@@ -14,7 +14,7 @@
       logStart = -1;
     }
     if(logStart === 0) {
-      alerts.addAlert("info", m.no_more_logs());
+      alerts.info(m.no_more_logs());
       return;
     }
     loadingLogs = true;
@@ -25,7 +25,7 @@
     loadingLogs = false;
     if(rsp.code != 200) {
       console.error('load logs failed', rsp);
-      alerts.addAlert("error", rsp.msg || 'load logs failed');
+      alerts.error(rsp.msg || 'load logs failed');
       return;
     }
     if(refresh) {

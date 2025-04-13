@@ -34,7 +34,7 @@
   onMount(async () => {
     let rsp = await getApi('/dev/available_strats');
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load strats failed');
+      alerts.error(rsp.msg || 'load strats failed');
       return;
     }
     strats = rsp.data;
@@ -42,7 +42,7 @@
     let paths = arr.map(v => "@" + v);
     rsp = await getApi('/dev/texts', { paths });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load config failed');
+      alerts.error(rsp.msg || 'load config failed');
       return;
     }
     paths.forEach(p => {
@@ -73,7 +73,7 @@
 
   async function startBacktest() {
     if (!configText) {
-      alerts.addAlert("error", "config is empty");
+      alerts.error("config is empty");
       return;
     }
 
@@ -95,11 +95,11 @@
     }
 
     if (rsp.code === 200) {
-      alerts.addAlert("success", m.add_bt_ok());
+      alerts.success(m.add_bt_ok());
       goto(localizeHref('/backtest'));
     } else {
       console.error('run backtest fail', rsp);
-      alerts.addAlert("error", rsp.msg || "run backtest fail");
+      alerts.error(rsp.msg || "run backtest fail");
     }
   }
 
@@ -123,7 +123,7 @@
 
   async function copyToClipboard(text: string) {
     await navigator.clipboard.writeText(text);
-    alerts.addAlert("success", m.copied());
+    alerts.success(m.copied());
   }
 
 </script>

@@ -101,10 +101,10 @@
     
     if(rsp.code === 200 && rsp.allowTradeAt) {
       data.allowTradeAt = rsp.allowTradeAt;
-      alerts.addAlert('success', m.save_success());
+      alerts.success(m.save_success());
       return;
     }
-    alerts.addAlert('error', m.save_failed({msg: rsp.msg ?? ''}));
+    alerts.error(m.save_failed({msg: rsp.msg ?? ''}));
   }
 
   async function refreshWallet(){
@@ -113,7 +113,7 @@
       data.balanceTotal = rsp.total ?? 0;
       data.balanceItems = rsp.items ?? [];
     }else{
-      alerts.addAlert('error', rsp.msg ?? '');
+      alerts.error(rsp.msg ?? '');
     }
   }
 

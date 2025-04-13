@@ -42,7 +42,7 @@
     const rsp = await getApi('/dev/bt_options');
     if(rsp.code != 200) {
       console.error('load options failed', rsp);
-      alerts.addAlert('error', rsp.msg || 'load options failed');
+      alerts.error(rsp.msg || 'load options failed');
       return;
     }
     strats = rsp.strats || [];
@@ -77,7 +77,7 @@
     if(show) loading = false;
     if(rsp.code != 200) {
       console.error('load backtest tasks failed', rsp);
-      alerts.addAlert('error', rsp.msg || 'load backtest tasks failed');
+      alerts.error(rsp.msg || 'load backtest tasks failed');
       return;
     }
     tasks = rsp.data;
@@ -146,7 +146,7 @@ Error: ${task.info}`
 
   function clickTask(task: BtTask) {
     if(!task.path) {
-      alerts.addAlert('warning', m.bt_result_not_exist());
+      alerts.warning(m.bt_result_not_exist());
     }else{
       goto(localizeHref(`/backtest/item?id=${task.id}`))
     }
@@ -203,7 +203,7 @@ Error: ${task.info}`
     });
 
     if (rsp.code != 200) {
-      alerts.addAlert('error', rsp.msg || 'Failed to update note');
+      alerts.error(rsp.msg || 'Failed to update note');
       return;
     }
 

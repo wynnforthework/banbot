@@ -48,7 +48,7 @@
       lastStart = res.start;
     } else {
       console.error('get logs failed', res);
-      alerts.addAlert('error', res.msg || 'get logs failed');
+      alerts.error(res.msg || 'get logs failed');
     }
   }
 
@@ -63,13 +63,13 @@
     $site.compileNeed = false;
     $site.dirtyBin = false;
     if ($site.building) {
-      alerts.addAlert('warning', m.already_building());
+      alerts.warning(m.already_building());
       return;
     }
     const res = await postApi('/dev/build', {});
     if (res.code !== 200) {
       console.error('build failed', res);
-      alerts.addAlert('error', res.msg || 'build failed');
+      alerts.error(res.msg || 'build failed');
     }
   }
 </script>

@@ -39,7 +39,7 @@
   async function loadSymbolInfo() {
     const rsp = await getApi('/dev/symbol_info', { id });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load symbol info failed');
+      alerts.error(rsp.msg || 'load symbol info failed');
       return;
     }
     symbol = rsp.symbol;
@@ -57,7 +57,7 @@
       limit: pageSize,
     });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load gaps failed');
+      alerts.error(rsp.msg || 'load gaps failed');
       return;
     }
     dataList = rsp.data;
@@ -66,7 +66,7 @@
 
   async function loadData(start: number = 0, end: number = 0) {
     if(!timeframe) {
-      alerts.addAlert("error", m.timeframe() + " is required");
+      alerts.error(m.timeframe() + " is required");
       return;
     }
     if(!start && startDate) {
@@ -79,7 +79,7 @@
       id, tf: timeframe, start, end, limit: pageSize,
     });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load data failed');
+      alerts.error(rsp.msg || 'load data failed');
       return;
     }
     dataList = rsp.data;

@@ -214,7 +214,7 @@
     const start_ms = toUTCStamp($save.dateStart)
     let stop_ms = toUTCStamp($save.dateEnd)
     if(!start_ms || !stop_ms){
-      alerts.addAlert('error', 'invalid time, please use: 202301011200')
+      alerts.error('invalid time, please use: 202301011200')
       return;
     }
     const tf_msecs = TFToSecs($save.period.timeframe) * 1000
@@ -222,7 +222,7 @@
     if(totalNum > maxBarNum){
       stop_ms = start_ms + tf_msecs * maxBarNum;
       const stop_str = fmtDateStr(stop_ms)
-      alerts.addAlert('warning', `too long:${totalNum}, cut ${maxBarNum} to ${stop_str}`)
+      alerts.warning(`too long:${totalNum}, cut ${maxBarNum} to ${stop_str}`)
     }
     await loadKlineRange($save.symbol, $save.period, start_ms, stop_ms, false)
   }

@@ -88,7 +88,7 @@
     } else if (tabName === 'exchange') {
       // exchange和position必须传symbols
       if (!data.symbols) {
-        alerts.addAlert('error', m.symbol_required());
+        alerts.error(m.symbol_required());
         return;
       }
       data.limit = limitSize;
@@ -122,7 +122,7 @@
     const rsp = await postAccApi('/forceexit', {orderId});
     if(rsp.code !== 200){
       console.error('close order failed', rsp);
-      alerts.addAlert('error', rsp.msg ?? m.close_order_failed());
+      alerts.error(rsp.msg ?? m.close_order_failed());
       return;
     }
     
@@ -184,7 +184,7 @@
       message += m.filled_orders({num: doneNum});
     }
     showCloseExg = false;
-    alerts.addAlert('success', message);
+    alerts.success(message);
     await loadData(1);
   }
 
@@ -194,9 +194,9 @@
     openingOd = false;
     
     if (rsp.code !== 200) {
-      alerts.addAlert('error', rsp.msg ?? m.open_order_failed());
+      alerts.error(rsp.msg ?? m.open_order_failed());
     } else {
-      alerts.addAlert('success', m.open_order_success());
+      alerts.success(m.open_order_success());
       showOpenOrder = false;
     }
   }
@@ -205,9 +205,9 @@
     const rsp = await postAccApi('/calc_profits', {});
     
     if (rsp.code !== 200) {
-      alerts.addAlert('error', m.update_failed({msg: rsp.msg ?? ''}));
+      alerts.error(m.update_failed({msg: rsp.msg ?? ''}));
     } else {
-      alerts.addAlert('success', m.updated_orders({num: rsp.num}));
+      alerts.success(m.updated_orders({num: rsp.num}));
       await loadData(currentPage);
     }
   }
@@ -308,7 +308,7 @@
           class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" 
           onclick={() => {
             if (tabName !== 'bot' && !search.symbols) {
-              alerts.addAlert('error', m.symbol_required());
+              alerts.error(m.symbol_required());
               return;
             }
             loadData(1);

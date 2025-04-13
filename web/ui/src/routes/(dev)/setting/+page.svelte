@@ -46,7 +46,7 @@
   async function loadBuildEnvs() {
     const rsp = await getApi('/dev/build_envs');
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load build envs failed');
+      alerts.error(rsp.msg || 'load build envs failed');
       return;
     }
     buildEnvs = rsp.data ?? [];
@@ -105,11 +105,11 @@
       });
       
       if (rsp.code != 200) {
-        alerts.addAlert("error", rsp.msg || 'build failed');
+        alerts.error(rsp.msg || 'build failed');
         return;
       }
       buildOk = true;
-      alerts.addAlert("success", m.build_success());
+      alerts.success(m.build_success());
     } finally {
       isBuilding = false;
     }
@@ -125,7 +125,7 @@
     const path = tabs[activeTab] ?? '';
     const rsp = await getApi('/dev/text', { path });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'load config failed');
+      alerts.error(rsp.msg || 'load config failed');
       return;
     }
     if (editor) {
@@ -139,10 +139,10 @@
       path, content: configText
     });
     if(rsp.code != 200) {
-      alerts.addAlert("error", rsp.msg || 'save config failed');
+      alerts.error(rsp.msg || 'save config failed');
       return;
     }
-    alerts.addAlert("success", m.save_success());
+    alerts.success(m.save_success());
   }
   
   async function onTextChange(value: string) {
@@ -173,7 +173,7 @@
   async function handleTimezoneChange(timezone: string) {
     selectedTimezone = timezone;
     await setTimezone(timezone);
-    alerts.addAlert("success", m.save_success());
+    alerts.success(m.save_success());
   }
 </script>
 
