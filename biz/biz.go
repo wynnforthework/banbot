@@ -62,6 +62,10 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	err = utils.Setup()
+	if err != nil {
+		return err
+	}
 	err = exg.Setup()
 	if err != nil {
 		return err

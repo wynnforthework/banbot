@@ -39,6 +39,10 @@ func ServeStatic(app *fiber.App) error {
 	}
 	if reDown > 0 {
 		downUrl := strings.Replace(downUrlTpl, "{tag}", core.UIVersion, 1)
+		if core.SysLang == "zh-CN" {
+			// 对简体中文的环境，使用gitee下载，避免访问外网可能失败
+			downUrl = strings.Replace(downUrl, "github", "gitee", 1)
+		}
 		log.Info(errMsg+", downloading", zap.String("url", downUrl))
 
 		// 创建临时目录
