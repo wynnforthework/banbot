@@ -285,6 +285,10 @@ func IsDocker() bool {
 		return dockerStatus == 1
 	}
 	dockerStatus = -1
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		dockerStatus = 1
+		return true
+	}
 	file, err := os.Open("/proc/1/cgroup")
 	if err != nil {
 		return false

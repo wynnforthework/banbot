@@ -327,6 +327,7 @@
     if (rsp.code === 200) {
       alerts.addAlert('success', m.create_strat_ok());
       await refreshTree();
+      await openFile(targetFolder+strategyName+".go");
     } else {
       alerts.addAlert('error', rsp.msg || 'create strategy failed');
     }
