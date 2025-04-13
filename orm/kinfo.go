@@ -52,7 +52,7 @@ func (q *Queries) FindKHoles(args FindKHolesArgs) ([]*KHole, int64, *errs.Error)
 	}
 
 	// 查询数据
-	b.WriteString("select id,sid,timeframe,start,stop from khole ")
+	b.WriteString("select id,sid,timeframe,start,stop,no_data from khole ")
 	b.WriteString(whereClause)
 	b.WriteString("order by start desc ")
 
@@ -76,7 +76,7 @@ func (q *Queries) FindKHoles(args FindKHolesArgs) ([]*KHole, int64, *errs.Error)
 	var holes []*KHole
 	for rows.Next() {
 		var hole KHole
-		if err := rows.Scan(&hole.ID, &hole.Sid, &hole.Timeframe, &hole.Start, &hole.Stop); err != nil {
+		if err := rows.Scan(&hole.ID, &hole.Sid, &hole.Timeframe, &hole.Start, &hole.Stop, &hole.NoData); err != nil {
 			return nil, 0, NewDbErr(core.ErrDbReadFail, err)
 		}
 		holes = append(holes, &hole)

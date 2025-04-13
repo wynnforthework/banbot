@@ -488,8 +488,9 @@
   "run_banbot_desc": "启动爬虫进程&机器人: `bot spider & bot trade`",
   "dashboard_desc": "去Dashboard查看并管理您的交易机器人",
   "confirm_build": "编译可能需要几分钟，确定要编译吗？",
-  "confirm_backtest": "回测可能耗时较长，确定要开始回测吗？",
+  "build_for_backtest": "您修改了策略代码，要先进行编译吗？",
   "pending": "等待",
+  "just_backtest": "直接回测",
   "duplicate_backtest": "重复回测",
   "backtest_duplicate_info": "回测任务已存在，您希望？",
   "backup_start": "备份并回测",
@@ -833,5 +834,6 @@
   "time_tuple": "时间范围结构体",
 
   "iorder_mgr": "订单管理器接口",
-  "iorder_mgr_live": "实时订单管理器接口"
+  "iorder_mgr_live": "实时订单管理器接口",
+  "indeed_empty": "确无数据"
 }

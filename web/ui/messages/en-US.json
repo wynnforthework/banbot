@@ -488,8 +488,9 @@
     "run_banbot_desc": "Start spider process & trader: `bot spider & bot trade`",
     "dashboard_desc": "Go to Dashboard to view and manage your trading robot",
     "confirm_build": "Compiling may take several minutes, are you sure to compile?",
-    "confirm_backtest": "Backtesting may take a long time, are you sure to start backtesting?",
+    "build_for_backtest": "Strategy code has been modified, would you like to compile before backtest ?",
     "pending": "Pending",
+    "just_backtest": "Just Backtest",
     "duplicate_backtest": "Duplicate Backtest",
     "backtest_duplicate_info": "Backtest task already exists, what do you want to do?",
     "backup_start": "Backup and Backtest",
@@ -821,5 +822,6 @@
     "time_tuple": "Time range structure",
 
     "iorder_mgr": "Order manager interface",
-    "iorder_mgr_live": "Real-time order manager interface"
+    "iorder_mgr_live": "Real-time order manager interface",
+    "indeed_empty": "Indeed Empty"
 }

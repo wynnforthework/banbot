@@ -330,6 +330,10 @@ func saveText(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	if strings.HasSuffix(args.Path, ".go") {
+		status.DirtyBin = true
+		BroadcastStatus()
+	}
 
 	return c.JSON(fiber.Map{
 		"code": 200,
@@ -356,6 +360,7 @@ func handleBuild(c *fiber.Ctx) error {
 			"msg": "Another build is in progress",
 		})
 	}
+	status.DirtyBin = false
 	status.Building = true
 	BroadcastStatus()
 	buildMutex.Unlock()

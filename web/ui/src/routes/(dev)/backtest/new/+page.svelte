@@ -8,9 +8,10 @@
   import { getApi, postApi } from '$lib/netio';
   import {alerts} from "$lib/stores/alerts"
   import AllConfig from '$lib/dev/AllConfig.svelte';
-  import {modals} from '$lib/stores/modals';
   import Modal from '$lib/kline/Modal.svelte';
   import {localizeHref} from "$lib/paraglide/runtime";
+  import { site } from '$lib/stores/site';
+  import {clickCompile} from "$lib/dev/common";
 
   let separateStrat = $state(false);
   let theme: Extension | null = $state(oneDark);
@@ -18,6 +19,8 @@
   let configDrawer = $state(false);
   let configText = $state('');
   let showDuplicate = $state(false);
+  let showCompile = $state(false);
+  let disableMainBtn = $state(false);
   let dupMode = $state('');
   let activeTab = $state('');
   let tabs: Record<string, string> = $state({});
@@ -116,9 +119,23 @@
   }
 
   async function clickBacktest(){
-    const ok = await modals.confirm(m.confirm_backtest());
-    if (!ok) return;
-    startBacktest();
+    if($site.dirtyBin){
+      showCompile = true
+    }else{
+      await startBacktest();
+    }
+  }
+
+  async function clickCompileOrNot(choose: string){
+    showCompile = false;
+    if(choose == 'compile'){
+      disableMainBtn = true;
+      await clickCompile()
+      disableMainBtn = false;
+    }else if(choose == 'just_backtest'){
+      $site.dirtyBin = false;
+      await startBacktest();
+    }
   }
 
   async function copyToClipboard(text: string) {
@@ -131,6 +148,11 @@
 <Modal title={m.duplicate_backtest()} buttons={['backup_start', 'overwrite_start', 'cancel']} show={showDuplicate} 
 click={clickDuplicate} center={true} width={600}>
   {m.backtest_duplicate_info()}
+</Modal>
+
+<Modal title={m.confirm()} buttons={['compile', 'just_backtest', 'cancel']} show={showCompile}
+       click={clickCompileOrNot} center={true} width={400}>
+  {m.build_for_backtest()}
 </Modal>
 
 <div class="drawer drawer-end">
@@ -184,7 +206,7 @@ click={clickDuplicate} center={true} width={600}>
           </div>
 
           <div class="flex gap-4 fixed bottom-0 left-0 right-0 p-2 w-[100%] bg-white flex justify-center">
-            <button class="btn btn-primary w-[50%]" onclick={clickBacktest}>{m.start_backtest()}</button>
+            <button class="btn btn-primary w-[50%]" disabled={disableMainBtn} onclick={clickBacktest}>{m.start_backtest()}</button>
           </div>
         </div>
       </div>

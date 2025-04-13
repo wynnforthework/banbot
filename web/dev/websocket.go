@@ -10,7 +10,7 @@ import (
 )
 
 type ServerStatus struct {
-	BinDirty bool `json:"binDirty"`
+	DirtyBin bool `json:"dirtyBin"`
 	Building bool `json:"building"`
 }
 

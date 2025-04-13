@@ -286,6 +286,7 @@
                   <th>{m.start_time()}({curTZ()})</th>
                   <th>{m.end_time()}({curTZ()})</th>
                   <th>Number</th>
+                  <th>{m.indeed_empty()}</th>
                 {:else}
                   <th>{m.time()}({curTZ()})</th>
                   <th>{m.time()}</th>
@@ -305,6 +306,7 @@
                     <td>{fmtDateStr(item.start)}</td>
                     <td>{fmtDateStr(item.stop)}</td>
                     <td>{Math.round((item.stop - item.start)/1000/TFToSecs(item.timeframe))}</td>
+                    <td>{item.no_data}</td>
                   {:else}
                     <td>{fmtDateStr(item[0])}</td>
                     <td>{item[0]}</td>

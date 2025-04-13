@@ -8,8 +8,9 @@
   import {initWsConn} from '$lib/dev/websocket';
   import {browser} from '$app/environment';
   import {alerts} from '$lib/stores/alerts';
-  import { postApi, getApi } from '$lib/netio';
+  import { getApi } from '$lib/netio';
   import {localizeHref} from "$lib/paraglide/runtime";
+  import {clickCompile} from "$lib/dev/common";
 
   const menuItems = [
     { href: localizeHref('/strategy'), icon: 'code', label: m.strategy(), tag: '/strategy' },
@@ -58,20 +59,7 @@
       fetchLogs();
     }
   }
-  
-  async function clickRefresh() {
-    $site.compileNeed = false;
-    $site.dirtyBin = false;
-    if ($site.building) {
-      alerts.warning(m.already_building());
-      return;
-    }
-    const res = await postApi('/dev/build', {});
-    if (res.code !== 200) {
-      console.error('build failed', res);
-      alerts.error(res.msg || 'build failed');
-    }
-  }
+
 </script>
 
 <div class="flex flex-col min-h-screen">
@@ -113,7 +101,7 @@
     
     <div class="navbar-end">
       <div class="tooltip tooltip-bottom" data-tip={m.build()}>
-        <button class="btn btn-ghost btn-circle" class:animate-spin={$site.building} onclick={clickRefresh}>
+        <button class="btn btn-ghost btn-circle" class:animate-spin={$site.building} onclick={clickCompile}>
           <Icon name="refresh" class={$site.compileNeed ? 'gradient size-6' : 'size-6'}/>
         </button>
       </div>

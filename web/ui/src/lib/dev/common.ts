@@ -1,4 +1,8 @@
 import * as m from '$lib/paraglide/messages.js';
+import {alerts} from "$lib/stores/alerts";
+import {postApi} from "$lib/netio";
+import {site} from "$lib/stores/site";
+import {get} from "svelte/store";
 
 export interface GroupItem {
   title: string;
@@ -107,4 +111,24 @@ export function showPairs(pairs: string) {
   }else{
     return pairs;
   }
+}
+
+export async function clickCompile() {
+  const siteShot = get(site);
+  if (siteShot.building) {
+    alerts.warning(m.already_building());
+    return true;
+  }
+  site.update((s) => {
+    s.compileNeed = false;
+    s.dirtyBin = false;
+    return s
+  })
+  const res = await postApi('/dev/build', {});
+  if (res.code !== 200) {
+    console.error('build failed', res);
+    alerts.error(res.msg || 'build failed');
+    return false
+  }
+  return true;
 }
