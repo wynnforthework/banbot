@@ -149,8 +149,6 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		o.simulOpen = 0
 		o.simulOpenSt = make(map[string]int)
 	}
-	openOds, lock := ormo.GetOpenODs(o.Account)
-	lock.Lock()
 	maxOpenNum := config.MaxOpenOrders
 	acc, _ := config.Accounts[o.Account]
 	if acc != nil && acc.MaxOpenOrders > 0 {
@@ -165,16 +163,18 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		strat.AddAccFailOpens(o.Account, strat.FailOpenNumLimit, orgNum-len(enters))
 	}
 	if len(enters) == 0 {
-		lock.Unlock()
 		return nil
 	}
 	// Check whether the maximum number of orders opened by the strategy is exceeded
 	// 检查是否超出策略最大开单数量
+	openOds, lock := ormo.GetOpenODs(o.Account)
+	lock.Lock()
 	stratOdNum := make(map[string]int)
 	for _, od := range openOds {
 		num, _ := stratOdNum[od.Strategy]
 		stratOdNum[od.Strategy] = num + 1
 	}
+	lock.Unlock()
 	skipNum := 0
 	res := make([]*strat.EnterReq, 0, len(enters))
 	for _, req := range enters {
@@ -196,7 +196,6 @@ func (o *OrderMgr) allowOrderEnter(env *banta.BarEnv, enters []*strat.EnterReq) 
 		o.simulOpen += 1
 		res = append(res, req)
 	}
-	lock.Unlock()
 	if skipNum > 0 {
 		strat.AddAccFailOpens(o.Account, strat.FailOpenNumLimitPol, skipNum)
 	}

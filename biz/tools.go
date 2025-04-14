@@ -8,13 +8,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"math"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -804,7 +804,7 @@ func RunHistKline(args *RunHistArgs) *errs.Error {
 		tfIdxs[it.TF] = i
 	}
 	var futures = make(map[string][]*tfFuts)
-	var lock sync.Mutex
+	var lock deadlock.Mutex
 	onItemBar := func(b *orm.InfoKline) {
 		if args.ViewNextNum <= 0 || b.IsWarmUp {
 			args.OnBar(b, nil)

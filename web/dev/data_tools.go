@@ -2,8 +2,8 @@ package dev
 
 import (
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"os"
-	"sync"
 
 	"github.com/banbox/banbot/btime"
 
@@ -25,7 +25,7 @@ import (
 // DataToolsManager 数据工具任务管理器
 type DataToolsManager struct {
 	running    bool
-	runningMux sync.Mutex
+	runningMux deadlock.Mutex
 }
 
 type FnDataTool = func(args *DataToolsArgs, pBar *utils.StagedPrg) *errs.Error
@@ -72,8 +72,8 @@ func (m *DataToolsManager) StartTask() error {
 // EndTask 结束任务
 func (m *DataToolsManager) EndTask() {
 	m.runningMux.Lock()
-	defer m.runningMux.Unlock()
 	m.running = false
+	m.runningMux.Unlock()
 }
 
 // RunDataTools 执行数据工具任务

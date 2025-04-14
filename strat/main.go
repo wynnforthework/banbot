@@ -429,8 +429,8 @@ func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarE
 func resetJobs() {
 	for account := range config.Accounts {
 		openOds, lock := ormo.GetOpenODs(account)
-		odList := make([]*ormo.InOutOrder, 0, len(openOds))
 		lock.Lock()
+		odList := make([]*ormo.InOutOrder, 0, len(openOds))
 		for _, od := range openOds {
 			odList = append(odList, od)
 		}

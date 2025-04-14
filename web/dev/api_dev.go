@@ -3,6 +3,7 @@ package dev
 import (
 	"context"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/banbox/banexg"
 	utils2 "github.com/banbox/banexg/utils"
@@ -41,7 +41,7 @@ type FileNode struct {
 }
 
 // 添加一个互斥锁来控制编译状态
-var buildMutex sync.Mutex
+var buildMutex deadlock.Mutex
 
 func regApiDev(api fiber.Router) {
 	api.Get("/ws", websocket.New(onWsDev))

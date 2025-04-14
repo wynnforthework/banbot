@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"io"
 	"os"
 	"os/exec"
@@ -45,12 +46,12 @@ var (
 	btInfoKeys      = make(map[string]bool)
 	maxBtTasks      = 3 // 最大并发回测任务数
 	runBtTasks      = make(map[int64]*exec.Cmd)
-	runBtTasksMutex sync.Mutex
+	runBtTasksMutex deadlock.Mutex
 
 	// 缓存回测任务订单到内存，加速分页查看。
 	cacheOrders []*ormo.InOutOrder
 	cachePath   string
-	ordersLock  sync.Mutex
+	ordersLock  deadlock.Mutex
 )
 
 func init() {
@@ -59,7 +60,7 @@ func init() {
 	}
 }
 
-func getGobOrders(path string) ([]*ormo.InOutOrder, *sync.Mutex, *errs.Error) {
+func getGobOrders(path string) ([]*ormo.InOutOrder, *deadlock.Mutex, *errs.Error) {
 	ordersLock.Lock()
 	defer ordersLock.Unlock()
 	if cachePath == path {

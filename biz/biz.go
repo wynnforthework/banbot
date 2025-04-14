@@ -5,11 +5,11 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -184,7 +184,7 @@ func InitOdSubs() {
 }
 
 // Preventing Concurrent Modification of BatchTasks
-var lockBatch = sync.Mutex{} // 防止并发修改BatchTasks
+var lockBatch = deadlock.Mutex{} // 防止并发修改BatchTasks
 
 /*
 AddBatchJob

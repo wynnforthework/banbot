@@ -2,7 +2,7 @@ package rpc
 
 import (
 	"fmt"
-	"sync"
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banexg/log"
@@ -22,7 +22,7 @@ type WeCred struct {
 	corpSecret  string
 	accessToken string
 	expireAt    int64
-	lock        *sync.Mutex
+	lock        *deadlock.Mutex
 }
 
 type WeWork struct {
@@ -66,7 +66,7 @@ func getWeCred(item map[string]interface{}) *WeCred {
 		cred = &WeCred{
 			corpId:     utils.GetMapVal(item, "corp_id", ""),
 			corpSecret: utils.GetMapVal(item, "corp_secret", ""),
-			lock:       &sync.Mutex{},
+			lock:       &deadlock.Mutex{},
 		}
 		creds[itemKey] = cred
 	}

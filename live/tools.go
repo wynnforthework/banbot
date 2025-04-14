@@ -157,6 +157,7 @@ func closeOrdersByLocal(accMap map[string]bool, pairMap map[string]bool, stratMa
 			}
 			exitOds = append(exitOds, od)
 		}
+		lock.Unlock()
 		if len(exitOds) > 0 {
 			checkAccs[account] = exitOds
 			log.Info("try exit orders", zap.String("acc", account), zap.Int("num", len(exitOds)))
@@ -165,7 +166,6 @@ func closeOrdersByLocal(accMap map[string]bool, pairMap map[string]bool, stratMa
 				return err
 			}
 		}
-		lock.Unlock()
 	}
 	if len(checkAccs) == 0 {
 		log.Info("no match open orders to close")

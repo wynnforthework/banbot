@@ -2,9 +2,9 @@ package data
 
 import (
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"math"
 	"sort"
-	"sync"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -118,7 +118,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 
 func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob, pb *utils.StagedPrg) (map[string]int64, *errs.Error) {
 	sinceMap := make(map[string]int64)
-	lockMap := sync.Mutex{}
+	lockMap := deadlock.Mutex{}
 	jobNum := 0
 	// 预热所需的必要数据
 	for _, job := range warmJobs {

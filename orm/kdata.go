@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,7 +23,7 @@ import (
 
 var (
 	adjMap = map[int32][]*AdjInfo{} // Cache of the target's weighting factor. 标的的复权因子缓存
-	amLock = sync.Mutex{}
+	amLock = deadlock.Mutex{}
 )
 
 /*

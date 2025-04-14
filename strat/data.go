@@ -2,7 +2,7 @@ package strat
 
 import (
 	ta "github.com/banbox/banta"
-	"sync"
+	"github.com/sasha-s/go-deadlock"
 )
 
 /*
@@ -20,13 +20,13 @@ var (
 	BatchTasks  = map[string]*BatchMap{} // tf_account_strat: pair: task 每个bar周期更新（只适用于单交易所单市场）
 	LastBatchMS = int64(0)               // timeMS The timestamp of the last batch execution is only used for backtesting 上次批量执行的时间戳，仅用于回测
 
-	lockInfoJobs sync.Mutex
+	lockInfoJobs deadlock.Mutex
 
 	accOdSubs = map[string][]FnOdChange{} // acc: listeners List of subscription order status change events 订阅订单状态变化事件列表
-	lockOdSub sync.Mutex
+	lockOdSub deadlock.Mutex
 
 	accFailOpens    = make(map[string]map[string]int) // Statistics of reasons for failed entry for accounts 各个账号开单失败原因统计
-	lockAccFailOpen sync.Mutex
+	lockAccFailOpen deadlock.Mutex
 )
 
 var (

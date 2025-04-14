@@ -5,13 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -357,7 +357,7 @@ where sid=%d and time >= %v and time < %v`, aggFrom, sid, startMS, endMS)
 }
 
 var alignOffs = make(map[int32]map[int64]int64)
-var lockAlignOff sync.Mutex
+var lockAlignOff deadlock.Mutex
 
 func GetAlignOff(sid int32, toTfMSecs int64) int64 {
 	lockAlignOff.Lock()

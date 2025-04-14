@@ -7,8 +7,8 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
-	"sync"
 )
 
 var (
@@ -49,7 +49,7 @@ func GetTaskAcc(id int64) string {
 	return ""
 }
 
-func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
+func GetOpenODs(account string) (map[int64]*InOutOrder, *deadlock.Mutex) {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
@@ -61,14 +61,14 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *sync.Mutex) {
 	}
 	lock, ok2 := lockOpenMap[account]
 	if !ok2 {
-		lock = &sync.Mutex{}
+		lock = &deadlock.Mutex{}
 		lockOpenMap[account] = lock
 	}
 	mOpenLock.Unlock()
 	return val, lock
 }
 
-func GetTriggerODs(account string) (map[string]map[int64]*InOutOrder, *sync.Mutex) {
+func GetTriggerODs(account string) (map[string]map[int64]*InOutOrder, *deadlock.Mutex) {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
@@ -79,7 +79,7 @@ func GetTriggerODs(account string) (map[string]map[int64]*InOutOrder, *sync.Mute
 	}
 	lock, ok2 := lockTriggerMap[account]
 	if !ok2 {
-		lock = &sync.Mutex{}
+		lock = &deadlock.Mutex{}
 		lockTriggerMap[account] = lock
 	}
 	return val, lock
@@ -162,9 +162,9 @@ func SaveDirtyODs(path string, account string) *errs.Error {
 func ResetVars() {
 	accOpenODs = make(map[string]map[int64]*InOutOrder)
 	accTriggerODs = make(map[string]map[string]map[int64]*InOutOrder)
-	lockOpenMap = make(map[string]*sync.Mutex)
-	lockTriggerMap = make(map[string]*sync.Mutex)
-	lockOds = make(map[string]*sync.Mutex)
+	lockOpenMap = make(map[string]*deadlock.Mutex)
+	lockTriggerMap = make(map[string]*deadlock.Mutex)
+	lockOds = make(map[string]*deadlock.Mutex)
 	accTasks = make(map[string]*BotTask)
 	taskIdAccMap = make(map[int64]string)
 }

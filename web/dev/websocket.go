@@ -1,7 +1,7 @@
 package dev
 
 import (
-	"sync"
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
@@ -17,7 +17,7 @@ type ServerStatus struct {
 var (
 	status  = ServerStatus{}
 	clients = make(map[*WsClient]bool)
-	wsLock  sync.RWMutex
+	wsLock  deadlock.RWMutex
 )
 
 type WsClient struct {

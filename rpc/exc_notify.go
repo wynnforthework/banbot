@@ -7,10 +7,10 @@ import (
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"
-	"sync"
 	"time"
 )
 
@@ -20,7 +20,7 @@ const (
 
 var (
 	keyLastMap = map[string]int64{}
-	lockExcKey sync.Mutex
+	lockExcKey deadlock.Mutex
 )
 
 func NewExcNotify() *ExcNotify {

@@ -2,7 +2,7 @@ package core
 
 import (
 	"context"
-	"sync"
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banexg"
 	"github.com/robfig/cron/v3"
@@ -117,9 +117,9 @@ const (
 var (
 	barPrices      = make(map[string]float64) // Latest price of each coin from bar, only for backtesting etc. The key can be a trading pair or a coin code 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
 	prices         = make(map[string]float64) // The latest order book price of the trading pair is only used for real-time simulation or real trading. The key can be a trading pair or a coin code 交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
-	lockPrices     sync.RWMutex
-	lockBarPrices  sync.RWMutex
-	TfPairHitsLock sync.RWMutex
+	lockPrices     deadlock.RWMutex
+	lockBarPrices  deadlock.RWMutex
+	TfPairHitsLock deadlock.RWMutex
 	Ctx            context.Context // Used to stop all goroutines at the same time 用于全部goroutine同时停止
 	StopAll        func()          // Stop all robot threads 停止全部机器人线程
 	BotRunning     bool            // Is the robot running? 机器人是否正在运行

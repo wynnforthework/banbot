@@ -9,14 +9,14 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
+	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
-	"sync"
 	"time"
 )
 
 type periodSta struct {
 	stamps map[int32]int64
-	lock   sync.Mutex
+	lock   deadlock.Mutex
 	msecs  int64
 }
 

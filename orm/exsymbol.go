@@ -11,17 +11,17 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"strings"
-	"sync"
 )
 
 var (
 	keySymbolMap = make(map[string]*ExSymbol)
 	idSymbolMap  = make(map[int32]*ExSymbol)
-	symbolLock   sync.Mutex
+	symbolLock   deadlock.Mutex
 	tryListIds   = make(map[int32]bool)
-	tryListLock  sync.Mutex
+	tryListLock  deadlock.Mutex
 )
 
 func (q *Queries) LoadExgSymbols(exgName string) *errs.Error {

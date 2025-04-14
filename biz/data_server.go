@@ -3,8 +3,8 @@ package biz
 import (
 	"fmt"
 	"github.com/banbox/banbot/utils"
+	"github.com/sasha-s/go-deadlock"
 	"net"
-	"sync"
 
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/exg"
@@ -44,7 +44,7 @@ func RunDataServer(args *config.CmdArgs) *errs.Error {
 
 type DataServer struct {
 	*UnimplementedFeaFeederServer
-	feaLock sync.Mutex
+	feaLock deadlock.Mutex
 }
 
 /*

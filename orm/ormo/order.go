@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"math"
 	"math/rand"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -478,7 +478,14 @@ func (i *InOutOrder) Save(sess *Queries) *errs.Error {
 			mLockOds.Unlock()
 		}
 		lock.Unlock()
+		oldId := i.ID
 		err := i.saveToDb(sess)
+		if i.ID != oldId && i.Status < InOutStatusFullExit {
+			lock.Lock()
+			delete(openOds, oldId)
+			openOds[i.ID] = i
+			lock.Unlock()
+		}
 		if err != nil {
 			return err
 		}
@@ -693,13 +700,13 @@ func (i *InOutOrder) TakeSnap() *InOutSnap {
 Return to modify the lock of the current order. A successful return indicates that the lock has been obtained
 返回修改当前订单的锁，返回成功表示已获取锁
 */
-func (i *InOutOrder) Lock() *sync.Mutex {
+func (i *InOutOrder) Lock() *deadlock.Mutex {
 	odKey := i.Key()
 	mLockOds.Lock()
 	defer mLockOds.Unlock()
 	lock, ok := lockOds[odKey]
 	if !ok {
-		lock = &sync.Mutex{}
+		lock = &deadlock.Mutex{}
 		lockOds[odKey] = lock
 	}
 	var got = int32(0)
@@ -751,8 +758,7 @@ func (i *InOutOrder) RealExitMS() int64 {
 }
 
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
-	var err_ error
-	i.ID, err_ = sess.AddIOrder(context.Background(), AddIOrderParams{
+	newID, err_ := sess.AddIOrder(context.Background(), AddIOrderParams{
 		TaskID:      i.TaskID,
 		Symbol:      i.Symbol,
 		Sid:         i.Sid,
@@ -777,6 +783,7 @@ func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 	if err_ != nil {
 		return errs.New(core.ErrDbExecFail, err_)
 	}
+	i.ID = newID
 	return nil
 }
 

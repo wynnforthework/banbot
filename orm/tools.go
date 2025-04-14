@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/banbox/banexg/log"
+	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"io"
 	"os"
@@ -666,7 +667,7 @@ func ImportData(dataDir string, numWorkers int, pb *utils2.StagedPrg) *errs.Erro
 	taskCh := make(chan string)
 	errCh := make(chan error, numWorkers+2)
 	insRanges := make(map[int32]map[string][2]int64)
-	insLock := sync.Mutex{}
+	insLock := deadlock.Mutex{}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	pBar := utils2.NewPrgBar(len(files)*core.StepTotal, "kLine")

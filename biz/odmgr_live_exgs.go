@@ -42,9 +42,9 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 		var part *ormo.InOutOrder
 		var doneParts []*ormo.InOutOrder
 		for _, iod := range openOds {
-			lock = iod.Lock()
+			lock2 := iod.Lock()
 			filled, feeCost, part = o.tryFillExit(iod, filled, od.Average, od.Timestamp, od.ID, od.Type, feeName, feeCost)
-			lock.Unlock()
+			lock2.Unlock()
 			if part.Status == ormo.InOutStatusFullExit {
 				doneParts = append(doneParts, part)
 			}
@@ -64,9 +64,9 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 		}
 		defer conn.Close()
 		for _, part = range doneParts {
-			lock = part.Lock()
+			lock2 := part.Lock()
 			err = o.finishOrder(part, sess)
-			lock.Unlock()
+			lock2.Unlock()
 			if err != nil {
 				log.Error("finish order fail", zap.String("key", part.Key()), zap.Error(err))
 			}

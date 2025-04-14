@@ -15,12 +15,12 @@ import (
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	"github.com/banbox/banta"
+	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -33,15 +33,15 @@ type LiveOrderMgr struct {
 	doneKeys         map[string]bool             // Completed Orders 已完成的订单：symbol+orderId
 	exgIdMap         map[string]*ormo.InOutOrder // symbol+orderId: InOutOrder
 	doneTrades       map[string]bool             // Processed trades 已处理的交易：symbol+tradeId
-	lockDoneKeys     sync.Mutex
-	lockExgIdMap     sync.Mutex
-	lockDoneTrades   sync.Mutex
+	lockDoneKeys     deadlock.Mutex
+	lockExgIdMap     deadlock.Mutex
+	lockDoneTrades   deadlock.Mutex
 	isWatchMyTrade   bool                       // Is the account transaction flow being monitored? 是否正在监听账户交易流
 	isTrialUnMatches bool                       // Is monitoring unmatched transactions? 是否正在监听未匹配交易
 	isConsumeOrderQ  bool                       // Is it consuming from the order queue? 是否正在从订单队列消费
 	isWatchAccConfig bool                       // Is the leverage ratio being monitored? 是否正在监听杠杆倍数变化
 	unMatchTrades    map[string]*banexg.MyTrade // Transactions received from ws that have no matching orders 从ws收到的暂无匹配的订单的交易
-	lockUnMatches    sync.Mutex                 // Prevent concurrent reading and writing of unMatchTrades 防止并发读写unMatchTrades
+	lockUnMatches    deadlock.Mutex             // Prevent concurrent reading and writing of unMatchTrades 防止并发读写unMatchTrades
 	exitByMyOrder    FuncHandleMyOrder          // Try to use the transaction results of other end operations to update the current order status 尝试使用其他端操作的交易结果，更新当前订单状态
 	traceExgOrder    FuncHandleMyOrder
 }
@@ -58,8 +58,8 @@ const (
 var (
 	pairVolMap     = map[string]*PairValItem{}
 	volPrices      = map[string]*VolPrice{}
-	lockPairVolMap sync.Mutex
-	lockVolPrices  sync.Mutex
+	lockPairVolMap deadlock.Mutex
+	lockVolPrices  deadlock.Mutex
 )
 
 type PairValItem struct {
@@ -265,7 +265,6 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 	defer conn.Close()
 	// Loading orders from the database
 	// 从数据库加载订单
-	openOds, lock := ormo.GetOpenODs(o.Account)
 	orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 		TaskID: task.ID,
 		Status: 1,
@@ -283,6 +282,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 			return nil, nil, nil, err
 		}
 	}
+	openOds, lock := ormo.GetOpenODs(o.Account)
 	var lastEntMS int64
 	var openPairs = map[string]struct{}{}
 	for _, od := range orders {

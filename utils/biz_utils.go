@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"sync"
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banexg"
@@ -19,7 +19,7 @@ type FnTaskPrg = func(task string, rate float64)
 
 type PrgBar struct {
 	bar      *progressbar.ProgressBar
-	m        *sync.Mutex
+	m        *deadlock.Mutex
 	title    string
 	DoneNum  int
 	TotalNum int
@@ -30,7 +30,7 @@ type PrgBar struct {
 type StagedPrg struct {
 	taskMap      map[string]*PrgTask
 	tasks        []string
-	lock         sync.Mutex
+	lock         deadlock.Mutex
 	triggers     map[string]FnTaskPrg
 	active       int     // index for tasks
 	minIntvMS    int64   // default 100
@@ -52,7 +52,7 @@ func NewPrgBar(totalNum int, title string) *PrgBar {
 	}
 	return &PrgBar{
 		bar:      pBar,
-		m:        &sync.Mutex{},
+		m:        &deadlock.Mutex{},
 		TotalNum: totalNum,
 		title:    title,
 	}

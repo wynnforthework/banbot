@@ -3,10 +3,10 @@ package biz
 import (
 	"fmt"
 	"github.com/banbox/banbot/btime"
+	"github.com/sasha-s/go-deadlock"
 	"math"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -31,7 +31,7 @@ type ItemWallet struct {
 	UnrealizedPOL float64            // The public unrealized profit and loss of this currency, used by the contract, can be deducted from the margin of other orders. Recalculated every bar. 此币的公共未实现盈亏，合约用到，可抵扣其他订单保证金占用。每个bar重新计算
 	UsedUPol      float64            // Used unrealized profit and loss (used as margin for other orders). 已占用的未实现盈亏（用作其他订单的保证金）
 	Withdraw      float64            // Cash withdrawal from balance will not be used for trading. 从余额提现的，不会用于交易
-	lock          sync.Mutex
+	lock          deadlock.Mutex
 }
 
 type BanWallets struct {

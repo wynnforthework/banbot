@@ -1,8 +1,8 @@
 package core
 
 import (
+	"github.com/sasha-s/go-deadlock"
 	"math"
-	"sync"
 )
 
 type Ema struct {
@@ -41,7 +41,7 @@ type NumSet struct {
 	AlignUnit int64
 	Data      map[string]float64
 	CallBack  func(int64, map[string]float64)
-	Lock      sync.Mutex
+	Lock      deadlock.Mutex
 }
 
 func NewNumSet(alignUnit int64, callback func(int64, map[string]float64)) *NumSet {

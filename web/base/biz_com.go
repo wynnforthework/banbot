@@ -2,7 +2,7 @@ package base
 
 import (
 	"fmt"
-	"sync"
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -19,10 +19,10 @@ import (
 
 var (
 	exgInits    = map[banexg.BanExchange]bool{}
-	exgInitLock sync.Mutex
+	exgInitLock deadlock.Mutex
 	receiver    *data.KLineWatcher
 	wsSubs      = map[string]map[*WsClient]bool{}
-	wsSubLock   sync.Mutex
+	wsSubLock   deadlock.Mutex
 )
 
 func InitExg(exchange banexg.BanExchange) *errs.Error {

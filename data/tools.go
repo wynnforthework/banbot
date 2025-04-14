@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
+	"github.com/sasha-s/go-deadlock"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 	"io/fs"
@@ -22,7 +23,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -40,7 +40,7 @@ var (
 	// The following are used in Build1mWithTicks to build 1m candlesticks from ticks
 	// 下面几个在Build1mWithTicks中使用，从tick构建1m K线
 	symKLines = make(map[string][]*banexg.Kline) // 1M data for the current year, the key is the contract ID 当前年的1m数据，键是合约ID
-	klineLock sync.Mutex                         //symKlines的并发读写锁
+	klineLock deadlock.Mutex                     //symKlines的并发读写锁
 	timeMsMin = int64(0)
 	timeMsMax = int64(0)
 )

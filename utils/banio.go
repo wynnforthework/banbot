@@ -12,13 +12,13 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
+	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"io"
 	"math/rand"
 	"net"
 	"os"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -45,8 +45,8 @@ type BanConn struct {
 	RefreshMS   int64             // Connection ready timestamp 连接就绪的时间戳
 	Ready       bool
 	IsReading   bool
-	lockConnect sync.Mutex
-	lockWrite   sync.Mutex
+	lockConnect deadlock.Mutex
+	lockWrite   deadlock.Mutex
 	heartBeatMs int64               // Timestamp of the latest received ping/pong
 	DoConnect   func(conn *BanConn) // Reconnect function, no attempt to reconnect provided 重新连接函数，未提供不尝试重新连接
 	ReInitConn  func()              // Initialize callback function after successful reconnection 重新连接成功后初始化回调函数
@@ -64,7 +64,7 @@ type IOMsgRaw struct {
 
 var (
 	tipRetryTimes     = make(map[string]int64)
-	tipRetryTimesLock sync.Mutex
+	tipRetryTimesLock deadlock.Mutex
 )
 
 func (c *BanConn) GetRemote() string {

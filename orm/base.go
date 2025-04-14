@@ -6,11 +6,11 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"github.com/sasha-s/go-deadlock"
 	"net"
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/banbox/banbot/exg"
 	utils2 "github.com/banbox/banbot/utils"
@@ -32,7 +32,7 @@ var (
 	pool       *pgxpool.Pool
 	dbPathMap  = make(map[string]string)
 	dbPathInit = make(map[string]bool)
-	dbPathLock = sync.Mutex{}
+	dbPathLock = deadlock.Mutex{}
 )
 
 //go:embed sql/trade_schema.sql
