@@ -61,6 +61,7 @@ func SplitToMap(text string, sep string) map[string]bool {
 	arr := strings.Split(text, sep)
 	var result = make(map[string]bool)
 	for _, str := range arr {
+		str = strings.TrimSpace(str)
 		if str != "" {
 			result[str] = true
 		}

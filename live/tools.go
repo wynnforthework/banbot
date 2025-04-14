@@ -8,7 +8,6 @@ import (
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
-	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
@@ -25,14 +24,15 @@ func RunTradeClose(args []string) error {
 	var isExg bool
 	var configs config.ArrString
 	parser.Var(&configs, "config", "config path to use, Multiple -config options may be used")
-	parser.StringVar(&accountStr, "account", "", "accounts to exit")
-	parser.StringVar(&pairStr, "pair", "", "pairs to exit")
-	parser.StringVar(&stratStr, "strat", "", "strats to exit")
+	parser.StringVar(&accountStr, "account", "", "accounts, comma separated, empty means all")
+	parser.StringVar(&pairStr, "pair", "", "pairs, comma separated, empty means all")
+	parser.StringVar(&stratStr, "strat", "", "strats, comma separated, empty means all")
 	parser.BoolVar(&isExg, "exg", false, "close exchange position directly")
 	err_ := parser.Parse(args)
 	if err_ != nil {
 		return err_
 	}
+	core.SetRunMode(core.RunModeLive)
 	err := config.LoadConfig(&config.CmdArgs{
 		Configs:  configs,
 		LogLevel: "info",
@@ -47,7 +47,6 @@ func RunTradeClose(args []string) error {
 	var stratMap = utils.SplitToMap(stratStr, ",")
 
 	// 初始化订单管理器
-	core.SetRunMode(core.RunModeLive)
 	err = biz.SetupComsExg(&config.CmdArgs{LogLevel: "info"})
 	if err != nil {
 		return err
@@ -126,12 +125,9 @@ func closeOrdersByLocal(accMap map[string]bool, pairMap map[string]bool, stratMa
 		return err
 	}
 	biz.InitLiveOrderMgr(sendOrderMsg)
-	sess, conn, err := ormo.Conn(orm.DbTrades, true)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	biz.StartLiveOdMgr()
 	checkAccs := make(map[string][]*ormo.InOutOrder)
+	closeNum := 0
 	for account := range config.Accounts {
 		if len(accMap) > 0 {
 			if _, accOk := accMap[account]; !accOk {
@@ -161,12 +157,14 @@ func closeOrdersByLocal(accMap map[string]bool, pairMap map[string]bool, stratMa
 		if len(exitOds) > 0 {
 			checkAccs[account] = exitOds
 			log.Info("try exit orders", zap.String("acc", account), zap.Int("num", len(exitOds)))
-			err = odMgr.ExitAndFill(sess, exitOds, &strat.ExitReq{Tag: core.ExitTagCli})
+			exit_, _, err := biz.CloseAccOrders(account, exitOds, &strat.ExitReq{Tag: core.ExitTagCli})
 			if err != nil {
 				return err
 			}
+			closeNum += exit_
 		}
 	}
+	log.Info("closed orders", zap.Int("num", closeNum))
 	if len(checkAccs) == 0 {
 		log.Info("no match open orders to close")
 		return nil
