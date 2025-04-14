@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/rpc"
+	"github.com/banbox/banbot/strat"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/log"
@@ -87,6 +88,7 @@ func CronKlineDelays() {
 			})
 		}
 	}
+	stuckCount := 0
 	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {
 		curMS := btime.TimeMS()
 		delaySecs := int((curMS - core.LastCopiedMs) / 1000)
@@ -94,8 +96,34 @@ func CronKlineDelays() {
 			// It should be received every minute, alert if haven't been received for more than 2 minutes
 			// 应该每分钟都能收到，超过2分钟未收到爬虫推送报警
 			logDelay("Listen to the spider kline timeout!")
+			stuckCount += 1
+			if stuckCount > config.CloseOnStuck {
+				// 超时未收到K线，全部平仓
+				for account := range config.Accounts {
+					openOds, lock := ormo.GetOpenODs(account)
+					lock.Lock()
+					var odList = utils.ValsOfMap(openOds)
+					lock.Unlock()
+					if len(odList) > 0 {
+						closeNum, failNum, err := biz.CloseAccOrders(account, odList, &strat.ExitReq{
+							Tag:   core.ExitTagDataStuck,
+							Force: true,
+						})
+						if err != nil {
+							log.Error("close orders on stuck fail", zap.String("acc", account),
+								zap.Int("success", closeNum), zap.Int("fail", failNum), zap.Error(err))
+						} else {
+							log.Warn(fmt.Sprintf("close orders on stuck: %s, %d closed, %d failed",
+								account, closeNum, failNum))
+						}
+					}
+				}
+				// 防止频繁检查
+				stuckCount = 0
+			}
 			return
 		}
+		stuckCount = 0
 		var fails = make(map[string][]string)
 		for pair, wait := range core.PairCopiedMs {
 			if wait[0]+wait[1]*2 > curMS {

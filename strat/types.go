@@ -26,6 +26,7 @@ type TradeStrat struct {
 	BatchInOut    bool    // Whether to batch execute entry/exit 是否批量执行入场/出场
 	BatchInfo     bool    // whether to perform batch processing after OninfoBar 是否对OnInfoBar后执行批量处理
 	StakeRate     float64 // Relative basic amount billing rate 相对基础金额开单倍率
+	StopLoss      float64 // Default stoploss without leverage 此策略默认止损比率，不带杠杆
 	StopEnterBars int
 	EachMaxLong   int      // max number of long open orders for one pair, -1 for disable
 	EachMaxShort  int      // max number of short open orders for one pair, -1 for disable

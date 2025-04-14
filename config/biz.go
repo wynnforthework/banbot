@@ -283,6 +283,10 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	}
 	ChargeOnBomb = c.ChargeOnBomb
 	TakeOverStrat = c.TakeOverStrat
+	CloseOnStuck = c.CloseOnStuck
+	if CloseOnStuck == 0 {
+		CloseOnStuck = 20
+	}
 	StakeAmount = c.StakeAmount
 	StakePct = c.StakePct
 	MaxStakeAmt = c.MaxStakeAmt

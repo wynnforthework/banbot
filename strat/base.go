@@ -164,15 +164,16 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Short {
 		curSLPrice = s.ShortSLPrice
 	}
-	if curSLPrice == 0 {
-		if req.StopLossVal > 0 {
-			curSLPrice = enterPrice - req.StopLossVal*dirFlag
-		} else if req.StopLoss != 0 {
-			curSLPrice = req.StopLoss
-		}
-		if curSLPrice < 0 {
-			curSLPrice = enterPrice * 0.001
-		}
+	if curSLPrice == 0 && s.Strat.StopLoss > 0 {
+		curSLPrice = enterPrice * (1 - s.Strat.StopLoss*dirFlag)
+	}
+	if req.StopLossVal > 0 {
+		curSLPrice = enterPrice - req.StopLossVal*dirFlag
+	} else if req.StopLoss != 0 {
+		curSLPrice = req.StopLoss
+	}
+	if curSLPrice < 0 {
+		curSLPrice = enterPrice * 0.001
 	}
 	req.StopLossVal = 0
 	req.StopLoss = 0
@@ -199,15 +200,13 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	if req.Short {
 		curTPPrice = s.ShortTPPrice
 	}
-	if curTPPrice == 0 {
-		if req.TakeProfitVal > 0 {
-			curTPPrice = enterPrice + req.TakeProfitVal*dirFlag
-		} else {
-			curTPPrice = req.TakeProfit
-		}
-		if curTPPrice < 0 {
-			curTPPrice = enterPrice * 0.001
-		}
+	if req.TakeProfitVal > 0 {
+		curTPPrice = enterPrice + req.TakeProfitVal*dirFlag
+	} else {
+		curTPPrice = req.TakeProfit
+	}
+	if curTPPrice < 0 {
+		curTPPrice = enterPrice * 0.001
 	}
 	req.TakeProfitVal = 0
 	req.TakeProfit = 0

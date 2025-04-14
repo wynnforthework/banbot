@@ -10,9 +10,11 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	"go.uber.org/zap"
 	"math"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -42,6 +44,39 @@ func New(pol *config.RunPolicyConfig) *TradeStrat {
 	}
 	if pol.OrderBarMax > 0 {
 		stgy.OdBarMax = pol.OrderBarMax
+	}
+	if pol.StopLoss != nil {
+		slRate, isFlt := pol.StopLoss.(float64)
+		if isFlt {
+			if slRate > 0 {
+				stgy.StopLoss = slRate
+			} else if slRate < 0 {
+				log.Error("stop_loss should > 0", zap.String("policy", pol.Name))
+			}
+		} else if slStr, ok := pol.StopLoss.(string); ok {
+			if strings.TrimSpace(slStr) != "" {
+				var err error
+				slStr = strings.TrimSpace(slStr)
+				if strings.HasSuffix(slStr, "%") {
+					slRate, err = strconv.ParseFloat(slStr[:len(slStr)-1], 64)
+					slRate /= 100
+				} else {
+					slRate, err = strconv.ParseFloat(slStr, 64)
+				}
+				if err != nil {
+					log.Error("invalid stop_loss", zap.String("policy", pol.Name), zap.Error(err))
+				} else if slRate > 0 {
+					stgy.StopLoss = slRate
+				}
+			}
+		} else if slInt, ok := pol.StopLoss.(int); ok {
+			if slInt != 0 {
+				log.Error("stop_loss format error, expect to be 5% or 0.05", zap.String("policy", pol.Name))
+			}
+		} else {
+			log.Error("invalid stop_loss type, expect e.g.: 5% or 0.05", zap.String("policy", pol.Name),
+				zap.String("type", fmt.Sprintf("%T", pol.StopLoss)))
+		}
 	}
 	return stgy
 }

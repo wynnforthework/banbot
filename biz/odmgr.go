@@ -1,6 +1,7 @@
 package biz
 
 import (
+	"fmt"
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -696,4 +697,37 @@ func (o *OrderMgr) finishOrder(od *ormo.InOutOrder, sess *ormo.Queries) *errs.Er
 
 func (o *OrderMgr) CleanUp() *errs.Error {
 	return nil
+}
+
+func CloseAccOrders(acc string, odList []*ormo.InOutOrder, req *strat.ExitReq) (int, int, *errs.Error) {
+	var odMgr IOrderMgr
+	if core.EnvReal {
+		odMgr = GetLiveOdMgr(acc)
+	} else {
+		odMgr = GetOdMgr(acc)
+	}
+
+	sess, conn, err := ormo.Conn(orm.DbTrades, true)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer conn.Close()
+	closeNum, failNum := 0, 0
+	var errMsg strings.Builder
+	for _, od := range odList {
+		r := req.Clone()
+		r.StratName = od.Strategy
+		r.OrderID = od.ID
+		_, err2 := odMgr.ExitOrder(sess, od, r)
+		if err2 != nil {
+			failNum += 1
+			errMsg.WriteString(fmt.Sprintf("Order %v: %v\n", od.ID, err2.Short()))
+		} else {
+			closeNum += 1
+		}
+	}
+	if failNum > 0 {
+		return closeNum, failNum, errs.NewMsg(errs.CodeRunTime, errMsg.String())
+	}
+	return closeNum, failNum, nil
 }

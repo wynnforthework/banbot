@@ -24,6 +24,7 @@ var (
 	MarginAddRate    float64 // When trading contracts, if a loss occurs and the loss reaches this value of the initial margin ratio, additional margin will be required to avoid forced liquidation. 交易合约时，如出现亏损，亏损达到初始保证金比率的此值时，进行追加保证金，避免强平
 	ChargeOnBomb     bool
 	TakeOverStrat    string
+	CloseOnStuck     int
 	StakeAmount      float64 // The amount of a single order, the priority is lower than StakePct 单笔开单金额，优先级低于StakePct
 	StakePct         float64 // Percentage of single bill amount 单笔开单金额百分比
 	MaxStakeAmt      float64 // Maximum bill amount for a single transaction 单笔最大开单金额
@@ -92,6 +93,7 @@ type Config struct {
 	MarginAddRate    float64                           `yaml:"margin_add_rate,omitempty" mapstructure:"margin_add_rate"`
 	ChargeOnBomb     bool                              `yaml:"charge_on_bomb,omitempty" mapstructure:"charge_on_bomb"`
 	TakeOverStrat    string                            `yaml:"take_over_strat,omitempty" mapstructure:"take_over_strat"`
+	CloseOnStuck     int                               `yaml:"close_on_stuck,omitempty" mapstructure:"close_on_stuck"`
 	StakeAmount      float64                           `yaml:"stake_amount,omitempty" mapstructure:"stake_amount"`
 	StakePct         float64                           `yaml:"stake_pct,omitempty" mapstructure:"stake_pct"`
 	MaxStakeAmt      float64                           `yaml:"max_stake_amt,omitempty" mapstructure:"max_stake_amt"`
@@ -141,6 +143,7 @@ type RunPolicyConfig struct {
 	OrderBarMax   int                           `yaml:"order_bar_max,omitempty" mapstructure:"order_bar_max"`
 	StakeRate     float64                       `yaml:"stake_rate,omitempty" mapstructure:"stake_rate"`
 	Dirt          string                        `yaml:"dirt,omitempty" mapstructure:"dirt"`
+	StopLoss      interface{}                   `yaml:"stop_loss,omitempty" mapstructure:"stop_loss"`
 	StratPerf     *StratPerfConfig              `yaml:"strat_perf,omitempty" mapstructure:"strat_perf"`
 	Pairs         []string                      `yaml:"pairs,omitempty,flow" mapstructure:"pairs"`
 	Params        map[string]float64            `yaml:"params,omitempty" mapstructure:"params"`

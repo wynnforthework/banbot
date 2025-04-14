@@ -498,33 +498,19 @@ func postForceExit(c *fiber.Ctx) error {
 		}
 		lock.Unlock()
 
-		sess, conn, err := ormo.Conn(orm.DbTrades, true)
+		closeNum, failNum, err := biz.CloseAccOrders(acc, targetOrders, &strat.ExitReq{
+			Tag:   core.ExitTagUserExit,
+			Force: true,
+		})
+		var errMsg string
 		if err != nil {
-			return err
-		}
-		defer conn.Close()
-		odMgr := biz.GetLiveOdMgr(acc)
-		closeNum, failNum := 0, 0
-		var errMsg strings.Builder
-		for _, od := range targetOrders {
-			_, err2 := odMgr.ExitOrder(sess, od, &strat.ExitReq{
-				Tag:       core.ExitTagUserExit,
-				StratName: od.Strategy,
-				OrderID:   od.ID,
-				Force:     true,
-			})
-			if err2 != nil {
-				failNum += 1
-				errMsg.WriteString(fmt.Sprintf("Order %v: %v\n", od.ID, err2.Short()))
-			} else {
-				closeNum += 1
-			}
+			errMsg = err.Short()
 		}
 
 		return c.JSON(fiber.Map{
 			"closeNum": closeNum,
 			"failNum":  failNum,
-			"errMsg":   errMsg.String(),
+			"errMsg":   errMsg,
 		})
 	})
 }

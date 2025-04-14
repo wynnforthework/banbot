@@ -26,6 +26,7 @@ max_stake_amt: 5000  # ${m.cfg_max_stake_amount()}
 draw_balance_over: 0  # ${m.cfg_draw_balance_over()}
 charge_on_bomb: false # ${m.cfg_charge_on_bomb()}
 take_over_strat: ma:demo # ${m.cfg_take_over_strat()}
+close_on_stuck: 20  # ${m.cfg_close_on_stuck()}
 open_vol_rate: 1  # ${m.cfg_open_vol_rate()}
 min_open_rate: 0.5  # ${m.cfg_min_open_rate()}
 low_cost_action: ignore  # ${m.cfg_low_cost_action()}
@@ -56,6 +57,7 @@ run_policy:  # ${m.cfg_run_policy()}
     max_simul_open: 0 # ${m.cfg_run_policy_max_simul_open()}
     order_bar_max: 0  # ${m.cfg_run_policy_order_bar_max()}
     stake_rate: 1  # ${m.cfg_run_policy_stake_rate()}
+    stop_loss: 1  # ${m.cfg_run_policy_stop_loss()}
     dirt: any  # ${m.cfg_run_policy_dirt()}
     pairs: [BTC/USDT:USDT]
     params: {atr: 15}

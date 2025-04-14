@@ -703,12 +703,12 @@ Return to modify the lock of the current order. A successful return indicates th
 func (i *InOutOrder) Lock() *deadlock.Mutex {
 	odKey := i.Key()
 	mLockOds.Lock()
-	defer mLockOds.Unlock()
 	lock, ok := lockOds[odKey]
 	if !ok {
 		lock = &deadlock.Mutex{}
 		lockOds[odKey] = lock
 	}
+	mLockOds.Unlock()
 	var got = int32(0)
 	if core.LiveMode {
 		// Real time mode with added deadlock detection

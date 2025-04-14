@@ -16,6 +16,7 @@ stake_amount: 200
 # stake_pct: 10
 max_stake_amt: 500
 draw_balance_over: 0
+close_on_stuck: 20
 min_open_rate: 0.5
 low_cost_action: ignore
 bt_net_cost: 15
