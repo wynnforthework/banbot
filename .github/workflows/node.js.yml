@@ -6,8 +6,12 @@ name: Frontend Build
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'web/ui/**'
   pull_request:
     branches: [ "main" ]
+    paths:
+      - 'web/ui/**'
 
 jobs:
   build:
@@ -19,13 +23,30 @@ jobs:
         
     steps:
     - uses: actions/checkout@v4
+    
     - name: Setup Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
         cache-dependency-path: web/ui/package-lock.json
-    - run: npm ci
+    
+    - name: Install dependencies
+      run: npm ci
       working-directory: web/ui
-    - run: npm run build
+    
+    - name: Build frontend
+      run: npm run build
       working-directory: web/ui
+      
+    - name: Create ZIP archive of build output
+      run: |
+        cd web/ui
+        zip -r dist.zip dist/
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: frontend-dist
+        path: web/ui/dist.zip
+        retention-days: 7
