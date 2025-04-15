@@ -39,14 +39,10 @@ jobs:
       run: npm run build
       working-directory: web/ui
       
-    - name: Create ZIP archive of build output
-      run: |
-        cd web/ui
-        zip -r dist.zip dist/
-        
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: frontend-dist
-        path: web/ui/dist.zip
+        name: dist
+        path: web/ui/dist/
         retention-days: 7
+        if-no-files-found: error
