@@ -1,4 +1,4 @@
-FROM banbase
+FROM banbot/banbase
 
 ENV BanDataDir=/ban/data
 ENV BanStratDir=/ban/strats
