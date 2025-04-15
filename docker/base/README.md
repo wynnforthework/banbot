@@ -17,3 +17,6 @@ After a large number of dependency packages have been upgraded, the base image s
 ```shell
 docker build --no-cache -t banbot/banbot .
 ```
+This step has created a GitHub Workflow in [banstrats](https://github.com/banbox/banstrats), which automatically builds and pushes to the Docker Hub repository whenever the code is updated.
+
+此步骤已在[banstrats](https://github.com/banbox/banstrats)中创建github workflow，每次更新代码会自动构建并推送到docker hub仓库。
