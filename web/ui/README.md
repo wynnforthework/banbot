@@ -21,9 +21,6 @@ sveltekit支持编译静态资源，只需将svelte.config.js中的`adapter-auto
 **云端指标**  
 本项目原生支持云端指标加载和显示，后端需提供`/kline/all_inds`和`/kline/calc_ind`接口，具体参数请参考`src/lib/indicators/cloudInds.ts`
 
-## TODO
-* 滚动条样式未全局生效
-
 ## Developing
 初始化：`npm install` (or `pnpm install` or `yarn`):
 
