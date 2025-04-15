@@ -25,26 +25,18 @@ sveltekit支持编译静态资源，只需将svelte.config.js中的`adapter-auto
 * 滚动条样式未全局生效
 
 ## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+初始化：`npm install` (or `pnpm install` or `yarn`):
 
 ```bash
 npx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide
 
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
 ## Building
-
-To create a production version of your app:
-
+已创建github workflow，在修改前端资源文件后自动执行编译，下载dist.zip即可。 
 ```bash
 npm run build
+
+npm run preview
 ```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
