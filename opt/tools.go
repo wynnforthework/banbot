@@ -269,7 +269,7 @@ func loadExgOrders(account, exgName, market string, startMS, endMS int64, pairNu
 		return nil, err
 	}
 	pairs := utils.KeysOfMap(pairNums)
-	err = save.Download(startMS, endMS, pairs)
+	err = save.Download(startMS, endMS, pairs, true)
 	if err != nil {
 		return nil, err
 	}

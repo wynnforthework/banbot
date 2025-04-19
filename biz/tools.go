@@ -892,6 +892,7 @@ func RunHistKline(args *RunHistArgs) *errs.Error {
 func DownExgOrders(args []string) error {
 	var exchange, market, account, pairs string
 	var timeStart, timeEnd string
+	var force bool
 	var configPaths config.ArrString
 	var sub = flag.NewFlagSet("cmp", flag.ExitOnError)
 	sub.Var(&configPaths, "config", "config path to use, Multiple -config options may be used")
@@ -901,6 +902,7 @@ func DownExgOrders(args []string) error {
 	sub.StringVar(&timeStart, "timestart", "", "set start time, allow multiple formats")
 	sub.StringVar(&timeEnd, "timeend", "", "set start time, allow multiple formats")
 	sub.StringVar(&pairs, "pairs", "", "symbols, comma separated")
+	sub.BoolVar(&force, "force", false, "force check from order stamp")
 	err_ := sub.Parse(args)
 	if err_ != nil {
 		return err_
@@ -938,7 +940,7 @@ func DownExgOrders(args []string) error {
 		return err_
 	}
 	pairArr := strings.Split(pairs, ",")
-	err = save.Download(startMS, endMS, pairArr)
+	err = save.Download(startMS, endMS, pairArr, force)
 	if err != nil {
 		return err
 	}
@@ -988,7 +990,7 @@ func GetExgOrderSet(account, exgName, market string) (*ExgOrderSet, *errs.Error)
 }
 
 // Download 下载指定时间范围内的订单记录
-func (s *ExgOrderSet) Download(startMS, endMS int64, pairs []string) *errs.Error {
+func (s *ExgOrderSet) Download(startMS, endMS int64, pairs []string, force bool) *errs.Error {
 	if len(pairs) == 0 {
 		return errs.NewMsg(errs.CodeParamRequired, "pairs is required")
 	}
@@ -1008,6 +1010,10 @@ func (s *ExgOrderSet) Download(startMS, endMS int64, pairs []string) *errs.Error
 			s.Data[pair] = old
 		}
 		var oldStart, oldEnd = old.StartMS, old.EndMS
+		if force && len(old.Orders) > 0 {
+			oldStart = old.Orders[0].Timestamp
+			oldEnd = old.Orders[len(old.Orders)-1].Timestamp + 1
+		}
 
 		var downloadRanges [][2]int64
 		if oldStart == 0 {
