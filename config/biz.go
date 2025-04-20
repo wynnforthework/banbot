@@ -794,6 +794,9 @@ func (c *RunPolicyConfig) Param(k string, dv float64) float64 {
 
 func (c *RunPolicyConfig) Def(k string, dv float64, p *core.Param) float64 {
 	val := c.Param(k, dv)
+	if p == nil {
+		return val
+	}
 	if p.Mean == 0 {
 		p.Mean = dv
 	}

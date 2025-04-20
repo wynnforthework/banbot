@@ -44,6 +44,8 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 		startMS, endMS = endMS, startMS
 		dirt = -1
 	}
+	// 交易所返回的最后一个可能是未完成bar，需要过滤掉
+	endMS = utils2.AlignTfMSecs(min(endMS, btime.UTCStamp()), tfMSecs)
 	fetchNum := int((endMS - startMS) / tfMSecs)
 	if fetchNum == 0 {
 		return nil
