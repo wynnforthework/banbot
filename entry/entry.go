@@ -18,6 +18,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"os"
 	"path/filepath"
 )
 
@@ -76,6 +77,14 @@ func RunTrade(args *config.CmdArgs) *errs.Error {
 	err := biz.SetupComsExg(args)
 	if err != nil {
 		return err
+	}
+	if args.OutPath != "" {
+		file, err_ := os.OpenFile(args.OutPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err_ != nil {
+			log.Error("open live dump file fail", zap.Error(err_))
+		} else {
+			orm.SetDump(file)
+		}
 	}
 	core.BotRunning = true
 	core.StartAt = btime.UTCStamp()

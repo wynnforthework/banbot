@@ -68,7 +68,7 @@ func init() {
 	AddCmdJob(&CmdJob{
 		Name:    "trade",
 		Run:     RunTrade,
-		Options: []string{"stake_amount", "pairs", "with_spider"},
+		Options: []string{"stake_amount", "pairs", "with_spider", "out"},
 		Help:    "live trade",
 	})
 	AddCmdJob(&CmdJob{

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/orm/ormo"
+	"strings"
 	"time"
 
 	"github.com/banbox/banbot/biz"
@@ -108,12 +109,14 @@ func (t *CryptoTrader) Run() *errs.Error {
 }
 
 func (t *CryptoTrader) FeedKLine(bar *orm.InfoKline) {
+	delayExecBatch()
+	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
+	orm.AddDumpRow(orm.DumpKline, envKey, bar.Kline)
 	err := t.Trader.FeedKline(bar)
 	if err != nil {
 		log.Error("handle bar fail", zap.String("pair", bar.Symbol), zap.Error(err))
 		return
 	}
-	delayExecBatch()
 }
 
 func delayExecBatch() {
@@ -123,6 +126,8 @@ func delayExecBatch() {
 			// There are TF cycles that have not yet been completed, and they are postponed for a few seconds to trigger again
 			// 有尚未完成的tf周期，推迟几秒再次触发
 			delayExecBatch()
+		} else {
+			orm.FlushDumps()
 		}
 	})
 }
@@ -164,6 +169,8 @@ func (t *CryptoTrader) startJobs() {
 }
 
 func exitCleanUp() {
+	orm.FlushDumps()
+	orm.CloseDump()
 	err := biz.CleanUpOdMgr()
 	if err != nil {
 		log.Error("clean odMgr fail", zap.Error(err))
