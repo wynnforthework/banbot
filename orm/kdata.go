@@ -271,6 +271,22 @@ func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol
 	}()
 
 	wg.Wait()
+	// 检查是否需要下载未完成bar
+	curMS := btime.UTCStamp()
+	tfMSecs := int64(tfSecs * 1000)
+	curAlignMS := utils2.AlignTfMSecs(curMS, tfMSecs)
+	if endMS > curAlignMS {
+		data, err := exchange.FetchOHLCV(exs.Symbol, timeFrame, curAlignMS, 1, nil)
+		if err != nil {
+			log.Warn("fetch unfinish bar fail", zap.Error(err))
+		}
+		if len(data) > 0 {
+			err = sess.SetUnfinish(exs.ID, timeFrame, curMS, data[0])
+			if err != nil {
+				log.Warn("set unfinish fail", zap.Int32("sid", exs.ID), zap.String("tf", timeFrame), zap.Error(err))
+			}
+		}
+	}
 	err_ := sess.DelInsKline(context.Background(), insId)
 	if err_ != nil {
 		log.Warn("DelInsKline fail", zap.Int32("id", insId), zap.Error(err_))

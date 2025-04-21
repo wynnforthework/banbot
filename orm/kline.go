@@ -73,8 +73,8 @@ func (q *Queries) QueryOHLCV(sid int32, timeframe string, startMs, endMs int64, 
 	maxEndMs := endMs
 	finishEndMS := utils2.AlignTfMSecs(endMs, tfMSecs)
 	unFinishMS := int64(0)
-	if core.LiveMode && withUnFinish {
-		curMs := btime.TimeMS()
+	if withUnFinish {
+		curMs := btime.UTCStamp()
 		unFinishMS = utils2.AlignTfMSecs(curMs, tfMSecs)
 		if finishEndMS > unFinishMS {
 			finishEndMS = unFinishMS
@@ -465,6 +465,19 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	return sess.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, info, timeframe) 
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
 		sub.Close, sub.Volume, sub.Info, sub.Timeframe)
+}
+
+func (q *Queries) SetUnfinish(sid int32, tf string, endMS int64, bar *banexg.Kline) *errs.Error {
+	whereSql := fmt.Sprintf("where sid=%v and timeframe='%v';", sid, tf)
+	fromWhere := "from kline_un " + whereSql
+	ctx := context.Background()
+	_, err_ := q.db.Exec(ctx, "delete "+fromWhere)
+	if err_ != nil {
+		return NewDbErr(core.ErrDbExecFail, err_)
+	}
+	return q.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, info, timeframe) 
+values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, sid, bar.Time, endMS, bar.Open, bar.High, bar.Low,
+		bar.Close, bar.Volume, bar.Info, tf)
 }
 
 // iterForAddKLines implements pgx.CopyFromSource.

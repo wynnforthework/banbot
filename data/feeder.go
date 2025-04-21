@@ -546,27 +546,17 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 type IHistKlineFeeder interface {
 	IKlineFeeder
 	getNextMS() int64
-	/*
-		DownIfNeed Download the entire range of K lines, which needs to be called before SetSeek  下载整个范围的K线，需在SetSeek前调用
-	*/
+	// DownIfNeed Download the entire range of K lines, which needs to be called before SetSeek  下载整个范围的K线，需在SetSeek前调用
 	DownIfNeed(sess *orm.Queries, exchange banexg.BanExchange, pBar *utils.PrgBar) *errs.Error
-	/*
-		SetSeek Set the reading position and call it before loop reading   设置读取位置，在循环读取前调用
-	*/
+	// SetSeek Set the reading position and call it before loop reading   设置读取位置，在循环读取前调用
 	SetSeek(since int64)
-	/* SetEndMS Set the end position for reading 设置读取的结束位置*/
+	// SetEndMS  Set the end position for reading 设置读取的结束位置
 	SetEndMS(ms int64)
-	/*
-		GetBar Get the current K line, and then call CallNext to move the pointer to the next 获取当前K线，然后可调用CallNext移动指针到下一个
-	*/
+	// GetBar Get the current K line, and then call CallNext to move the pointer to the next 获取当前K线，然后可调用CallNext移动指针到下一个
 	GetBar() *banexg.Kline
-	/*
-		RunBar Run the callback function corresponding to Bar 运行Bar对应的回调函数
-	*/
+	// RunBar Run the callback function corresponding to Bar 运行Bar对应的回调函数
 	RunBar(bar *banexg.Kline) *errs.Error
-	/*
-		CallNext Move the pointer to the next K line 移动指针到下一个K线
-	*/
+	// CallNext Move the pointer to the next K line 移动指针到下一个K线
 	CallNext()
 }
 
@@ -861,7 +851,7 @@ func (f *TfKlineLoader) SetNext() {
 	}
 	defer conn.Release()
 	batchSize := 3000
-	_, bars, err := sess.GetOHLCV(f.ExSymbol, f.Timeframe, f.offsetMS, endMS, batchSize, false)
+	_, bars, err := sess.GetOHLCV(f.ExSymbol, f.Timeframe, f.offsetMS, endMS, batchSize, true)
 	if err != nil || len(bars) == 0 {
 		f.rowIdx = -1
 		f.offsetMS = max(f.offsetMS, f.nextMS)
