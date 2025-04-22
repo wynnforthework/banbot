@@ -206,6 +206,8 @@ func AggKlineBigs(args *config.CmdArgs) *errs.Error {
 
 func runInit(args *config.CmdArgs) *errs.Error {
 	errs.PrintErr = utils.PrintErr
+	dataDir := config.GetDataDir()
+	fmt.Printf("BanDataDir=%s\n", dataDir)
 	err := biz.InitDataDir()
 	if err != nil {
 		return err

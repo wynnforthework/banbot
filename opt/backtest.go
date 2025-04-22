@@ -72,7 +72,7 @@ func (b *BackTestLite) FeedKLine(bar *orm.InfoKline) bool {
 			// 进入下一个时间帧，触发批量入场回调
 			waitNum := biz.TryFireBatches(curTime)
 			if waitNum > 0 {
-				panic(fmt.Sprintf("batch job exec fail, wait: %v", waitNum))
+				log.Warn(fmt.Sprintf("batch job exec fail, wait: %v", waitNum))
 			}
 			strat.LastBatchMS = curTime
 		}

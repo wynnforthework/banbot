@@ -214,11 +214,13 @@ func (c *Config) Apply(args *CmdArgs) error {
 		} else {
 			stop = btime.UTCStamp()
 		}
-	} else {
+	} else if strings.TrimSpace(c.TimeRangeRaw) != "" {
 		start, stop, err = ParseTimeRange(c.TimeRangeRaw)
 		if err != nil {
 			return err
 		}
+	} else {
+		return fmt.Errorf("`time_start` in yml is required")
 	}
 	c.TimeRange = &TimeTuple{start, stop}
 	if args.StakeAmount > 0 {

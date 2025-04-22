@@ -254,15 +254,22 @@ func TryFireBatches(currMS int64) int {
 				panic(fmt.Sprintf("unsupport BatchType: %v", task.Type))
 			}
 		}
+		account := strings.Split(key, "_")[1]
+		openOds, lock := ormo.GetOpenODs(account)
+		lock.Lock()
+		allOrders := utils.ValsOfMap(openOds)
+		lock.Unlock()
 		delete(strat.BatchTasks, key)
 		if len(enterJobs) > 0 {
 			// Check all batch tasks at this time and decide which ones to enter or exit
 			// 检查此时间所有批量任务，决定哪些入场或那些出场
+			for _, job := range enterJobs {
+				job.InitBar(allOrders)
+			}
 			stgy.OnBatchJobs(enterJobs)
 			// Perform entry/exit tasks
 			// 执行入场/出场任务
-			keyParts := strings.Split(key, "_")
-			odMgr := GetOdMgr(keyParts[1])
+			odMgr := GetOdMgr(account)
 			var ents []*ormo.InOutOrder
 			var exits []*ormo.InOutOrder
 			for _, job := range enterJobs {
@@ -410,22 +417,18 @@ func InitDataDir() *errs.Error {
 	if err_ != nil {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
-	var err *errs.Error
 	configPath := filepath.Join(dataDir, "config.yml")
 	configLocalPath := filepath.Join(dataDir, "config.local.yml")
-	exists := utils.Exists(configPath)
-	existLocal := utils.Exists(configLocalPath)
-	if exists || existLocal {
+	if utils.Exists(configPath) || utils.Exists(configLocalPath) {
 		// dont init config in dataDir if any of config.yml/config.local.yml exist
 		return nil
 	}
-	if !exists {
-		err = utils.WriteFile(configPath, replaceDockerHosts(configData))
-		log.Info("init done: $config.yml")
+	err := utils.WriteFile(configPath, replaceDockerHosts(configData))
+	if err != nil {
+		return err
 	}
-	if !existLocal {
-		err = utils.WriteFile(configLocalPath, replaceDockerHosts(configLocalData))
-		log.Info("init done: $config.local.yml")
-	}
+	log.Info("init done", zap.String("p", configPath))
+	err = utils.WriteFile(configLocalPath, replaceDockerHosts(configLocalData))
+	log.Info("init done", zap.String("p", configLocalPath))
 	return err
 }
