@@ -86,8 +86,8 @@ type Config struct {
 	MarketType       string                            `yaml:"market_type,omitempty" mapstructure:"market_type"`
 	ContractType     string                            `yaml:"contract_type,omitempty" mapstructure:"contract_type"`
 	OdBookTtl        int64                             `yaml:"odbook_ttl,omitempty" mapstructure:"odbook_ttl"`
-	StopEnterBars    int                               `json:"stop_enter_bars,omitempty" mapstructure:"stop_enter_bars"`
-	ConcurNum        int                               `json:"concur_num,omitempty" mapstructure:"concur_num"`
+	StopEnterBars    int                               `yaml:"stop_enter_bars,omitempty" mapstructure:"stop_enter_bars"`
+	ConcurNum        int                               `yaml:"concur_num,omitempty" mapstructure:"concur_num"`
 	OrderType        string                            `yaml:"order_type,omitempty" mapstructure:"order_type"`
 	PreFire          float64                           `yaml:"prefire,omitempty" mapstructure:"prefire"`
 	MarginAddRate    float64                           `yaml:"margin_add_rate,omitempty" mapstructure:"margin_add_rate"`

@@ -353,6 +353,7 @@ func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.
 	if req.Short {
 		odSide = banexg.OdSideSell
 	}
+	curTimeMS := btime.TimeMS()
 	taskId := ormo.GetTaskID(o.Account)
 	od := &ormo.InOutOrder{
 		IOrder: &ormo.IOrder{
@@ -365,7 +366,7 @@ func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.
 			EnterTag:  req.Tag,
 			InitPrice: core.GetPrice(env.Symbol),
 			Leverage:  req.Leverage,
-			EnterAt:   btime.TimeMS(),
+			EnterAt:   curTimeMS,
 			Strategy:  req.StratName,
 			StgVer:    int64(stgVer),
 		},
@@ -378,6 +379,8 @@ func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.
 			Price:     req.Limit,
 			Amount:    req.Amount,
 			Status:    ormo.OdStatusInit,
+			CreateAt:  curTimeMS,
+			UpdateAt:  curTimeMS,
 		},
 		Info:       map[string]interface{}{},
 		DirtyMain:  true,
