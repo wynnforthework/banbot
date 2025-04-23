@@ -282,13 +282,16 @@ func (i *InOutOrder) CanClose() bool {
 	return float64(btime.TimeMS()-i.RealEnterMS()) > float64(tfMSecs)*0.9
 }
 
-func (i *InOutOrder) SetExit(tag, orderType string, limit float64) {
+func (i *InOutOrder) SetExit(exitAt int64, tag, orderType string, limit float64) {
+	if exitAt == 0 {
+		exitAt = btime.TimeMS()
+	}
 	if i.ExitAt == 0 {
 		if tag == "" {
 			tag = core.ExitTagUnknown
 		}
 		i.ExitTag = tag
-		i.ExitAt = btime.TimeMS()
+		i.ExitAt = exitAt
 		i.DirtyMain = true
 	}
 	if i.Exit == nil {
@@ -303,7 +306,8 @@ func (i *InOutOrder) SetExit(tag, orderType string, limit float64) {
 			Enter:     false,
 			OrderType: orderType,
 			Side:      odSide,
-			CreateAt:  btime.TimeMS(),
+			CreateAt:  exitAt,
+			UpdateAt:  exitAt,
 			Price:     limit,
 			Amount:    i.Enter.Filled,
 			Status:    OdStatusInit,
@@ -326,9 +330,9 @@ LocalExit
 Forcefully exiting the order locally takes effect immediately, without waiting for the next bar. This does not involve wallet updates, the wallet needs to be updated on its own.
 When calling this function on a real drive, it will be saved to the database
 在本地强制退出订单，立刻生效，无需等到下一个bar。这里不涉及钱包更新，钱包需要自行更新。
-实盘时调用此函数会保存到数据库
+实盘时调用此函数会持久化存储
 */
-func (i *InOutOrder) LocalExit(tag string, price float64, msg, odType string) *errs.Error {
+func (i *InOutOrder) LocalExit(exitAt int64, tag string, price float64, msg, odType string) *errs.Error {
 	if price == 0 {
 		newPrice := core.GetPrice(i.Symbol)
 		if newPrice > 0 {
@@ -341,10 +345,6 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg, odType string) *e
 			price = i.InitPrice
 		}
 	}
-	if odType == "" {
-		odType = banexg.OdTypeMarket
-	}
-	i.SetExit(tag, odType, price)
 	if i.Enter.Status < OdStatusClosed {
 		i.Enter.Status = OdStatusClosed
 		err := i.UpdateFee(price, true, true)
@@ -353,10 +353,11 @@ func (i *InOutOrder) LocalExit(tag string, price float64, msg, odType string) *e
 		}
 		i.DirtyEnter = true
 	}
-	i.Exit.Status = OdStatusClosed
-	if i.Exit.Filled == 0 {
-		i.ExitAt = btime.TimeMS()
+	if odType == "" {
+		odType = banexg.OdTypeMarket
 	}
+	i.SetExit(exitAt, tag, odType, price)
+	i.Exit.Status = OdStatusClosed
 	i.Exit.Filled = i.Enter.Filled
 	i.Exit.Average = i.Exit.Price
 	i.Status = InOutStatusFullExit

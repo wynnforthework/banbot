@@ -178,7 +178,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 		}
 		stopAfter := od.GetInfoInt64(ormo.OdInfoStopAfter)
 		if stopAfter > 0 && stopAfter <= curMS {
-			err := od.LocalExit(core.ExitTagEntExp, od.InitPrice, "reach StopEnterBars", "")
+			err := od.LocalExit(stopAfter, core.ExitTagEntExp, od.InitPrice, "reach StopEnterBars", "")
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			if err != nil {
 				log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
@@ -193,7 +193,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 	_, err := wallets.EnterOd(od)
 	if err != nil {
 		if err.Code == core.ErrLowFunds {
-			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, err.Error(), "")
+			err = od.LocalExit(fillMS, core.ExitTagForceExit, od.InitPrice, err.Error(), "")
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			o.onLowFunds()
 			return err
@@ -228,7 +228,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 				num, _ := o.zeroAmts[od.Symbol]
 				o.zeroAmts[od.Symbol] = num + 1
 			}
-			err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
+			err = od.LocalExit(fillMS, core.ExitTagFatalErr, od.InitPrice, err.Error(), "")
 			_, quote, _, _ := core.SplitSymbol(od.Symbol)
 			wallets.Cancel(od.Key(), quote, 0, true)
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
@@ -246,11 +246,6 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 	if exOrder.OrderType == banexg.OdTypeLimit && updateTime-od.EnterAt < 60000 {
 		// 以限价单入场，但很快成交的话，认为是市价单成交If the limit order is filled quickly, it will be considered a market order.
 		exOrder.OrderType = banexg.OdTypeMarket
-	}
-	if exOrder.Filled == 0 {
-		// 将EnterAt更新为实际入场时间
-		// Update Enter.UpdateAt to the actual entry time
-		od.Enter.UpdateAt = updateTime
 	}
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = entPrice
@@ -386,16 +381,9 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 		}
 		od = part
 	}
-	err := od.LocalExit(exitTag, fillPrice, "", odType)
 	cutSecs := tfSecs * (1 - rate)
-	od.ExitAt = curMS - int64(cutSecs*1000)
-	od.DirtyMain = true
-	if od.Exit != nil {
-		od.Exit.UpdateAt = od.ExitAt
-		od.Exit.CreateAt = od.ExitAt
-		od.DirtyExit = true
-	}
-	_ = od.Save(nil)
+	exitAt := curMS - int64(cutSecs*1000)
+	err := od.LocalExit(exitAt, exitTag, fillPrice, "", odType)
 	wallets := GetWallets(o.Account)
 	wallets.ExitOd(od, od.Exit.Amount)
 	_ = o.finishOrder(od, nil)

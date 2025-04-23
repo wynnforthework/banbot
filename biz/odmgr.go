@@ -267,6 +267,7 @@ func (o *OrderMgr) RelayOrders(sess *ormo.Queries, orders []*ormo.InOutOrder) *e
 			return errs.NewMsg(errs.CodeNoMarketForPair, "%s not found", odr.Symbol)
 		}
 		price := core.GetPrice(odr.Symbol)
+		curTime := btime.TimeMS()
 		od := &ormo.InOutOrder{
 			IOrder: &ormo.IOrder{
 				TaskID:    taskId,
@@ -294,7 +295,8 @@ func (o *OrderMgr) RelayOrders(sess *ormo.Queries, orders []*ormo.InOutOrder) *e
 				OrderType: odr.Enter.OrderType,
 				//OrderID:   odr.Enter.OrderID,
 				Side:     odr.Enter.Side,
-				CreateAt: btime.TimeMS(),
+				CreateAt: curTime,
+				UpdateAt: curTime,
 				Price:    price,
 				Amount:   odr.Enter.Amount,
 				Status:   ormo.OdStatusInit,
@@ -633,7 +635,7 @@ func (o *OrderMgr) exitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat
 		}
 		return o.exitOrder(sess, part, req)
 	}
-	od.SetExit(req.Tag, odType, 0)
+	od.SetExit(0, req.Tag, odType, 0)
 	return o.postOrderExit(sess, od)
 }
 

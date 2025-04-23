@@ -520,8 +520,28 @@ func FireOdChange(acc string, od *ormo.InOutOrder, evt int) {
 	subs2, _ := accOdSubs["*"]
 	lockOdSub.Unlock()
 	subs = append(subs, subs2...)
+	// 将模拟时间置为事件触发时间，并备份当前时间
+	evtTime := int64(0)
+	if evt == OdChgEnter {
+		evtTime = od.EnterAt
+	} else if evt == OdChgEnterFill {
+		evtTime = od.Enter.UpdateAt
+	} else if evt == OdChgExit {
+		evtTime = od.ExitAt
+	} else if evt == OdChgExitFill && od.Exit != nil {
+		evtTime = od.Exit.UpdateAt
+	}
+	backMS := int64(0)
+	if evtTime > 0 {
+		backMS = btime.TimeMS()
+		btime.CurTimeMS = evtTime
+	}
 	for _, cb := range subs {
 		cb(acc, od, evt)
+	}
+	// 恢复原始时间
+	if evtTime > 0 {
+		btime.CurTimeMS = backMS
 	}
 }
 

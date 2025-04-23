@@ -199,7 +199,7 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 						part = od.CutPart(overAmt, 0)
 					}
 					closeAmt := part.HoldAmount()
-					err = part.LocalExit(core.ExitTagNoMatch, 0, "", "")
+					err = part.LocalExit(0, core.ExitTagNoMatch, 0, "", "")
 					if err != nil {
 						log.Error("force exit order fail", zap.String("key", part.Key()), zap.Error(err))
 						continue
@@ -406,7 +406,7 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[strin
 		if isFarEnter(od) {
 			ormo.AddTriggerOd(o.Account, od)
 		} else {
-			err = od.LocalExit(core.ExitTagForceExit, od.InitPrice, "Restart and cancel orders that haven't been filled", "")
+			err = od.LocalExit(0, core.ExitTagForceExit, od.InitPrice, "Restart and cancel orders that haven't been filled", "")
 			strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 			return err
 		}
@@ -519,7 +519,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 					// Not submitted to the exchange yet, cancel directly
 					// 尚未提交到交易所，直接取消
 					msg := "Cancel unsubmitted orders"
-					err = iod.LocalExit(core.ExitTagCancel, iod.Enter.Price, msg, "")
+					err = iod.LocalExit(0, core.ExitTagCancel, iod.Enter.Price, msg, "")
 					strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 					if err != nil {
 						return openOds, err
@@ -532,7 +532,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				// TODO: 这里计算的quote价值，后续需要改为法币价值
 				if iod.Status < ormo.InOutStatusFullExit {
 					msg := "The order has no corresponding position"
-					err = iod.LocalExit(core.ExitTagFatalErr, iod.InitPrice, msg, "")
+					err = iod.LocalExit(0, core.ExitTagFatalErr, iod.InitPrice, msg, "")
 					strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 					if err != nil {
 						return openOds, err
@@ -553,7 +553,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			}
 			if posAmt < odAmt*-0.01 {
 				msg := fmt.Sprintf("The order has no corresponding position in the exchange: %.5f", posAmt+odAmt)
-				err = iod.LocalExit(core.ExitTagFatalErr, iod.InitPrice, msg, "")
+				err = iod.LocalExit(0, core.ExitTagFatalErr, iod.InitPrice, msg, "")
 				strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 				if err != nil {
 					return openOds, err
@@ -792,7 +792,7 @@ Try to close a position, used to update the closing status of the robot's order 
 func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, odTime int64, orderID, odType,
 	feeName string, feeCost float64) (float64, float64, *ormo.InOutOrder) {
 	if iod.Enter.Filled == 0 {
-		err := iod.LocalExit(core.ExitTagForceExit, iod.InitPrice, "not entered", "")
+		err := iod.LocalExit(0, core.ExitTagForceExit, iod.InitPrice, "not entered", "")
 		strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 		if err != nil {
 			log.Error("local exit no enter order fail", zap.String("key", iod.Key()), zap.Error(err))
@@ -1216,9 +1216,9 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 		// Exit order. This is mostly caused by stop loss or take profit. No exit sub-order has been created yet.
 		// 退出订单，这里多半是止损止盈导致的退出，尚未创建退出子订单
 		if isStopLoss {
-			od.SetExit(core.ExitTagStopLoss, banexg.OdTypeMarket, 0)
+			od.SetExit(0, core.ExitTagStopLoss, banexg.OdTypeMarket, 0)
 		} else if isTakeProfit {
-			od.SetExit(core.ExitTagTakeProfit, banexg.OdTypeTakeProfit, 0)
+			od.SetExit(0, core.ExitTagTakeProfit, banexg.OdTypeTakeProfit, 0)
 		} else {
 			// TODO: 检查是否是用户主动平仓，用户可能一次性平仓多个，需要更新相关订单状态
 			log.Error(fmt.Sprintf("%s subOd %s nil, trade state: %s", od.Key(), dirtTag, trade.State))
@@ -1337,7 +1337,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 					return nil
 				} else {
 					msg := err.Short()
-					err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg, "")
+					err = od.LocalExit(0, core.ExitTagFatalErr, od.InitPrice, msg, "")
 					strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 					if err != nil {
 						log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
@@ -1362,7 +1362,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 	if err != nil {
 		msg := "submit order fail, local exit"
 		log.Error(msg, zap.String("key", odKey), zap.Error(err))
-		err = od.LocalExit(core.ExitTagFatalErr, od.InitPrice, msg, "")
+		err = od.LocalExit(0, core.ExitTagFatalErr, od.InitPrice, msg, "")
 		strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 		if err != nil {
 			log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
@@ -1396,7 +1396,7 @@ func (o *LiveOrderMgr) tryExitPendingEnter(od *ormo.InOutOrder) *errs.Error {
 			od.Enter.Status = ormo.OdStatusClosed
 			od.DirtyEnter = true
 		}
-		od.SetExit(core.ExitTagForceExit, "", od.Enter.Price)
+		od.SetExit(0, core.ExitTagForceExit, "", od.Enter.Price)
 		od.Exit.Status = ormo.OdStatusClosed
 		od.DirtyMain = true
 		od.DirtyExit = true
@@ -1970,7 +1970,7 @@ func cancelTimeoutEnter(odMgr *LiveOrderMgr, od *ormo.InOutOrder) {
 	if od.Enter.Filled == 0 {
 		// Not yet filled, exit directly
 		// 尚未入场，直接退出
-		err := od.LocalExit(core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars", "")
+		err := od.LocalExit(0, core.ExitTagForceExit, od.InitPrice, "reach StopEnterBars", "")
 		strat.FireOdChange(odMgr.Account, od, strat.OdChgExitFill)
 		if err != nil {
 			log.Error("local exit for StopEnterBars fail", zap.String("key", od.Key()), zap.Error(err))
@@ -2092,7 +2092,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
 			if tg.Tag != "" {
 				exitTag = tg.Tag
 			}
-			od.SetExit(exitTag, banexg.OdTypeMarket, 0)
+			od.SetExit(0, exitTag, banexg.OdTypeMarket, 0)
 			err = o.execOrderExit(od)
 			if err != nil {
 				log.Error("exit order by trigger fail", zap.String("key", od.Key()), zap.Error(err))
