@@ -12,7 +12,7 @@ var (
 	RunMode       string                               // live / backtest / other
 	RunEnv        string                               // prod / test / dry_run
 	StartAt       int64                                // start timestamp(13 digits) 启动时间，13位时间戳
-	EnvReal       bool                                 // Whether to actually submit the order to the exchange(run_env:prod/test) 是否是提交到交易所真实订单模式run_env:prod/test
+	EnvReal       bool                                 // LiveMode && RunEnv != RunEnvDryRun submit the order to the exchange(run_env:prod/test) 提交订单到交易所run_env:prod/test
 	LiveMode      bool                                 // Whether real-time mode(real trade/dry run) 是否是实时模式：实盘+模拟运行
 	BackTestMode  bool                                 // 回测模式
 	TFSecs        map[string]int                       // All time frames involved 所有涉及的时间周期
@@ -43,7 +43,7 @@ var (
 	MemProfile bool
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "v0.2.14-beta.1"
+	Version   = "v0.2.14-beta.2"
 	UIVersion = "v0.2.12"
 	SysLang   string // language code for current system 当前系统语言设置
 	LogFile   string
