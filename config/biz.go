@@ -390,7 +390,7 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 }
 
 func ApplyPairPolicy(pairs []string, policies []*RunPolicyConfig) {
-	staticPairs, fixPairs := initPolicies(policies)
+	staticPairs, fixPairs := SetRunPolicy(true, policies...)
 	if len(pairs) > 0 {
 		staticPairs = true
 		fixPairs = append(fixPairs, pairs...)
@@ -401,13 +401,17 @@ func ApplyPairPolicy(pairs []string, policies []*RunPolicyConfig) {
 	Pairs, _ = utils2.UniqueItems(pairs)
 }
 
-func initPolicies(policyList []*RunPolicyConfig) (bool, []string) {
-	if policyList == nil {
-		policyList = make([]*RunPolicyConfig, 0)
+// SetRunPolicy set run_policy and their indexs
+func SetRunPolicy(index bool, items ...*RunPolicyConfig) (bool, []string) {
+	if items == nil {
+		items = make([]*RunPolicyConfig, 0)
 	}
 	var polPairs []string
 	staticPairs := true
-	for _, pol := range policyList {
+	for i, pol := range items {
+		if index {
+			pol.Index = i
+		}
 		if pol.Params == nil {
 			pol.Params = make(map[string]float64)
 		}
@@ -421,7 +425,7 @@ func initPolicies(policyList []*RunPolicyConfig) (bool, []string) {
 			staticPairs = false
 		}
 	}
-	RunPolicy = policyList
+	RunPolicy = items
 	return staticPairs, polPairs
 }
 

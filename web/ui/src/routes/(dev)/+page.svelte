@@ -4,14 +4,14 @@
   import {getLocale, localizeHref} from "$lib/paraglide/runtime";
   import {onMount} from "svelte";
   import {getApi} from "$lib/netio";
-  import {redirect} from "@sveltejs/kit";
+  import {goto} from "$app/navigation";
 
   let showQRCode = $state(false)
 
   onMount(() => {
     // /ping可访问表示处于实时模式，跳转到DashBoard
     getApi('/ping').then(rsp => {
-      redirect(302, localizeHref('/dash'))
+      goto(localizeHref('/dash'))
     })
   })
 </script>

@@ -480,7 +480,7 @@ func relayUnFinishOrders(pairTfScores map[string]map[string]float64, forbidJobs 
 		lite := NewBackTestLite(true, nil, nil, nil)
 		// set policy to run
 		// 重新加载策略任务
-		config.RunPolicy = gp.Policies
+		config.SetRunPolicy(false, gp.Policies...)
 		warms, _, err := strat.LoadStratJobs(core.Pairs, pairTfScores)
 		if err != nil {
 			return err

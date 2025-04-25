@@ -140,7 +140,7 @@ func RunRollBTPicker(args *config.CmdArgs) *errs.Error {
 				t.curMs += t.runMSecs
 				continue
 			}
-			config.RunPolicy = polList
+			config.SetRunPolicy(true, polList...)
 			core.BotRunning = true
 			t.dateRange.StartMS = t.curMs
 			t.dateRange.EndMS = t.curMs + t.runMSecs
@@ -225,7 +225,7 @@ Update strategy group parameters using EMA to avoid significant differences in p
 */
 func applyOptPolicies(olds, pols []*config.RunPolicyConfig, alpha float64) {
 	if alpha >= 1 {
-		config.RunPolicy = pols
+		config.SetRunPolicy(true, pols...)
 		return
 	}
 	var data = make(map[string]*config.RunPolicyConfig)
@@ -250,7 +250,7 @@ func applyOptPolicies(olds, pols []*config.RunPolicyConfig, alpha float64) {
 			res = append(res, item)
 		}
 	}
-	config.RunPolicy = res
+	config.SetRunPolicy(true, res...)
 }
 
 func RunOptimize(args *config.CmdArgs) *errs.Error {
@@ -494,7 +494,7 @@ func optForGroup(pol *config.RunPolicyConfig, method, picker string, rounds int,
 	if minScore > 0 && maxScore > 0 {
 		// 检查组合的是否优于long/short/both
 		flog.WriteString("\n========== union long/short ============\n")
-		config.RunPolicy = []*config.RunPolicyConfig{long, short}
+		config.SetRunPolicy(true, long, short)
 		bt, loss := runBTOnce()
 		line := fmt.Sprintf("loss: %5.2f \t%v\n", loss, bt.BriefLine())
 		flog.WriteString(line)
@@ -511,7 +511,7 @@ func optForGroup(pol *config.RunPolicyConfig, method, picker string, rounds int,
 	if minScore < 0 || maxScore > minScore*5 {
 		// The long and short returns are seriously unbalanced, the parameters with high fixed returns remain unchanged, and the parameters with low returns are fine-tuned to find the best score of the combination
 		// 多空收益严重不均衡，固定收益高的参数不变，微调收益低的参数，寻找组合最佳分数
-		config.RunPolicy = []*config.RunPolicyConfig{long, short}
+		config.SetRunPolicy(true, long, short)
 		var unionScore float64
 		if long.Score > short.Score {
 			optForPol(short, method, picker, rounds, flog)
