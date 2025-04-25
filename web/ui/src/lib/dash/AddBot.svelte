@@ -28,7 +28,7 @@
 
   function validateUrl(value: string): string | null {
     if (!value) return m.this_is_required();
-    if (!/^(https?:\/\/)?\S+/.test(value)) return m.not_url();
+    if (!/^(https?:\/\/)\S+/.test(value)) return m.not_url();
     return null;
   }
 

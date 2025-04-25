@@ -150,6 +150,7 @@ type RunPolicyConfig struct {
 	PairParams    map[string]map[string]float64 `yaml:"pair_params,omitempty" mapstructure:"pair_params"`
 	defs          map[string]*core.Param
 	Score         float64
+	Index         int // index in run_policy array
 }
 
 type StratPerfConfig struct {

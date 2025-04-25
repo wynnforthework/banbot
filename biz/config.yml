@@ -118,7 +118,7 @@ webhook:
   exception:
     content: '{name}: {status}'
 api_server:
-  enabled: false
+  enable: false
   bind_ip: 127.0.0.1
   port: 8001
   jwt_secret_key: '123456789'

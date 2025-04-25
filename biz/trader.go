@@ -128,7 +128,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 		if !barExpired {
 			isBatch = job.Strat.BatchInOut && job.Strat.OnBatchJobs != nil
 			if isBatch {
-				AddBatchJob(account, bar.TimeFrame, job, false)
+				AddBatchJob(account, bar.TimeFrame, job, nil)
 			} else {
 				enters = append(enters, job.Entrys...)
 			}
@@ -151,7 +151,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 		job.IsWarmUp = bar.IsWarmUp
 		job.Strat.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
 		if job.Strat.BatchInfo && job.Strat.OnBatchInfos != nil {
-			AddBatchJob(account, bar.TimeFrame, job, true)
+			AddBatchJob(account, bar.TimeFrame, job, env)
 		}
 	}
 	// 处理订单

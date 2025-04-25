@@ -193,14 +193,14 @@ Even if the job has no entry tasks, this method should be called to postpone the
 添加批量入场任务。
 即使job没有入场任务，也应该调用此方法，用于推迟入场时间TFEnterMS
 */
-func AddBatchJob(account, tf string, job *strat.StratJob, isInfo bool) {
+func AddBatchJob(account, tf string, job *strat.StratJob, infoEnv *ta.BarEnv) {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
 	key := fmt.Sprintf("%s_%s_%s", tf, account, job.Strat.Name)
 	tasks, ok := strat.BatchTasks[key]
 	if !ok {
 		tasks = &strat.BatchMap{
-			Map:     make(map[string]*strat.BatchTask),
+			Map:     make(map[string]*strat.JobEnv),
 			TFMSecs: int64(utils2.TFToSecs(tf) * 1000),
 		}
 		strat.BatchTasks[key] = tasks
@@ -208,11 +208,7 @@ func AddBatchJob(account, tf string, job *strat.StratJob, isInfo bool) {
 	// Delay 3s to wait for execution
 	// 推迟3s等待执行
 	tasks.ExecMS = btime.TimeMS() + core.DelayBatchMS
-	var batchType = strat.BatchTypeInOut
-	if isInfo {
-		batchType = strat.BatchTypeInfo
-	}
-	tasks.Map[job.Symbol.Symbol] = &strat.BatchTask{Job: job, Type: batchType}
+	tasks.Map[job.Symbol.Symbol] = &strat.JobEnv{Job: job, Env: infoEnv}
 }
 
 func TryFireBatches(currMS int64) int {
@@ -241,38 +237,40 @@ func TryFireBatches(currMS int64) int {
 			}
 			continue
 		}
-		var enterJobs []*strat.StratJob
-		var infoJobs = make(map[string]*strat.StratJob)
+		var mainJobs []*strat.StratJob
+		var infoJobs = make(map[string]*strat.JobEnv)
 		var stgy *strat.TradeStrat
 		for pair, task := range tasks.Map {
 			stgy = task.Job.Strat
-			if task.Type == strat.BatchTypeInOut {
-				enterJobs = append(enterJobs, task.Job)
-			} else if task.Type == strat.BatchTypeInfo {
-				infoJobs[pair] = task.Job
+			if task.Env == nil {
+				mainJobs = append(mainJobs, task.Job)
 			} else {
-				panic(fmt.Sprintf("unsupport BatchType: %v", task.Type))
+				infoJobs[pair] = task
 			}
 		}
-		account := strings.Split(key, "_")[1]
+		arr := strings.Split(key, "_")
+		timeframe, account := arr[0], arr[1]
 		openOds, lock := ormo.GetOpenODs(account)
 		lock.Lock()
 		allOrders := utils.ValsOfMap(openOds)
 		lock.Unlock()
 		delete(strat.BatchTasks, key)
-		if len(enterJobs) > 0 {
+		for _, job := range mainJobs {
+			job.InitBar(allOrders)
+		}
+		if len(infoJobs) > 0 {
+			stgy.OnBatchInfos(timeframe, infoJobs)
+		}
+		if len(mainJobs) > 0 {
 			// Check all batch tasks at this time and decide which ones to enter or exit
 			// 检查此时间所有批量任务，决定哪些入场或那些出场
-			for _, job := range enterJobs {
-				job.InitBar(allOrders)
-			}
-			stgy.OnBatchJobs(enterJobs)
+			stgy.OnBatchJobs(mainJobs)
 			// Perform entry/exit tasks
 			// 执行入场/出场任务
 			odMgr := GetOdMgr(account)
 			var ents []*ormo.InOutOrder
 			var exits []*ormo.InOutOrder
-			for _, job := range enterJobs {
+			for _, job := range mainJobs {
 				if len(job.Entrys) == 0 && len(job.Exits) == 0 {
 					continue
 				}
@@ -289,9 +287,6 @@ func TryFireBatches(currMS int64) int {
 					log.Error("process orders fail", zap.Error(err))
 				}
 			}
-		}
-		if len(infoJobs) > 0 {
-			stgy.OnBatchInfos(infoJobs)
 		}
 	}
 	return waitNum

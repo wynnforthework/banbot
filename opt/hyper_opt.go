@@ -858,8 +858,8 @@ func collectOptLog(paths []string, minScore float64, picker, pairSel string) (st
 						inUnion = false
 						if needRun {
 							config.RunPolicy = []*config.RunPolicyConfig{
-								long.ToPol(name, dirt, tfStr, pair),
-								short.ToPol(name, dirt, tfStr, pair),
+								long.ToPol(0, name, dirt, tfStr, pair),
+								short.ToPol(1, name, dirt, tfStr, pair),
 							}
 						}
 					} else if dirt == "long" {
@@ -867,15 +867,15 @@ func collectOptLog(paths []string, minScore float64, picker, pairSel string) (st
 							long = best
 							if needRun {
 								config.RunPolicy = []*config.RunPolicyConfig{
-									long.ToPol(name, dirt, tfStr, pair),
+									long.ToPol(0, name, dirt, tfStr, pair),
 								}
 							}
 						} else {
 							shortMain = best
 							if needRun {
 								config.RunPolicy = []*config.RunPolicyConfig{
-									short.ToPol(name, dirt, tfStr, pair),
-									shortMain.ToPol(name, dirt, tfStr, pair),
+									short.ToPol(0, name, dirt, tfStr, pair),
+									shortMain.ToPol(1, name, dirt, tfStr, pair),
 								}
 							}
 						}
@@ -884,20 +884,20 @@ func collectOptLog(paths []string, minScore float64, picker, pairSel string) (st
 							short = best
 							if needRun {
 								config.RunPolicy = []*config.RunPolicyConfig{
-									short.ToPol(name, dirt, tfStr, pair)}
+									short.ToPol(0, name, dirt, tfStr, pair)}
 							}
 						} else {
 							longMain = best
 							if needRun {
 								config.RunPolicy = []*config.RunPolicyConfig{
-									long.ToPol(name, dirt, tfStr, pair),
-									longMain.ToPol(name, dirt, tfStr, pair)}
+									long.ToPol(0, name, dirt, tfStr, pair),
+									longMain.ToPol(1, name, dirt, tfStr, pair)}
 							}
 						}
 					} else {
 						both = best
 						if needRun {
-							config.RunPolicy = []*config.RunPolicyConfig{both.ToPol(name, dirt, tfStr, pair)}
+							config.RunPolicy = []*config.RunPolicyConfig{both.ToPol(0, name, dirt, tfStr, pair)}
 						}
 					}
 					var dumpPath string

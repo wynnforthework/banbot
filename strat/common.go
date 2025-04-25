@@ -566,9 +566,9 @@ func (w Warms) Update(pair, tf string, num int) {
 /*
 JobForbidType 0 allow; 1 forbid; 2 forbid & occupy a slot
 */
-func JobForbidType(pair, tf, stratName string) int {
+func JobForbidType(pair, tf, stratID string) int {
 	if jobs, ok := ForbidJobs[fmt.Sprintf("%s_%s", pair, tf)]; ok {
-		hold, ok2 := jobs[stratName]
+		hold, ok2 := jobs[stratID]
 		if ok2 {
 			if hold {
 				return 2

@@ -40,7 +40,7 @@ type TradeStrat struct {
 	OnInfoBar           func(s *StratJob, e *ta.BarEnv, pair, tf string)    // Other dependent bar data 其他依赖的bar数据
 	OnTrades            func(s *StratJob, trades []*banexg.Trade)           // Transaction by transaction data 逐笔交易数据
 	OnBatchJobs         func(jobs []*StratJob)                              // All target jobs at the current time, used for bulk opening/closing of orders 当前时间所有标的job，用于批量开单/平仓
-	OnBatchInfos        func(jobs map[string]*StratJob)                     // All info marked jobs at the current time, used for batch processing 当前时间所有info标的job，用于批量处理
+	OnBatchInfos        func(tf string, jobs map[string]*JobEnv)            // All info marked jobs at the current time, used for batch processing 当前时间所有info标的job，用于批量处理
 	OnCheckExit         func(s *StratJob, od *ormo.InOutOrder) *ExitReq     // Custom order exit logic 自定义订单退出逻辑
 	OnOrderChange       func(s *StratJob, od *ormo.InOutOrder, chgType int) // Order update callback 订单更新回调
 	GetDrawDownExitRate CalcDDExitRate                                      // Calculate the ratio of tracking profit taking, drawdown, and exit 计算跟踪止盈回撤退出的比率
@@ -56,14 +56,9 @@ const (
 	OdChgExitFill         // Order exit completed 订单退出完成
 )
 
-const (
-	BatchTypeInOut = iota
-	BatchTypeInfo
-)
-
-type BatchTask struct {
-	Job  *StratJob
-	Type int
+type JobEnv struct {
+	Job *StratJob
+	Env *ta.BarEnv
 }
 
 /*
@@ -72,7 +67,7 @@ Batch execution task pool for all targets in the current exchange market time cy
 当前交易所-市场-时间周期下，所有标的的批量执行任务池
 */
 type BatchMap struct {
-	Map     map[string]*BatchTask
+	Map     map[string]*JobEnv
 	TFMSecs int64
 	ExecMS  int64 // The timestamp for executing batch tasks is delayed by a few seconds upon receiving a new target; Delay exceeded and BatchMS did not receive, start execution 执行批量任务的时间戳，每收到新的标的，推迟几秒；超过DelayBatchMS未收到，开始执行
 }

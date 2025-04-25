@@ -321,18 +321,18 @@ func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 	return env
 }
 
-func markStratJob(tf, stgName string, exs *orm.ExSymbol, dirt int, accLimits accStratLimits) *errs.Error {
+func markStratJob(tf, polID string, exs *orm.ExSymbol, dirt int, accLimits accStratLimits) *errs.Error {
 	envKey := strings.Join([]string{exs.Symbol, tf}, "_")
 	for acc, jobs := range AccJobs {
 		envJobs, ok := jobs[envKey]
 		if !ok {
 			return errs.NewMsg(errs.CodeRunTime, "`envKey` for StratJob not found: %s", envKey)
 		}
-		job, ok := envJobs[stgName]
+		job, ok := envJobs[polID]
 		if !ok {
-			return errs.NewMsg(errs.CodeRunTime, "`name` for StratJob not found: %s %s", stgName, envKey)
+			return errs.NewMsg(errs.CodeRunTime, "`name` for StratJob not found: %s %s", polID, envKey)
 		}
-		if accLimits.tryAdd(acc, stgName) {
+		if accLimits.tryAdd(acc, polID) {
 			job.MaxOpenShort = job.Strat.EachMaxShort
 			job.MaxOpenLong = job.Strat.EachMaxLong
 			if dirt == core.OdDirtShort {

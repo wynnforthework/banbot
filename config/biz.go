@@ -756,23 +756,23 @@ func DumpYaml(desensitize bool) ([]byte, *errs.Error) {
 	return data, nil
 }
 
+// ID return name_index
 func (c *RunPolicyConfig) ID() string {
-	if c.Dirt == "" {
-		return c.Name
-	}
-	if c.Dirt == "long" {
-		return c.Name + ":l"
-	} else if c.Dirt == "short" {
-		return c.Name + ":s"
-	} else {
-		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
-	}
+	return fmt.Sprintf("%s_%d", c.Name, c.Index)
 }
 
 func (c *RunPolicyConfig) Key() string {
+	name := c.Name
+	if c.Dirt == "long" {
+		name += ":l"
+	} else if c.Dirt == "short" {
+		name += ":s"
+	} else {
+		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
+	}
 	tfStr := strings.Join(c.RunTimeframes, "|")
 	pairStr := strings.Join(c.Pairs, "|")
-	return fmt.Sprintf("%s/%s/%s", c.ID(), tfStr, pairStr)
+	return fmt.Sprintf("%s/%s/%s", name, tfStr, pairStr)
 }
 
 func (c *RunPolicyConfig) OdDirt() int {
@@ -889,6 +889,7 @@ func (c *RunPolicyConfig) ToYaml() string {
 
 func (c *RunPolicyConfig) Clone() *RunPolicyConfig {
 	res := &RunPolicyConfig{
+		Index:         c.Index,
 		Name:          c.Name,
 		Filters:       c.Filters,
 		RunTimeframes: c.RunTimeframes,
