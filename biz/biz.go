@@ -208,7 +208,11 @@ func AddBatchJob(account, tf string, job *strat.StratJob, infoEnv *ta.BarEnv) {
 	// Delay 3s to wait for execution
 	// 推迟3s等待执行
 	tasks.ExecMS = btime.TimeMS() + core.DelayBatchMS
-	tasks.Map[job.Symbol.Symbol] = &strat.JobEnv{Job: job, Env: infoEnv}
+	var pair = job.Symbol.Symbol
+	if infoEnv != nil {
+		pair = infoEnv.Symbol
+	}
+	tasks.Map[pair] = &strat.JobEnv{Job: job, Env: infoEnv}
 }
 
 func TryFireBatches(currMS int64) int {
