@@ -39,6 +39,7 @@ const (
 	OdInfoStopAfter  = "StopAfter"
 	OdInfoStopLoss   = "StopLoss"
 	OdInfoTakeProfit = "TakeProfit"
+	OdInfoClientID   = "ClientID"
 )
 
 const (

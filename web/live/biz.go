@@ -703,7 +703,7 @@ func getTaskPairs(c *fiber.Ctx) error {
 }
 
 func getExsMap(c *fiber.Ctx) error {
-	exsMap := orm.GetExSymbols(core.ExgName, core.Market)
+	exsMap := orm.GetExSymbolMap(core.ExgName, core.Market)
 	return c.JSON(fiber.Map{
 		"data": exsMap,
 	})

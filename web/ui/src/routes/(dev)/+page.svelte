@@ -11,7 +11,9 @@
   onMount(() => {
     // /ping可访问表示处于实时模式，跳转到DashBoard
     getApi('/ping').then(rsp => {
-      goto(localizeHref('/dash'))
+      if (rsp.code == 200){
+        goto(localizeHref('/dash'))
+      }
     })
   })
 </script>

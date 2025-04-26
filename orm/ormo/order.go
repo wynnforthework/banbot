@@ -661,10 +661,11 @@ Generate the exchange's ClientOrderId
 生成交易所的ClientOrderId
 */
 func (i *InOutOrder) ClientId(random bool) string {
+	client := i.GetInfoString(OdInfoClientID)
 	if random {
-		return fmt.Sprintf("%s_%v_%v", config.Name, i.ID, rand.Intn(1000))
+		return fmt.Sprintf("%s_%v_%v_%v", config.Name, i.ID, rand.Intn(1000), client)
 	}
-	return fmt.Sprintf("%s_%v", config.Name, i.ID)
+	return fmt.Sprintf("%s_%v_%v", config.Name, i.ID, client)
 }
 
 type InOutSnap struct {

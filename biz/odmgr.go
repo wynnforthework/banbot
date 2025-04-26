@@ -416,6 +416,9 @@ func (o *OrderMgr) EnterOrder(sess *ormo.Queries, env *banta.BarEnv, req *strat.
 			Tag:   req.TakeProfitTag,
 		})
 	}
+	if req.ClientID != "" {
+		od.SetInfo(ormo.OdInfoClientID, req.ClientID)
+	}
 	err := od.Save(sess)
 	if err != nil {
 		return od, err
