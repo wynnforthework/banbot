@@ -209,10 +209,12 @@ func AddBatchJob(account, tf string, job *strat.StratJob, infoEnv *ta.BarEnv) {
 	// 推迟3s等待执行
 	tasks.ExecMS = btime.TimeMS() + core.DelayBatchMS
 	var pair = job.Symbol.Symbol
+	var pairKey = pair + "_main"
 	if infoEnv != nil {
 		pair = infoEnv.Symbol
+		pairKey = pair + "_info"
 	}
-	tasks.Map[pair] = &strat.JobEnv{Job: job, Env: infoEnv}
+	tasks.Map[pairKey] = &strat.JobEnv{Job: job, Env: infoEnv, Symbol: pair}
 }
 
 func TryFireBatches(currMS int64) int {
@@ -244,12 +246,12 @@ func TryFireBatches(currMS int64) int {
 		var mainJobs []*strat.StratJob
 		var infoJobs = make(map[string]*strat.JobEnv)
 		var stgy *strat.TradeStrat
-		for pair, task := range tasks.Map {
+		for _, task := range tasks.Map {
 			stgy = task.Job.Strat
 			if task.Env == nil {
 				mainJobs = append(mainJobs, task.Job)
 			} else {
-				infoJobs[pair] = task
+				infoJobs[task.Symbol] = task
 			}
 		}
 		arr := strings.Split(key, "_")

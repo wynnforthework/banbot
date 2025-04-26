@@ -57,8 +57,9 @@ const (
 )
 
 type JobEnv struct {
-	Job *StratJob
-	Env *ta.BarEnv
+	Job    *StratJob
+	Env    *ta.BarEnv
+	Symbol string
 }
 
 /*
