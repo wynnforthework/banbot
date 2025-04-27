@@ -767,12 +767,11 @@ func (c *RunPolicyConfig) ID() string {
 
 func (c *RunPolicyConfig) Key() string {
 	name := c.Name
-	if c.Dirt == "long" {
+	dirt := c.OdDirt()
+	if dirt == core.OdDirtLong {
 		name += ":l"
-	} else if c.Dirt == "short" {
+	} else if dirt == core.OdDirtShort {
 		name += ":s"
-	} else {
-		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
 	}
 	tfStr := strings.Join(c.RunTimeframes, "|")
 	pairStr := strings.Join(c.Pairs, "|")
@@ -781,12 +780,14 @@ func (c *RunPolicyConfig) Key() string {
 
 func (c *RunPolicyConfig) OdDirt() int {
 	dirt := core.OdDirtBoth
-	if c.Dirt == "long" {
+	text := strings.TrimSpace(c.Dirt)
+	c.Dirt = text
+	if text == "long" {
 		dirt = core.OdDirtLong
-	} else if c.Dirt == "short" {
+	} else if text == "short" {
 		dirt = core.OdDirtShort
-	} else if c.Dirt != "" {
-		panic(fmt.Sprintf("unknown run_policy dirt: %v", c.Dirt))
+	} else if text != "" && text != "any" {
+		panic(fmt.Sprintf("unknown run_policy dirt: %v", text))
 	}
 	return dirt
 }
