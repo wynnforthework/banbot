@@ -383,7 +383,7 @@ func (f *KlineFeeder) WarmTfs(curMS int64, tfNums map[string]int, pBar *utils.Pr
 		}
 		maxEndMs = max(maxEndMs, curEnd)
 	}
-	if !hourDone {
+	if !hourDone && maxEndMs > 0 {
 		f.hour.SetSeek(utils2.AlignTfMSecs(maxEndMs, 3600000))
 	}
 	return maxEndMs, skips, nil
