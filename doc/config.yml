@@ -1,5 +1,5 @@
 name: local  # 机器人名称，用于在消息通知中区分不同机器人
-env: prod  # 运行环境，prod表示生产网络，test表示测试网络（币安测试网），dry_run表示模拟
+env: prod  # 运行环境，prod表示生产网络，test表示测试网络，dry_run表示模拟实盘交易
 leverage: 2  # 杠杆倍数，仅期货合约市场有效
 limit_vol_secs: 5  # 按成交量取订单簿价格的过期时间，单位：秒，默认10
 put_limit_secs: 120  # 在此预期时间内能成交的限价单，才提交到交易所，单位：秒，默认120

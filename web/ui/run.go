@@ -104,7 +104,7 @@ func ServeStatic(app *fiber.App) error {
 			// 忽略根目录dist
 			name := f.Name
 			name = strings.TrimPrefix(name, "dist/")
-			if name == "" {
+			if name == "" || strings.Contains(name, "..") {
 				continue
 			}
 
