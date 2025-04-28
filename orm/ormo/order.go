@@ -1190,8 +1190,8 @@ Retrieve the specified task and the latest usage time period of the specified po
 */
 func (q *Queries) GetHistOrderTfs(taskId int64, stagy string) (map[string]string, *errs.Error) {
 	ctx := context.Background()
-	sql := fmt.Sprintf("select DISTINCT ON (symbol) symbol,timeframe from iorder where task_id=%v and strategy=? ORDER BY symbol, enter_at DESC", taskId)
-	rows, err_ := q.db.QueryContext(ctx, sql, stagy)
+	sqlStr := fmt.Sprintf("select DISTINCT symbol,timeframe from iorder where task_id=%v and strategy=? ORDER BY symbol, enter_at DESC", taskId)
+	rows, err_ := q.db.QueryContext(ctx, sqlStr, stagy)
 	if err_ != nil {
 		return nil, errs.New(core.ErrDbReadFail, err_)
 	}
