@@ -164,12 +164,15 @@ func NewPairSubs() *PairSubs {
 // GetNewSubs get pairs need to be subscribed
 func (s *PairSubs) GetNewSubs(pairs []string) []string {
 	if s.Status == 0 {
-		s.Status = 1
 		// 未订阅，返回全部品种
 		if len(pairs) > 0 {
 			s.Set(pairs...)
 		}
-		return s.Keys()
+		pairs = s.Keys()
+		if len(pairs) > 0 {
+			s.Status = 1
+		}
+		return pairs
 	} else {
 		// 正在订阅，返回新的尚未订阅品种
 		return s.Set(pairs...)
@@ -359,6 +362,9 @@ func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
 
 func (m *Miner) watchTrades(pairs []string) {
 	pairs = m.Trades.GetNewSubs(pairs)
+	if len(pairs) == 0 {
+		return
+	}
 	out, err := m.exchange.WatchTrades(pairs, nil)
 	if err != nil {
 		m.Trades.Status = 0
@@ -430,6 +436,9 @@ func (m *Miner) watchPrices() {
 
 func (m *Miner) watchOdBooks(pairs []string) {
 	pairs = m.Depths.GetNewSubs(pairs)
+	if len(pairs) == 0 {
+		return
+	}
 	out, err := m.exchange.WatchOrderBooks(pairs, 0, nil)
 	if err != nil {
 		m.Depths.Status = 0
@@ -475,6 +484,9 @@ type SubKLineState struct {
 */
 func (m *Miner) watchKLines(pairs []string) {
 	pairs = m.KLines.GetNewSubs(pairs)
+	if len(pairs) == 0 {
+		return
+	}
 	jobs := make([][2]string, 0, len(pairs))
 	timeFrame := "1s"
 	if banexg.IsContract(m.Market) {
