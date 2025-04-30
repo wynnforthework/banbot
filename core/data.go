@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"github.com/banbox/banexg/log"
 	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banexg"
@@ -38,6 +39,7 @@ var (
 	Cron          = cron.New(cron.WithSeconds())       // Use cron to run tasks regularly 使用cron定时运行任务
 
 	ExitCalls []func() // CALLBACK TO STOP EXECUTION 停止执行的回调
+	CapOut    *log.OutCapture
 
 	CPUProfile bool
 	MemProfile bool

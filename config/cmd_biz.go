@@ -3,13 +3,13 @@ package config
 import (
 	"flag"
 	"github.com/sasha-s/go-deadlock"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -58,15 +58,13 @@ func (a *CmdArgs) SetLog(showLog bool, handlers ...zapcore.Core) {
 	if a.LogLevel == "" {
 		logCfg.Level = "info"
 	}
-	if a.Logfile != "" {
-		logCfg.File = &log.FileLogConfig{
-			LogPath: a.Logfile,
-		}
+	logFile := a.Logfile
+	if logFile != "" {
+		core.SetLogCap(logFile)
 	}
 	log.SetupLogger(logCfg)
-	core.LogFile = a.Logfile
-	if showLog && a.Logfile != "" {
-		log.Info("Log To", zap.String("path", a.Logfile))
+	if showLog && core.LogFile != "" {
+		log.Info("Log To", zap.String("path", core.LogFile))
 	}
 }
 

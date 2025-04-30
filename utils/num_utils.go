@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"cmp"
 	"fmt"
 	"github.com/muesli/clusters"
 	"github.com/muesli/kmeans"
@@ -268,4 +269,31 @@ rate默认1，x偏移40时，衰减70%；rate>1时，衰减加速
 */
 func NearScore(x, mid, rate float64) float64 {
 	return math.Exp(-math.Abs(x-mid) * rate * 0.03)
+}
+
+type FltInt struct {
+	Flt float64
+	Idx int
+}
+
+// ArgSortDesc 返回float64切片降序排序后对应的原始索引
+func ArgSortDesc(values []float64) []int {
+	// 创建索引值对的切片
+	indexed := make([]*FltInt, len(values))
+	for i, v := range values {
+		indexed[i] = &FltInt{Flt: v, Idx: i}
+	}
+
+	// 对索引值对进行排序
+	slices.SortFunc(indexed, func(a, b *FltInt) int {
+		return -cmp.Compare(a.Flt, b.Flt)
+	})
+
+	// 提取排序后的索引
+	indices := make([]int, len(values))
+	for i, v := range indexed {
+		indices[i] = v.Idx
+	}
+
+	return indices
 }
