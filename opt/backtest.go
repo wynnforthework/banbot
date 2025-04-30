@@ -255,9 +255,10 @@ func (b *BackTest) Run() {
 
 func (b *BackTest) initTaskOut() *errs.Error {
 	if b.OutDir != "" {
-		config.Args.Logfile = b.OutDir + "/out.log"
-		if utils.Exists(config.Args.Logfile) {
-			err_ := os.Remove(config.Args.Logfile)
+		logFile := b.OutDir + "/out.log"
+		config.Args.Logfile = logFile
+		if utils.Exists(logFile) {
+			err_ := os.Remove(logFile)
 			if err_ != nil {
 				log.Warn("delete old log fail", zap.Error(err_))
 			}

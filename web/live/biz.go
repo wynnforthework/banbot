@@ -990,10 +990,10 @@ func getLog(c *fiber.Ctx) error {
 	if err_ := base.VerifyArg(c, args, base.ArgQuery); err_ != nil {
 		return err_
 	}
-	if config.Args.Logfile == "" {
+	if core.LogFile == "" {
 		return c.JSON(fiber.Map{"code": 400, "msg": "no log file"})
 	}
-	data, pos, err := utils.ReadFileTail(config.Args.Logfile, args.Limit, args.End)
+	data, pos, err := utils.ReadFileTail(core.LogFile, args.Limit, args.End)
 	if err != nil {
 		return err
 	}
