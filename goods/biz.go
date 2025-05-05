@@ -149,6 +149,11 @@ func RefreshPairList(alignStart bool) ([]string, *errs.Error) {
 		core.Pairs = append(core.Pairs, p)
 		core.PairsMap[p] = true
 	}
+	for _, p := range config.RunPolicy {
+		for _, pair := range p.Pairs {
+			core.PairsMap[pair] = true
+		}
+	}
 
 	for pair := range core.BanPairsUntil {
 		if _, ok := core.PairsMap[pair]; !ok {

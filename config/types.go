@@ -182,6 +182,7 @@ type APIServerConfig struct {
 type UserConfig struct {
 	Username    string            `yaml:"user,omitempty" mapstructure:"user"`           // 用户名
 	Password    string            `yaml:"pwd,omitempty" mapstructure:"pwd"`             // 密码
+	AllowIPs    []string          `yaml:"allow_ips" mapstructure:"allow_ips"`           // Allow access from specific IP addresses 允许从特定IP地址访问
 	AccRoles    map[string]string `yaml:"acc_roles,omitempty" mapstructure:"acc_roles"` // Role permissions for different accounts 对不同账户的角色权限
 	ExpireHours float64           `yaml:"exp_hours" mapstructure:"exp_hours"`           // Token expiration time, default 168 hours token过期时间，默认168小时
 }

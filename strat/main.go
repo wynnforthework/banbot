@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/goods"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
@@ -65,13 +66,9 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		if err != nil {
 			return nil, nil, err
 		}
-		var exsList []*orm.ExSymbol
-		for _, pair := range curPairs {
-			exs, err := orm.GetExSymbolCur(pair)
-			if err != nil {
-				return nil, nil, err
-			}
-			exsList = append(exsList, exs)
+		exsList, err := CallStratSymbols(stgy, curPairs, tfScores)
+		if err != nil {
+			return nil, nil, err
 		}
 		dirt := pol.OdDirt()
 		for _, exs := range exsList {
@@ -281,6 +278,62 @@ func ExitStratJobs() {
 			}
 		}
 	}
+}
+
+func CallStratSymbols(stgy *TradeStrat, curPairs []string, tfScores map[string]map[string]float64) ([]*orm.ExSymbol, *errs.Error) {
+	var exsMap = make(map[string]*orm.ExSymbol)
+	for _, pair := range curPairs {
+		exs, err := orm.GetExSymbolCur(pair)
+		if err != nil {
+			return nil, err
+		}
+		exsMap[pair] = exs
+	}
+	if stgy.OnSymbols == nil {
+		return utils2.ValsOfMap(exsMap), nil
+	}
+	adds, removes := stgy.OnSymbols(curPairs)
+	if len(adds) > 0 || len(removes) > 0 {
+		log.Info("strategy change symbols", zap.String("strat", stgy.Name),
+			zap.Int("add", len(adds)), zap.Int("remove", len(removes)))
+		if len(adds) > 0 {
+			newPairs := make([]string, 0, len(adds))
+			for _, pair := range adds {
+				if _, ok := exsMap[pair]; !ok {
+					exs, err := orm.GetExSymbolCur(pair)
+					if err != nil {
+						return nil, err
+					}
+					exsMap[pair] = exs
+					if _, ok = tfScores[pair]; !ok {
+						newPairs = append(newPairs, pair)
+						if _, ok = core.PairsMap[pair]; !ok {
+							core.PairsMap[pair] = true
+							core.Pairs = append(core.Pairs, pair)
+						}
+					}
+				}
+			}
+			if len(newPairs) > 0 {
+				pairTfScores, err := CalcPairTfScores(exg.Default, newPairs)
+				if err != nil {
+					log.Error("CalcPairTfScores fail", zap.Error(err))
+				} else {
+					for pair, scores := range pairTfScores {
+						tfScores[pair] = scores
+					}
+				}
+			}
+		}
+		if len(removes) > 0 {
+			for _, it := range removes {
+				if _, ok := exsMap[it]; ok {
+					delete(exsMap, it)
+				}
+			}
+		}
+	}
+	return utils2.ValsOfMap(exsMap), nil
 }
 
 func printFailTfScores(stratName string, pairTfScores map[string]map[string]float64) {

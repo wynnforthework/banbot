@@ -14,7 +14,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
-	"github.com/banbox/banta"
 	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"math"
@@ -77,6 +76,14 @@ func InitLiveOrderMgr(callBack func(od *ormo.InOutOrder, isEnter bool)) {
 			accOdMgrs[account] = odMgr
 		} else {
 			mgr.callBack = callBack
+		}
+	}
+	if ormo.OdEditListener == nil {
+		ormo.OdEditListener = func(od *ormo.InOutOrder, action string) {
+			odMgr := GetOdMgr(ormo.GetTaskAcc(od.TaskID))
+			if odMgr != nil {
+				odMgr.EditOrder(od, action)
+			}
 		}
 	}
 }
@@ -864,25 +871,24 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 	return filled, feeCost, part
 }
 
-func (o *LiveOrderMgr) ProcessOrders(sess *ormo.Queries, env *banta.BarEnv, enters []*strat.EnterReq,
-	exits []*strat.ExitReq, edits []*ormo.InOutEdit) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
-	log.Info("Process Strategy Signals", zap.String("pair", env.Symbol),
-		zap.Any("enters", enters), zap.Any("exits", exits))
-	ents, extOrders, err := o.OrderMgr.ProcessOrders(sess, env, enters, exits)
-	if err != nil {
-		return ents, extOrders, err
+func (o *LiveOrderMgr) ProcessOrders(sess *ormo.Queries, job *strat.StratJob) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
+	if len(job.Entrys) == 0 && len(job.Exits) == 0 {
+		return nil, nil, nil
 	}
-	for _, edit := range edits {
-		if edit.Action == ormo.OdActionLimitEnter && isFarEnter(edit.Order) {
-			ormo.AddTriggerOd(o.Account, edit.Order)
-			continue
-		}
+	log.Info("ProcessOrders", zap.String("acc", o.Account), zap.String("pair", job.Symbol.Symbol),
+		zap.Any("enters", job.Entrys), zap.Any("exits", job.Exits))
+	return o.OrderMgr.ProcessOrders(sess, job)
+}
+
+func (o *LiveOrderMgr) EditOrder(od *ormo.InOutOrder, action string) {
+	if action == ormo.OdActionLimitEnter && isFarEnter(od) {
+		ormo.AddTriggerOd(o.Account, od)
+	} else {
 		o.queue <- &OdQItem{
-			Order:  edit.Order,
-			Action: edit.Action,
+			Order:  od,
+			Action: action,
 		}
 	}
-	return ents, extOrders, nil
 }
 
 func makeAfterEnter(o *LiveOrderMgr) FuncHandleIOrder {

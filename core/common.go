@@ -312,4 +312,9 @@ func SetLogCap(path string) {
 		CapOut.Start()
 		LogFile = path
 	}
+	ExitCalls = append(ExitCalls, func() {
+		if CapOut != nil {
+			CapOut.Stop()
+		}
+	})
 }

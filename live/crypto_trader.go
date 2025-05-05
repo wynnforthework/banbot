@@ -142,6 +142,7 @@ func (t *CryptoTrader) startJobs() {
 		// 监听账户订单流、处理用户下单、消费订单队列
 		biz.StartLiveOdMgr()
 	}
+	t.markUnWarm()
 	// Refresh trading pairs regularly
 	// 定期刷新交易对
 	CronRefreshPairs(t.dp)
@@ -166,6 +167,16 @@ func (t *CryptoTrader) startJobs() {
 		StartLoopBalancePositions()
 	}
 	core.Cron.Start()
+}
+
+func (t *CryptoTrader) markUnWarm() {
+	for _, accMap := range strat.AccJobs {
+		for _, jobMap := range accMap {
+			for _, job := range jobMap {
+				job.IsWarmUp = false
+			}
+		}
+	}
 }
 
 func exitCleanUp() {

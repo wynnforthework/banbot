@@ -467,6 +467,9 @@ func (i *InOutOrder) IsDirty() bool {
 }
 
 func (i *InOutOrder) Save(sess *Queries) *errs.Error {
+	if i.ID == 0 && core.SimOrderMatch {
+		core.NewNumInSim += 1
+	}
 	if core.LiveMode {
 		openOds, lock := GetOpenODs(GetTaskAcc(i.TaskID))
 		lock.Lock()
@@ -628,9 +631,17 @@ func (i *InOutOrder) SetExitTrigger(key string, args *ExitTrigger) {
 	} else {
 		rangeVal = math.Abs(i.InitPrice - args.Price)
 	}
+	var changed = true
+	if tg.ExitTrigger != nil {
+		old := tg.ExitTrigger
+		changed = old.Price != args.Price || old.Limit != args.Limit || old.Rate != args.Rate
+	}
 	tg.Range = rangeVal
 	tg.ExitTrigger = args
 	i.SetInfo(key, tg)
+	if changed {
+		fireOdEdit(i, key)
+	}
 }
 
 func (i *InOutOrder) SetStopLoss(args *ExitTrigger) {
@@ -668,34 +679,34 @@ func (i *InOutOrder) ClientId(random bool) string {
 	return fmt.Sprintf("%s_%v_%v", config.Name, i.ID, client)
 }
 
-type InOutSnap struct {
-	EnterLimit      float64
-	ExitLimit       float64
-	StopLoss        float64
-	TakeProfit      float64
-	StopLossLimit   float64
-	TakeProfitLimit float64
+// SetLimit set limit price for enter/exit
+func (i *InOutOrder) SetLimit(price float64, enter bool) *errs.Error {
+	if enter {
+		if i.Status < InOutStatusFullEnter && i.Enter != nil && i.Enter.Status < OdStatusClosed {
+			if i.Enter.Price == price {
+				return nil
+			}
+			i.Enter.Price = price
+			fireOdEdit(i, OdActionLimitEnter)
+		} else {
+			return errs.NewMsg(core.ErrRunTime, "cannot set price for entered order")
+		}
+	} else if i.Status > InOutStatusFullEnter && i.Exit != nil && i.Exit.Status < OdStatusClosed {
+		if i.Exit.Price == price {
+			return nil
+		}
+		i.Exit.Price = price
+		fireOdEdit(i, OdActionLimitExit)
+	} else {
+		return errs.NewMsg(core.ErrRunTime, "cannot set price for exited order")
+	}
+	return nil
 }
 
-func (i *InOutOrder) TakeSnap() *InOutSnap {
-	snap := &InOutSnap{}
-	if i.Status < InOutStatusFullEnter && i.Enter != nil && i.Enter.Status < OdStatusClosed {
-		snap.EnterLimit = i.Enter.Price
+func fireOdEdit(od *InOutOrder, action string) {
+	if OdEditListener != nil && core.EnvReal && od.Status > InOutStatusInit && od.ID > 0 {
+		OdEditListener(od, action)
 	}
-	if i.Status > InOutStatusFullEnter && i.Exit != nil && i.Exit.Status < OdStatusClosed {
-		snap.ExitLimit = i.Exit.Price
-	}
-	sl := i.GetStopLoss()
-	tp := i.GetTakeProfit()
-	if sl != nil {
-		snap.StopLoss = sl.Price
-		snap.StopLossLimit = sl.Limit
-	}
-	if tp != nil {
-		snap.TakeProfit = tp.Price
-		snap.TakeProfitLimit = tp.Limit
-	}
-	return snap
 }
 
 /*

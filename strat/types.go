@@ -12,6 +12,7 @@ import (
 type CalcDDExitRate func(s *StratJob, od *ormo.InOutOrder, maxChg float64) float64
 type PickTimeFrameFunc func(symbol string, tfScores []*core.TfScore) string
 type FnOdChange func(acc string, od *ormo.InOutOrder, evt int)
+type FnOnPostApi func(client *core.ApiClient, msg map[string]interface{}, jobs map[string]map[string]*StratJob) error
 
 type Warms map[string]map[string]int
 
@@ -30,11 +31,12 @@ type TradeStrat struct {
 	StopEnterBars int
 	EachMaxLong   int      // max number of long open orders for one pair, -1 for disable
 	EachMaxShort  int      // max number of short open orders for one pair, -1 for disable
-	AllowTFs      []string // Allow running time period, use global configuration when not provided 允许运行的时间周期，不提供时使用全局配置
+	RunTimeFrames []string // Allow running time period, use global configuration when not provided 允许运行的时间周期，不提供时使用全局配置
 	Outputs       []string // The content of the text file output by the strategy, where each string is one line 策略输出的文本文件内容，每个字符串是一行
 	Policy        *config.RunPolicyConfig
 
 	OnPairInfos         func(s *StratJob) []*PairSub
+	OnSymbols           func(items []string) ([]string, []string) // return adds, removes
 	OnStartUp           func(s *StratJob)
 	OnBar               func(s *StratJob)
 	OnInfoBar           func(s *StratJob, e *ta.BarEnv, pair, tf string)    // Other dependent bar data 其他依赖的bar数据
@@ -45,6 +47,7 @@ type TradeStrat struct {
 	OnOrderChange       func(s *StratJob, od *ormo.InOutOrder, chgType int) // Order update callback 订单更新回调
 	GetDrawDownExitRate CalcDDExitRate                                      // Calculate the ratio of tracking profit taking, drawdown, and exit 计算跟踪止盈回撤退出的比率
 	PickTimeFrame       PickTimeFrameFunc                                   // Choose a suitable trading cycle for the specified currency 为指定币选择适合的交易周期
+	OnPostApi           FnOnPostApi                                         // callback for post api PostAPI时的策略回调
 	OnShutDown          func(s *StratJob)                                   // Callback when the robot stops 机器人停止时回调
 }
 

@@ -360,7 +360,8 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 		c.StratPerf.Validate()
 	}
 	StratPerf = c.StratPerf
-	ApplyPairPolicy(c.Pairs, c.RunPolicy)
+	Pairs, _ = utils2.UniqueItems(c.Pairs)
+	SetRunPolicy(true, c.RunPolicy...)
 	if c.PairMgr == nil {
 		c.PairMgr = &PairMgrConfig{}
 	}
@@ -389,29 +390,18 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	return nil
 }
 
-func ApplyPairPolicy(pairs []string, policies []*RunPolicyConfig) {
-	staticPairs, fixPairs := SetRunPolicy(true, policies...)
-	if len(pairs) > 0 {
-		staticPairs = true
-		fixPairs = append(fixPairs, pairs...)
-	}
-	if staticPairs && len(fixPairs) > 0 {
-		pairs, _ = utils2.UniqueItems(fixPairs)
-	}
-	Pairs, _ = utils2.UniqueItems(pairs)
-}
-
 // SetRunPolicy set run_policy and their indexs
-func SetRunPolicy(index bool, items ...*RunPolicyConfig) (bool, []string) {
+func SetRunPolicy(index bool, items ...*RunPolicyConfig) {
 	if items == nil {
 		items = make([]*RunPolicyConfig, 0)
 	}
-	var polPairs []string
-	staticPairs := true
-	for i, pol := range items {
+	nameCnts := make(map[string]int)
+	for _, pol := range items {
+		num, _ := nameCnts[pol.Name]
 		if index {
-			pol.Index = i
+			pol.Index = num
 		}
+		nameCnts[pol.Name] = num + 1
 		if pol.Params == nil {
 			pol.Params = make(map[string]float64)
 		}
@@ -419,14 +409,13 @@ func SetRunPolicy(index bool, items ...*RunPolicyConfig) (bool, []string) {
 			pol.PairParams = make(map[string]map[string]float64)
 		}
 		pol.defs = make(map[string]*core.Param)
-		if len(pol.Pairs) > 0 {
-			polPairs = append(polPairs, pol.Pairs...)
+		if len(pol.Pairs) == 0 {
+			pol.Pairs = Pairs
 		} else {
-			staticPairs = false
+			pol.Pairs, _ = utils2.UniqueItems(pol.Pairs)
 		}
 	}
 	RunPolicy = items
-	return staticPairs, polPairs
 }
 
 func GetTakeOverTF(pair, defTF string) string {
@@ -762,7 +751,10 @@ func DumpYaml(desensitize bool) ([]byte, *errs.Error) {
 
 // ID return name_index
 func (c *RunPolicyConfig) ID() string {
-	return fmt.Sprintf("%s_%d", c.Name, c.Index)
+	if c.Index <= 0 {
+		return c.Name
+	}
+	return fmt.Sprintf("%s_%d", c.Name, c.Index+1)
 }
 
 func (c *RunPolicyConfig) Key() string {

@@ -210,105 +210,17 @@ func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 	s.Exits = nil
 }
 
-func (s *StratJob) SnapOrderStates() map[int64]*ormo.InOutSnap {
-	var res = make(map[int64]*ormo.InOutSnap)
-	orders := s.GetOrders(0)
+func CheckCustomExits(job *StratJob) *errs.Error {
+	orders := job.GetOrders(0)
 	for _, od := range orders {
-		res[od.ID] = od.TakeSnap()
-	}
-	return res
-}
-
-func (s *StratJob) CheckCustomExits(snap map[int64]*ormo.InOutSnap) ([]*ormo.InOutEdit, *errs.Error) {
-	var res []*ormo.InOutEdit
-	var skipSL, skipTP = 0, 0
-	orders := s.GetOrders(0)
-	for _, od := range orders {
-		shot := od.TakeSnap()
-		old, ok := snap[od.ID]
-		if !od.CanClose() || od.Status < ormo.InOutStatusFullEnter {
-			// Not fully entered yet, check if the limit price or trigger price has been updated
-			// 尚未完全入场，检查限价或触发价格是否更新
-			if !ok {
-				continue
-			}
-			if old.EnterLimit != shot.EnterLimit {
-				// Modify the entry price
-				// 修改入场价格
-				res = append(res, &ormo.InOutEdit{
-					Order:  od,
-					Action: ormo.OdActionLimitEnter,
-				})
-			}
-		} else {
-			// Those who have fully entered, check if they have exited
-			// 已完全入场的，检查是否退出
-			slEdit, tpEdit, err := s.checkOrderExit(od)
+		if od.Status >= ormo.InOutStatusFullEnter && od.CanClose() {
+			_, err := job.customExit(od)
 			if err != nil {
-				return res, err
-			}
-			if slEdit != nil {
-				if slEdit.Action == "" {
-					skipSL += 1
-				} else {
-					res = append(res, slEdit)
-				}
-			} else if old != nil && (old.StopLoss != shot.StopLoss || old.StopLossLimit != shot.StopLossLimit) {
-				// Updated stop loss elsewhere
-				// 在其他地方更新了止损
-				res = append(res, &ormo.InOutEdit{Order: od, Action: ormo.OdActionStopLoss})
-			}
-			if tpEdit != nil {
-				if tpEdit.Action == "" {
-					skipSL += 1
-				} else {
-					res = append(res, tpEdit)
-				}
-			} else if old != nil && (old.TakeProfit != shot.TakeProfit || old.TakeProfitLimit != shot.TakeProfitLimit) {
-				// Updated profit taking in other places
-				// 在其他地方更新了止盈
-				res = append(res, &ormo.InOutEdit{Order: od, Action: ormo.OdActionTakeProfit})
-			}
-			if old.ExitLimit != shot.ExitLimit {
-				// Modify the appearance price
-				// 修改出场价格
-				res = append(res, &ormo.InOutEdit{
-					Order:  od,
-					Action: ormo.OdActionLimitExit,
-				})
+				return err
 			}
 		}
 	}
-	if core.LiveMode && skipSL+skipTP > 0 {
-		log.Warn(fmt.Sprintf("%s/%s triggers on exchange is disabled, stoploss: %v, takeprofit: %v",
-			s.Strat.Name, s.Symbol.Symbol, skipSL, skipTP))
-	}
-	return res, nil
-}
-
-func (s *StratJob) checkOrderExit(od *ormo.InOutOrder) (*ormo.InOutEdit, *ormo.InOutEdit, *errs.Error) {
-	sl := od.GetStopLoss().Clone()
-	tp := od.GetTakeProfit().Clone()
-	req, err := s.customExit(od)
-	if err != nil || req != nil {
-		return nil, nil, err
-	}
-	var slEdit, tpEdit *ormo.InOutEdit
-	newSL := od.GetStopLoss()
-	newTP := od.GetTakeProfit()
-	// Check if the condition sheet needs to be modified
-	// 检查是否需要修改条件单
-	if sl != nil || newSL != nil {
-		if sl == nil || newSL == nil || sl.Price != newSL.Price || sl.Limit != newSL.Limit {
-			slEdit = &ormo.InOutEdit{Order: od, Action: ormo.OdActionStopLoss}
-		}
-	}
-	if tp != nil || newTP != nil {
-		if tp == nil || newTP == nil || tp.Price != newTP.Price || tp.Limit != newTP.Limit {
-			tpEdit = &ormo.InOutEdit{Order: od, Action: ormo.OdActionTakeProfit}
-		}
-	}
-	return slEdit, tpEdit, nil
+	return nil
 }
 
 /*

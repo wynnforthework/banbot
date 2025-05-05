@@ -98,7 +98,15 @@ func RefreshPairs(showLog, cronStart bool, pBar *utils.StagedPrg) ([]string, map
 	if pBar != nil {
 		pBar.SetProgress("loadPairs", 1)
 	}
-	pairTfScores, err := strat.CalcPairTfScores(exg.Default, pairs)
+	allPairs := make([]string, 0, len(pairs))
+	allPairs = append(allPairs, pairs...)
+	for _, r := range config.RunPolicy {
+		if len(r.Pairs) > 0 {
+			allPairs = append(allPairs, r.Pairs...)
+		}
+	}
+	allPairs, _ = utils.UniqueItems(allPairs)
+	pairTfScores, err := strat.CalcPairTfScores(exg.Default, allPairs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -178,6 +186,12 @@ func InitOdSubs() {
 			job, _ := its[od.Strategy]
 			if job != nil {
 				stgy.OnOrderChange(job, od, evt)
+				if len(job.Entrys) > 0 || len(job.Exits) > 0 {
+					_, _, err := GetOdMgr(acc).ProcessOrders(nil, job)
+					if err != nil {
+						log.Error("process orders fail", zap.Error(err))
+					}
+				}
 			}
 		})
 	}
@@ -274,21 +288,8 @@ func TryFireBatches(currMS int64) int {
 			// Perform entry/exit tasks
 			// 执行入场/出场任务
 			odMgr := GetOdMgr(account)
-			var ents []*ormo.InOutOrder
-			var exits []*ormo.InOutOrder
 			for _, job := range mainJobs {
-				if len(job.Entrys) == 0 && len(job.Exits) == 0 {
-					continue
-				}
-				ents, exits, err = odMgr.ProcessOrders(sess, job.Env, job.Entrys, job.Exits, nil)
-				if job.Strat.OnOrderChange != nil {
-					for _, od := range ents {
-						job.Strat.OnOrderChange(job, od, strat.OdChgEnter)
-					}
-					for _, od := range exits {
-						job.Strat.OnOrderChange(job, od, strat.OdChgExit)
-					}
-				}
+				_, _, err = odMgr.ProcessOrders(sess, job)
 				if err != nil {
 					log.Error("process orders fail", zap.Error(err))
 				}

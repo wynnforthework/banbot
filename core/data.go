@@ -44,8 +44,11 @@ var (
 	CPUProfile bool
 	MemProfile bool
 
+	SimOrderMatch bool // 是否正处于回测订单撮合
+	NewNumInSim   int  // 撮合时创建新订单的数量
+
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "v0.2.15-beta.2"
+	Version   = "v0.2.15-beta.3"
 	UIVersion = "v0.2.14"
 	SysLang   string // language code for current system 当前系统语言设置
 	LogFile   string
@@ -59,7 +62,7 @@ const (
 )
 
 const (
-	MinStakeAmount = 10 // Minimum billing amount 最小开单金额
+	MinStakeAmount = 5.5 // Minimum billing amount 最小开单金额
 	StepTotal      = 1000
 	KBatchSize     = 900 // The maximum number of K lines returned by the exchange in a single request. When 1000, the API weight is too large. 单次请求交易所最大返回K线数量, 1000时api权重过大
 	DefaultDateFmt = "2006-01-02 15:04:05"
