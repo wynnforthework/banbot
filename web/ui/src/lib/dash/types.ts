@@ -5,7 +5,8 @@ export interface BotAccount{
   account: string
   role: string
   token: string
-  running?: boolean
+  env?: string
+  status?: string
   dayDoneNum?: number
   dayDonePft?: number
   dayOpenNum?: number
@@ -19,7 +20,8 @@ export interface BotTicket{
   url: string
   user_name: string
   password: string
-  name?: string
+  env: string
+  name?: string // bot name
   token?: string
   accounts?: Record<string, string>
 }

@@ -126,10 +126,14 @@ func postLogin(c *fiber.Ctx) error {
 		return err
 	}
 
+	clientIP := c.IP()
 	users := config.GetApiUsers()
 	for _, u := range users {
 		if u.Username != req.Username || u.Password != req.Password {
 			continue
+		}
+		if len(u.AllowIPs) > 0 && !utils.ArrContains(u.AllowIPs, clientIP) {
+			return fiber.NewError(fiber.StatusUnauthorized, "unauthorized from ip: "+clientIP)
 		}
 		expHours := u.ExpireHours
 		if expHours == 0 {
@@ -150,6 +154,7 @@ func postLogin(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"name":     config.Name,
 			"token":    token,
+			"env":      core.RunEnv,
 			"accounts": u.AccRoles,
 		})
 	}
@@ -198,9 +203,13 @@ func AuthMiddleware(secret string) fiber.Handler {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			user := claims["user"]
 			c.Locals("user", user)
+			clientIP := c.IP()
 			users := config.GetApiUsers()
 			for _, u := range users {
 				if u.Username == user {
+					if len(u.AllowIPs) > 0 && !utils.ArrContains(u.AllowIPs, clientIP) {
+						return fiber.NewError(fiber.StatusUnauthorized, "unauthorized from ip: "+clientIP)
+					}
 					c.Locals("accounts", u.AccRoles)
 					break
 				}

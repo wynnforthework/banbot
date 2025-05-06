@@ -184,6 +184,7 @@ api_server:  # ${m.cfg_api_server()}
   users:
     - user: ban
       pwd: 123
+      allow_ips: []
       acc_roles: {user1: admin}
 `
   let theme: Extension | null = $state(oneDark);

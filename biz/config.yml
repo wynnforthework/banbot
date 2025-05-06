@@ -125,4 +125,5 @@ api_server:
   users:
     - user: ban
       pwd: '123'
+      allow_ips: []
       acc_roles: {user1: admin}
