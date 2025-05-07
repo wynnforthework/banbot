@@ -219,6 +219,7 @@ type PairMgrConfig struct {
 	ForceFilters bool `yaml:"force_filters" mapstructure:"force_filters,omitempty"`
 	// hold/close 品种切换时保留还是退出仓位
 	PosOnRotation string `yaml:"pos_on_rotation" mapstructure:"pos_on_rotation"`
+	UseLatest     bool   `yaml:"use_latest" mapstructure:"use_latest"`
 }
 
 // UNIVERSAL FILTER 通用的过滤器

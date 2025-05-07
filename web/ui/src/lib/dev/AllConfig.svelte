@@ -82,6 +82,7 @@ pairmgr:
   limit: 999  # ${m.cfg_pairmgr_limit()}
   force_filters: false # ${m.cfg_pairmgr_force_filters()}
   pos_on_rotation: hold  # ${m.cfg_pairmgr_pos_on_rotation()}
+  use_latest: false  # ${m.cfg_pairmgr_use_latest()}
 pairlists:  # ${m.cfg_pairlists()}
   - name: VolumePairList  # ${m.cfg_pairlists_vol()}
     limit: 100  # ${m.cfg_pairlists_limit100()}

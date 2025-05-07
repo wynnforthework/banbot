@@ -585,6 +585,7 @@
     "cfg_pairmgr_limit": "Keep a maximum of n symbols in the list",
     "cfg_pairmgr_force_filters": "apply pairlists to static pairs force",
     "cfg_pairmgr_pos_on_rotation": "hold/close the position when rotating the symbol list",
+    "cfg_pairmgr_use_latest": "When the cron is not enabled, whether to use the latest time to refresh the varieties only takes effect for the backtest. ",
     "cfg_pairlists": "Filters for trading pairs, applied sequentially in top-down order",
     "cfg_pairlists_vol": "Sort all pairs by trading volume in descending order",
     "cfg_pairlists_limit100": "Take the top 100 pairs",

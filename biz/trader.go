@@ -139,7 +139,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 			}
 		} else {
 			entryNum := len(job.Entrys)
-			if core.LiveMode && entryNum > 0 {
+			if core.LiveMode && !isWarmup && entryNum > 0 {
 				log.Info("skip open orders by bar expired", zap.String("acc", account),
 					zap.String("pair", bar.Symbol), zap.String("tf", bar.TimeFrame),
 					zap.Int("num", entryNum))

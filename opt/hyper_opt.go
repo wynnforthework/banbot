@@ -279,7 +279,7 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 	allPairs := config.Pairs
 	if len(allPairs) == 0 {
 		goods.ShowLog = false
-		allPairs, err = goods.RefreshPairList(false)
+		allPairs, err = goods.RefreshPairList(btime.TimeMS())
 		if err != nil {
 			return "", err
 		}

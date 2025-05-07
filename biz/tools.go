@@ -636,7 +636,7 @@ func CalcCorrelation(args *config.CmdArgs) *errs.Error {
 	if args.OutPath == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "--out is required")
 	}
-	pairs, err := goods.RefreshPairList(false)
+	pairs, err := goods.RefreshPairList(btime.TimeMS())
 	if err != nil {
 		return err
 	}

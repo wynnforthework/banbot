@@ -97,7 +97,7 @@ func RunDownData(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
-	pairs, err := goods.RefreshPairList(false)
+	pairs, err := goods.RefreshPairList(btime.TimeMS())
 	if err != nil {
 		return err
 	}

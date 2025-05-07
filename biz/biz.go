@@ -89,9 +89,9 @@ func SetupComsExg(args *config.CmdArgs) *errs.Error {
 	return orm.InitExg(exg.Default)
 }
 
-func RefreshPairs(showLog, cronStart bool, pBar *utils.StagedPrg) ([]string, map[string]map[string]float64, *errs.Error) {
+func RefreshPairs(showLog bool, timeMS int64, pBar *utils.StagedPrg) ([]string, map[string]map[string]float64, *errs.Error) {
 	goods.ShowLog = showLog
-	pairs, err := goods.RefreshPairList(cronStart)
+	pairs, err := goods.RefreshPairList(timeMS)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -585,6 +585,7 @@
   "cfg_pairmgr_limit": "列表中最多保留n个币种",
   "cfg_pairmgr_force_filters": "强制对静态交易对应用pairlists",
   "cfg_pairmgr_pos_on_rotation": "hold/close 品种列表切换时，持仓保留还是立刻平仓",
+  "cfg_pairmgr_use_latest": "未启用cron时，是否使用最新时间刷新品种，仅对回测生效",
   "cfg_pairlists": "交易对过滤器，按照从上到下的顺序依次应用",
   "cfg_pairlists_vol": "按照交易量从大到小排序所有交易对",
   "cfg_pairlists_limit100": "取前100个交易对",

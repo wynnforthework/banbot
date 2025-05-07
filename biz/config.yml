@@ -42,6 +42,7 @@ run_policy: []
 #  limit: 999
 #  force_filters: false
 #  pos_on_rotation: hold
+#  use_latest: false
 pairlists:
   - name: VolumePairList
     limit: 100

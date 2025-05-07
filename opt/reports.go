@@ -1026,41 +1026,12 @@ func CalcGroupCumProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrd
 	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	startMS := utils2.AlignTfMSecs(minTimeMS, tfMSecs)
 	endMS := utils2.AlignTfMSecs(maxTimeMS, tfMSecs) + tfMSecs
-	exsMap := orm.GetExSymbolMap(core.ExgName, core.Market)
 	var result []*ChartDs
 	maxXNum := 0
 	for key, pairMap := range groups {
-		var glbRets []float64
-		for pair, orders := range pairMap {
-			exs := exsMap[pair]
-			_, bars, err := orm.GetOHLCV(exs, tf, startMS, endMS, 0, false)
-			if err != nil {
-				return nil, nil, err
-			}
-			var closes []float64
-			if len(bars) > 0 {
-				bars, _ = utils.FillOHLCVLacks(bars, startMS, endMS, tfMSecs)
-				closes = make([]float64, len(bars))
-				for i, b := range bars {
-					closes[i] = b.Close
-				}
-			}
-			// 计算每日回报
-			returns, _, _ := ormo.CalcUnitReturns(orders, closes, startMS, endMS, tfMSecs)
-			if glbRets == nil {
-				glbRets = returns
-			} else {
-				for i, v := range returns {
-					glbRets[i] += v
-				}
-			}
-		}
-		// 计算累计回报
-		var cumRets = make([]float64, len(glbRets))
-		sumRet := float64(0)
-		for i, v := range glbRets {
-			sumRet += v
-			cumRets[i] = sumRet
+		cumRets, err := calcCumCurve(pairMap, startMS, endMS, tf, 0)
+		if err != nil {
+			return nil, nil, err
 		}
 		maxXNum = max(maxXNum, len(cumRets))
 		result = append(result, &ChartDs{
@@ -1080,6 +1051,44 @@ func CalcGroupCumProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrd
 		curMS += tfMSecs
 	}
 	return labels, result, nil
+}
+
+// 计算给定订单的累计收益曲线
+func calcCumCurve(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64, tf string, baseVal float64) ([]float64, *errs.Error) {
+	var glbRets []float64
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+	for pair, orders := range pairOrders {
+		exs := orm.GetExSymbol2(core.ExgName, core.Market, pair)
+		_, bars, err := orm.GetOHLCV(exs, tf, startMS, endMS, 0, false)
+		if err != nil {
+			return nil, err
+		}
+		var closes []float64
+		if len(bars) > 0 {
+			bars, _ = utils.FillOHLCVLacks(bars, startMS, endMS, tfMSecs)
+			closes = make([]float64, len(bars))
+			for i, b := range bars {
+				closes[i] = b.Close
+			}
+		}
+		// 计算每日回报
+		returns, _, _ := ormo.CalcUnitReturns(orders, closes, startMS, endMS, tfMSecs)
+		if glbRets == nil {
+			glbRets = returns
+		} else {
+			for i, v := range returns {
+				glbRets[i] += v
+			}
+		}
+	}
+	// 计算累计回报
+	var cumRets = make([]float64, len(glbRets))
+	sumRet := baseVal
+	for i, v := range glbRets {
+		sumRet += v
+		cumRets[i] = sumRet
+	}
+	return cumRets, nil
 }
 
 type TimeVal struct {
