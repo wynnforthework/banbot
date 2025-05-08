@@ -381,6 +381,10 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 		trigPrice = tp.Price
 		amtRate = tp.Rate
 		fillPrice = getExcPrice(od, bar, tp.Price, tp.Limit, afterRate, tfSecs)
+		if fillPrice == 0 && tp.Limit > 0 {
+			// 设置了限价止盈，强制使用止盈价出场
+			fillPrice = tp.Limit
+		}
 		if tp.Tag != "" {
 			exitTag = tp.Tag
 		} else {

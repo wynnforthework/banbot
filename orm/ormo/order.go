@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/sasha-s/go-deadlock"
 	"math"
 	"math/rand"
 	"slices"
@@ -12,6 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -770,6 +771,29 @@ func (i *InOutOrder) RealExitMS() int64 {
 	return i.ExitAt
 }
 
+func (i *InOutOrder) Clone() *InOutOrder {
+	if i == nil {
+		return nil
+	}
+	clone := &InOutOrder{
+		IOrder:     i.IOrder.Clone(),
+		Enter:      i.Enter.Clone(),
+		Exit:       i.Exit.Clone(),
+		Info:       make(map[string]interface{}),
+		DirtyMain:  i.DirtyMain,
+		DirtyEnter: i.DirtyEnter,
+		DirtyExit:  i.DirtyExit,
+		DirtyInfo:  i.DirtyInfo,
+		idKey:      i.idKey,
+	}
+	if i.Info != nil {
+		for k, v := range i.Info {
+			clone.Info[k] = v
+		}
+	}
+	return clone
+}
+
 func (i *IOrder) saveAdd(sess *Queries) *errs.Error {
 	newID, err_ := sess.AddIOrder(context.Background(), AddIOrderParams{
 		TaskID:      i.TaskID,
@@ -838,6 +862,35 @@ func (i *IOrder) NanInfTo(v float64) {
 	i.ProfitRate = utils.NanInfTo(i.ProfitRate, v)
 	i.MaxPftRate = utils.NanInfTo(i.MaxPftRate, v)
 	i.MaxDrawDown = utils.NanInfTo(i.MaxDrawDown, v)
+}
+
+func (i *IOrder) Clone() *IOrder {
+	if i == nil {
+		return nil
+	}
+	return &IOrder{
+		ID:          i.ID,
+		TaskID:      i.TaskID,
+		Symbol:      i.Symbol,
+		Sid:         i.Sid,
+		Timeframe:   i.Timeframe,
+		Short:       i.Short,
+		Status:      i.Status,
+		EnterTag:    i.EnterTag,
+		InitPrice:   i.InitPrice,
+		QuoteCost:   i.QuoteCost,
+		ExitTag:     i.ExitTag,
+		Leverage:    i.Leverage,
+		EnterAt:     i.EnterAt,
+		ExitAt:      i.ExitAt,
+		Strategy:    i.Strategy,
+		StgVer:      i.StgVer,
+		MaxPftRate:  i.MaxPftRate,
+		MaxDrawDown: i.MaxDrawDown,
+		ProfitRate:  i.ProfitRate,
+		Profit:      i.Profit,
+		Info:        i.Info,
+	}
 }
 
 func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
@@ -940,6 +993,31 @@ func (i *ExOrder) NanInfTo(v float64) {
 	}
 	i.Price = utils.NanInfTo(i.Price, v)
 	i.Fee = utils.NanInfTo(i.Fee, v)
+}
+
+func (i *ExOrder) Clone() *ExOrder {
+	if i == nil {
+		return nil
+	}
+	return &ExOrder{
+		ID:        i.ID,
+		TaskID:    i.TaskID,
+		InoutID:   i.InoutID,
+		Symbol:    i.Symbol,
+		Enter:     i.Enter,
+		OrderType: i.OrderType,
+		OrderID:   i.OrderID,
+		Side:      i.Side,
+		CreateAt:  i.CreateAt,
+		Price:     i.Price,
+		Average:   i.Average,
+		Amount:    i.Amount,
+		Filled:    i.Filled,
+		Status:    i.Status,
+		Fee:       i.Fee,
+		FeeType:   i.FeeType,
+		UpdateAt:  i.UpdateAt,
+	}
 }
 
 func (q *Queries) getIOrders(sql string, args []interface{}) ([]*IOrder, *errs.Error) {

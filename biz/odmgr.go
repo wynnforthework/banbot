@@ -619,6 +619,7 @@ func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.E
 		if isTakeProfit && od.Status >= ormo.InOutStatusPartEnter {
 			od.SetTakeProfit(&ormo.ExitTrigger{
 				Price: q.Limit,
+				Limit: q.Limit,
 				Rate:  q.ExitRate,
 				Tag:   q.Tag,
 			})
