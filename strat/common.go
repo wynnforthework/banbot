@@ -586,3 +586,39 @@ func (a accStratLimits) tryAdd(acc, name string) bool {
 	}
 	return true
 }
+
+/*
+PrintStratGroups
+print strategy+timeframe from `core.StgPairTfs`
+从core.StgPairTfs输出策略+时间周期的币种信息到控制台
+*/
+func PrintStratGroups() {
+	text := core.GroupByPairQuotes(map[string][]string{"Pairs": core.Pairs}, false)
+	log.Info("global pairs", zap.String("res", "\n"+text))
+	for acc, jobMap := range AccJobs {
+		allows := make(map[string][]string)
+		disables := make(map[string][]string)
+		for pairTF, stratMap := range jobMap {
+			arrP := strings.Split(pairTF, "_")
+			pair, tf := arrP[0], arrP[1]
+			for stratID := range stratMap {
+				key := fmt.Sprintf("%s_%s", stratID, tf)
+				if ok, _ := core.PairsMap[pair]; ok {
+					arr, _ := allows[key]
+					allows[key] = append(arr, pair)
+				} else {
+					arr, _ := disables[key]
+					disables[key] = append(arr, pair)
+				}
+			}
+		}
+		if len(allows) > 0 {
+			text := core.GroupByPairQuotes(allows, true)
+			log.Info("group jobs by strat_tf", zap.String("acc", acc), zap.String("res", "\n"+text))
+		}
+		if len(disables) > 0 {
+			text := core.GroupByPairQuotes(disables, true)
+			log.Info("group disable jobs by strat_tf", zap.String("acc", acc), zap.String("res", "\n"+text))
+		}
+	}
+}

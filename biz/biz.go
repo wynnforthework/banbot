@@ -141,7 +141,7 @@ func RefreshJobs(pairs []string, pairTfScores map[string]map[string]float64, sho
 		}
 	}
 	if showLog {
-		core.PrintStratGroups()
+		strat.PrintStratGroups()
 	}
 	if pBar != nil {
 		pBar.SetProgress("loadJobs", 1)

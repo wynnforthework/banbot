@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import * as m from '$lib/paraglide/messages.js'
-  import type { BotTicket, BotAccount } from '$lib/dash/types';
+  import type { BotTicket } from '$lib/dash/types';
   import AddBot from '$lib/dash/AddBot.svelte';
   import { alerts } from '$lib/stores/alerts';
   import { modals } from '$lib/stores/modals';
-  import { ctx, save, loadAccounts } from '$lib/dash/store';
+  import {ctx, save, loadAccounts, activeAcc} from '$lib/dash/store';
   import {localizeHref, getLocale} from "$lib/paraglide/runtime";
 
   let showAdd = false;
@@ -30,10 +30,6 @@
       return c;
     });
     await loadAccounts(true);
-  }
-
-  function viewAccount(account: BotAccount) {
-    $save.current = `${account.url}_${account.account}`;
   }
 
   function accStateText(status: string | undefined): string{
@@ -111,7 +107,7 @@
                   <td class="text-right font-mono text-sm">{acc.dayOpenPft?.toFixed(2)}[{acc.dayOpenNum}]</td>
                   <td>
                     {#if acc.status !== 'disconnected'}
-                      <a class="btn btn-xs btn-primary" href={localizeHref("/dash/board")} onclick={() => viewAccount(acc)}>
+                      <a class="btn btn-xs btn-primary" href={localizeHref("/dash/board")} onclick={() => activeAcc(acc)}>
                         {m.view()}
                       </a>
                     {/if}

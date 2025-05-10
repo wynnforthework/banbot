@@ -24,7 +24,7 @@
   let model: BotTicket = $state(empty);
 
   if (browser) {
-    urlPlaceholder = `${window.location.protocol}//12.34.56.78`;
+    urlPlaceholder = `${window.location.protocol}//12.34.56.78:8001`;
   }
 
   function validateUrl(value: string): string | null {

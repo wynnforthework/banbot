@@ -36,7 +36,7 @@ type TradeStrat struct {
 	Policy        *config.RunPolicyConfig
 
 	OnPairInfos         func(s *StratJob) []*PairSub
-	OnSymbols           func(items []string) ([]string, []string) // return adds, removes
+	OnSymbols           func(items []string) []string // return modified pairs
 	OnStartUp           func(s *StratJob)
 	OnBar               func(s *StratJob)
 	OnInfoBar           func(s *StratJob, e *ta.BarEnv, pair, tf string)    // Other dependent bar data 其他依赖的bar数据

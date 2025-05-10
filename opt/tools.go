@@ -684,3 +684,230 @@ func readAssetHtml(file, prefix string, useRate bool) (*AssetData, *errs.Error) 
 
 	return &data, nil
 }
+
+type FacArgs struct {
+	Pairs     map[string]*PairStat
+	TimeFrame string
+	StartMS   int64
+	EndMS     int64
+}
+
+var (
+	FactorMap = make(map[string]func(FacArgs) ([]string, error))
+)
+
+func BtFactors(args []string) error {
+	var configPaths config.ArrString
+	var factor, inPath, minBack, maxBack, runPeriod string
+	var sub = flag.NewFlagSet("fac", flag.ExitOnError)
+	sub.Var(&configPaths, "config", "config path to use, Multiple -config options may be used")
+	sub.StringVar(&factor, "factor", "", "factor to test")
+	sub.StringVar(&inPath, "in", "", "path for all pairs orders e.g.: orders.gob")
+	sub.StringVar(&minBack, "min-back", "1y", "min look back period")
+	sub.StringVar(&maxBack, "max-back", "2y", "max look back period")
+	sub.StringVar(&runPeriod, "interval", "4M", "interval time range between refreshes")
+	err_ := sub.Parse(args)
+	if err_ != nil {
+		return err_
+	}
+	var startMs = config.TimeRange.StartMS
+	var endMS = config.TimeRange.EndMS
+	var tfSecs int
+	var orders []*ormo.InOutOrder
+	var err *errs.Error
+	if inPath == "" {
+		return errors.New("-in is required")
+	}
+	facFunc, ok := FactorMap[factor]
+	if !ok || facFunc == nil {
+		return errors.New("-factor invalid")
+	}
+	orders, err = ormo.LoadOrdersGob(inPath)
+	if err != nil {
+		return err
+	}
+	var totalCost float64
+	var validOdNum int
+	if len(orders) > 0 {
+		startMs = orders[0].EnterAt
+		endMS = orders[0].ExitAt
+		for _, od := range orders {
+			curStart := od.EnterAt
+			if curStart < startMs && curStart > 0 {
+				startMs = curStart
+			}
+			curEnd := od.ExitAt
+			if od.Exit != nil && od.Exit.UpdateAt > curEnd {
+				curEnd = od.Exit.UpdateAt
+			}
+			if curEnd > endMS {
+				endMS = curEnd
+			}
+			tfSecs = max(tfSecs, utils2.TFToSecs(od.Timeframe))
+			curCost := od.EnterCost()
+			if curCost > 0 {
+				totalCost += curCost
+				validOdNum += 1
+			}
+		}
+	} else {
+		return errors.New("orders is empty")
+	}
+	if validOdNum == 0 {
+		return errors.New("no valid orders")
+	}
+	if tfSecs == 0 {
+		tfSecs = utils2.TFToSecs("1d")
+	}
+	minBackMSecs := int64(utils2.TFToSecs(minBack) * 1000)
+	maxBackMSecs := int64(utils2.TFToSecs(maxBack) * 1000)
+	intvMSecs := int64(utils2.TFToSecs(runPeriod) * 1000)
+	dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
+	if intvMSecs < dayMSecs {
+		return errors.New("interval must >= 1d")
+	}
+	if minBackMSecs > maxBackMSecs {
+		return errors.New("min-back must <= max-back")
+	}
+	if minBackMSecs < intvMSecs {
+		return errors.New("min-back must >= interval")
+	}
+	// 按interval对齐开始截止时间
+	startMs = utils2.AlignTfMSecs(startMs, intvMSecs)
+	endMS = utils2.AlignTfMSecs(endMS, intvMSecs) + intvMSecs
+	totalRangeMs := endMS - startMs
+	dayNum := totalRangeMs / dayMSecs
+	tfMSecs := int64(tfSecs * 1000)
+	if dayNum >= 90 {
+		tfMSecs = dayMSecs
+	}
+	if totalRangeMs < minBackMSecs+intvMSecs {
+		return errors.New("order time range must > min-back + interval")
+	}
+	tf := utils2.SecsToTF(int(tfMSecs / 1000))
+	avgCost := totalCost / float64(validOdNum)
+	initFund := avgCost * 100 // 固定使用平均开仓金额的100倍作为初始资金
+	rangeStart := startMs
+	rangeEnd := startMs + minBackMSecs
+	curFund := math.Round(initFund)
+	testRets := make([]float64, 0, 128)
+	//testStart := rangeEnd
+	for rangeEnd+intvMSecs/5 < endMS {
+		pairOrders, err := getRangeOrders(orders, tf, rangeStart, rangeEnd)
+		if err != nil {
+			return err
+		}
+		pairInfos, err := calcPairStats(pairOrders, rangeStart, rangeEnd, tf)
+		if err != nil {
+			return err
+		}
+		pairs, err_ := facFunc(FacArgs{
+			Pairs:     pairInfos,
+			TimeFrame: tf,
+			StartMS:   rangeStart,
+			EndMS:     rangeEnd,
+		})
+		if err_ != nil {
+			return err_
+		}
+		// 使用选中品种，交易interval时间段
+		pairOrders, err = getRangeOrders(orders, tf, rangeEnd, rangeEnd+intvMSecs)
+		if err != nil {
+			return err
+		}
+		pairMap := make(map[string][]*ormo.InOutOrder)
+		for _, s := range pairs {
+			if v, ok := pairOrders[s]; ok {
+				pairMap[s] = v
+			}
+		}
+		returns, err := calcCumCurve(pairMap, rangeEnd, rangeEnd+intvMSecs, tf, curFund)
+		if err != nil {
+			return err
+		}
+		if len(returns) > 0 {
+			testRets = append(testRets, returns...)
+			curFund = testRets[len(testRets)-1]
+		}
+		rangeEnd += intvMSecs
+		if rangeEnd-rangeStart > maxBackMSecs {
+			rangeStart = rangeEnd - maxBackMSecs
+		}
+	}
+	return nil
+}
+
+func getRangeOrders(orders []*ormo.InOutOrder, tf string, startMS, endMS int64) (map[string][]*ormo.InOutOrder, *errs.Error) {
+	pairOrders := make(map[string][]*ormo.InOutOrder)
+	for _, od := range orders {
+		if od.EnterAt >= endMS || od.ExitAt > 0 && od.ExitAt <= startMS {
+			continue
+		}
+		items, _ := pairOrders[od.Symbol]
+		var curOd *ormo.InOutOrder
+		if od.EnterAt >= startMS && od.ExitAt >= endMS {
+			curOd = od
+		} else {
+			curOd = od.Clone()
+			curOd.ID = 0
+		}
+		pairOrders[od.Symbol] = append(items, curOd)
+	}
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+	for pair, items := range pairOrders {
+		exs := orm.GetExSymbol2(core.ExgName, core.Market, pair)
+		_, bars, err := orm.GetOHLCV(exs, tf, startMS, endMS, 1, false)
+		if err != nil {
+			return nil, err
+		}
+		if len(bars) == 0 {
+			return nil, errs.NewMsg(errs.CodeRunTime, "no kline after %v %v-", pair, startMS)
+		}
+		priceOpen := bars[0].Open
+		openMS := bars[0].Time
+		_, bars, err = orm.GetOHLCV(exs, tf, 0, endMS, 1, false)
+		if err != nil {
+			return nil, err
+		}
+		if len(bars) == 0 {
+			return nil, errs.NewMsg(errs.CodeRunTime, "no kline before %v -%v", pair, endMS)
+		}
+		last := bars[len(bars)-1]
+		priceClose := last.Close
+		closeMS := last.Time + tfMSecs
+		for _, od := range items {
+			if od.ID != 0 {
+				continue
+			}
+			// 订单持仓超过时间区间，使用首尾价格重新计算
+			amtRate := float64(1)
+			if od.EnterAt < openMS {
+				od.InitPrice = priceOpen
+				if od.Enter != nil {
+					curAmt := od.EnterCost() / priceOpen
+					amtRate = curAmt / od.Enter.Filled
+					od.Enter.Filled = curAmt
+					od.Enter.Amount = curAmt
+					od.Enter.CreateAt = openMS
+					od.Enter.UpdateAt = openMS
+					od.Enter.Price = priceOpen
+					od.Enter.Average = priceOpen
+				}
+			}
+			if od.Exit != nil {
+				if amtRate != 1 {
+					od.Exit.Amount *= amtRate
+					od.Exit.Filled *= amtRate
+				}
+				if od.ExitAt > closeMS {
+					od.Exit.CreateAt = closeMS
+					od.Exit.UpdateAt = closeMS
+					od.Exit.Price = priceClose
+					od.Exit.Average = priceClose
+				}
+			}
+			od.UpdateProfits(priceClose)
+		}
+	}
+	return pairOrders, nil
+}

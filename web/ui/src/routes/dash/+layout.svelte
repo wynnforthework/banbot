@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import Icon from '$lib/Icon.svelte';
-  import {ctx, save, acc, loadAccounts} from '$lib/dash/store';
+  import {ctx, save, acc, loadAccounts, activeAcc} from '$lib/dash/store';
   import type { BotAccount, BotTicket } from '$lib/dash/types';
   import * as m from '$lib/paraglide/messages.js';
   import { alerts } from '$lib/stores/alerts';
@@ -29,7 +29,7 @@
   ]);
 
   function clickAccount(acc: BotAccount) {
-    $save.current = `${acc.url}_${acc.account}`;
+    activeAcc(acc)
     location.reload();
   }
   
@@ -109,7 +109,7 @@
                 {#each $ctx.accounts as acc}
                   <li>
                     <a 
-                      class={`rounded-md py-1.5 px-3 text-sm hover:bg-base-200 transition-colors ${`${acc.url}_${acc.account}` === $save.current ? 'bg-primary/90 text-primary-content' : ''}`}
+                      class={`rounded-md py-1.5 px-3 text-sm hover:bg-base-200 transition-colors ${acc.id === $save.current ? 'bg-primary/90 text-primary-content' : ''}`}
                       onclick={() => clickAccount(acc)}
                     >
                       {acc.name}/{acc.account}

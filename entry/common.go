@@ -266,6 +266,12 @@ func init() {
 		RunRaw: strat.ListStrats,
 		Help:   "list registered strategies",
 	})
+	AddCmdJob(&CmdJob{
+		Name:   "bt_factor",
+		Parent: "tool",
+		RunRaw: opt.BtFactors,
+		Help:   "backtest factors with orders",
+	})
 
 	AddCmdJob(&CmdJob{
 		Name:   "down_order",

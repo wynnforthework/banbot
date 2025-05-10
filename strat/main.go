@@ -290,9 +290,10 @@ func CallStratSymbols(stgy *TradeStrat, curPairs []string, tfScores map[string]m
 		exsMap[pair] = exs
 	}
 	if stgy.OnSymbols == nil {
-		return utils2.ValsOfMap(exsMap), nil
+		return utils2.ValsOfMapBy(exsMap, curPairs), nil
 	}
-	adds, removes := stgy.OnSymbols(curPairs)
+	modified := stgy.OnSymbols(curPairs)
+	adds, removes := utils.GetAddsRemoves(modified, curPairs)
 	if len(adds) > 0 || len(removes) > 0 {
 		log.Info("strategy change symbols", zap.String("strat", stgy.Name),
 			zap.Int("add", len(adds)), zap.Int("remove", len(removes)))
@@ -333,7 +334,7 @@ func CallStratSymbols(stgy *TradeStrat, curPairs []string, tfScores map[string]m
 			}
 		}
 	}
-	return utils2.ValsOfMap(exsMap), nil
+	return utils2.ValsOfMapBy(exsMap, modified), nil
 }
 
 func printFailTfScores(stratName string, pairTfScores map[string]map[string]float64) {

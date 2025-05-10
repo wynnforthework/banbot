@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/banbox/banbot/orm"
+	"github.com/banbox/banexg"
 	"math"
 	"os"
 	"path/filepath"
@@ -895,6 +896,38 @@ func (r *BTResult) DelBigObjects() {
 	}
 }
 
+func (r *BTResult) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, totalLegal float64) {
+	if odNum < 0 {
+		odNum = ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
+	}
+	jobNum := 0
+	jobMap := strat.GetJobs(wallets.Account)
+	for _, jobs := range jobMap {
+		for _, j := range jobs {
+			if j.CheckMS+j.Env.TFMSecs >= timeMS {
+				jobNum += 1
+			}
+		}
+	}
+	if totalLegal < 0 {
+		totalLegal = wallets.TotalLegal(nil, true)
+	}
+	avaLegal := wallets.AvaLegal(nil)
+	profitLegal := wallets.UnrealizedPOLLegal(nil)
+	drawLegal := wallets.GetWithdrawLegal(nil)
+	curDate := btime.ToDateStr(timeMS, "")
+	r.donePftLegal += ormo.LegalDoneProfits(r.histOdOff)
+	r.histOdOff = len(ormo.HistODs)
+	r.Plots.Labels = append(r.Plots.Labels, curDate)
+	r.Plots.OdNum = append(r.Plots.OdNum, odNum)
+	r.Plots.JobNum = append(r.Plots.JobNum, jobNum)
+	r.Plots.Real = append(r.Plots.Real, totalLegal)
+	r.Plots.Available = append(r.Plots.Available, avaLegal)
+	r.Plots.Profit = append(r.Plots.Profit, r.donePftLegal)
+	r.Plots.UnrealizedPOL = append(r.Plots.UnrealizedPOL, profitLegal)
+	r.Plots.WithDraw = append(r.Plots.WithDraw, drawLegal)
+}
+
 func selectPairs(r *BTResult, name string) []string {
 	fn, ok := PairPickers[name]
 	if !ok {
@@ -1059,17 +1092,9 @@ func calcCumCurve(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64
 	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	for pair, orders := range pairOrders {
 		exs := orm.GetExSymbol2(core.ExgName, core.Market, pair)
-		_, bars, err := orm.GetOHLCV(exs, tf, startMS, endMS, 0, false)
+		_, closes, err := getOHLCVNoLack(exs, tf, startMS, endMS, tfMSecs)
 		if err != nil {
 			return nil, err
-		}
-		var closes []float64
-		if len(bars) > 0 {
-			bars, _ = utils.FillOHLCVLacks(bars, startMS, endMS, tfMSecs)
-			closes = make([]float64, len(bars))
-			for i, b := range bars {
-				closes[i] = b.Close
-			}
 		}
 		// 计算每日回报
 		returns, _, _ := ormo.CalcUnitReturns(orders, closes, startMS, endMS, tfMSecs)
@@ -1089,6 +1114,123 @@ func calcCumCurve(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64
 		cumRets[i] = sumRet
 	}
 	return cumRets, nil
+}
+
+func getOHLCVNoLack(exs *orm.ExSymbol, tf string, startMS, endMS, tfMSecs int64) ([]*banexg.Kline, []float64, *errs.Error) {
+	_, bars, err := orm.GetOHLCV(exs, tf, startMS, endMS, 0, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	var closes []float64
+	if len(bars) > 0 {
+		bars, _ = utils.FillOHLCVLacks(bars, startMS, endMS, tfMSecs)
+		closes = make([]float64, len(bars))
+		for i, b := range bars {
+			closes[i] = b.Close
+		}
+	}
+	return bars, closes, nil
+}
+
+func BuildBtResult(odList []*ormo.InOutOrder, funds map[string]float64) (*BTResult, *errs.Error) {
+	btRes := NewBTResult()
+	if len(odList) == 0 {
+		return btRes, nil
+	}
+	backUp := biz.BackupVars()
+	biz.ResetVars()
+	defer func() {
+		biz.RestoreVars(backUp)
+	}()
+	wallets := biz.GetWallets(config.DefAcc)
+	wallets.SetWallets(funds)
+	wallets.TryUpdateStakePctAmt()
+	totalLegal := wallets.TotalLegal(nil, false)
+	if totalLegal == 0 {
+		return nil, errs.NewMsg(errs.CodeRunTime, "TotalLegal of wallets is empty")
+	}
+	// 更新起止时间、最小周期
+	var startMS = odList[0].RealEnterMS()
+	var endMS = odList[0].ExitAt
+	var tfSecs = utils2.TFToSecs(odList[0].Timeframe)
+	for _, od := range odList {
+		enterAt := od.RealEnterMS()
+		if enterAt > 0 && enterAt < startMS {
+			startMS = enterAt
+		}
+		endMS = max(endMS, od.ExitAt)
+		curSecs := utils2.TFToSecs(od.Timeframe)
+		tfSecs = min(tfSecs, curSecs)
+	}
+	tfMSecs := int64(tfSecs * 1000)
+	startMS = utils2.AlignTfMSecs(startMS, tfMSecs)
+	endMS = utils2.AlignTfMSecs(endMS, tfMSecs) + tfMSecs
+	btRes.StartMS = startMS
+	btRes.EndMS = endMS
+	btRes.OrderNum = len(odList)
+	tf := utils2.SecsToTF(tfSecs)
+	totalBarNum := int((endMS - startMS) / tfMSecs)
+	// 获取各个品种信息
+	pairOrders := make(map[string][]*ormo.InOutOrder)
+	for _, od := range odList {
+		items, _ := pairOrders[od.Symbol]
+		pairOrders[od.Symbol] = append(items, od)
+	}
+	pairStats, err := calcPairStats(pairOrders, startMS, endMS, tf)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(odList, func(i, j int) bool {
+		return odList[i].RealEnterMS() < odList[j].RealEnterMS()
+	})
+	openOds := make(map[int64]*ormo.InOutOrder)
+	btRes.PlotEvery = int(math.Round(float64(totalBarNum) / float64(ShowNum)))
+	btRes.logPlot(wallets, startMS, 0, totalLegal)
+	curMS := startMS + tfMSecs
+	nextOd := 0
+	for {
+		for nextOd < len(odList) {
+			next := odList[nextOd]
+			if next.RealEnterMS() < curMS {
+				openOds[next.ID] = next
+				nextOd += 1
+			} else {
+				break
+			}
+		}
+	}
+	_ = pairStats
+	return nil, nil
+}
+
+type PairStat struct {
+	Orders  []*ormo.InOutOrder
+	Exs     *orm.ExSymbol
+	Bars    []*banexg.Kline
+	Returns []float64
+	Prices  []float64
+}
+
+func calcPairStats(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64, tf string) (map[string]*PairStat, *errs.Error) {
+	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
+	var result = make(map[string]*PairStat)
+	for pair, orders := range pairOrders {
+		exs := orm.GetExSymbol2(core.ExgName, core.Market, pair)
+		bars, closes, err := getOHLCVNoLack(exs, tf, startMS, endMS, tfMSecs)
+		if err != nil {
+			return nil, err
+		}
+		// 计算每日回报
+		returns, _, _ := ormo.CalcUnitReturns(orders, closes, startMS, endMS, tfMSecs)
+		result[pair] = &PairStat{
+			Orders:  orders,
+			Exs:     exs,
+			Bars:    bars,
+			Returns: returns,
+			Prices:  closes,
+		}
+	}
+	return result, nil
 }
 
 type TimeVal struct {

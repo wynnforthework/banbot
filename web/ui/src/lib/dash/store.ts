@@ -9,12 +9,21 @@ import {site} from '$lib/stores/site';
 export const ctx = writable<DashCtx>(new DashCtx());
 export const save = persisted('dash', new DashSave());
 export const acc = writable<BotAccount>({
+  id: '',
   url: '',
   name: '',
   account: '',
   role: '',
   token: '',
 })
+
+export function activeAcc(accInfo: BotAccount){
+  acc.set(accInfo)
+  save.update(s => {
+    s.current = accInfo.id;
+    return s
+  })
+}
 
 // 更新账户信息
 export async function updateAcc(accInfo: BotAccount) {
@@ -53,6 +62,7 @@ export async function loadBotAccounts(bot: BotTicket, request: boolean = false):
     }
     const role = bot.accounts[account];
     const accInfo: BotAccount = {
+      id: `${bot.url}_${account}`,
       url: bot.url,
       name: bot.name || '',
       account: account,
@@ -112,15 +122,11 @@ export async function loadAccounts(request: boolean = false) {
     });
   }
   const accounts = get(ctx).accounts;
-  const selected = accounts.filter(a => `${a.url}_${a.account}` === saveShot.current);
+  const selected = accounts.filter(a => a.id === saveShot.current);
   if (selected.length > 0) {
     acc.set(selected[0]);
   }else if(accounts.length > 0){
-    acc.set(accounts[0]);
-    save.update(s => {
-      s.current = `${accounts[0].url}_${accounts[0].account}`;
-      return s;
-    });
+    activeAcc(accounts[0]);
   }else{
     //console.log('no accounts avaiable', saveShot);
   }

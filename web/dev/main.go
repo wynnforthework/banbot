@@ -3,6 +3,7 @@ package dev
 import (
 	"flag"
 	"fmt"
+	utils2 "github.com/banbox/banexg/utils"
 	"os"
 	"path/filepath"
 	"time"
@@ -83,6 +84,7 @@ func Run(args []string) error {
 	app := fiber.New(fiber.Config{
 		AppName:      "banbot",
 		ErrorHandler: base.ErrHandler,
+		JSONEncoder:  utils2.Marshal,
 	})
 
 	app.Use(cors.New(cors.Config{

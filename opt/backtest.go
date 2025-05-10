@@ -340,38 +340,6 @@ func (b *BackTest) logState(startMS, timeMS int64) {
 	b.logPlot(wallets, startMS, odNum, totalLegal)
 }
 
-func (b *BackTest) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, totalLegal float64) {
-	if odNum < 0 {
-		odNum = ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
-	}
-	jobNum := 0
-	jobMap := strat.GetJobs(wallets.Account)
-	for _, jobs := range jobMap {
-		for _, j := range jobs {
-			if j.CheckMS+j.Env.TFMSecs >= timeMS {
-				jobNum += 1
-			}
-		}
-	}
-	if totalLegal < 0 {
-		totalLegal = wallets.TotalLegal(nil, true)
-	}
-	avaLegal := wallets.AvaLegal(nil)
-	profitLegal := wallets.UnrealizedPOLLegal(nil)
-	drawLegal := wallets.GetWithdrawLegal(nil)
-	curDate := btime.ToDateStr(timeMS, "")
-	b.donePftLegal += ormo.LegalDoneProfits(b.histOdOff)
-	b.histOdOff = len(ormo.HistODs)
-	b.Plots.Labels = append(b.Plots.Labels, curDate)
-	b.Plots.OdNum = append(b.Plots.OdNum, odNum)
-	b.Plots.JobNum = append(b.Plots.JobNum, jobNum)
-	b.Plots.Real = append(b.Plots.Real, totalLegal)
-	b.Plots.Available = append(b.Plots.Available, avaLegal)
-	b.Plots.Profit = append(b.Plots.Profit, b.donePftLegal)
-	b.Plots.UnrealizedPOL = append(b.Plots.UnrealizedPOL, profitLegal)
-	b.Plots.WithDraw = append(b.Plots.WithDraw, drawLegal)
-}
-
 func (b *BackTest) cronDumpBtStatus() {
 	b.lastDumpMs = btime.UTCStamp()
 	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {

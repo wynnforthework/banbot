@@ -154,16 +154,16 @@ func (i *InOutOrder) KeyAlign() string {
 	return i.key(timeMS)
 }
 
+// SetEnterLimit set limit price for enter
 func (i *InOutOrder) SetEnterLimit(price float64) *errs.Error {
-	if i.Status >= InOutStatusFullEnter {
+	if i.Status >= InOutStatusFullEnter || i.Enter == nil || i.Enter.Status >= OdStatusClosed {
 		return errs.NewMsg(errs.CodeRunTime, "cannot set entry limit for entered order: %s", i.Key())
 	}
-	if i.Status == InOutStatusInit {
-		i.InitPrice = price
-		i.DirtyMain = true
+	if i.Enter.Price != price {
+		i.Enter.Price = price
+		i.DirtyEnter = true
+		fireOdEdit(i, OdActionLimitEnter)
 	}
-	i.Enter.Price = price
-	i.DirtyEnter = true
 	return nil
 }
 
@@ -678,30 +678,6 @@ func (i *InOutOrder) ClientId(random bool) string {
 		return fmt.Sprintf("%s_%v_%v_%v", config.Name, i.ID, rand.Intn(1000), client)
 	}
 	return fmt.Sprintf("%s_%v_%v", config.Name, i.ID, client)
-}
-
-// SetLimit set limit price for enter/exit
-func (i *InOutOrder) SetLimit(price float64, enter bool) *errs.Error {
-	if enter {
-		if i.Status < InOutStatusFullEnter && i.Enter != nil && i.Enter.Status < OdStatusClosed {
-			if i.Enter.Price == price {
-				return nil
-			}
-			i.Enter.Price = price
-			fireOdEdit(i, OdActionLimitEnter)
-		} else {
-			return errs.NewMsg(core.ErrRunTime, "cannot set price for entered order")
-		}
-	} else if i.Status > InOutStatusFullEnter && i.Exit != nil && i.Exit.Status < OdStatusClosed {
-		if i.Exit.Price == price {
-			return nil
-		}
-		i.Exit.Price = price
-		fireOdEdit(i, OdActionLimitExit)
-	} else {
-		return errs.NewMsg(core.ErrRunTime, "cannot set price for exited order")
-	}
-	return nil
 }
 
 func fireOdEdit(od *InOutOrder, action string) {

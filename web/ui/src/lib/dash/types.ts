@@ -1,5 +1,6 @@
 /**交易账户 */
 export interface BotAccount{
+  id: string
   url: string
   name: string
   account: string
