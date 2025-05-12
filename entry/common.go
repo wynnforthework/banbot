@@ -272,6 +272,13 @@ func init() {
 		RunRaw: opt.BtFactors,
 		Help:   "backtest factors with orders",
 	})
+	AddCmdJob(&CmdJob{
+		Name:    "bt_result",
+		Parent:  "tool",
+		Run:     opt.BuildBtResult,
+		Options: []string{"in", "out"},
+		Help:    "build backtest result from orders.gob and config",
+	})
 
 	AddCmdJob(&CmdJob{
 		Name:   "down_order",

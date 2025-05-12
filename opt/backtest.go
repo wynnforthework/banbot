@@ -18,7 +18,6 @@ import (
 	"go.uber.org/zap"
 	"math"
 	"os"
-	"slices"
 	"time"
 )
 
@@ -193,7 +192,8 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 	ok := b.BackTestLite.FeedKLine(bar)
 	if !bar.IsWarmUp && core.CheckWallets {
 		core.CheckWallets = false
-		b.logState(bar.Time, curTime)
+		odNum := ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
+		b.logState(bar.Time, curTime, odNum)
 	}
 	if ok && b.nextRefresh > 0 && bar.Time >= b.nextRefresh {
 		// 刷新交易对
@@ -276,68 +276,6 @@ func (b *BackTest) initTaskOut() *errs.Error {
 		log.Warn("stake_amt may result in inconsistent order amounts with each backtest!")
 	}
 	return nil
-}
-
-func (b *BackTest) logState(startMS, timeMS int64) {
-	if b.StartMS == 0 {
-		b.StartMS = startMS
-	}
-	b.EndMS = timeMS
-	wallets := biz.GetWallets(config.DefAcc)
-	totalLegal := wallets.TotalLegal(nil, true)
-	b.MinReal = min(b.MinReal, totalLegal)
-	if totalLegal >= b.MaxReal {
-		b.MaxReal = totalLegal
-	} else {
-		drawDownPct := (b.MaxReal - totalLegal) * 100 / b.MaxReal
-		b.MaxDrawDownPct = max(b.MaxDrawDownPct, drawDownPct)
-		b.MaxDrawDownVal = max(b.MaxDrawDownVal, b.MaxReal-totalLegal)
-		maxOccupy := b.MaxReal - wallets.AvaLegal(nil)
-		b.MaxFundOccup = max(b.MaxFundOccup, maxOccupy)
-		b.MaxOccupForPair = max(b.MaxOccupForPair, maxOccupy/float64(len(core.Pairs)))
-	}
-	odNum := ormo.OpenNum(config.DefAcc, ormo.InOutStatusPartEnter)
-	if b.TimeNum%b.PlotEvery != 0 {
-		if odNum > b.Plots.tmpOdNum {
-			b.Plots.tmpOdNum = odNum
-		}
-		return
-	}
-	if b.Plots.tmpOdNum > odNum {
-		odNum = b.Plots.tmpOdNum
-	}
-	b.Plots.tmpOdNum = 0
-	splStep := 5
-	if len(b.Plots.Real) >= ShowNum*splStep {
-		// Check whether there is too much data and resample if the total number of samples exceeds 5 times
-		// 检查数据是否太多，超过采样总数5倍时，进行重采样
-		b.PlotEvery *= splStep
-		oldNum := len(b.Plots.Real)
-		newNum := oldNum / splStep
-		plots := &PlotData{
-			Labels:        make([]string, 0, newNum),
-			OdNum:         make([]int, 0, newNum),
-			JobNum:        make([]int, 0, newNum),
-			Real:          make([]float64, 0, newNum),
-			Available:     make([]float64, 0, newNum),
-			UnrealizedPOL: make([]float64, 0, newNum),
-			WithDraw:      make([]float64, 0, newNum),
-		}
-		for i := 0; i < oldNum; i += splStep {
-			plots.Labels = append(plots.Labels, b.Plots.Labels[i])
-			plots.OdNum = append(plots.OdNum, slices.Max(b.Plots.OdNum[i:i+splStep]))
-			plots.JobNum = append(plots.JobNum, slices.Max(b.Plots.JobNum[i:i+splStep]))
-			plots.Real = append(plots.Real, b.Plots.Real[i])
-			plots.Available = append(plots.Available, b.Plots.Available[i])
-			plots.Profit = append(plots.Profit, b.Plots.Profit[i])
-			plots.UnrealizedPOL = append(plots.UnrealizedPOL, b.Plots.UnrealizedPOL[i])
-			plots.WithDraw = append(plots.WithDraw, b.Plots.WithDraw[i])
-		}
-		b.Plots = plots
-		return
-	}
-	// 这里应使用bar的开始时间，避免多个时间周期运行时，大部分CheckMS未更新
-	b.logPlot(wallets, startMS, odNum, totalLegal)
 }
 
 func (b *BackTest) cronDumpBtStatus() {

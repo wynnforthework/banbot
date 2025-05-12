@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg"
+	"gonum.org/v1/gonum/floats"
 	"math"
 	"os"
 	"path/filepath"
@@ -31,42 +32,43 @@ import (
 )
 
 type BTResult struct {
-	MaxOpenOrders   int        `json:"maxOpenOrders"`
-	MinReal         float64    `json:"minReal"`
-	MaxReal         float64    `json:"maxReal"`         // Maximum Assets 最大资产
-	MaxDrawDownPct  float64    `json:"maxDrawDownPct"`  // Maximum drawdown percentage 最大回撤百分比
-	ShowDrawDownPct float64    `json:"showDrawDownPct"` // Displays the maximum drawdown percentage 显示最大回撤百分比
-	MaxDrawDownVal  float64    `json:"maxDrawDownVal"`  // Maximum drawdown percentage 最大回撤金额
-	ShowDrawDownVal float64    `json:"showDrawDownVal"` // Displays the maximum drawdown percentage 显示最大回撤金额
-	MaxFundOccup    float64    `json:"maxFundOccup"`
-	MaxOccupForPair float64    `json:"maxOccupForPair"`
-	BarNum          int        `json:"barNum"`
-	TimeNum         int        `json:"timeNum"`
-	OrderNum        int        `json:"orderNum"`
-	lastTime        int64      // 上次bar的时间戳
-	histOdOff       int        // 计算已完成订单利润的偏移
-	donePftLegal    float64    // 已完成订单利润
-	Plots           *PlotData  `json:"plots"`
-	CreateMS        int64      `json:"createMS"`
-	StartMS         int64      `json:"startMS"`
-	EndMS           int64      `json:"endMS"`
-	PlotEvery       int        `json:"plotEvery"`
-	TotalInvest     float64    `json:"totalInvest"`
-	OutDir          string     `json:"outDir"`
-	PairGrps        []*RowItem `json:"pairGrps"`
-	DateGrps        []*RowItem `json:"dateGrps"`
-	EnterGrps       []*RowItem `json:"enterGrps"`
-	ExitGrps        []*RowItem `json:"exitGrps"`
-	ProfitGrps      []*RowItem `json:"profitGrps"`
-	TotProfit       float64    `json:"totProfit"`
-	TotCost         float64    `json:"totCost"`
-	TotFee          float64    `json:"totFee"`
-	TotProfitPct    float64    `json:"totProfitPct"`
-	WinRatePct      float64    `json:"winRatePct"`
-	FinBalance      float64    `json:"finBalance"`
-	FinWithdraw     float64    `json:"finWithdraw"`
-	SharpeRatio     float64    `json:"sharpeRatio"`
-	SortinoRatio    float64    `json:"sortinoRatio"`
+	MaxOpenOrders   int            `json:"maxOpenOrders"`
+	MinReal         float64        `json:"minReal"`
+	MaxReal         float64        `json:"maxReal"`         // Maximum Assets 最大资产
+	MaxDrawDownPct  float64        `json:"maxDrawDownPct"`  // Maximum drawdown percentage 最大回撤百分比
+	ShowDrawDownPct float64        `json:"showDrawDownPct"` // Displays the maximum drawdown percentage 显示最大回撤百分比
+	MaxDrawDownVal  float64        `json:"maxDrawDownVal"`  // Maximum drawdown percentage 最大回撤金额
+	ShowDrawDownVal float64        `json:"showDrawDownVal"` // Displays the maximum drawdown percentage 显示最大回撤金额
+	MaxFundOccup    float64        `json:"maxFundOccup"`
+	MaxOccupForPair float64        `json:"maxOccupForPair"`
+	BarNum          int            `json:"barNum"`
+	TimeNum         int            `json:"timeNum"`
+	OrderNum        int            `json:"orderNum"`
+	lastTime        int64          // 上次bar的时间戳
+	histOdOff       int            // 计算已完成订单利润的偏移
+	donePftLegal    float64        // 已完成订单利润
+	Plots           *PlotData      `json:"plots"`
+	CreateMS        int64          `json:"createMS"`
+	StartMS         int64          `json:"startMS"`
+	EndMS           int64          `json:"endMS"`
+	PlotEvery       int            `json:"plotEvery"`
+	TotalInvest     float64        `json:"totalInvest"`
+	OutDir          string         `json:"outDir"`
+	PairGrps        []*RowItem     `json:"pairGrps"`
+	DateGrps        []*RowItem     `json:"dateGrps"`
+	EnterGrps       []*RowItem     `json:"enterGrps"`
+	ExitGrps        []*RowItem     `json:"exitGrps"`
+	ProfitGrps      []*RowItem     `json:"profitGrps"`
+	TotProfit       float64        `json:"totProfit"`
+	TotCost         float64        `json:"totCost"`
+	TotFee          float64        `json:"totFee"`
+	TotProfitPct    float64        `json:"totProfitPct"`
+	TfHits          map[string]int `json:"tfHits"`
+	WinRatePct      float64        `json:"winRatePct"`
+	FinBalance      float64        `json:"finBalance"`
+	FinWithdraw     float64        `json:"finWithdraw"`
+	SharpeRatio     float64        `json:"sharpeRatio"`
+	SortinoRatio    float64        `json:"sortinoRatio"`
 }
 
 type PlotData struct {
@@ -117,7 +119,13 @@ func (r *BTResult) printBtResult() {
 	}
 
 	r.Collect()
-	orders := ormo.HistODs
+	log.Info("BackTest Reports:\n" + r.cmdReports(ormo.HistODs))
+	log.Info("Saved", zap.String("at", r.OutDir))
+
+	r.dumpBtFiles()
+}
+
+func (r *BTResult) cmdReports(orders []*ormo.InOutOrder) string {
 	var b strings.Builder
 	var tblText string
 	if len(orders) > 0 {
@@ -146,10 +154,7 @@ func (r *BTResult) printBtResult() {
 		b.WriteString("No Orders Found\n")
 	}
 	b.WriteString(r.textMetrics(orders))
-	log.Info("BackTest Reports:\n" + b.String())
-	log.Info("BackTest Saved", zap.String("at", r.OutDir))
-
-	r.dumpBtFiles()
+	return b.String()
 }
 
 func (r *BTResult) dumpBtFiles() {
@@ -182,6 +187,7 @@ func (r *BTResult) Collect() {
 	sumFee := float64(0)
 	sumCost := float64(0)
 	winCount := float64(0)
+	tfHits := make(map[string]int)
 	for _, od := range orders {
 		sumProfit += od.Profit
 		sumFee += od.Enter.Fee
@@ -192,7 +198,10 @@ func (r *BTResult) Collect() {
 		if od.Profit > 0 {
 			winCount += 1
 		}
+		oldNum, _ := tfHits[od.Timeframe]
+		tfHits[od.Timeframe] = oldNum + 1
 	}
+	r.TfHits = tfHits
 	r.TotProfit = sumProfit
 	r.TotCost = utils.NanInfTo(sumCost, 0)
 	r.TotFee = sumFee
@@ -202,7 +211,7 @@ func (r *BTResult) Collect() {
 	}
 	// Calculate the maximum drawdown on the chart
 	// 计算图表上的最大回撤
-	ddRate, ddVal := r.Plots.calcDrawDown()
+	ddRate, ddVal := utils.CalcDrawDown(r.Plots.Real, 0)
 	r.ShowDrawDownPct = ddRate * 100
 	r.ShowDrawDownVal = ddVal
 	if len(orders) > 0 {
@@ -216,9 +225,12 @@ func (r *BTResult) Collect() {
 	wallets := biz.GetWallets(config.DefAcc)
 	r.FinBalance = wallets.AvaLegal(nil)
 	r.FinWithdraw = wallets.GetWithdrawLegal(nil)
-	err := r.calcMeasures(30)
+	rangeSecs := (r.EndMS - r.StartMS) / 1000
+	sharpe, sortino, err := CalcMeasuresByReal(r.Plots.Real, rangeSecs, "", 0, 0)
 	if err != nil {
 		log.Warn("calc sharpe/sortino fail", zap.Error(err))
+	} else {
+		r.SharpeRatio, r.SortinoRatio = sharpe, sortino
 	}
 }
 
@@ -267,6 +279,8 @@ func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownVal, realDrawVal)})
 	table.Append([]string{"Max Fund Occupy", strconv.FormatFloat(r.MaxFundOccup, 'f', 0, 64)})
 	table.Append([]string{"Max Occupy by Pair", strconv.FormatFloat(r.MaxOccupForPair, 'f', 0, 64)})
+	table.Append([]string{"TimeFrames", sortTfMap(r.TfHits)})
+	table.Append([]string{"Win Rate", strconv.FormatFloat(r.WinRatePct, 'f', 1, 64) + "%"})
 	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
 	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
 	table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})
@@ -532,33 +546,41 @@ func measurePerformance(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) 
 	if len(ods) == 0 {
 		return 0, 0, nil
 	}
-	sort.Slice(ods, func(i, j int) bool {
-		return ods[i].RealExitMS() < ods[j].RealExitMS()
-	})
 	initStake := float64(0)
 	for key, val := range config.WalletAmounts {
 		initStake += val * core.GetPriceSafe(key)
 	}
-	dayTfMsecs := int64(utils2.TFToSecs("1d") * 1000)
-	startMS := utils2.AlignTfMSecs(ods[0].RealEnterMS(), dayTfMsecs)
-	endMS := utils2.AlignTfMSecs(ods[len(ods)-1].RealEnterMS(), dayTfMsecs) + dayTfMsecs
-	returns, _, _ := ormo.CalcUnitReturns(ods, nil, startMS, endMS, dayTfMsecs)
-	if len(returns) <= 2 {
-		return 0, 0, nil
+	tf := "1d"
+	tfSecs := utils2.TFToSecs(tf)
+	tfMsecs := int64(tfSecs * 1000)
+	startMS, endMS := ormo.CalcTimeRange(ods)
+	startMS = utils2.AlignTfMSecs(startMS, tfMsecs)
+	endMS = utils2.AlignTfMSecs(endMS, tfMsecs) + tfMsecs
+	pairOrders := make(map[string][]*ormo.InOutOrder)
+	for _, od := range ods {
+		items, _ := pairOrders[od.Symbol]
+		pairOrders[od.Symbol] = append(items, od)
 	}
-	retRates := make([]float64, len(returns))
-	for i, ret := range returns {
-		retRates[i] = ret / initStake
+	cumRets, err := calcCumCurve(pairOrders, startMS, endMS, tf, initStake)
+	if err != nil {
+		return 0, 0, err
 	}
-	return calcMeasures(retRates, 365)
+	lastRet := cumRets[0]
+	retRates := make([]float64, len(cumRets))
+	for i, ret := range cumRets {
+		retRates[i] = (ret - lastRet) / lastRet
+		lastRet = ret
+	}
+	periods := utils2.TFToSecs("1y") / tfSecs
+	return calcMeasures(retRates, periods, 0)
 }
 
-func calcMeasures(returns []float64, periods int) (float64, float64, *errs.Error) {
-	sharpeFlt, err := utils.SharpeRatioBy(returns, 0.02, periods, true)
+func calcMeasures(returns []float64, periods int, riskFree float64) (float64, float64, *errs.Error) {
+	sharpeFlt, err := utils.SharpeRatioBy(returns, riskFree, periods, true)
 	if err != nil {
 		return 0, 0, errs.New(errs.CodeRunTime, err)
 	}
-	sortineFlt, err := utils.SortinoRatioBy(returns, 0.02, periods, true)
+	sortineFlt, err := utils.SortinoRatioBy(returns, riskFree, periods, true)
 	if err != nil {
 		if !errors.Is(err, utils.ErrNoNegativeResults) {
 			return sharpeFlt, 0, errs.New(errs.CodeRunTime, err)
@@ -796,73 +818,8 @@ func (r *BTResult) dumpGraph() {
 	}
 }
 
-func (p *PlotData) calcDrawDown() (float64, float64) {
-	var drawDownRate, maxReal, drawDownVal float64
-	if len(p.Real) > 0 {
-		reals := p.Real
-		maxReal = reals[0]
-		for _, val := range reals {
-			if val > maxReal {
-				maxReal = val
-			} else {
-				drawDownVal = max(drawDownVal, maxReal-val)
-				curDown := math.Abs(val/maxReal - 1)
-				if curDown > drawDownRate {
-					drawDownRate = curDown
-				}
-			}
-		}
-	}
-	return drawDownRate, drawDownVal
-}
-
-func (r *BTResult) calcMeasures(num int) *errs.Error {
-	p := r.Plots
-	if len(p.Real) <= 1 {
-		return nil
-	}
-	step := max(1, len(p.Real)/num)
-	prevVal := p.Real[0]
-	inReturns := make([]float64, 0, num)
-	for i := step; i < len(p.Real); i += step {
-		curVal := p.Real[i]
-		inReturns = append(inReturns, (curVal-prevVal)/prevVal)
-		prevVal = curVal
-	}
-	if len(inReturns) < num {
-		last := p.Real[len(p.Real)-1]
-		inReturns = append(inReturns, (last-prevVal)/prevVal)
-	}
-	dayMSecs := int64(utils2.TFToSecs("1d") * 1000)
-	// 计算一年包含交易单位数量：365 / 单个交易单位包含天数
-	// 单个交易单位包含天数 = 总交易天数 / 交易单位总数
-	// 一年包含交易单位数量 = 交易单位总数 * 365 / 总交易天数
-	days := int((r.EndMS - r.StartMS) / dayMSecs)
-	if days > 0 {
-		periods := len(inReturns) * 365 / days
-		sharpe, sortino, err := calcMeasures(inReturns, periods)
-		if err != nil {
-			return err
-		}
-		if !math.IsNaN(sharpe) && !math.IsInf(sharpe, 0) {
-			r.SharpeRatio = sharpe
-		}
-		if !math.IsNaN(sortino) && !math.IsInf(sortino, 0) {
-			r.SortinoRatio = sortino
-		}
-	}
-	return nil
-}
-
 func (r *BTResult) Score() float64 {
-	var score float64
-	if r.TotProfitPct <= 0 {
-		score = r.TotProfitPct
-	} else {
-		// 盈利时返回无回撤收益率
-		score = r.TotProfitPct * math.Pow(1-r.ShowDrawDownPct/100, 1.5)
-	}
-	return utils.NanInfTo(score, 0)
+	return CalcBtScore(r.TotProfitPct, r.ShowDrawDownPct)
 }
 
 func (r *BTResult) dumpDetail(outPath string) {
@@ -894,6 +851,67 @@ func (r *BTResult) DelBigObjects() {
 			p.Durations = nil
 		}
 	}
+}
+
+func (r *BTResult) logState(startMS, timeMS int64, odNum int) {
+	if r.StartMS == 0 {
+		r.StartMS = startMS
+	}
+	r.EndMS = timeMS
+	wallets := biz.GetWallets(config.DefAcc)
+	totalLegal := wallets.TotalLegal(nil, true)
+	r.MinReal = min(r.MinReal, totalLegal)
+	if totalLegal >= r.MaxReal {
+		r.MaxReal = totalLegal
+	} else {
+		drawDownPct := (r.MaxReal - totalLegal) * 100 / r.MaxReal
+		r.MaxDrawDownPct = max(r.MaxDrawDownPct, drawDownPct)
+		r.MaxDrawDownVal = max(r.MaxDrawDownVal, r.MaxReal-totalLegal)
+		maxOccupy := r.MaxReal - wallets.AvaLegal(nil)
+		r.MaxFundOccup = max(r.MaxFundOccup, maxOccupy)
+		r.MaxOccupForPair = max(r.MaxOccupForPair, maxOccupy/float64(len(core.Pairs)))
+	}
+	if r.TimeNum%r.PlotEvery != 0 {
+		if odNum > r.Plots.tmpOdNum {
+			r.Plots.tmpOdNum = odNum
+		}
+		return
+	}
+	if r.Plots.tmpOdNum > odNum {
+		odNum = r.Plots.tmpOdNum
+	}
+	r.Plots.tmpOdNum = 0
+	splStep := 5
+	if len(r.Plots.Real) >= ShowNum*splStep {
+		// Check whether there is too much data and resample if the total number of samples exceeds 5 times
+		// 检查数据是否太多，超过采样总数5倍时，进行重采样
+		r.PlotEvery *= splStep
+		oldNum := len(r.Plots.Real)
+		newNum := oldNum / splStep
+		plots := &PlotData{
+			Labels:        make([]string, 0, newNum),
+			OdNum:         make([]int, 0, newNum),
+			JobNum:        make([]int, 0, newNum),
+			Real:          make([]float64, 0, newNum),
+			Available:     make([]float64, 0, newNum),
+			UnrealizedPOL: make([]float64, 0, newNum),
+			WithDraw:      make([]float64, 0, newNum),
+		}
+		for i := 0; i < oldNum; i += splStep {
+			plots.Labels = append(plots.Labels, r.Plots.Labels[i])
+			plots.OdNum = append(plots.OdNum, slices.Max(r.Plots.OdNum[i:i+splStep]))
+			plots.JobNum = append(plots.JobNum, slices.Max(r.Plots.JobNum[i:i+splStep]))
+			plots.Real = append(plots.Real, r.Plots.Real[i])
+			plots.Available = append(plots.Available, r.Plots.Available[i])
+			plots.Profit = append(plots.Profit, r.Plots.Profit[i])
+			plots.UnrealizedPOL = append(plots.UnrealizedPOL, r.Plots.UnrealizedPOL[i])
+			plots.WithDraw = append(plots.WithDraw, r.Plots.WithDraw[i])
+		}
+		r.Plots = plots
+		return
+	}
+	// 这里应使用bar的开始时间，避免多个时间周期运行时，大部分CheckMS未更新
+	r.logPlot(wallets, startMS, odNum, totalLegal)
 }
 
 func (r *BTResult) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, totalLegal float64) {
@@ -928,6 +946,49 @@ func (r *BTResult) logPlot(wallets *biz.BanWallets, timeMS int64, odNum int, tot
 	r.Plots.WithDraw = append(r.Plots.WithDraw, drawLegal)
 }
 
+// CalcMeasuresByReal real & rangeSecs are required, tf=1d, factor=365, riskFree=0
+func CalcMeasuresByReal(real []float64, rangeSecs int64, tf string, factor int, riskFree float64) (float64, float64, *errs.Error) {
+	inLen := len(real)
+	if inLen <= 1 {
+		return 0, 0, nil
+	}
+	if tf == "" {
+		tf, factor = "1d", 365
+	}
+	tfSecs := utils2.TFToSecs(tf)
+	if factor == 0 {
+		factor = utils2.TFToSecs("1y") / tfSecs
+	}
+	expNum := int(rangeSecs / int64(tfSecs))
+	rate := float64(inLen) / float64(expNum)
+	step := 1
+	if rate < 0.7 {
+		// 输入数量远小于给定时间周期，使用输入数量对应周期
+		tfSecs = int(float64(tfSecs) / rate)
+		factor = utils2.TFToSecs("1y") / tfSecs
+	} else {
+		// 输入数量远多于给定周期，计算采样步长
+		step = max(1, inLen/expNum)
+	}
+	prevVal := real[0]
+	inReturns := make([]float64, 0, inLen/step+1)
+	for i := step; i < inLen; i += step {
+		curVal := real[i]
+		inReturns = append(inReturns, (curVal-prevVal)/prevVal)
+		prevVal = curVal
+	}
+	if len(inReturns) <= 1 {
+		return 0, 0, nil
+	}
+	sharpe, sortino, err := calcMeasures(inReturns, factor, riskFree)
+	if err != nil {
+		return 0, 0, err
+	}
+	sharpe = utils.NanInfTo(sharpe, 0)
+	sortino = utils.NanInfTo(sortino, 0)
+	return sharpe, sortino, nil
+}
+
 func selectPairs(r *BTResult, name string) []string {
 	fn, ok := PairPickers[name]
 	if !ok {
@@ -948,6 +1009,17 @@ func parseBtResult(path string) (*BTResult, *errs.Error) {
 		return nil, errs.New(errs.CodeUnmarshalFail, err_)
 	}
 	return &res, nil
+}
+
+func CalcBtScore(profitPct, drawDownPct float64) float64 {
+	var score float64
+	if profitPct <= 0 {
+		score = profitPct
+	} else {
+		// 盈利时返回无回撤收益率
+		score = profitPct * math.Pow(1-drawDownPct/100, 1.5)
+	}
+	return utils.NanInfTo(score, 0)
 }
 
 /*
@@ -1051,8 +1123,8 @@ func CalcGroupCumProfits(odList []*ormo.InOutOrder, genKey func(o *ormo.InOutOrd
 		}
 		old, _ := odMap[od.Symbol]
 		odMap[od.Symbol] = append(old, od)
-		minTimeMS = min(minTimeMS, od.Enter.CreateAt)
-		maxTimeMS = max(maxTimeMS, od.Exit.CreateAt)
+		minTimeMS = min(minTimeMS, od.RealEnterMS())
+		maxTimeMS = max(maxTimeMS, od.RealExitMS())
 	}
 	unitSecs := int((maxTimeMS-minTimeMS)/1000) / xNum
 	tf := utils.RoundSecsTF(max(unitSecs, 60))
@@ -1132,7 +1204,7 @@ func getOHLCVNoLack(exs *orm.ExSymbol, tf string, startMS, endMS, tfMSecs int64)
 	return bars, closes, nil
 }
 
-func BuildBtResult(odList []*ormo.InOutOrder, funds map[string]float64) (*BTResult, *errs.Error) {
+func calcBtResult(odList []*ormo.InOutOrder, funds map[string]float64, outDir string) (*BTResult, *errs.Error) {
 	btRes := NewBTResult()
 	if len(odList) == 0 {
 		return btRes, nil
@@ -1151,16 +1223,19 @@ func BuildBtResult(odList []*ormo.InOutOrder, funds map[string]float64) (*BTResu
 	}
 	// 更新起止时间、最小周期
 	var startMS = odList[0].RealEnterMS()
-	var endMS = odList[0].ExitAt
+	var endMS = odList[0].RealExitMS()
 	var tfSecs = utils2.TFToSecs(odList[0].Timeframe)
+	pairOrders := make(map[string][]*ormo.InOutOrder)
 	for _, od := range odList {
 		enterAt := od.RealEnterMS()
 		if enterAt > 0 && enterAt < startMS {
 			startMS = enterAt
 		}
-		endMS = max(endMS, od.ExitAt)
+		endMS = max(endMS, od.RealExitMS())
 		curSecs := utils2.TFToSecs(od.Timeframe)
 		tfSecs = min(tfSecs, curSecs)
+		items, _ := pairOrders[od.Symbol]
+		pairOrders[od.Symbol] = append(items, od)
 	}
 	tfMSecs := int64(tfSecs * 1000)
 	startMS = utils2.AlignTfMSecs(startMS, tfMSecs)
@@ -1169,51 +1244,162 @@ func BuildBtResult(odList []*ormo.InOutOrder, funds map[string]float64) (*BTResu
 	btRes.EndMS = endMS
 	btRes.OrderNum = len(odList)
 	tf := utils2.SecsToTF(tfSecs)
-	totalBarNum := int((endMS - startMS) / tfMSecs)
 	// 获取各个品种信息
-	pairOrders := make(map[string][]*ormo.InOutOrder)
-	for _, od := range odList {
-		items, _ := pairOrders[od.Symbol]
-		pairOrders[od.Symbol] = append(items, od)
-	}
 	pairStats, err := calcPairStats(pairOrders, startMS, endMS, tf)
 	if err != nil {
 		return nil, err
 	}
+	// 检查计算结果是否正确
+	numMap := make(map[int]int)
+	failMap := make(map[string]float64)
+	for _, sta := range pairStats {
+		key := len(sta.KLines)
+		if len(sta.Returns) != key {
+			return nil, errs.NewMsg(errs.CodeRunTime, "%s len(Klines) != len(Returns)", sta.Symbol)
+		}
+		num, _ := numMap[key]
+		numMap[key] = num + 1
+		profitSum := float64(0)
+		for _, od := range sta.Orders {
+			profitSum += od.Profit
+		}
+		retSum := floats.Sum(sta.Returns)
+		diffRate := math.Abs(profitSum-retSum) / max(profitSum, retSum)
+		if diffRate > 0.03 {
+			failMap[sta.Symbol] = math.Round(diffRate * 100)
+		}
+	}
+	if len(numMap) > 1 {
+		return nil, errs.NewMsg(errs.CodeRunTime, "pairStats len not same: %v", numMap)
+	}
+	if len(failMap) > 0 {
+		log.Warn("Sum(Returns) and Sum(Profits) differs too much", zap.Any("pair pcts", failMap))
+	}
 	sort.Slice(odList, func(i, j int) bool {
 		return odList[i].RealEnterMS() < odList[j].RealEnterMS()
 	})
-	openOds := make(map[int64]*ormo.InOutOrder)
-	btRes.PlotEvery = int(math.Round(float64(totalBarNum) / float64(ShowNum)))
+	core.Pairs = utils.KeysOfMap(pairOrders)
 	btRes.logPlot(wallets, startMS, 0, totalLegal)
-	curMS := startMS + tfMSecs
-	nextOd := 0
-	for {
+	btRes.MaxReal = totalLegal
+	btRes.MinReal = totalLegal
+	btRes.TotalInvest = totalLegal
+	offsetMS := min(tfMSecs/2, 120000) // 定位到K线后120s，避免整点时订单尚未成交
+	curAlignMS := startMS
+	openOds, lock := ormo.GetOpenODs(config.DefAcc)
+	nextOd, failEnter := 0, 0
+	for curAlignMS < endMS {
+		barStartMs := curAlignMS
+		curAlignMS += tfMSecs
+		curMS := curAlignMS + offsetMS
+		// 更新所有品种价格
+		prices := make(map[string]float64)
+		for _, sta := range pairStats {
+			for sta.Idx < len(sta.KLines) {
+				bar := sta.KLines[sta.Idx]
+				if bar.Time < barStartMs {
+					sta.Idx++
+					continue
+				}
+				if bar.Time == barStartMs {
+					sta.Idx++
+					prices[sta.Symbol] = bar.Close
+				}
+				break
+			}
+		}
+		core.SetPrices(prices)
+		// 更新当前持仓订单
+		lock.Lock()
+		openList := utils2.ValsOfMap(openOds)
+		lock.Unlock()
+		for _, od := range openList {
+			if od.RealExitMS() < curMS {
+				wallets.ExitOd(od, od.Exit.Filled)
+				wallets.ConfirmOdExit(od, od.Exit.Average)
+				ormo.HistODs = append(ormo.HistODs, od)
+				lock.Lock()
+				delete(openOds, od.ID)
+				lock.Unlock()
+			}
+		}
 		for nextOd < len(odList) {
-			next := odList[nextOd]
-			if next.RealEnterMS() < curMS {
-				openOds[next.ID] = next
+			od := odList[nextOd]
+			if od.RealEnterMS() < curMS {
 				nextOd += 1
+				if od.RealExitMS() > curMS {
+					_, err = wallets.EnterOd(od)
+					if err != nil {
+						failEnter += 1
+						continue
+					}
+					wallets.ConfirmOdEnter(od, od.Enter.Average)
+					lock.Lock()
+					openOds[od.ID] = od
+					lock.Unlock()
+				}
 			} else {
 				break
 			}
 		}
+		// 更新状态
+		lock.Lock()
+		settleMap := make(map[string][]*ormo.InOutOrder)
+		for _, od := range openOds {
+			_, _, settle, _ := core.SplitSymbol(od.Symbol)
+			arr, _ := settleMap[settle]
+			settleMap[settle] = append(arr, od)
+		}
+		openNum := len(openOds)
+		btRes.MaxOpenOrders = max(btRes.MaxOpenOrders, openNum)
+		lock.Unlock()
+		for code, odArr := range settleMap {
+			err = wallets.UpdateOds(odArr, code)
+			if err != nil {
+				return nil, err
+			}
+		}
+		btRes.BarNum += len(prices)
+		btRes.TimeNum += 1
+		btRes.logState(barStartMs, curAlignMS, openNum)
 	}
-	_ = pairStats
-	return nil, nil
+	if failEnter > 0 {
+		log.Warn("skip enter failed orders", zap.Int("num", failEnter))
+	}
+	// 退出终止时尚未退出的订单
+	lock.Lock()
+	openList := utils2.ValsOfMap(openOds)
+	lock.Unlock()
+	for _, od := range openList {
+		wallets.ExitOd(od, od.Exit.Filled)
+		wallets.ConfirmOdExit(od, od.Exit.Average)
+		lock.Lock()
+		delete(openOds, od.ID)
+		lock.Unlock()
+	}
+	btRes.logState(curAlignMS, curAlignMS, 0)
+	// 统计结果并输出
+	ormo.HistODs = odList
+	btRes.Collect()
+	log.Info("BackTest Reports:\n" + btRes.cmdReports(odList))
+	if outDir != "" {
+		btRes.OutDir = outDir
+		btRes.dumpBtFiles()
+		log.Info("Saved", zap.String("at", outDir))
+	}
+	return btRes, nil
 }
 
 type PairStat struct {
+	*orm.ExSymbol
 	Orders  []*ormo.InOutOrder
-	Exs     *orm.ExSymbol
-	Bars    []*banexg.Kline
+	KLines  []*banexg.Kline
 	Returns []float64
-	Prices  []float64
+	Idx     int
 }
 
-func calcPairStats(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64, tf string) (map[string]*PairStat, *errs.Error) {
+func calcPairStats(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64, tf string) ([]*PairStat, *errs.Error) {
 	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
-	var result = make(map[string]*PairStat)
+	var result = make([]*PairStat, 0, len(pairOrders))
 	for pair, orders := range pairOrders {
 		exs := orm.GetExSymbol2(core.ExgName, core.Market, pair)
 		bars, closes, err := getOHLCVNoLack(exs, tf, startMS, endMS, tfMSecs)
@@ -1222,13 +1408,12 @@ func calcPairStats(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int6
 		}
 		// 计算每日回报
 		returns, _, _ := ormo.CalcUnitReturns(orders, closes, startMS, endMS, tfMSecs)
-		result[pair] = &PairStat{
-			Orders:  orders,
-			Exs:     exs,
-			Bars:    bars,
-			Returns: returns,
-			Prices:  closes,
-		}
+		result = append(result, &PairStat{
+			Orders:   orders,
+			ExSymbol: exs,
+			KLines:   bars,
+			Returns:  returns,
+		})
 	}
 	return result, nil
 }
@@ -1267,4 +1452,21 @@ func SampleOdNums(odList []*ormo.InOutOrder, num int) ([]int, int64, int64) {
 		}
 	}
 	return nums, minTimeMS, maxTimeMS
+}
+
+func sortTfMap(intMap map[string]int) string {
+	arr := make([]*core.StrInt64, 0, len(intMap))
+	for k, v := range intMap {
+		arr = append(arr, &core.StrInt64{
+			Str: k, Int: int64(v),
+		})
+	}
+	sort.Slice(arr, func(i, j int) bool {
+		return arr[i].Int > arr[j].Int
+	})
+	tfArr := make([]string, len(arr))
+	for i, v := range arr {
+		tfArr[i] = v.Str
+	}
+	return strings.Join(tfArr, "/")
 }

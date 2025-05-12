@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"gonum.org/v1/gonum/floats"
 	"math"
 	"math/rand"
 	"slices"
@@ -1350,6 +1351,23 @@ func LegalDoneProfits(off int) float64 {
 	return total
 }
 
+func CalcTimeRange(odList []*InOutOrder) (int64, int64) {
+	if len(odList) == 0 {
+		return 0, 0
+	}
+	startMS := odList[0].RealEnterMS()
+	endMS := odList[0].RealExitMS()
+	for _, od := range odList {
+		curEnter := od.RealEnterMS()
+		curExit := od.RealExitMS()
+		if curEnter > 0 {
+			startMS = min(startMS, curEnter)
+		}
+		endMS = max(endMS, curExit)
+	}
+	return startMS, endMS
+}
+
 /*
 CalcUnitReturns 计算单位每日回报金额
 
@@ -1360,15 +1378,11 @@ endMS 区间结束时间，13位时间戳
 tfMSecs 单位的毫秒间隔
 */
 func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfMSecs int64) ([]float64, int, int) {
-	for _, od := range odList {
-		startMS = min(startMS, od.Enter.CreateAt)
-		endMS = max(endMS, od.Exit.CreateAt)
-	}
 	arrLen := int((endMS - startMS) / tfMSecs)
 	returns := make([]float64, arrLen)
 	dayOff, dayEnd := 0, 0
 	for i, od := range odList {
-		entryAlignMS := utils2.AlignTfMSecs(od.Enter.CreateAt, tfMSecs)
+		entryAlignMS := utils2.AlignTfMSecs(od.RealEnterMS(), tfMSecs)
 		offset := int((entryAlignMS - startMS) / tfMSecs)
 		dirt := float64(1)
 		if od.Short {
@@ -1379,46 +1393,59 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 		}
 		entryPrice := od.Enter.Average
 		exitPrice := od.Exit.Average
-		exitMS := od.Exit.CreateAt
-		priceStep := (exitPrice - entryPrice) / float64((exitMS-entryAlignMS)/tfMSecs+1)
+		exitMS := od.RealExitMS()
+		holdNumF := float64((exitMS-entryAlignMS)/tfMSecs + 1)
+		holdNum := int(math.Ceil(holdNumF))
+		priceStep := (exitPrice - entryPrice) / holdNumF
 		posPrice := entryPrice + priceStep // 模拟每个单位的收盘价
 		enterCost := od.EnterCost()
 
+		rets := make([]float64, holdNum)
+		idx := 0
 		bCode, qCode, _, _ := core.SplitSymbol(od.Symbol)
-		if offset < len(returns) && od.Enter != nil {
+		if od.Enter != nil {
 			if od.Enter.FeeType == qCode {
-				returns[offset] -= od.Enter.Fee
+				rets[idx] -= od.Enter.Fee
 			} else if od.Enter.FeeType == bCode {
-				returns[offset] -= od.Enter.Fee * od.Enter.Average
+				rets[idx] -= od.Enter.Fee * od.Enter.Average
 			}
 		}
 
+		// 计算在每个时间单位上的回报
 		for entryAlignMS < exitMS {
 			closePrice := exitPrice
 			if exitMS > entryAlignMS+tfMSecs {
-				if offset < len(closes) {
-					closePrice = closes[offset]
+				if offset+idx < len(closes) {
+					closePrice = closes[offset+idx]
 				} else {
 					closePrice = posPrice
 				}
 			}
 			ret := (closePrice/entryPrice - 1) * dirt * enterCost
-			if offset < len(returns) {
-				returns[offset] += ret
+			if idx < len(rets) {
+				rets[idx] += ret
 			}
-			offset += 1
+			idx += 1
 			entryAlignMS += tfMSecs
 			entryPrice = closePrice
 			posPrice += priceStep
 		}
-		if offset-1 < len(returns) && od.Exit != nil {
+		if idx-1 < len(rets) && od.Exit != nil {
 			if od.Exit.FeeType == qCode {
-				returns[offset-1] -= od.Exit.Fee
+				rets[idx-1] -= od.Exit.Fee
 			} else if od.Exit.FeeType == bCode {
-				returns[offset-1] -= od.Exit.Fee * od.Exit.Average
+				rets[idx-1] -= od.Exit.Fee * od.Exit.Average
 			}
 		}
-		dayEnd = offset
+		// 避免计算日回报误差，根据利润归一化
+		retRate := od.Profit / floats.Sum(rets)
+		for j, v := range rets {
+			if offset+j >= len(returns) {
+				break
+			}
+			returns[offset+j] = v * retRate
+		}
+		dayEnd = offset + len(rets)
 	}
 	return returns, dayOff, dayEnd
 }

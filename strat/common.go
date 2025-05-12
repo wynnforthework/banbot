@@ -435,11 +435,11 @@ func FireOdChange(acc string, od *ormo.InOutOrder, evt int) {
 	// 将模拟时间置为事件触发时间，并备份当前时间
 	evtTime := int64(0)
 	if evt == OdChgEnter {
-		evtTime = od.EnterAt
+		evtTime = od.Enter.CreateAt
 	} else if evt == OdChgEnterFill {
 		evtTime = od.Enter.UpdateAt
 	} else if evt == OdChgExit {
-		evtTime = od.ExitAt
+		evtTime = od.Exit.CreateAt
 	} else if evt == OdChgExitFill && od.Exit != nil {
 		evtTime = od.Exit.UpdateAt
 	}

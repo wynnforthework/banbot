@@ -2274,7 +2274,7 @@ func calcFatalLoss(wallets *BanWallets, orders []*ormo.InOutOrder, backMins int)
 	sumProfit := float64(0)
 	for i := len(orders) - 1; i >= 0; i-- {
 		od := orders[i]
-		if od.Enter.CreateAt < minTimeMS {
+		if od.RealEnterMS() < minTimeMS {
 			break
 		}
 		sumProfit += od.Profit
