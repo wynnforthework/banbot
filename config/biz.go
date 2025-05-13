@@ -96,7 +96,8 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 		}
 	}
 	if len(args.Configs) > 0 {
-		if utils2.IsDocker() {
+		if !outSaved && utils2.IsDocker() {
+			outSaved = true
 			// 对于docker中启动，且传入了额外yml配置的，合并写入到config.local.yml，方便WebUI启动回测时保留额外的yml配置
 			items := make([]string, 0, len(args.Configs)+1)
 			localCfgPath := filepath.Join(GetDataDir(), "config.local.yml")
@@ -115,6 +116,9 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 				return nil, err2
 			}
 			args.Configs = nil
+			if args.NoDefault {
+				paths = append(paths, localCfgPath)
+			}
 		} else {
 			paths = append(paths, args.Configs...)
 		}
