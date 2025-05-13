@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"gonum.org/v1/gonum/floats"
 	"math"
 	"math/rand"
 	"slices"
@@ -1382,7 +1381,8 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 	returns := make([]float64, arrLen)
 	dayOff, dayEnd := 0, 0
 	for i, od := range odList {
-		entryAlignMS := utils2.AlignTfMSecs(od.RealEnterMS(), tfMSecs)
+		entryMS := od.RealEnterMS()
+		entryAlignMS := utils2.AlignTfMSecs(entryMS, tfMSecs)
 		offset := int((entryAlignMS - startMS) / tfMSecs)
 		dirt := float64(1)
 		if od.Short {
@@ -1394,6 +1394,9 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 		entryPrice := od.Enter.Average
 		exitPrice := od.Exit.Average
 		exitMS := od.RealExitMS()
+		if exitMS <= entryMS {
+			continue
+		}
 		holdNumF := float64((exitMS-entryAlignMS)/tfMSecs + 1)
 		holdNum := int(math.Ceil(holdNumF))
 		priceStep := (exitPrice - entryPrice) / holdNumF
@@ -1412,6 +1415,7 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 		}
 
 		// 计算在每个时间单位上的回报
+		openPrice := entryPrice
 		for entryAlignMS < exitMS {
 			closePrice := exitPrice
 			if exitMS > entryAlignMS+tfMSecs {
@@ -1421,13 +1425,13 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 					closePrice = posPrice
 				}
 			}
-			ret := (closePrice/entryPrice - 1) * dirt * enterCost
+			ret := (closePrice - openPrice) / entryPrice * dirt * enterCost
 			if idx < len(rets) {
 				rets[idx] += ret
 			}
 			idx += 1
 			entryAlignMS += tfMSecs
-			entryPrice = closePrice
+			openPrice = closePrice
 			posPrice += priceStep
 		}
 		if idx-1 < len(rets) && od.Exit != nil {
@@ -1437,13 +1441,12 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 				rets[idx-1] -= od.Exit.Fee * od.Exit.Average
 			}
 		}
-		// 避免计算日回报误差，根据利润归一化
-		retRate := od.Profit / floats.Sum(rets)
+		// 累加利润
 		for j, v := range rets {
 			if offset+j >= len(returns) {
 				break
 			}
-			returns[offset+j] = v * retRate
+			returns[offset+j] += v
 		}
 		dayEnd = offset + len(rets)
 	}

@@ -406,6 +406,9 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[strin
 	if od.Exit != nil {
 		tryOd = od.Exit
 	}
+	if tryOd == nil {
+		return errs.NewMsg(errs.CodeRunTime, "Enter part of %s is nil", od.Key())
+	}
 	var err *errs.Error
 	if tryOd.Enter && tryOd.OrderID == "" && tryOd.Status == ormo.OdStatusInit {
 		// The order has not been submitted to the exchange and is an entry order

@@ -488,7 +488,7 @@ func groupItems(orders []*ormo.InOutOrder, measure bool, getTag func(od *ormo.In
 	if measure {
 		// 分30份采样计算指标，太大的话会导致指标偏小
 		for _, gp := range groups {
-			sharpe, sortino, err := measurePerformance(gp.Orders)
+			sharpe, sortino, err := CalcMeasureByOrders(gp.Orders)
 			if err != nil {
 				log.Warn("calc measure fail", zap.Error(err))
 			} else {
@@ -542,7 +542,7 @@ func printGroups(groups []*RowItem, title string, measure bool, extHeads []strin
 	return b.String()
 }
 
-func measurePerformance(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) {
+func CalcMeasureByOrders(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) {
 	if len(ods) == 0 {
 		return 0, 0, nil
 	}
@@ -956,26 +956,30 @@ func CalcMeasuresByReal(real []float64, rangeSecs int64, tf string, factor int, 
 		tf, factor = "1d", 365
 	}
 	tfSecs := utils2.TFToSecs(tf)
-	if factor == 0 {
-		factor = utils2.TFToSecs("1y") / tfSecs
-	}
-	expNum := int(rangeSecs / int64(tfSecs))
+	yearSecs := utils2.TFToSecs("1y")
+	// 期望数量=时间范围/年*年内周期数
+	expNum := int(float64(rangeSecs) / float64(yearSecs) * float64(factor))
 	rate := float64(inLen) / float64(expNum)
-	step := 1
+	step, smpNum := 1, 0
 	if rate < 0.7 {
 		// 输入数量远小于给定时间周期，使用输入数量对应周期
+		smpNum = inLen
 		tfSecs = int(float64(tfSecs) / rate)
-		factor = utils2.TFToSecs("1y") / tfSecs
 	} else {
 		// 输入数量远多于给定周期，计算采样步长
-		step = max(1, inLen/expNum)
+		step = max(1, int(math.Round(rate)))
+		smpNum = inLen / step
+		tfSecs = int(rangeSecs) / smpNum
 	}
+	factor = yearSecs / tfSecs
 	prevVal := real[0]
-	inReturns := make([]float64, 0, inLen/step+1)
+	inReturns := make([]float64, 0, smpNum+1)
+	cumRets := make([]float64, 0, smpNum+1)
 	for i := step; i < inLen; i += step {
 		curVal := real[i]
 		inReturns = append(inReturns, (curVal-prevVal)/prevVal)
 		prevVal = curVal
+		cumRets = append(cumRets, curVal)
 	}
 	if len(inReturns) <= 1 {
 		return 0, 0, nil
@@ -1245,7 +1249,7 @@ func calcBtResult(odList []*ormo.InOutOrder, funds map[string]float64, outDir st
 	btRes.OrderNum = len(odList)
 	tf := utils2.SecsToTF(tfSecs)
 	// 获取各个品种信息
-	pairStats, err := calcPairStats(pairOrders, startMS, endMS, tf)
+	pairStats, err := CalcPairStats(pairOrders, startMS, endMS, tf)
 	if err != nil {
 		return nil, err
 	}
@@ -1397,7 +1401,7 @@ type PairStat struct {
 	Idx     int
 }
 
-func calcPairStats(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64, tf string) ([]*PairStat, *errs.Error) {
+func CalcPairStats(pairOrders map[string][]*ormo.InOutOrder, startMS, endMS int64, tf string) ([]*PairStat, *errs.Error) {
 	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	var result = make([]*PairStat, 0, len(pairOrders))
 	for pair, orders := range pairOrders {

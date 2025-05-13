@@ -814,8 +814,6 @@ func BtFactors(args []string) error {
 		return errors.New("min-back must >= interval")
 	}
 	// 按interval对齐开始截止时间
-	startMs = utils2.AlignTfMSecs(startMs, intvMSecs)
-	endMS = utils2.AlignTfMSecs(endMS, intvMSecs) + intvMSecs
 	totalRangeMs := endMS - startMs
 	dayNum := totalRangeMs / dayMSecs
 	tfMSecs := int64(tfSecs * 1000)
@@ -848,11 +846,11 @@ func BtFactors(args []string) error {
 	rangeEnd := startMs + minBackMSecs
 	var testOrders []*ormo.InOutOrder
 	for rangeEnd+intvMSecs/5 < endMS {
-		pairOrders, err := getRangeOrders(orders, tf, rangeStart, rangeEnd)
+		pairOrders, err := CutOrdersInRange(orders, rangeStart, rangeEnd)
 		if err != nil {
 			return err
 		}
-		pairInfos, err := calcPairStats(pairOrders, rangeStart, rangeEnd, tf)
+		pairInfos, err := CalcPairStats(pairOrders, rangeStart, rangeEnd, tf)
 		if err != nil {
 			return err
 		}
@@ -878,7 +876,7 @@ func BtFactors(args []string) error {
 		rangeStr := fmt.Sprintf("%s-%s", startDate, endDate)
 		log.Info("select pairs", zap.String("range", rangeStr), zap.Strings("arr", pairs))
 		// 使用选中品种，交易interval时间段
-		pairOrders, err = getRangeOrders(orders, tf, rangeEnd, rangeEnd+intvMSecs)
+		pairOrders, err = CutOrdersInRange(orders, rangeEnd, rangeEnd+intvMSecs)
 		if err != nil {
 			return err
 		}
@@ -899,7 +897,7 @@ func BtFactors(args []string) error {
 	return nil
 }
 
-func getRangeOrders(orders []*ormo.InOutOrder, tf string, startMS, endMS int64) (map[string][]*ormo.InOutOrder, *errs.Error) {
+func CutOrdersInRange(orders []*ormo.InOutOrder, startMS, endMS int64) (map[string][]*ormo.InOutOrder, *errs.Error) {
 	pairOrders := make(map[string][]*ormo.InOutOrder)
 	cloneIds := make(map[int64]bool)
 	for _, od := range orders {
@@ -918,10 +916,22 @@ func getRangeOrders(orders []*ormo.InOutOrder, tf string, startMS, endMS int64) 
 		items, _ := pairOrders[od.Symbol]
 		pairOrders[od.Symbol] = append(items, curOd)
 	}
-	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	for pair, items := range pairOrders {
+		tfMap := make(map[string]int)
+		minTF, minTfSecs := "", 0
+		for _, od := range items {
+			if _, ok := tfMap[od.Timeframe]; !ok {
+				secs := utils2.TFToSecs(od.Timeframe)
+				tfMap[od.Timeframe] = secs
+				if minTF == "" || secs < minTfSecs {
+					minTfSecs = secs
+					minTF = od.Timeframe
+				}
+			}
+		}
+		tfMSecs := int64(minTfSecs * 1000)
 		exs := orm.GetExSymbol2(core.ExgName, core.Market, pair)
-		_, bars, err := orm.GetOHLCV(exs, tf, startMS, endMS, 1, false)
+		_, bars, err := orm.GetOHLCV(exs, minTF, startMS, endMS, 1, false)
 		if err != nil {
 			return nil, err
 		}
@@ -930,7 +940,7 @@ func getRangeOrders(orders []*ormo.InOutOrder, tf string, startMS, endMS int64) 
 		}
 		priceOpen := bars[0].Open
 		openMS := bars[0].Time
-		_, bars, err = orm.GetOHLCV(exs, tf, 0, endMS, 1, false)
+		_, bars, err = orm.GetOHLCV(exs, minTF, 0, endMS, 1, false)
 		if err != nil {
 			return nil, err
 		}
