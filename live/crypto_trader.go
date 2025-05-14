@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banbot/orm/ormo"
+	"github.com/banbox/banexg/utils"
 	"strings"
 	"time"
 
@@ -110,9 +111,24 @@ func (t *CryptoTrader) Run() *errs.Error {
 }
 
 func (t *CryptoTrader) FeedKLine(bar *orm.InfoKline) {
-	delayExecBatch()
-	envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
-	orm.AddDumpRow(orm.DumpKline, envKey, bar.Kline)
+	if bar.IsWarmUp {
+		tfMSecs := int64(utils.TFToSecs(bar.TimeFrame) * 1000)
+		barEndMS := bar.Time + tfMSecs
+		if barEndMS > strat.LastBatchMS {
+			// Enter the next timeframe and trigger the batch entry callback
+			// 进入下一个时间帧，触发批量入场回调
+			execMS := barEndMS + core.DelayBatchMS + 1
+			waitNum := biz.TryFireBatches(execMS, bar.IsWarmUp)
+			if waitNum > 0 {
+				log.Warn(fmt.Sprintf("batch job exec fail, wait: %v", waitNum))
+			}
+			strat.LastBatchMS = barEndMS
+		}
+	} else {
+		delayExecBatch()
+		envKey := strings.Join([]string{bar.Symbol, bar.TimeFrame}, "_")
+		orm.AddDumpRow(orm.DumpKline, envKey, bar.Kline)
+	}
 	err := t.Trader.FeedKline(bar)
 	if err != nil {
 		log.Error("handle bar fail", zap.String("pair", bar.Symbol), zap.Error(err))
@@ -122,7 +138,7 @@ func (t *CryptoTrader) FeedKLine(bar *orm.InfoKline) {
 
 func delayExecBatch() {
 	time.AfterFunc(time.Millisecond*core.DelayBatchMS, func() {
-		waitNum := biz.TryFireBatches(btime.UTCStamp())
+		waitNum := biz.TryFireBatches(btime.UTCStamp(), false)
 		if waitNum > 0 {
 			// There are TF cycles that have not yet been completed, and they are postponed for a few seconds to trigger again
 			// 有尚未完成的tf周期，推迟几秒再次触发

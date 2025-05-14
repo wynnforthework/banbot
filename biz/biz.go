@@ -231,13 +231,13 @@ func AddBatchJob(account, tf string, job *strat.StratJob, infoEnv *ta.BarEnv) {
 	tasks.Map[pairKey] = &strat.JobEnv{Job: job, Env: infoEnv, Symbol: pair}
 }
 
-func TryFireBatches(currMS int64) int {
+func TryFireBatches(currMS int64, isWarmUp bool) int {
 	lockBatch.Lock()
 	defer lockBatch.Unlock()
 	var sess *ormo.Queries
 	var conn *sql.DB
 	var err *errs.Error
-	if core.LiveMode {
+	if core.LiveMode && !isWarmUp {
 		// In real-time mode, the order is saved to the database. In non-real-time mode, the order is temporarily saved to the memory without the need for a database.
 		// 实时模式保存到数据库。非实时模式，订单临时保存到内存，无需数据库
 		sess, conn, err = ormo.Conn(orm.DbTrades, true)
@@ -287,11 +287,13 @@ func TryFireBatches(currMS int64) int {
 			stgy.OnBatchJobs(mainJobs)
 			// Perform entry/exit tasks
 			// 执行入场/出场任务
-			odMgr := GetOdMgr(account)
-			for _, job := range mainJobs {
-				_, _, err = odMgr.ProcessOrders(sess, job)
-				if err != nil {
-					log.Error("process orders fail", zap.Error(err))
+			if !isWarmUp {
+				odMgr := GetOdMgr(account)
+				for _, job := range mainJobs {
+					_, _, err = odMgr.ProcessOrders(sess, job)
+					if err != nil {
+						log.Error("process orders fail", zap.Error(err))
+					}
 				}
 			}
 		}

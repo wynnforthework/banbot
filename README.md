@@ -6,6 +6,7 @@ banbot is a high-performance, easy-to-use, multi-symbol, multi-strategy, multi-p
 
 [![AGPLv3 licensed][agpl-badge]][agpl-url]
 [![Discord chat][discord-badge]][discord-url]
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/banbox/banbot)
 
 [agpl-badge]: https://img.shields.io/badge/license-AGPL--v3-green.svg
 [agpl-url]: https://github.com/banbox/banbot/blob/develop/LICENSE

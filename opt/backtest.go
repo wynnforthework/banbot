@@ -65,21 +65,21 @@ func NewBackTestLite(isOpt bool, onBar data.FnPairKline, getEnd data.FnGetInt64,
 func (b *BackTestLite) FeedKLine(bar *orm.InfoKline) bool {
 	b.BarNum += 1
 	curTime := btime.TimeMS()
-	if !bar.IsWarmUp {
-		if curTime > strat.LastBatchMS {
-			// Enter the next timeframe and trigger the batch entry callback
-			// 进入下一个时间帧，触发批量入场回调
-			btime.CurTimeMS = strat.LastBatchMS
-			waitNum := biz.TryFireBatches(curTime)
-			if waitNum > 0 {
-				log.Warn(fmt.Sprintf("batch job exec fail, wait: %v", waitNum))
-			}
-			strat.LastBatchMS = curTime
-			btime.CurTimeMS = curTime
+	if curTime > strat.LastBatchMS {
+		// Enter the next timeframe and trigger the batch entry callback
+		// 进入下一个时间帧，触发批量入场回调
+		btime.CurTimeMS = strat.LastBatchMS
+		waitNum := biz.TryFireBatches(curTime, bar.IsWarmUp)
+		if waitNum > 0 {
+			log.Warn(fmt.Sprintf("batch job exec fail, wait: %v", waitNum))
 		}
-		if curTime > b.lastTime {
-			b.lastTime = curTime
-			b.TimeNum += 1
+		strat.LastBatchMS = curTime
+		btime.CurTimeMS = curTime
+	}
+	if curTime > b.lastTime {
+		b.lastTime = curTime
+		b.TimeNum += 1
+		if !bar.IsWarmUp {
 			core.CheckWallets = true
 		}
 	}

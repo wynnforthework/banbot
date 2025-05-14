@@ -58,8 +58,12 @@ func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
 	// 超过1分钟且周期的一半，认为bar延迟，不可下单
 	delaySecs := int((btime.TimeMS()-bar.Time)/1000) - tfSecs
 	barExpired := delaySecs >= max(60, tfSecs/2)
-	if barExpired && core.LiveMode && !bar.IsWarmUp {
-		log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delaySecs))
+	if barExpired {
+		if core.LiveMode && !bar.IsWarmUp {
+			log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delaySecs))
+		} else {
+			barExpired = false
+		}
 	}
 	// Update indicator environment
 	// 更新指标环境

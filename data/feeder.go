@@ -259,7 +259,7 @@ func (f *Feeder) fireCallBacks(timeFrame string, tfMSecs int64, bars []*banexg.K
 	isLive := core.LiveMode
 	pair := f.Symbol
 	for _, bar := range bars {
-		if !isLive {
+		if !isLive || f.isWarmUp {
 			btime.CurTimeMS = bar.Time + tfMSecs
 		}
 		f.CallBack(&orm.InfoKline{
@@ -410,6 +410,11 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 	if len(bars) == 0 {
 		return 0
 	}
+	bakBt := core.BackTestMode
+	core.BackTestMode = true
+	defer func() {
+		core.BackTestMode = bakBt
+	}()
 	f.isWarmUp = true
 	tfMSecs := int64(utils2.TFToSecs(tf) * 1000)
 	lastMS := bars[len(bars)-1].Time + tfMSecs

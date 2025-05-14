@@ -396,7 +396,7 @@ func (s *StratJob) drawDownExit(od *ormo.InOutOrder) *ExitReq {
 		odDirt = -1
 	}
 	if (spVal-curPrice)*odDirt >= 0 {
-		return &ExitReq{Tag: "take", OrderID: od.ID}
+		return &ExitReq{Tag: core.ExitTagDrawDown, OrderID: od.ID}
 	}
 	od.SetStopLoss(&ormo.ExitTrigger{
 		Price: spVal,
