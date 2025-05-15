@@ -148,7 +148,9 @@ func DecSortinoRatioAdv(moReturns []decimal.Decimal, riskFree decimal.Decimal, p
 	if smart {
 		downSide = downSide.Mul(decimal.NewFromFloat(AutoCorrPenalty(DecArrToFloats(excessReturns))))
 	}
-
+	if downSide.Equal(decimal.Zero) {
+		return decimal.Zero, nil
+	}
 	res := avg.Div(downSide)
 	if annualize && periods > 1 {
 		res = res.Mul(decimal.NewFromFloat(math.Sqrt(float64(periods))))
