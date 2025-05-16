@@ -355,6 +355,8 @@
     "confirm_file_target": "Are you sure to {op} {src} to {target} ?",
     "input_file_name": "input target file name: ",
     "confirm_delete": "Are you sure to delete {src}? This operation cannot be undone!",
+    "confirm_delete_n": "Are you sure to delete {src} items? This operation cannot be undone!",
+    "delete_result": "delete {success} success, {fail} fail",
     "create": "Create",
     "bad_strat_name": "Please use the format \"folder:strategy\", such as Trend:MaCross",
     "only_strat_need": "Please enter the strategy name directly",

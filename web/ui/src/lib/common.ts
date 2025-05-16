@@ -11,3 +11,8 @@ export function getFirstValid(vals: any[]){
   }
   return 0
 }
+
+export interface StrVal{
+  str: string
+  val: any
+}

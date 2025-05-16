@@ -137,7 +137,8 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob, pb *utils.StagedP
 	}
 	skipWarms := make(map[string][2]int)
 	startTime := btime.TimeMS()
-	retErr := utils.ParallelRun(warmJobs, core.ConcurNum, func(_ int, job *WarmJob) *errs.Error {
+	// 这里不可使用并行预热，因预热过程会读写btime等全局变量，可能导致指标计算时repeat append on Series panic
+	for _, job := range warmJobs {
 		hold := job.hold
 		if job.timeMS == 0 {
 			job.timeMS = startTime
@@ -149,12 +150,14 @@ func (p *Provider[IKlineFeeder]) warmJobs(warmJobs []*WarmJob, pb *utils.StagedP
 			skipWarms[k] = v
 		}
 		lockMap.Unlock()
-		return err
-	})
+		if err != nil {
+			return sinceMap, err
+		}
+	}
 	if len(skipWarms) > 0 {
 		log.Warn("warm lacks", zap.String("items", StrWarmLacks(skipWarms)))
 	}
-	return sinceMap, retErr
+	return sinceMap, nil
 }
 
 type HistProvider struct {

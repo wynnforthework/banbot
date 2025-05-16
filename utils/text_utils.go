@@ -54,7 +54,7 @@ func MapToStr[T any](m map[string]T, value bool, precFlt int) string {
 	var b strings.Builder
 	arr := make([]*core.StrAny, 0, len(m))
 	for k, v := range m {
-		arr = append(arr, &core.StrAny{Str: k, Any: v})
+		arr = append(arr, &core.StrAny{Str: k, Val: v})
 	}
 	sort.Slice(arr, func(i, j int) bool {
 		return arr[i].Str < arr[j].Str
@@ -65,12 +65,12 @@ func MapToStr[T any](m map[string]T, value bool, precFlt int) string {
 		}
 		if value {
 			var valStr string
-			if fltVal, ok := p.Any.(float64); ok {
+			if fltVal, ok := p.Val.(float64); ok {
 				valStr = strconv.FormatFloat(fltVal, 'f', precFlt, 64)
-			} else if flt32Val, ok := p.Any.(float32); ok {
+			} else if flt32Val, ok := p.Val.(float32); ok {
 				valStr = strconv.FormatFloat(float64(flt32Val), 'f', precFlt, 64)
 			} else {
-				valStr = fmt.Sprintf("%v", p.Any)
+				valStr = fmt.Sprintf("%v", p.Val)
 			}
 			item := fmt.Sprintf("%s: %v", p.Str, valStr)
 			b.WriteString(item)

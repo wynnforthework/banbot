@@ -27,19 +27,19 @@ type PerfSta struct {
 	Delta    float64     `yaml:"delta" mapstructure:"delta"` // Multiplier before logarithmizing TotProfit 对TotProfit进行对数处理前的乘数
 }
 
-type StrVal struct {
-	Str string
-	Val float64
+type StrAny struct {
+	Str string `json:"str"`
+	Val any    `json:"val"`
 }
 
-type StrAny struct {
-	Str string
-	Any any
+type StrVal[T comparable] struct {
+	Str string `json:"str"`
+	Val T      `json:"val"`
 }
 
 type StrInt64 struct {
-	Str string
-	Int int64
+	Str string `json:"str"`
+	Int int64  `json:"int"`
 }
 
 type Param struct {

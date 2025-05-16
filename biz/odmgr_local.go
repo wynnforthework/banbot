@@ -395,7 +395,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 	curMS := btime.TimeMS()
 	// The time when the simulation is triggered
 	// 模拟触发时的时间
-	var rate = config.BTNetCost / tfSecs
+	var rate = float64(0) // 限价单触发不考虑网络延迟
 	odType := banexg.OdTypeMarket
 	if fillPrice > 0 {
 		odType = banexg.OdTypeLimit

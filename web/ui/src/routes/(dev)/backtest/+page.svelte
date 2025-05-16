@@ -11,9 +11,11 @@
   import {site} from "$lib/stores/site";
   import Icon from "$lib/Icon.svelte";
   import {localizeHref} from "$lib/paraglide/runtime";
+  import {modals} from "$lib/stores/modals";
+  import type {StrVal} from "$lib/common";
 
   let tasks = $state<BtTask[]>([]);
-  let strats = $state<string[]>([]);
+  let strats = $state<StrVal[]>([]);
   let periods = $state<string[]>([]);
   let ranges = $state<{label: string, value: number}[]>([]);
   let hoveredCard = $state<number|null>(null);
@@ -110,12 +112,12 @@
     }
   }
 
-  function showStrats(strats: string) {
-    if(strats.includes(',')) {
-      const parts = strats.split(',');
+  function showStrats(name: string) {
+    if(name.includes(',')) {
+      const parts = name.split(',');
       return parts[0] + ' & ' + (parts.length - 1) + ' More';
     }
-    return strats;
+    return name;
   }
 
   function taskTooltip(task: BtTask){
@@ -179,6 +181,30 @@ Error: ${task.info}`
     }
   }
 
+  async function delActiveReports(){
+    const delNum = selectedTasks.length;
+    if (delNum == 0){
+      return
+    }
+    const ok = await modals.confirm(m.confirm_delete_n({src: delNum}));
+    if (!ok) return;
+    const ids = selectedTasks.map(t => t.id);
+    const rsp = await postApi("/dev/del_bt_reports", {ids});
+    if (rsp.code != 200) {
+      alerts.error(rsp.msg || 'Failed to delete reports');
+      return;
+    }
+    if (rsp.fail){
+      alerts.warning(m.delete_result(rsp as any))
+    }else{
+      alerts.success(m.delete_result(rsp as any))
+    }
+    if(rsp.success){
+      selectedTasks = [];
+      await fetchTasks();
+    }
+  }
+
   function isTaskSelected(task: BtTask) {
     return selectedTasks.some(t => t.id === task.id);
   }
@@ -239,8 +265,8 @@ Error: ${task.info}`
     <div class="flex gap-4">
       <select class="select" bind:value={selectedStrat}>
         <option value="">{m.all_strats()}</option>
-        {#each strats as strat}
-          <option value={strat}>{strat}</option>
+        {#each strats as item}
+          <option value={item.str}>{item.str}({item.val})</option>
         {/each}
       </select>
 
@@ -272,8 +298,11 @@ Error: ${task.info}`
       </button>
       {#if !isMultiSelect}
         <a class="btn btn-primary" href={localizeHref("/backtest/new")}>{m.run_backtest()}</a>
-      {:else if compareUrl}
-        <a class="btn btn-primary" href={compareUrl} target="_blank">{m.compare_assets()}</a>
+      {:else}
+        {#if compareUrl}
+          <a class="btn btn-primary" href={compareUrl} target="_blank">{m.compare_assets()}</a>
+        {/if}
+        <a class="btn btn-error" onclick={delActiveReports}>{m.delete_()}</a>
       {/if}
     </div>
   </div>

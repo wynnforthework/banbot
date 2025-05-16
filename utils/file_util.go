@@ -111,6 +111,41 @@ func EnsureDir(dir string, perm os.FileMode) error {
 	return nil
 }
 
+func RemovePath(path string, recursive bool) error {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("check path fail: %s %w", path, err)
+	}
+
+	// check is dir
+	if fileInfo.IsDir() {
+		// not allow to delete by recursive
+		if !recursive {
+			// check is empty
+			entries, err := os.ReadDir(path)
+			if err != nil {
+				return fmt.Errorf("read dir fail: %s %w", path, err)
+			}
+
+			if len(entries) > 0 {
+				return fmt.Errorf("dir is not empty, enable recursive to delete: %s", path)
+			}
+
+			// delete empty dir
+			return os.Remove(path)
+		}
+
+		// delete all
+		return os.RemoveAll(path)
+	}
+
+	// delete file
+	return os.Remove(path)
+}
+
 // FindSubPath searches for the first occurrence of a directory named tgtName
 // within the specified workDir and its subdirectories up to two levels deep.
 func FindSubPath(parDir, tgtName string, maxDepth int) (string, error) {

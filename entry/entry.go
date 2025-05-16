@@ -263,10 +263,15 @@ func runMergeAssets(args []string) error {
 	if len(files) < 2 {
 		return errs.NewMsg(errs.CodeParamRequired, "at least 2 files need to merge")
 	}
+	if outPath == "" {
+		return errs.NewMsg(errs.CodeParamRequired, "-out is required")
+	}
 	filesMap := make(map[string]string)
 	for _, file := range files {
-		filesMap[file] = ""
+		path := config.ParsePath(file)
+		filesMap[path] = ""
 	}
+	outPath = config.ParsePath(outPath)
 
 	lineArr := utils.SplitSolid(lines, ",", true)
 	err2 := opt.MergeAssetsHtml(outPath, filesMap, lineArr, false)

@@ -355,6 +355,8 @@
   "confirm_file_target": "确定要将 {src} {op} 到 {target} 吗？",
   "input_file_name": "请输入目标文件名称",
   "confirm_delete": "确定要删除 {src} 吗？此操作不可恢复！",
+  "confirm_delete_n": "确定要删除 {src} 个条目吗? 此操作不可恢复！",
+  "delete_result": "已成功删除 {success} 个, 失败{fail} 个",
   "create": "创建",
   "bad_strat_name": "请使用\"目录:策略名\"的格式，例如 Trend:MaCross",
   "only_strat_need": "请直接输入策略名",

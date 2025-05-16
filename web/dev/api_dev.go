@@ -73,6 +73,7 @@ func regApiDev(api fiber.Router) {
 	api.Get("/download", handleDownload)
 	api.Get("/compare_assets", getCompareAssets)
 	api.Post("/update_note", handleUpdateNote)
+	api.Post("/del_bt_reports", delBacktestReports)
 }
 
 func onWsDev(c *websocket.Conn) {
@@ -523,20 +524,25 @@ func getBtOptions(c *fiber.Ctx) error {
 	}
 
 	// 处理策略列表
-	stratMap := make(map[string]bool)
+	stratMap := make(map[string]int)
 	for _, o := range options {
 		strats := strings.Split(o.Strats, ",")
 		for _, s := range strats {
 			if s = strings.TrimSpace(s); s != "" {
-				stratMap[s] = true
+				oldNum, _ := stratMap[s]
+				stratMap[s] = oldNum + 1
 			}
 		}
 	}
-	strats := make([]string, 0, len(stratMap))
-	for s := range stratMap {
-		strats = append(strats, s)
+	strats := make([]core.StrVal[int], 0, len(stratMap))
+	for s, v := range stratMap {
+		strats = append(strats, core.StrVal[int]{
+			Str: s, Val: v,
+		})
 	}
-	sort.Strings(strats)
+	sort.Slice(strats, func(i, j int) bool {
+		return strats[i].Val > strats[j].Val
+	})
 
 	// 处理周期列表
 	periodMap := make(map[string]int)
@@ -1462,6 +1468,75 @@ func getCompareAssets(c *fiber.Ctx) error {
 	// 设置响应头
 	c.Set("Content-Type", "text/html")
 	return c.Send(content)
+}
+
+func delBacktestReports(c *fiber.Ctx) error {
+	type DelArgs struct {
+		IDs    []int64  `json:"ids"`
+		Hashes []string `json:"hashes"`
+	}
+	var args = new(DelArgs)
+	if err := base.VerifyArg(c, args, base.ArgBody); err != nil {
+		return err
+	}
+
+	qu, conn, err2 := ormu.Conn()
+	if err2 != nil {
+		return err2
+	}
+	defer conn.Close()
+
+	// 构建files参数
+	files := make(map[string]bool)
+	tasks := make([]int64, 0, len(args.IDs))
+	failNum := 0
+	for _, id := range args.IDs {
+		task, err := qu.GetTask(context.Background(), id)
+		if err != nil {
+			failNum += 1
+			log.Error("query task fail", zap.Int64("id", id), zap.Error(err))
+			continue
+		}
+		tasks = append(tasks, id)
+		if task.Path != "" {
+			path := filepath.Join(config.GetDataDir(), "backtest", task.Path)
+			files[path] = utils.Exists(path)
+		}
+	}
+	for _, hash := range args.Hashes {
+		path := filepath.Join(config.GetDataDir(), "backtest", hash)
+		files[path] = utils.Exists(path)
+		rows, err := qu.FindTasks(context.Background(), ormu.FindTasksParams{
+			Path: hash,
+		})
+		if err != nil {
+			log.Error("FindTasks by hash fail", zap.String("hash", hash), zap.Error(err))
+			continue
+		}
+		for _, r := range rows {
+			tasks = append(tasks, r.ID)
+		}
+	}
+	for path, exist := range files {
+		if !exist {
+			continue
+		}
+		err := utils.RemovePath(path, true)
+		if err != nil {
+			log.Error("delete fail", zap.Error(err))
+			failNum += 1
+		}
+	}
+	if len(tasks) > 0 {
+		err := qu.DelTasks(context.Background(), tasks)
+		if err != nil {
+			log.Error("delete records fail", zap.Error(err))
+		}
+	}
+	return c.JSON(fiber.Map{
+		"success": len(files) - failNum,
+		"fail":    failNum,
+	})
 }
 
 // handleUpdateNote 处理更新回测任务备注的请求
