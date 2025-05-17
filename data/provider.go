@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/strat"
 	"github.com/sasha-s/go-deadlock"
 	"math"
 	"sort"
@@ -442,6 +443,8 @@ func NewLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) (*LiveProvider, *e
 		KLineWatcher: watcher,
 	}
 	watcher.OnKLineMsg = makeOnKlineMsg(provider)
+	watcher.OnTrades = makeOnTrade(provider)
+	watcher.OnDepth = makeOnDepth(provider)
 	// 立刻订阅实时价格
 	err = watcher.SendMsg("subscribe", []string{
 		fmt.Sprintf("price_%s_%s", core.ExgName, core.Market),
@@ -473,12 +476,12 @@ func (p *LiveProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 		if err != nil {
 			return err
 		}
-		if len(core.BookPairs) > 0 {
-			jobs = make([]WatchJob, 0, len(core.BookPairs))
-			for pair := range core.BookPairs {
+		for msgType, pairMap := range strat.WsSubJobs {
+			jobs = make([]WatchJob, 0, len(pairMap))
+			for pair := range pairMap {
 				jobs = append(jobs, WatchJob{Symbol: pair, TimeFrame: "1m"})
 			}
-			err = p.WatchJobs(core.ExgName, core.Market, "book", jobs...)
+			err = p.WatchJobs(core.ExgName, core.Market, msgType, jobs...)
 			if err != nil {
 				return err
 			}
@@ -509,6 +512,9 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 	return func(msg *KLineMsg) {
 		if msg.ExgName != core.ExgName || msg.Market != core.Market {
 			return
+		}
+		if msg.Interval < msg.TFSecs {
+			fireWsKlines(msg)
 		}
 		hold, ok := p.holders[msg.Pair]
 		if !ok {
@@ -559,5 +565,43 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 		} else {
 			hold.setWaitBar(lastBar)
 		}
+	}
+}
+
+func makeOnTrade(p *LiveProvider) func(exgName, market, pair string, trades []*banexg.Trade) {
+	return func(exgName, market, pair string, trades []*banexg.Trade) {
+		pairMap, _ := strat.WsSubJobs[core.WsSubTrade]
+		if len(pairMap) == 0 || len(trades) == 0 {
+			return
+		}
+		jobMap, _ := pairMap[pair]
+		for job := range jobMap {
+			job.Strat.OnWsTrades(job, pair, trades)
+		}
+	}
+}
+
+func makeOnDepth(p *LiveProvider) func(dep *banexg.OrderBook) {
+	return func(dep *banexg.OrderBook) {
+		pairMap, _ := strat.WsSubJobs[core.WsSubDepth]
+		if len(pairMap) == 0 {
+			return
+		}
+		jobMap, _ := pairMap[dep.Symbol]
+		for job := range jobMap {
+			job.Strat.OnWsDepth(job, dep)
+		}
+	}
+}
+
+func fireWsKlines(msg *KLineMsg) {
+	pairMap, _ := strat.WsSubJobs[core.WsSubKLine]
+	if len(pairMap) == 0 || len(msg.Arr) == 0 {
+		return
+	}
+	jobMap, _ := pairMap[msg.Pair]
+	last := msg.Arr[len(msg.Arr)-1]
+	for job := range jobMap {
+		job.Strat.OnWsKline(job, msg.Pair, last)
 	}
 }

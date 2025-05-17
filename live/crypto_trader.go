@@ -67,6 +67,14 @@ func (t *CryptoTrader) Init() *errs.Error {
 	lastRefreshMS = btime.TimeMS()
 	// add exit callback
 	core.ExitCalls = append(core.ExitCalls, exitCleanUp)
+	strat.WsSubUnWatch = func(m map[string][]string) {
+		for msgType, pairs := range m {
+			err2 := dp.UnWatchJobs(core.ExgName, core.Market, msgType, pairs)
+			if err2 != nil {
+				log.Error("UnWatchJobs fail", zap.String("type", msgType), zap.Error(err2))
+			}
+		}
+	}
 	return err
 }
 

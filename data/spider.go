@@ -320,13 +320,13 @@ func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 	if err != nil {
 		return err
 	}
-	if jobType == "ws" || jobType == "book" {
+	if jobType == core.WsSubDepth {
 		m.watchOdBooks(valids)
-	} else if jobType == "ohlcv" || jobType == "uohlcv" {
+	} else if jobType == "ohlcv" || jobType == core.WsSubKLine {
 		m.watchKLines(valids)
 	} else if jobType == "price" {
 		m.watchPrices()
-	} else if jobType == "trade" {
+	} else if jobType == core.WsSubTrade {
 		m.watchTrades(valids)
 	} else {
 		log.Error("unknown sub type", zap.String("val", jobType))
@@ -335,10 +335,10 @@ func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 }
 
 func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
-	if jobType == "ws" || jobType == "book" {
+	if jobType == core.WsSubDepth {
 		removes := m.Depths.Remove(pairs...)
 		return m.exchange.UnWatchOrderBooks(removes, nil)
-	} else if jobType == "ohlcv" || jobType == "uohlcv" {
+	} else if jobType == "ohlcv" || jobType == core.WsSubKLine {
 		timeFrame := "1s"
 		if banexg.IsContract(m.Market) {
 			timeFrame = "1m"
@@ -351,7 +351,7 @@ func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
 		return m.exchange.UnWatchOHLCVs(jobs, nil)
 	} else if jobType == "price" {
 		return m.exchange.UnWatchMarkPrices(nil, nil)
-	} else if jobType == "trade" {
+	} else if jobType == core.WsSubTrade {
 		items := m.Trades.Remove(pairs...)
 		return m.exchange.UnWatchTrades(items, nil)
 	} else {
@@ -378,7 +378,7 @@ func (m *Miner) watchTrades(pairs []string) {
 	}
 	m.Trades.Status = 2
 	log.Info("start watch trades", zap.String("exg", m.ExgName), zap.Int("num", m.Trades.Len()))
-	prefix := fmt.Sprintf("trade_%s_%s_", m.ExgName, m.Market)
+	prefix := fmt.Sprintf("%s_%s_%s_", core.WsSubTrade, m.ExgName, m.Market)
 
 	go func() {
 		defer func() {
@@ -386,13 +386,21 @@ func (m *Miner) watchTrades(pairs []string) {
 			retryWaits.SetFail("watchTrades")
 			log.Info("watch trades stopped", zap.String("exg", m.ExgName))
 		}()
-		for item := range out {
-			err = m.spider.Broadcast(&utils.IOMsg{
-				Action: prefix,
-				Data:   item,
-			})
-			if err != nil {
-				log.Error("broadCast trade fail", zap.String("key", prefix), zap.Error(err))
+		for {
+			batch := utils.ReadChanBatch(out, false)
+			pairTrades := make(map[string][]*banexg.Trade)
+			for _, t := range batch {
+				items, _ := pairTrades[t.Symbol]
+				pairTrades[t.Symbol] = append(items, t)
+			}
+			for pair, items := range pairTrades {
+				err = m.spider.Broadcast(&utils.IOMsg{
+					Action: prefix + pair,
+					Data:   items,
+				})
+				if err != nil {
+					log.Error("broadCast trade fail", zap.String("key", prefix), zap.Error(err))
+				}
 			}
 		}
 	}()
@@ -452,7 +460,7 @@ func (m *Miner) watchOdBooks(pairs []string) {
 	}
 	m.Depths.Status = 2
 	log.Info("start watch odBooks", zap.String("exg", m.ExgName), zap.Int("num", m.Depths.Len()))
-	prefix := fmt.Sprintf("book_%s_%s_", m.ExgName, m.Market)
+	prefix := fmt.Sprintf("%s_%s_%s_", core.WsSubDepth, m.ExgName, m.Market)
 
 	go func() {
 		defer func() {
@@ -460,13 +468,20 @@ func (m *Miner) watchOdBooks(pairs []string) {
 			retryWaits.SetFail("watchOdBooks")
 			log.Info("watch odBook stopped", zap.String("exg", m.ExgName))
 		}()
-		for book := range out {
-			err = m.spider.Broadcast(&utils.IOMsg{
-				Action: prefix + book.Symbol,
-				Data:   book,
-			})
-			if err != nil {
-				log.Error("broadCast odBook fail", zap.String("pair", book.Symbol), zap.Error(err))
+		for {
+			batch := utils.ReadChanBatch(out, false)
+			pairBook := make(map[string]*banexg.OrderBook)
+			for _, dep := range batch {
+				pairBook[dep.Symbol] = dep
+			}
+			for pair, dep := range pairBook {
+				err = m.spider.Broadcast(&utils.IOMsg{
+					Action: prefix + pair,
+					Data:   dep,
+				})
+				if err != nil {
+					log.Error("broadCast odBook fail", zap.String("market", prefix), zap.Error(err))
+				}
 			}
 		}
 	}()
@@ -548,26 +563,24 @@ func (m *Miner) watchKLines(pairs []string) {
 			log.Warn("no pair state: " + code)
 			return
 		}
-		curTS := btime.UTCStamp()
-		var err_ *errs.Error
-		var intvMS float64
 		// Send uohlcv subscription messages
 		// 发送uohlcv订阅消息
+		err_ := m.spider.Broadcast(&utils.IOMsg{
+			Action: unPrefix + pair,
+			Data: NotifyKLines{
+				TFSecs:   tfSecs,
+				Interval: 1,
+				Arr:      arr,
+			},
+		})
+		curTS := btime.UTCStamp()
+		var intvMS float64
 		if curTS > state.LastNotify+900 {
-			// at most 1 K-line message can be sent in 1s
-			// 1s最多发送1次k线消息
+			// 1s最多记录一次
 			if state.LastNotify > 0 {
 				intvMS = float64(curTS - state.LastNotify)
 				ns.Update(curTS, key, intvMS)
 			}
-			err_ = m.spider.Broadcast(&utils.IOMsg{
-				Action: unPrefix + pair,
-				Data: NotifyKLines{
-					TFSecs:   tfSecs,
-					Interval: 1,
-					Arr:      arr,
-				},
-			})
 			state.LastNotify = curTS
 		}
 		if intvMa.Age > 3 && intvMS > intvMa.Val*5 {
@@ -613,28 +626,19 @@ func (m *Miner) watchKLines(pairs []string) {
 			log.Info("watch kline stopped", zap.String("exg", m.ExgName))
 		}()
 		for {
-			first := <-out
-			if first == nil {
-				continue
-			}
+			klines := utils.ReadChanBatch(out, false)
 			cache := map[string][]*banexg.Kline{}
-			curKey := fmt.Sprintf("%s_%s", first.Symbol, first.TimeFrame)
-			cache[curKey] = []*banexg.Kline{&first.Kline}
-			prices := map[string]float64{first.Symbol: first.Close}
-		readCache:
-			for {
-				select {
-				case val := <-out:
-					prices[val.Symbol] = val.Close
-					valKey := fmt.Sprintf("%s_%s", val.Symbol, val.TimeFrame)
-					arr, _ := cache[valKey]
-					if len(arr) > 0 && arr[len(arr)-1].Time == val.Time {
-						arr[len(arr)-1] = &val.Kline
-					} else {
-						cache[valKey] = append(arr, &val.Kline)
-					}
-				default:
-					break readCache
+			prices := map[string]float64{}
+			for _, val := range klines {
+				log.Info("watchKLine", zap.String("p", val.Symbol), zap.Int64("t", val.Time),
+					zap.Float64("c", val.Close))
+				prices[val.Symbol] = val.Close
+				valKey := fmt.Sprintf("%s_%s", val.Symbol, val.TimeFrame)
+				arr, _ := cache[valKey]
+				if len(arr) > 0 && arr[len(arr)-1].Time == val.Time {
+					arr[len(arr)-1] = &val.Kline
+				} else {
+					cache[valKey] = append(arr, &val.Kline)
 				}
 			}
 			if tfSecs < 60 {

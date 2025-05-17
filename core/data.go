@@ -27,7 +27,6 @@ var (
 	PairsMap      = make(map[string]bool)              // All global symbols(bool value means whether allow open order) 全局所有的标的(值表示是否允许开单)
 	BanPairsUntil = make(map[string]int64)             // symbols not allowed for trading before the specified timestamp 在指定时间戳前禁止交易的品种
 	NoEnterUntil  = make(map[string]int64)             // account: The 13-digit timestamp before the account is allowed to trade 禁止开单的截止13位时间戳
-	BookPairs     = make(map[string]bool)              // Monitor the currency of the trading pair 监听交易对的币种
 	PairCopiedMs  = map[string][2]int64{}              // The latest time that all targets received K lines from the crawler, as well as the waiting interval, are used to determine whether there are any that have not been received for a long time. 所有标的从爬虫收到K线的最新时间，以及等待间隔，用于判断是否有长期未收到的。
 	TfPairHits    = map[string]map[string]int{}        // tf[pair[hits]]The number of bars for each currency in each period within a period of time, used for timing output 一段时间内各周期各币种的bar数量，用于定时输出
 	JobPerfs      = make(map[string]*JobPerf)          // stagy_pair_tf: JobPerf Record the billing amount ratio of the task. If the winning rate is low, the billing amount should be reduced. 记录任务的开单金额比率，胜率低的要减少开单金额
@@ -48,7 +47,7 @@ var (
 	NewNumInSim   int  // 撮合时创建新订单的数量
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "v0.2.17-beta.4"
+	Version   = "v0.2.17-beta.5"
 	UIVersion = "v0.2.17-beta.4"
 	SysLang   string // language code for current system 当前系统语言设置
 	LogFile   string
@@ -89,6 +88,12 @@ const (
 	OdDirtShort = iota - 1
 	OdDirtBoth
 	OdDirtLong
+)
+
+const (
+	WsSubKLine = "uohlcv"
+	WsSubDepth = "depth"
+	WsSubTrade = "trade"
 )
 
 const (
@@ -134,6 +139,11 @@ var (
 	OrderTypeEnums = []string{"", banexg.OdTypeMarket, banexg.OdTypeLimit, banexg.OdTypeStopLoss,
 		banexg.OdTypeStopLossLimit, banexg.OdTypeTakeProfit, banexg.OdTypeTakeProfitLimit,
 		banexg.OdTypeStop, banexg.OdTypeLimitMaker}
+	WsSubMap = map[string]bool{
+		WsSubKLine: true,
+		WsSubDepth: true,
+		WsSubTrade: true,
+	}
 )
 
 const (

@@ -22,7 +22,7 @@ type TradeStrat struct {
 	WarmupNum     int
 	OdBarMax      int     // default: 500. Estimated maximum bar hold number for orders (used to find unfinished positions for backtesting) 预计订单持仓最大bar数量（用于查找回测未完成持仓）
 	MinTfScore    float64 // Minimum time cycle quality, default 0.8 最小时间周期质量，默认0.8
-	WatchBook     bool
+	WsSubs        map[string]string
 	DrawDownExit  bool
 	BatchInOut    bool    // Whether to batch execute entry/exit 是否批量执行入场/出场
 	BatchInfo     bool    // whether to perform batch processing after OninfoBar 是否对OnInfoBar后执行批量处理
@@ -39,16 +39,18 @@ type TradeStrat struct {
 	OnSymbols           func(items []string) []string // return modified pairs
 	OnStartUp           func(s *StratJob)
 	OnBar               func(s *StratJob)
-	OnInfoBar           func(s *StratJob, e *ta.BarEnv, pair, tf string)    // Other dependent bar data 其他依赖的bar数据
-	OnTrades            func(s *StratJob, trades []*banexg.Trade)           // Transaction by transaction data 逐笔交易数据
-	OnBatchJobs         func(jobs []*StratJob)                              // All target jobs at the current time, used for bulk opening/closing of orders 当前时间所有标的job，用于批量开单/平仓
-	OnBatchInfos        func(tf string, jobs map[string]*JobEnv)            // All info marked jobs at the current time, used for batch processing 当前时间所有info标的job，用于批量处理
-	OnCheckExit         func(s *StratJob, od *ormo.InOutOrder) *ExitReq     // Custom order exit logic 自定义订单退出逻辑
-	OnOrderChange       func(s *StratJob, od *ormo.InOutOrder, chgType int) // Order update callback 订单更新回调
-	GetDrawDownExitRate CalcDDExitRate                                      // Calculate the ratio of tracking profit taking, drawdown, and exit 计算跟踪止盈回撤退出的比率
-	PickTimeFrame       PickTimeFrameFunc                                   // Choose a suitable trading cycle for the specified currency 为指定币选择适合的交易周期
-	OnPostApi           FnOnPostApi                                         // callback for post api PostAPI时的策略回调
-	OnShutDown          func(s *StratJob)                                   // Callback when the robot stops 机器人停止时回调
+	OnInfoBar           func(s *StratJob, e *ta.BarEnv, pair, tf string)       // Other dependent bar data 其他依赖的bar数据
+	OnWsTrades          func(s *StratJob, pair string, trades []*banexg.Trade) // Transaction by transaction data 逐笔交易数据
+	OnWsDepth           func(s *StratJob, dep *banexg.OrderBook)               // Websocket order book websocket推送深度信息
+	OnWsKline           func(s *StratJob, pair string, k *banexg.Kline)        // websocket real-time kline(may unfinish) Websocket推送的实时K线
+	OnBatchJobs         func(jobs []*StratJob)                                 // All target jobs at the current time, used for bulk opening/closing of orders 当前时间所有标的job，用于批量开单/平仓
+	OnBatchInfos        func(tf string, jobs map[string]*JobEnv)               // All info marked jobs at the current time, used for batch processing 当前时间所有info标的job，用于批量处理
+	OnCheckExit         func(s *StratJob, od *ormo.InOutOrder) *ExitReq        // Custom order exit logic 自定义订单退出逻辑
+	OnOrderChange       func(s *StratJob, od *ormo.InOutOrder, chgType int)    // Order update callback 订单更新回调
+	GetDrawDownExitRate CalcDDExitRate                                         // Calculate the ratio of tracking profit taking, drawdown, and exit 计算跟踪止盈回撤退出的比率
+	PickTimeFrame       PickTimeFrameFunc                                      // Choose a suitable trading cycle for the specified currency 为指定币选择适合的交易周期
+	OnPostApi           FnOnPostApi                                            // callback for post api PostAPI时的策略回调
+	OnShutDown          func(s *StratJob)                                      // Callback when the robot stops 机器人停止时回调
 }
 
 const (

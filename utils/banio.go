@@ -47,6 +47,7 @@ type BanConn struct {
 	IsReading   bool
 	lockConnect deadlock.Mutex
 	lockWrite   deadlock.Mutex
+	lockTag     deadlock.Mutex
 	heartBeatMs int64               // Timestamp of the latest received ping/pong
 	DoConnect   func(conn *BanConn) // Reconnect function, no attempt to reconnect provided 重新连接函数，未提供不尝试重新连接
 	ReInitConn  func()              // Initialize callback function after successful reconnection 重新连接成功后初始化回调函数
@@ -74,7 +75,9 @@ func (c *BanConn) IsClosed() bool {
 	return c.Conn == nil || !c.Ready
 }
 func (c *BanConn) HasTag(tag string) bool {
+	c.lockTag.Lock()
 	_, ok := c.Tags[tag]
+	c.lockTag.Unlock()
 	return ok
 }
 
@@ -147,6 +150,9 @@ func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 }
 
 func (c *BanConn) Read() ([]byte, *errs.Error) {
+	if c.Conn == nil {
+		return nil, errs.NewMsg(core.ErrRunTime, "BanConn Read nil")
+	}
 	lenBuf := make([]byte, 4)
 	_, err_ := c.Conn.Read(lenBuf)
 	if err_ != nil {
@@ -168,14 +174,18 @@ func (c *BanConn) Read() ([]byte, *errs.Error) {
 }
 
 func (c *BanConn) Subscribe(tags ...string) {
+	c.lockTag.Lock()
 	for _, tag := range tags {
 		c.Tags[tag] = true
 	}
+	c.lockTag.Unlock()
 }
 func (c *BanConn) UnSubscribe(tags ...string) {
+	c.lockTag.Lock()
 	for _, tag := range tags {
 		delete(c.Tags, tag)
 	}
+	c.lockTag.Unlock()
 }
 
 /*

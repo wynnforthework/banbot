@@ -95,7 +95,7 @@ func RunReceiver() {
 	for _, exs := range exsList {
 		jobs = append(jobs, data.WatchJob{Symbol: exs.Symbol, TimeFrame: timeFrame})
 	}
-	err = receiver.WatchJobs(core.ExgName, core.Market, "uohlcv", jobs...)
+	err = receiver.WatchJobs(core.ExgName, core.Market, core.WsSubKLine, jobs...)
 	if err != nil {
 		log.Error("subscribe spider fail", zap.Int("num", len(jobs)), zap.Error(err))
 	}

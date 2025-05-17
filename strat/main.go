@@ -43,7 +43,6 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	// Set the global variables involved to null, as will be updated below
 	// 将涉及的全局变量置为空，下面会更新
 	core.TFSecs = make(map[string]int)
-	core.BookPairs = make(map[string]bool)
 	core.StgPairTfs = make(map[string]map[string]string)
 	resetJobs()
 	pairTfWarms := make(Warms)
@@ -146,6 +145,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 						if job.Strat.OnShutDown != nil {
 							job.Strat.OnShutDown(job)
 						}
+						unRegWsJob(job)
 						exitJobs[job] = true
 						exitPairs[job.Symbol.Symbol] = true
 						if job.EnteredNum > 0 {
@@ -173,8 +173,11 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 						core.StgPairTfs[j.Strat.Name] = subMap
 					}
 					subMap[pair] = tf
-					if j.Strat.WatchBook {
-						core.BookPairs[pair] = true
+					if len(j.Strat.WsSubs) > 0 {
+						err := regWsJob(j)
+						if err != nil {
+							return nil, nil, err
+						}
 					}
 				}
 				envKeys[envKey] = true
@@ -275,6 +278,7 @@ func ExitStratJobs() {
 				if job.Strat.OnShutDown != nil {
 					job.Strat.OnShutDown(job)
 				}
+				unRegWsJob(job)
 			}
 		}
 	}
@@ -497,6 +501,70 @@ func resetJobs() {
 				job.MaxOpenShort = -1
 			}
 		}
+	}
+}
+
+func regWsJob(j *StratJob) *errs.Error {
+	for msgType, subPairs := range j.Strat.WsSubs {
+		if _, ok := core.WsSubMap[msgType]; !ok {
+			return errs.NewMsg(errs.CodeRunTime, "WsSubs.%s for %s is invalid", msgType, j.Strat.Name)
+		}
+		if msgType == core.WsSubDepth && j.Strat.OnWsDepth == nil {
+			continue
+		}
+		if msgType == core.WsSubTrade && j.Strat.OnWsTrades == nil {
+			continue
+		}
+		if msgType == core.WsSubKLine && j.Strat.OnWsKline == nil {
+			continue
+		}
+		pairMap, ok := WsSubJobs[msgType]
+		if !ok {
+			pairMap = make(map[string]map[*StratJob]bool)
+			WsSubJobs[msgType] = pairMap
+		}
+		pairArr := strings.Split(subPairs, ",")
+		for _, p := range pairArr {
+			if p == "_cur_" || p == "" {
+				p = j.Symbol.Symbol
+			}
+			jobMap, ok := pairMap[p]
+			if !ok {
+				jobMap = make(map[*StratJob]bool)
+				pairMap[p] = jobMap
+			}
+			jobMap[j] = true
+		}
+	}
+	return nil
+}
+
+func unRegWsJob(j *StratJob) {
+	unwatches := make(map[string][]string)
+	for msgType, subPairs := range j.Strat.WsSubs {
+		pairMap, ok := WsSubJobs[msgType]
+		if !ok {
+			continue
+		}
+		pairArr := strings.Split(subPairs, ",")
+		var removes []string
+		for _, p := range pairArr {
+			if p == "_cur_" || p == "" {
+				p = j.Symbol.Symbol
+			}
+			if jobMap, ok := pairMap[p]; ok {
+				delete(jobMap, j)
+				if len(jobMap) == 0 {
+					removes = append(removes, p)
+				}
+			}
+		}
+		if len(removes) > 0 {
+			unwatches[msgType] = removes
+		}
+	}
+	if len(unwatches) > 0 && WsSubUnWatch != nil {
+		WsSubUnWatch(unwatches)
 	}
 }
 

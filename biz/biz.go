@@ -318,6 +318,7 @@ func ResetVars() {
 	strat.AccJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.PairStrats = make(map[string]map[string]*strat.TradeStrat)
+	strat.WsSubJobs = make(map[string]map[string]map[*strat.StratJob]bool)
 	strat.BatchTasks = make(map[string]*strat.BatchMap)
 	strat.ForbidJobs = make(map[string]map[string]bool)
 	strat.LastBatchMS = 0
@@ -341,6 +342,7 @@ type VarsBackup struct {
 	AccJobs       map[string]map[string]map[string]*strat.StratJob
 	AccInfoJobs   map[string]map[string]map[string]*strat.StratJob
 	PairStrats    map[string]map[string]*strat.TradeStrat
+	WsSubJobs     map[string]map[string]map[*strat.StratJob]bool
 	BatchTasks    map[string]*strat.BatchMap
 	ForbidJobs    map[string]map[string]bool
 	LastBatchMS   int64
@@ -367,6 +369,7 @@ func BackupVars() *VarsBackup {
 		AccJobs:       strat.AccJobs,
 		AccInfoJobs:   strat.AccInfoJobs,
 		PairStrats:    strat.PairStrats,
+		WsSubJobs:     strat.WsSubJobs,
 		BatchTasks:    strat.BatchTasks,
 		ForbidJobs:    strat.ForbidJobs,
 		LastBatchMS:   strat.LastBatchMS,
@@ -396,6 +399,7 @@ func RestoreVars(backup *VarsBackup) {
 	strat.AccJobs = backup.AccJobs
 	strat.AccInfoJobs = backup.AccInfoJobs
 	strat.PairStrats = backup.PairStrats
+	strat.WsSubJobs = backup.WsSubJobs
 	strat.BatchTasks = backup.BatchTasks
 	strat.ForbidJobs = backup.ForbidJobs
 	strat.LastBatchMS = backup.LastBatchMS

@@ -16,6 +16,7 @@ var (
 	AccInfoJobs = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID_pair]StratJob 额外订阅
 	PairStrats  = make(map[string]map[string]*TradeStrat)          // pair:[stratID]TradeStrat 所有的订阅策略
 	ForbidJobs  = make(map[string]map[string]bool)                 // pair_tf: [stratID] occupy
+	WsSubJobs   = make(map[string]map[string]map[*StratJob]bool)   // msgType: pair: job
 
 	BatchTasks  = map[string]*BatchMap{} // tf_account_strat: pair: task 每个bar周期更新（只适用于单交易所单市场）
 	LastBatchMS = int64(0)               // timeMS The timestamp of the last batch execution is only used for backtesting 上次批量执行的时间戳，仅用于回测
@@ -27,6 +28,8 @@ var (
 
 	accFailOpens    = make(map[string]map[string]int) // Statistics of reasons for failed entry for accounts 各个账号开单失败原因统计
 	lockAccFailOpen deadlock.Mutex
+
+	WsSubUnWatch func(map[string][]string)
 )
 
 var (

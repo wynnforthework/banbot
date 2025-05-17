@@ -20,7 +20,8 @@ type KLineWatcher struct {
 	jobs       map[string]*PairTFCache
 	initMsgs   []*utils.IOMsg
 	OnKLineMsg func(msg *KLineMsg) // 收到爬虫K线消息
-	OnTrade    func(exgName, market string, trade *banexg.Trade)
+	OnTrades   func(exgName, market, pair string, trades []*banexg.Trade)
+	OnDepth    func(dep *banexg.OrderBook)
 }
 
 type WatchJob struct {
@@ -50,11 +51,11 @@ func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
 		ClientIO: client,
 		jobs:     make(map[string]*PairTFCache),
 	}
-	res.Listens["uohlcv"] = res.onSpiderBar
+	res.Listens[core.WsSubKLine] = res.onSpiderBar
 	res.Listens["ohlcv"] = res.onSpiderBar
 	res.Listens["price"] = res.onPriceUpdate
-	res.Listens["trade"] = res.onTrades
-	res.Listens["book"] = res.onBook
+	res.Listens[core.WsSubTrade] = res.onTrades
+	res.Listens[core.WsSubDepth] = res.onBook
 	res.ReInitConn = func() {
 		if len(res.initMsgs) == 0 {
 			return
@@ -72,24 +73,21 @@ func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
 	return res, nil
 }
 
-func (w *KLineWatcher) getPrefixs(exgName, marketType, jobType string) []string {
-	exgMarket := fmt.Sprintf("%s_%s", exgName, marketType)
-	prefixs := make([]string, 0, 2)
-	if jobType == "ws" {
-		prefixs = append(prefixs, "trade_"+exgMarket, "book_"+exgMarket)
-	} else {
-		prefixs = append(prefixs, jobType+"_"+exgMarket)
+func (w *KLineWatcher) getPrefix(exgName, marketType, jobType string) string {
+	if jobType == "price" {
+		// price不按品种订阅
+		return fmt.Sprintf("%s_%s_%s", jobType, exgName, marketType)
 	}
-	return prefixs
+	return fmt.Sprintf("%s_%s_%s_", jobType, exgName, marketType)
 }
 
 /*
 WatchJobs
 Subscribe data from crawlers.
-从爬虫订阅数据。ohlcv/uohlcv/ws/trade/book
+从爬虫订阅数据。ohlcv/uohlcv/trade/depth
 */
 func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...WatchJob) *errs.Error {
-	prefixs := w.getPrefixs(exgName, marketType, jobType)
+	prefix := w.getPrefix(exgName, marketType, jobType)
 	tags := make([]string, 0, len(jobs))
 	pairs := make([]string, 0, len(jobs))
 	minTfSecs := 300
@@ -105,8 +103,8 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 		}
 		tfSecs := utils2.TFToSecs(j.TimeFrame)
 		minTfSecs = min(minTfSecs, tfSecs)
-		for _, p := range prefixs {
-			tags = append(tags, p+"_"+j.Symbol)
+		if strings.HasSuffix(prefix, "_") {
+			tags = append(tags, prefix+j.Symbol)
 		}
 		pairs = append(pairs, j.Symbol)
 		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since,
@@ -116,6 +114,9 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 			btime.SetPairMs(j.Symbol, j.Since, int64(tfSecs*1000))
 		}
 	}
+	if !strings.HasSuffix(prefix, "_") {
+		tags = append(tags, prefix)
+	}
 	err = w.SendMsg("subscribe", tags)
 	if err != nil {
 		return err
@@ -123,7 +124,7 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 	if minTfSecs < 60 && banexg.IsContract(marketType) && jobType == "ohlcv" {
 		//The contract market does not support OHLCV below 1M, and WS is used to listen to transaction aggregation
 		//合约市场不支持1m以下的ohlcv，使用ws监听交易归集
-		jobType = "trade"
+		jobType = core.WsSubTrade
 	}
 	args := append([]string{exgName, marketType, jobType}, pairs...)
 	return w.SendMsg("watch_pairs", args)
@@ -140,15 +141,18 @@ func (w *KLineWatcher) SendMsg(action string, data interface{}) *errs.Error {
 }
 
 func (w *KLineWatcher) UnWatchJobs(exgName, marketType, jobType string, pairs []string) *errs.Error {
-	prefixs := w.getPrefixs(exgName, marketType, jobType)
-	tags := make([]string, 0, len(prefixs)*len(pairs))
+	prefix := w.getPrefix(exgName, marketType, jobType)
+	tags := make([]string, 0, len(pairs))
 	for _, pair := range pairs {
-		for _, prefix := range prefixs {
-			tags = append(tags, fmt.Sprintf("%s_%s", prefix, pair))
+		if strings.HasSuffix(prefix, "_") {
+			tags = append(tags, prefix+pair)
 		}
 		jobKey := fmt.Sprintf("%s_%s", pair, jobType)
 		delete(w.jobs, jobKey)
 		delete(core.PairCopiedMs, pair)
+	}
+	if len(tags) == 0 {
+		return nil
 	}
 	return w.WriteMsg(&utils.IOMsg{Action: "unsubscribe", Data: tags})
 }
@@ -189,7 +193,7 @@ func (w *KLineWatcher) onSpiderBar(key string, data []byte) {
 	}
 	logFields := []zap.Field{zap.String("key", key), zap.Int("num", len(bars.Arr)),
 		zap.Int64("nextMS", nextBarMS)}
-	if msgType == "uohlcv" {
+	if msgType == core.WsSubKLine {
 		log.Debug("spider uohlcv", logFields...)
 		w.OnKLineMsg(msg)
 		return
@@ -249,19 +253,19 @@ func (w *KLineWatcher) onPriceUpdate(key string, data []byte) {
 }
 
 func (w *KLineWatcher) onTrades(key string, data []byte) {
-	if w.OnTrade == nil {
+	if w.OnTrades == nil {
 		return
 	}
 	parts := strings.Split(key, "_")
-	exgName, market := parts[1], parts[2]
-	var trade banexg.Trade
-	err := utils2.Unmarshal(data, &trade, utils2.JsonNumDefault)
+	exgName, market, pair := parts[1], parts[2], parts[3]
+	var trades []*banexg.Trade
+	err := utils2.Unmarshal(data, &trades, utils2.JsonNumDefault)
 	if err != nil {
 		log.Error("onTrades receive invalid data", zap.String("raw", string(data)),
 			zap.Error(err))
 		return
 	}
-	w.OnTrade(exgName, market, &trade)
+	w.OnTrades(exgName, market, pair, trades)
 }
 
 func (w *KLineWatcher) onBook(key string, data []byte) {
@@ -286,4 +290,7 @@ func (w *KLineWatcher) onBook(key string, data []byte) {
 		return
 	}
 	core.OdBooks[pair] = &book
+	if w.OnDepth != nil {
+		w.OnDepth(&book)
+	}
 }

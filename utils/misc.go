@@ -524,3 +524,20 @@ func CronPrev(scd cron.Schedule, stamp time.Time) time.Time {
 	}
 	return prev
 }
+
+func ReadChanBatch[T comparable](c chan T, withNil bool) []T {
+	var result []T
+	var zero T
+readCache:
+	for {
+		select {
+		case val := <-c:
+			if withNil || val != zero {
+				result = append(result, val)
+			}
+		default:
+			break readCache
+		}
+	}
+	return result
+}
