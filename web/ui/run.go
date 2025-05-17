@@ -72,7 +72,20 @@ func downNewUI(errMsg, uiDistDir, verPath string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed with status: %s", resp.Status)
+		if resp.StatusCode == 404 && !strings.Contains(downUrl, "github") {
+			// 非github下载404，尝试从github下载
+			log.Warn("download 404, retry from github")
+			resp, err = http.Get(downUrl)
+			if err != nil {
+				return err
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				return fmt.Errorf("download failed with status: %s", resp.Status)
+			}
+		} else {
+			return fmt.Errorf("download failed with status: %s", resp.Status)
+		}
 	}
 
 	out, err := os.Create(zipPath)
