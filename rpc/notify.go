@@ -8,7 +8,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
-	"go.uber.org/zap"
 	"maps"
 )
 
@@ -22,6 +21,7 @@ func InitRPC() *errs.Error {
 
 func initWebHooks() *errs.Error {
 	if len(config.RPCChannels) == 0 {
+		log.Info("no channels, skip send rpc msg")
 		return nil
 	}
 	// 解析accounts中的rpc配置
@@ -66,12 +66,14 @@ func initWebHooks() *errs.Error {
 		go channel.ConsumeForever()
 		channels = append(channels, channel)
 	}
+	if len(channels) == 0 {
+		log.Info("no channels, skip send rpc msg")
+	}
 	return nil
 }
 
 func SendMsg(msg map[string]interface{}) {
 	if len(channels) == 0 {
-		log.Info("no channels, skip send rpc msg", zap.Any("msg", msg))
 		return
 	}
 	account := utils.GetMapVal(msg, "account", "")

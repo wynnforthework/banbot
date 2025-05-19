@@ -300,14 +300,24 @@ func SetLogCap(path string) {
 	if LogFile == path {
 		return
 	}
+	LogFile = ""
 	if CapOut != nil {
 		CapOut.Stop()
+		CapOut = nil
 	}
-	var err error
-	CapOut, err = log.NewOutCaptureToFile(path, "")
+	var flags = os.O_CREATE | os.O_WRONLY
+	if LiveMode {
+		// 实时模式日志追加保存
+		flags = os.O_APPEND | os.O_CREATE | os.O_WRONLY
+	}
+	file, err := os.OpenFile(path, flags, 0644)
+	if err != nil {
+		log.Error("open file to write log fail", zap.Error(err))
+		return
+	}
+	CapOut, err = log.NewOutCapture(file, file)
 	if err != nil {
 		log.Error("new out capture fail", zap.Error(err))
-		LogFile = ""
 	} else {
 		CapOut.Start()
 		LogFile = path

@@ -61,15 +61,29 @@ func FlushDumps() {
 		err := dumpEncoder.Encode(dumpRows)
 		if err != nil {
 			log.Error("dump rows fail", zap.Error(err))
+		} else {
+			err = dumpFile.Sync()
+			if err != nil {
+				log.Error("flush dump rows fail", zap.Error(err))
+			} else {
+				dumpRows = nil
+			}
 		}
-		dumpRows = nil
 	}
 	dumpLock.Unlock()
 }
 
 func CloseDump() {
+	FlushDumps()
+	if dumpFile == nil {
+		return
+	}
 	dumpLock.Lock()
-	err := dumpFile.Close()
+	err := dumpFile.Sync()
+	if err != nil {
+		log.Error("flush dump rows fail", zap.Error(err))
+	}
+	err = dumpFile.Close()
 	if err != nil {
 		log.Error("close dump file fail", zap.Error(err))
 	}
