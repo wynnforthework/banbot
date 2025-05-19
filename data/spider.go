@@ -630,8 +630,6 @@ func (m *Miner) watchKLines(pairs []string) {
 			cache := map[string][]*banexg.Kline{}
 			prices := map[string]float64{}
 			for _, val := range klines {
-				log.Info("watchKLine", zap.String("p", val.Symbol), zap.Int64("t", val.Time),
-					zap.Float64("c", val.Close))
 				prices[val.Symbol] = val.Close
 				valKey := fmt.Sprintf("%s_%s", val.Symbol, val.TimeFrame)
 				arr, _ := cache[valKey]
