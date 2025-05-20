@@ -31,6 +31,8 @@
   let search = $state({
     status: '',
     symbols: '',
+    dirt: '',
+    strategy: '',
     startMs: '',
     stopMs: ''
   });
@@ -119,7 +121,7 @@
   async function closeOrder(orderId: string) {
     if (!await modals.confirm(m.confirm_close_position())) return;
     
-    const rsp = await postAccApi('/forceexit', {orderId});
+    const rsp = await postAccApi('/exit_order', {orderId});
     if(rsp.code !== 200){
       console.error('close order failed', rsp);
       alerts.error(rsp.msg ?? m.close_order_failed());
@@ -175,7 +177,7 @@
       data.symbol = 'all';
     }
 
-    const rsp = await postAccApi('/close_pos', data);
+    const rsp = await postAccApi('/close_exg_pos', data);
 
     const closeNum = rsp.close_num ?? 0;
     const doneNum = rsp.done_num ?? 0;
@@ -286,14 +288,23 @@
     {#if tabName !== 'position'}
       <div class="flex flex-wrap gap-4">
         {#if tabName === 'bot'}
-          <select class="select select-sm focus:outline-none text-sm w-48" bind:value={search.status}>
-            <option value="">{m.all()}</option>
+          <select class="select select-sm focus:outline-none text-sm w-36" bind:value={search.status}>
+            <option value="">{m.any_status()}</option>
             <option value="open">{m.pos_opened()}</option>
             <option value="his">{m.closed()}</option>
           </select>
         {/if}
+        <select class="select select-sm focus:outline-none text-sm w-36" bind:value={search.dirt}>
+          <option value="">{m.any_dirt()}</option>
+          <option value="long">{m.long()}</option>
+          <option value="short">{m.short()}</option>
+        </select>
 
-        <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-48" placeholder={m.symbol()} bind:value={search.symbols}
+        {#if tabName === 'bot'}
+        <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-36" placeholder={m.strategy()} bind:value={search.strategy}/>
+        {/if}
+
+        <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-36" placeholder={m.symbol()} bind:value={search.symbols}
           required={tabName !== 'bot'} />
 
         <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-48" placeholder="20231012" bind:value={search.startMs} />

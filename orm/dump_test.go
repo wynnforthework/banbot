@@ -22,7 +22,7 @@ import (
 // 2. The interval between consecutive K-lines matches the timeframe
 // 3. Reports any missing K-lines
 func TestKLineConsistency(t *testing.T) {
-	inPath := "E:\\trade\\go\\bandata\\dump\\4h3.gob"
+	inPath := "E:\\trade\\go\\tmp\\4h3.gob"
 	file, err := os.Open(inPath)
 	if err != nil {
 		t.Fatalf("Failed to open dump file: %v", err)

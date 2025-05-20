@@ -44,8 +44,8 @@ func regApiBiz(api fiber.Router) {
 	api.Get("/exs_map", getExsMap)
 	api.Get("/orders", getOrders)
 	api.Post("/calc_profits", postCalcProfits)
-	api.Post("/forceexit", postForceExit)
-	api.Post("/close_pos", postClosePos)
+	api.Post("/exit_order", postExitOrder)
+	api.Post("/close_exg_pos", postCloseExgPos)
 	api.Post("/delay_entry", postDelayEntry)
 	api.Get("/config", getConfig)
 	api.Get("/stg_jobs", getStratJobs)
@@ -316,6 +316,7 @@ func getOrders(c *fiber.Ctx) error {
 		AfterID   int    `query:"afterId"`
 		Symbols   string `query:"symbols"`
 		Status    string `query:"status"`
+		Dirt      string `query:"dirt"`
 		Strategy  string `query:"strategy"`
 		TimeFrame string `query:"timeFrame"`
 		Source    string `query:"source" validate:"required"`
@@ -347,12 +348,19 @@ func getOrders(c *fiber.Ctx) error {
 		} else if data.Status == "his" {
 			status = 2
 		}
+		var odDirt = 0
+		if data.Dirt == "long" {
+			odDirt = core.OdDirtLong
+		} else if data.Dirt == "short" {
+			odDirt = core.OdDirtShort
+		}
 		orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 			TaskID:      taskId,
 			Strategy:    data.Strategy,
 			Pairs:       symbols,
 			TimeFrame:   data.TimeFrame,
 			Status:      status,
+			Dirt:        odDirt,
 			CloseAfter:  data.StartMs,
 			CloseBefore: data.StopMs,
 			Limit:       data.Limit,
@@ -393,6 +401,16 @@ func getOrders(c *fiber.Ctx) error {
 		})
 		if err != nil {
 			return err
+		}
+		if data.Dirt != "" {
+			filtered := make([]*banexg.Order, 0, len(orders))
+			for _, od := range orders {
+				if od.PositionSide != data.Dirt {
+					continue
+				}
+				filtered = append(filtered, od)
+			}
+			orders = filtered
 		}
 		sort.Slice(orders, func(i, j int) bool {
 			return orders[i].Timestamp > orders[j].Timestamp
@@ -465,7 +483,7 @@ func postCalcProfits(c *fiber.Ctx) error {
 	})
 }
 
-func postForceExit(c *fiber.Ctx) error {
+func postExitOrder(c *fiber.Ctx) error {
 	type ForceExitArgs struct {
 		OrderID string `json:"orderId" validate:"required"`
 	}
@@ -517,7 +535,7 @@ func postForceExit(c *fiber.Ctx) error {
 	})
 }
 
-func postClosePos(c *fiber.Ctx) error {
+func postCloseExgPos(c *fiber.Ctx) error {
 	type CloseArgs struct {
 		Symbol    string  `json:"symbol" validate:"required"`
 		Side      string  `json:"side"`
@@ -555,13 +573,11 @@ func postClosePos(c *fiber.Ctx) error {
 			if q.Side == "short" {
 				side = "buy"
 			}
-			params := map[string]interface{}{}
+			params := map[string]interface{}{
+				banexg.ParamAccount: acc,
+			}
 			if banexg.IsContract(core.Market) {
-				posSide := "LONG"
-				if q.Side == "short" {
-					posSide = "SHORT"
-				}
-				params["positionSide"] = posSide
+				params[banexg.ParamPositionSide] = strings.ToUpper(q.Side)
 			}
 			res, err := exg.Default.CreateOrder(q.Symbol, q.OrderType, side, q.Amount, q.Price, params)
 			if err != nil {

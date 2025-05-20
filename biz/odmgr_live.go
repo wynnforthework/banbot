@@ -141,35 +141,38 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 	// 按symbol分组本地订单
 	openOds, lock := ormo.GetOpenODs(o.Account)
 	lock.Lock()
+	// 过滤重复订单
+	var duplicateOdNum = 0
+	var checkKeys = make(map[string]bool)
 	odMap := make(map[string]map[bool][]*ormo.InOutOrder)
 	for _, od := range openOds {
-		if _, ok := odMap[od.Symbol]; !ok {
-			odMap[od.Symbol] = make(map[bool][]*ormo.InOutOrder)
+		key := od.Key()
+		if _, ok := checkKeys[key]; !ok {
+			checkKeys[key] = true
+			dirtMap, ok := odMap[od.Symbol]
+			if !ok {
+				dirtMap = make(map[bool][]*ormo.InOutOrder)
+				odMap[od.Symbol] = dirtMap
+			}
+			dirtMap[od.Short] = append(dirtMap[od.Short], od)
+		} else {
+			duplicateOdNum += 1
 		}
-		odMap[od.Symbol][od.Short] = append(odMap[od.Symbol][od.Short], od)
 	}
 	lock.Unlock()
+	if duplicateOdNum > 0 {
+		log.Info("found duplicate orders in global Open orders", zap.Int("num", duplicateOdNum))
+	}
 
 	// 对每个symbol的多空方向进行检查
 	var closedList []*ormo.InOutOrder
 	for symbol, sideOds := range odMap {
 		pos, hasPair := posMap[symbol]
-		for isShort, ods := range sideOds {
+		for isShort, curOds := range sideOds {
 			var posAmt float64
 			if hasPair {
 				if p, ok := pos[isShort]; ok {
 					posAmt = p.Contracts
-				}
-			}
-
-			// 过滤重复订单
-			var checkKeys = make(map[string]bool)
-			var curOds = make([]*ormo.InOutOrder, 0, len(ods))
-			for _, od := range ods {
-				key := od.Key()
-				if _, ok := checkKeys[key]; !ok {
-					curOds = append(curOds, od)
-					checkKeys[key] = true
 				}
 			}
 
@@ -180,7 +183,7 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 			}
 
 			// 如果本地订单量大于实际持仓量,需要关闭部分订单
-			if localAmt > posAmt*1.002 {
+			if localAmt > posAmt*1.02 {
 				// 按数量降序排序
 				sort.Slice(curOds, func(i, j int) bool {
 					amtI := curOds[i].HoldAmount()
@@ -290,13 +293,11 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 		}
 	}
 	openOds, lock := ormo.GetOpenODs(o.Account)
-	var lastEntMS int64
 	var openPairs = map[string]struct{}{}
 	for _, od := range orders {
 		if od.Status >= ormo.InOutStatusFullExit {
 			continue
 		}
-		lastEntMS = max(lastEntMS, od.RealEnterMS())
 		err = o.restoreInOutOrder(od, exgOdMap)
 		if err != nil {
 			log.Error("restoreInOutOrder fail", zap.String("key", od.Key()), zap.Error(err))
@@ -349,7 +350,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 			}
 		}
 		prevTF, _ := pairLastTfs[pair]
-		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, lastEntMS, curOds)
+		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, curOds)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -477,20 +478,28 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[strin
 For the specified currency, synchronize the exchange order status to the local machine. Executed when the robot is just started.
 对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
 */
-func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, sinceMs int64,
-	openOds []*ormo.InOutOrder) ([]*ormo.InOutOrder, *errs.Error) {
+func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, openOds []*ormo.InOutOrder) ([]*ormo.InOutOrder, *errs.Error) {
 	var exOrders []*banexg.Order
 	var err *errs.Error
-	if len(openOds) > 0 {
-		// There are open orders locally. Get order records from the exchange and try to restore the order status.
-		// 本地有未平仓订单，从交易所获取订单记录，尝试恢复订单状态。
-		exOrders, err = exg.Default.FetchOrders(pair, sinceMs, 0, map[string]interface{}{
-			banexg.ParamAccount: o.Account,
-		})
-		if err != nil {
-			return openOds, err
-		}
+	var curMS = btime.UTCStamp()
+	// Get exchange order history and try to restore the order status.
+	// 从交易所获取订单记录，尝试恢复订单状态。
+	exOrders, err = exg.Default.FetchOrders(pair, 0, 300, map[string]interface{}{
+		banexg.ParamAccount: o.Account,
+		banexg.ParamUntil:   curMS,
+	})
+	if err != nil {
+		return openOds, err
 	}
+	// 计算机器人仓位，其他端仓位
+	var longPosAmt, shortPosAmt float64
+	if longPos != nil {
+		longPosAmt = longPos.Contracts
+	}
+	if shortPos != nil {
+		shortPosAmt = shortPos.Contracts
+	}
+	longBotAmt, shortBotAmt, longOtherAmt, shortOtherAmt := calcHoldAmounts(exOrders, longPosAmt, shortPosAmt)
 	// Get the exchange order before getting the connection to reduce the time taken
 	// 获取交易所订单后再获取连接，减少占用时长
 	sess, conn, err := ormo.Conn(orm.DbTrades, true)
@@ -510,20 +519,10 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				return openOds, err
 			}
 		}
-		var longPosAmt, shortPosAmt float64
-		if longPos != nil {
-			longPosAmt = longPos.Contracts
-		}
-		if shortPos != nil {
-			shortPosAmt = shortPos.Contracts
-		}
 		// Check if the remaining open orders match the position. If not, close the corresponding orders.
 		// 检查剩余的打开订单是否和仓位匹配，如不匹配强制关闭对应的订单
 		for _, iod := range openOds {
-			odAmt := iod.Enter.Filled
-			if iod.Exit != nil {
-				odAmt -= iod.Exit.Filled
-			}
+			odAmt := iod.HoldAmount()
 			if odAmt == 0 {
 				if iod.Status == 0 && iod.Enter.OrderID == "" {
 					// Not submitted to the exchange yet, cancel directly
@@ -551,18 +550,16 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				openOds = utils.RemoveFromArr(openOds, iod, 1)
 				continue
 			}
-			posAmt := longPosAmt
+			var posAmt = float64(0)
 			if iod.Short {
-				posAmt = shortPosAmt
-			}
-			posAmt -= odAmt
-			if iod.Short {
-				shortPosAmt = posAmt
+				shortBotAmt -= odAmt
+				posAmt = shortBotAmt
 			} else {
-				longPosAmt = posAmt
+				longBotAmt -= odAmt
+				posAmt = longBotAmt
 			}
-			if posAmt < odAmt*-0.01 {
-				msg := fmt.Sprintf("The order has no corresponding position in the exchange: %.5f", posAmt+odAmt)
+			if posAmt < odAmt*0.01 {
+				msg := fmt.Sprintf("The order has no corresponding position in the exchange: %.5f", posAmt)
 				err = iod.LocalExit(0, core.ExitTagFatalErr, iod.InitPrice, msg, "")
 				strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 				if err != nil {
@@ -571,17 +568,18 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				openOds = utils.RemoveFromArr(openOds, iod, 1)
 			}
 		}
-		if longPos != nil {
-			longPos.Contracts = longPosAmt
-		}
-		if shortPos != nil {
-			shortPos.Contracts = shortPosAmt
-		}
 	}
 	if config.TakeOverStrat == "" {
+		if longBotAmt > AmtDust || shortBotAmt > AmtDust {
+			log.Error("unknown exchange position for bot", zap.Float64("long", longBotAmt),
+				zap.Float64("short", shortBotAmt))
+		}
 		return openOds, nil
 	}
-	if longPos != nil && longPos.Contracts > AmtDust {
+	longPosAmt = max(longBotAmt, 0) + longOtherAmt
+	shortPosAmt = max(shortBotAmt, 0) + shortOtherAmt
+	if longPos != nil && longPosAmt > AmtDust {
+		longPos.Contracts = longPosAmt
 		longOd, err := o.createOdFromPos(longPos, defTF)
 		if err != nil {
 			return openOds, err
@@ -592,7 +590,8 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			return openOds, err
 		}
 	}
-	if shortPos != nil && shortPos.Contracts > AmtDust {
+	if shortPos != nil && shortPosAmt > AmtDust {
+		shortPos.Contracts = shortPosAmt
 		shortOd, err := o.createOdFromPos(shortPos, defTF)
 		if err != nil {
 			return openOds, err
@@ -604,6 +603,77 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 		}
 	}
 	return openOds, nil
+}
+
+// 从订单记录中计算当前机器人主动打开的仓位大小
+func calcHoldAmounts(orders []*banexg.Order, longAmt, shortAmt float64) (float64, float64, float64, float64) {
+	var longBot, shortBot, longOther, shortOther float64
+	for _, od := range orders {
+		if od.Filled <= core.AmtDust {
+			continue
+		}
+		isShort := od.PositionSide == banexg.PosSideShort
+		isSell := od.Side == banexg.OdSideSell
+		isBot := strings.HasPrefix(od.ClientOrderID, config.Name) || strings.HasPrefix(od.ClientOrderID, "ban")
+		if isShort == isSell {
+			// 入场订单，开多或开空
+			if isShort {
+				if isBot {
+					shortBot += od.Filled
+				} else {
+					shortOther += od.Filled
+				}
+			} else {
+				if isBot {
+					longBot += od.Filled
+				} else {
+					longOther += od.Filled
+				}
+			}
+		} else {
+			// 出场订单，平多或平空
+			var curBot = longBot
+			var curOther = longOther
+			if isShort {
+				curBot = shortBot
+				curOther = shortOther
+			}
+			if isBot {
+				if curBot >= od.Filled*0.99 {
+					curBot -= od.Filled
+					curBot = max(curBot, 0)
+				} else {
+					// 机器人开单仓位不足，使用其他端仓位
+					curOther -= od.Filled - curBot
+					curBot = 0
+					curOther = max(curOther, 0)
+				}
+			} else {
+				if curOther >= od.Filled*0.99 {
+					curOther -= od.Filled
+					curOther = max(curOther, 0)
+				} else {
+					curBot -= od.Filled - curOther
+					curOther = 0
+					curBot = max(curBot, 0)
+				}
+			}
+			if isShort {
+				shortBot, shortOther = curBot, curOther
+			} else {
+				longBot, longOther = curBot, curOther
+			}
+		}
+	}
+	if longBot+longOther > longAmt+AmtDust {
+		longBot = min(longBot, longAmt)
+		longOther = longAmt - longBot
+	}
+	if shortBot+shortOther > shortAmt+AmtDust {
+		shortBot = min(shortBot, shortAmt)
+		shortOther = shortAmt - shortBot
+	}
+	return longBot, shortBot, longOther, shortOther
 }
 
 func getFeeNameCost(fee *banexg.Fee, pair, odType, side string, amount, price float64) (string, float64) {

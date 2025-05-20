@@ -1078,6 +1078,7 @@ type GetOrdersArgs struct {
 	TimeFrame   string
 	Status      int   // 0 represents all, 1 represents open interest, 2 represents historical orders 0表示所有，1表示未平仓，2表示历史订单
 	TaskID      int64 // 0 represents all,>0 represents specified task 0表示所有，>0表示指定任务
+	Dirt        int   // core.OdDirtLong/core.OdDirtShort/core.OdDirtBoth
 	EnterTag    string
 	ExitTag     string
 	CloseAfter  int64 // Start timestamp 开始时间戳
@@ -1136,6 +1137,10 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	if args.TimeFrame != "" {
 		b.WriteString(fmt.Sprintf("and timeframe=$%v ", len(sqlParams)+1))
 		sqlParams = append(sqlParams, args.TimeFrame)
+	}
+	if args.Dirt != 0 {
+		b.WriteString(fmt.Sprintf("and short=$%v ", len(sqlParams)+1))
+		sqlParams = append(sqlParams, args.Dirt == core.OdDirtShort)
 	}
 	if args.CloseAfter > 0 {
 		b.WriteString(fmt.Sprintf("and exit_at >= $%v ", len(sqlParams)+1))
