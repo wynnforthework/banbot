@@ -376,22 +376,6 @@ func (i *InOutOrder) LocalExit(exitAt int64, tag string, price float64, msg, odT
 }
 
 /*
-ForceExit
-Force exit order, if already purchased, exit at market price. If the purchase is not executed, cancel the pending order. If it has not been submitted, delete the order directly
-
-	Generation mode: Submit a request to the exchange.
-	Simulation mode: Exit after the next bar appears
-
-强制退出订单，如已买入，则以市价单退出。如买入未成交，则取消挂单，如尚未提交，则直接删除订单
-
-	生成模式：提交请求到交易所。
-	模拟模式：在下一个bar出现后完成退出
-*/
-func (i *InOutOrder) ForceExit(tag string, msg string) {
-	panic("ForceExit not implement")
-}
-
-/*
 CutPart
 Split a small InOutOrder from the current order to solve the problem of one buy and multiple sell
 从当前订单分割出一个小的InOutOrder，解决一次买入，多次卖出问题

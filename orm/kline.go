@@ -394,28 +394,15 @@ calcUnFinish
 Calculate the unfinished bars of large cycles from sub cycles
 从子周期计算大周期的未完成bar
 */
-func calcUnFinish(sid int32, timeFrame, subTF string, startMS, endMS int64, arr []*banexg.Kline) *KlineUn {
-	toTfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
-	fromTfMSecs := int64(utils2.TFToSecs(subTF) * 1000)
-	offMS := GetAlignOff(sid, toTfMSecs)
+func calcUnFinish(sid int32, tfMSecs, fromTfMSecs int64, arr []*banexg.Kline) *banexg.Kline {
+	offMS := GetAlignOff(sid, tfMSecs)
 	infoBy := GetSymbolByID(sid).InfoBy()
-	merged, _ := utils.BuildOHLCV(arr, toTfMSecs, 0, nil, fromTfMSecs, offMS, infoBy)
+	merged, _ := utils.BuildOHLCV(arr, tfMSecs, 0, nil, fromTfMSecs, offMS, infoBy)
 	if len(merged) == 0 {
 		return nil
 	}
 	out := merged[len(merged)-1]
-	return &KlineUn{
-		Sid:       sid,
-		StartMs:   startMS,
-		Open:      out.Open,
-		High:      out.High,
-		Low:       out.Low,
-		Close:     out.Close,
-		Volume:    out.Volume,
-		Info:      out.Info,
-		StopMs:    endMS,
-		Timeframe: timeFrame,
-	}
+	return out
 }
 
 func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, startMS, endMS int64, klines []*banexg.Kline) *errs.Error {
@@ -435,14 +422,16 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		log.Warn("skip unFinish for empty", zap.Int64("s", startMS), zap.Int64("e", endMS))
 		return nil
 	}
-	sub := calcUnFinish(sid, agg.TimeFrame, subTF, startMS, endMS, klines)
-	if sub == nil {
+	fromTfMSecs := int64(utils2.TFToSecs(subTF) * 1000)
+	unFinish := calcUnFinish(sid, tfMSecs, fromTfMSecs, klines)
+	if unFinish == nil {
 		_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
 		if err_ != nil {
 			return NewDbErr(core.ErrDbExecFail, err_)
 		}
 		return nil
 	}
+	unFinish.Time = startMS
 	barStartMS := utils2.AlignTfMSecs(startMS, tfMSecs)
 	barEndMS := utils2.AlignTfMSecs(endMS, tfMSecs)
 	if barStartMS == barEndMS {
@@ -455,10 +444,10 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 		if err_ == nil && unBar.StopMs == startMS {
 			//When the start timestamp of this insertion matches exactly with the end timestamp of the unfinished bar, it is considered valid
 			//当本次插入开始时间戳，和未完成bar结束时间戳完全匹配时，认为有效
-			unBar.High = max(unBar.High, sub.High)
-			unBar.Low = min(unBar.Low, sub.Low)
-			unBar.Close = sub.Close
-			unBar.Volume += sub.Volume
+			unBar.High = max(unBar.High, unFinish.High)
+			unBar.Low = min(unBar.Low, unFinish.Low)
+			unBar.Close = unFinish.Close
+			unBar.Volume += unFinish.Volume
 			unBar.StopMs = endMS
 			updSql := fmt.Sprintf("update kline_un set high=%v,low=%v,close=%v,volume=%v,info=%v,stop_ms=%v %s",
 				unBar.High, unBar.Low, unBar.Close, unBar.Volume, unBar.Info, unBar.StopMs, whereSql)
@@ -471,26 +460,29 @@ func updateUnFinish(sess *Queries, agg *KlineAgg, sid int32, subTF string, start
 	}
 	//When rapid updates are unavailable, collect from sub cycles
 	//当快速更新不可用时，从子周期归集
-	_, err_ := sess.db.Exec(ctx, "delete "+fromWhere)
-	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
-	}
-	return sess.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, info, timeframe) 
-values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, sub.Sid, sub.StartMs, endMS, sub.Open, sub.High, sub.Low,
-		sub.Close, sub.Volume, sub.Info, sub.Timeframe)
+	return sess.SetUnfinish(sid, agg.TimeFrame, endMS, unFinish)
 }
 
 func (q *Queries) SetUnfinish(sid int32, tf string, endMS int64, bar *banexg.Kline) *errs.Error {
 	whereSql := fmt.Sprintf("where sid=%v and timeframe='%v';", sid, tf)
 	fromWhere := "from kline_un " + whereSql
-	ctx := context.Background()
-	_, err_ := q.db.Exec(ctx, "delete "+fromWhere)
-	if err_ != nil {
-		return NewDbErr(core.ErrDbExecFail, err_)
+	tx, sess, err := q.NewTx(context.Background())
+	if err != nil {
+		return err
 	}
-	return q.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, info, timeframe) 
+	_, err_ := sess.db.Exec(context.Background(), "delete "+fromWhere)
+	if err_ != nil {
+		err = NewDbErr(core.ErrDbExecFail, err_)
+	} else {
+		err = sess.Exec(`insert into kline_un (sid, start_ms, stop_ms, open, high, low, close, volume, info, timeframe) 
 values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, sid, bar.Time, endMS, bar.Open, bar.High, bar.Low,
-		bar.Close, bar.Volume, bar.Info, tf)
+			bar.Close, bar.Volume, bar.Info, tf)
+	}
+	err2 := tx.Close(context.Background(), err == nil)
+	if err2 != nil {
+		log.Error("SetUnfinish Tx close fail", zap.Bool("commit", err == nil), zap.Error(err2))
+	}
+	return err
 }
 
 // iterForAddKLines implements pgx.CopyFromSource.

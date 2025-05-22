@@ -337,7 +337,11 @@ func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
 	if jobType == core.WsSubDepth {
 		removes := m.Depths.Remove(pairs...)
-		return m.exchange.UnWatchOrderBooks(removes, nil)
+		if len(removes) > 0 {
+			log.Info("UnSubPairs Depth", zap.Strings("pairs", removes))
+			return m.exchange.UnWatchOrderBooks(removes, nil)
+		}
+		return nil
 	} else if jobType == "ohlcv" || jobType == core.WsSubKLine {
 		timeFrame := "1s"
 		if banexg.IsContract(m.Market) {
@@ -348,12 +352,21 @@ func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
 		for _, p := range items {
 			jobs = append(jobs, [2]string{p, timeFrame})
 		}
-		return m.exchange.UnWatchOHLCVs(jobs, nil)
+		if len(jobs) > 0 {
+			log.Info("UnSubPairs "+jobType, zap.Strings("pairs", items))
+			return m.exchange.UnWatchOHLCVs(jobs, nil)
+		}
+		return nil
 	} else if jobType == "price" {
+		log.Info("UnSubPairs all pairs price", zap.Strings("pairs", pairs))
 		return m.exchange.UnWatchMarkPrices(nil, nil)
 	} else if jobType == core.WsSubTrade {
 		items := m.Trades.Remove(pairs...)
-		return m.exchange.UnWatchTrades(items, nil)
+		if len(items) > 0 {
+			log.Info("UnSubPairs trades", zap.Strings("pairs", items))
+			return m.exchange.UnWatchTrades(items, nil)
+		}
+		return nil
 	} else {
 		log.Error("unknown unsub type", zap.String("val", jobType))
 	}

@@ -254,6 +254,7 @@ For redundant positions, treat them as new orders opened by the user and create 
 	     对于冗余的仓位，视为用户开的新订单，创建新订单跟踪。
 */
 func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
+	EnsurePricesLoaded()
 	exchange := exg.Default
 	task := ormo.GetTask(o.Account)
 	// Get the exchange order
@@ -293,10 +294,14 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 		}
 	}
 	openOds, lock := ormo.GetOpenODs(o.Account)
+	var lastEntMS int64
 	var openPairs = map[string]struct{}{}
 	for _, od := range orders {
 		if od.Status >= ormo.InOutStatusFullExit {
 			continue
+		}
+		if od.Enter.OrderID != "" {
+			lastEntMS = max(lastEntMS, od.RealEnterMS())
 		}
 		err = o.restoreInOutOrder(od, exgOdMap)
 		if err != nil {
@@ -350,7 +355,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 			}
 		}
 		prevTF, _ := pairLastTfs[pair]
-		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, curOds)
+		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, lastEntMS, curOds)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -478,13 +483,15 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[strin
 For the specified currency, synchronize the exchange order status to the local machine. Executed when the robot is just started.
 对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
 */
-func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, openOds []*ormo.InOutOrder) ([]*ormo.InOutOrder, *errs.Error) {
+func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, sinceMS int64,
+	openOds []*ormo.InOutOrder) ([]*ormo.InOutOrder, *errs.Error) {
 	var exOrders []*banexg.Order
 	var err *errs.Error
 	var curMS = btime.UTCStamp()
 	// Get exchange order history and try to restore the order status.
 	// 从交易所获取订单记录，尝试恢复订单状态。
-	exOrders, err = exg.Default.FetchOrders(pair, 0, 300, map[string]interface{}{
+	// 这里必须指定sinceMS，避免获取过早的订单创建冗余本地记录
+	exOrders, err = exg.Default.FetchOrders(pair, sinceMS, 300, map[string]interface{}{
 		banexg.ParamAccount: o.Account,
 		banexg.ParamUntil:   curMS,
 	})
@@ -571,8 +578,13 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	}
 	if config.TakeOverStrat == "" {
 		if longBotAmt > AmtDust || shortBotAmt > AmtDust {
-			log.Error("unknown exchange position for bot", zap.Float64("long", longBotAmt),
-				zap.Float64("short", shortBotAmt))
+			price := core.GetPrice(pair)
+			longCost := longBotAmt * price
+			shortCost := shortBotAmt * price
+			if longCost > 1 || shortCost > 1 {
+				log.Error("unknown exchange position for bot", zap.String("pair", pair),
+					zap.Float64("long", longCost), zap.Float64("short", shortCost))
+			}
 		}
 		return openOds, nil
 	}
@@ -729,7 +741,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 		var part *ormo.InOutOrder
 		var res []*ormo.InOutOrder
 		for _, iod := range ods {
-			if iod.Short != isShort {
+			if iod.Short != isShort || iod.RealEnterMS() > odTime {
 				continue
 			}
 			amount, feeCost, part = o.tryFillExit(iod, amount, price, odTime, od.ID, od.Type, feeName, feeCost)
@@ -1593,7 +1605,19 @@ func (o *LiveOrderMgr) submitExgOrder(od *ormo.InOutOrder, isEnter bool) *errs.E
 	}
 	res, err := exchange.CreateOrder(od.Symbol, subOd.OrderType, side, amount, price, params)
 	if err != nil {
-		return err
+		if !isEnter && err.BizCode == -2022 {
+			msg := "ReduceOnly Order is rejected."
+			log.Error("close exg pos fail", zap.String("key", od.Key()), zap.Error(err))
+			err = od.LocalExit(btime.UTCStamp(), core.ExitTagNoMatch, price, msg, banexg.OdTypeMarket)
+			if err != nil {
+				return err
+			}
+			cancelTriggerOds(od)
+			o.callBack(od, isEnter)
+			return nil
+		} else {
+			return err
+		}
 	}
 	err = o.updateOdByExgRes(od, isEnter, res)
 	if err != nil {

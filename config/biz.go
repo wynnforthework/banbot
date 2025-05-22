@@ -366,6 +366,10 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	StratPerf = c.StratPerf
 	Pairs, _ = utils2.UniqueItems(c.Pairs)
 	SetRunPolicy(true, c.RunPolicy...)
+	_, needCalc := GetStaticPairs()
+	if needCalc && len(c.PairFilters) == 0 {
+		return errs.NewMsg(core.ErrBadConfig, "`pairs` or `pairlists` is required")
+	}
 	if c.PairMgr == nil {
 		c.PairMgr = &PairMgrConfig{}
 	}
@@ -420,6 +424,25 @@ func SetRunPolicy(index bool, items ...*RunPolicyConfig) {
 		}
 	}
 	RunPolicy = items
+}
+
+// GetStaticPairs 合并pairs和run_policy.pairs返回，bool表示是否需要动态计算
+func GetStaticPairs() ([]string, bool) {
+	var res = make([]string, 0, len(Pairs))
+	res = append(res, Pairs...)
+	needCalc := false
+	for _, p := range RunPolicy {
+		if len(p.Pairs) > 0 {
+			res = append(res, p.Pairs...)
+		} else {
+			needCalc = true
+		}
+	}
+	if len(Pairs) > 0 {
+		needCalc = false
+	}
+	res, _ = utils2.UniqueItems(res)
+	return res, needCalc
 }
 
 func GetTakeOverTF(pair, defTF string) string {

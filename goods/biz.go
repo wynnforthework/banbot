@@ -80,11 +80,10 @@ RefreshPairList
 更新core.Pairs和core.PairsMap
 */
 func RefreshPairList(timeMS int64) ([]string, *errs.Error) {
-	var pairs []string
 	var allowFilter = false
 	var err *errs.Error
-	if len(config.Pairs) > 0 {
-		pairs = config.Pairs
+	pairs, _ := config.GetStaticPairs()
+	if len(pairs) > 0 {
 		pairVols, err := getSymbolVols(pairs, "1h", 1, timeMS)
 		if err != nil {
 			return nil, err
