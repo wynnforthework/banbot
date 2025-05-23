@@ -457,6 +457,11 @@ func (o *OrderMgr) enterOrder(sess *ormo.Queries, exs *orm.ExSymbol, tf string, 
 	if req.ClientID != "" {
 		od.SetInfo(ormo.OdInfoClientID, req.ClientID)
 	}
+	if len(req.Infos) > 0 {
+		for k, v := range req.Infos {
+			od.SetInfo(k, v)
+		}
+	}
 	err := od.Save(sess)
 	if err != nil {
 		return od, err

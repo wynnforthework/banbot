@@ -139,6 +139,7 @@ type EnterReq struct {
 	TakeProfitTag   string  // Reason for profit taking 止盈原因
 	StopBars        int     // If the entry limit order exceeds how many bars and is not executed, it will be cancelled 入场限价单超过多少个bar未成交则取消
 	ClientID        string  // used as suffix of ClientOrderID to exchange
+	Infos           map[string]string
 }
 
 /*

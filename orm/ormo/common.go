@@ -20,6 +20,9 @@ func DumpOrdersGob(path string) *errs.Error {
 func LoadOrdersGob(path string) ([]*InOutOrder, *errs.Error) {
 	var data []*InOutOrder
 	err := utils.DecodeGobFile(path, &data)
+	for _, od := range data {
+		od.loadInfo()
+	}
 	return data, err
 }
 
