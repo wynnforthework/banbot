@@ -471,6 +471,25 @@ func (f *SpreadFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.E
 	return symbols, nil
 }
 
+func (f *BlockFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
+	if len(f.Pairs) == 0 {
+		return symbols, nil
+	}
+	if f.pairMap == nil {
+		f.pairMap = make(map[string]bool)
+		for _, p := range f.Pairs {
+			f.pairMap[p] = true
+		}
+	}
+	res := make([]string, 0, len(symbols))
+	for _, s := range symbols {
+		if _, ok := f.pairMap[s]; !ok {
+			res = append(res, s)
+		}
+	}
+	return res, nil
+}
+
 func (f *OffsetFilter) Filter(symbols []string, timeMS int64) ([]string, *errs.Error) {
 	var res = symbols
 	if f.Reverse {

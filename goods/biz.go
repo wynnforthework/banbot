@@ -59,6 +59,8 @@ func GetPairFilters(items []*config.CommonPairFilter, withInvalid bool) ([]IFilt
 			output = &ShuffleFilter{BaseFilter: base}
 		case "CorrelationFilter":
 			output = &CorrelationFilter{BaseFilter: base}
+		case "BlockFilter":
+			output = &BlockFilter{BaseFilter: base}
 		default:
 			return nil, errs.NewMsg(errs.CodeParamInvalid, "unknown symbol filter: %s", cfg.Name)
 		}

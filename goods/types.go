@@ -80,6 +80,12 @@ type VolatilityFilter struct {
 	Min      float64 `yaml:"min" mapstructure:"min,omitempty"`             // 波动分数最小值
 }
 
+type BlockFilter struct {
+	BaseFilter
+	Pairs   []string `yaml:"pairs" mapstructure:"pairs,omitempty"`
+	pairMap map[string]bool
+}
+
 type AgeFilter struct {
 	BaseFilter
 	Min int `yaml:"min" mapstructure:"min,omitempty"` // 最小上市天数
