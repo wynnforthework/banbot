@@ -294,14 +294,14 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 		}
 	}
 	openOds, lock := ormo.GetOpenODs(o.Account)
-	var lastEntMS int64
+	var lastOrderMS int64
 	var openPairs = map[string]struct{}{}
 	for _, od := range orders {
 		if od.Status >= ormo.InOutStatusFullExit {
 			continue
 		}
 		if od.Enter.OrderID != "" {
-			lastEntMS = max(lastEntMS, od.RealEnterMS())
+			lastOrderMS = max(lastOrderMS, od.RealEnterMS(), od.RealExitMS())
 		}
 		err = o.restoreInOutOrder(od, exgOdMap)
 		if err != nil {
@@ -355,7 +355,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 			}
 		}
 		prevTF, _ := pairLastTfs[pair]
-		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, lastEntMS, curOds)
+		curOds, err = o.syncPairOrders(pair, prevTF, longPos, shortPos, lastOrderMS, curOds)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -482,6 +482,7 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[strin
 /*
 For the specified currency, synchronize the exchange order status to the local machine. Executed when the robot is just started.
 对指定币种，将交易所订单状态同步到本地。机器人刚启动时执行。
+sinceMS是本地记录的已处理交易所最新订单时间戳，只获取此后的订单，同步状态到本地。
 */
 func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *banexg.Position, sinceMS int64,
 	openOds []*ormo.InOutOrder) ([]*ormo.InOutOrder, *errs.Error) {
@@ -506,7 +507,6 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	if shortPos != nil {
 		shortPosAmt = shortPos.Contracts
 	}
-	longBotAmt, shortBotAmt, longOtherAmt, shortOtherAmt := calcHoldAmounts(exOrders, longPosAmt, shortPosAmt)
 	// Get the exchange order before getting the connection to reduce the time taken
 	// 获取交易所订单后再获取连接，减少占用时长
 	sess, conn, err := ormo.Conn(orm.DbTrades, true)
@@ -557,30 +557,36 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				openOds = utils.RemoveFromArr(openOds, iod, 1)
 				continue
 			}
-			var posAmt = float64(0)
+			var fillAmt = float64(0)
 			if iod.Short {
-				shortBotAmt -= odAmt
-				posAmt = shortBotAmt
+				fillAmt = min(shortPosAmt, odAmt)
+				shortPosAmt -= odAmt
 			} else {
-				longBotAmt -= odAmt
-				posAmt = longBotAmt
+				fillAmt = min(longPosAmt, odAmt)
+				longPosAmt -= odAmt
 			}
-			if posAmt < odAmt*0.01 {
-				msg := fmt.Sprintf("The order has no corresponding position in the exchange: %.5f", posAmt)
+			if fillAmt < odAmt*0.01 {
+				msg := fmt.Sprintf("no corresponding position in the exchange")
 				err = iod.LocalExit(0, core.ExitTagFatalErr, iod.InitPrice, msg, "")
 				strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 				if err != nil {
 					return openOds, err
 				}
 				openOds = utils.RemoveFromArr(openOds, iod, 1)
+			} else if fillAmt < odAmt*0.99 {
+				price := core.GetPrice(pair)
+				holdCost := odAmt * price
+				fillPct := math.Round(fillAmt * 100 / odAmt)
+				log.Error("position not match", zap.String("pair", pair), zap.String("key", iod.Key()),
+					zap.Float64("holdCost", holdCost), zap.Float64("fillPct", fillPct))
 			}
 		}
 	}
 	if config.TakeOverStrat == "" {
-		if longBotAmt > AmtDust || shortBotAmt > AmtDust {
+		if longPosAmt > AmtDust || shortPosAmt > AmtDust {
 			price := core.GetPrice(pair)
-			longCost := longBotAmt * price
-			shortCost := shortBotAmt * price
+			longCost := math.Round(longPosAmt*price*100) / 100
+			shortCost := math.Round(shortPosAmt*price*100) / 100
 			if longCost > 1 || shortCost > 1 {
 				log.Error("unknown exchange position for bot", zap.String("pair", pair),
 					zap.Float64("long", longCost), zap.Float64("short", shortCost))
@@ -588,8 +594,6 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 		}
 		return openOds, nil
 	}
-	longPosAmt = max(longBotAmt, 0) + longOtherAmt
-	shortPosAmt = max(shortBotAmt, 0) + shortOtherAmt
 	if longPos != nil && longPosAmt > AmtDust {
 		longPos.Contracts = longPosAmt
 		longOd, err := o.createOdFromPos(longPos, defTF)
@@ -615,77 +619,6 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 		}
 	}
 	return openOds, nil
-}
-
-// 从订单记录中计算当前机器人主动打开的仓位大小
-func calcHoldAmounts(orders []*banexg.Order, longAmt, shortAmt float64) (float64, float64, float64, float64) {
-	var longBot, shortBot, longOther, shortOther float64
-	for _, od := range orders {
-		if od.Filled <= core.AmtDust {
-			continue
-		}
-		isShort := od.PositionSide == banexg.PosSideShort
-		isSell := od.Side == banexg.OdSideSell
-		isBot := strings.HasPrefix(od.ClientOrderID, config.Name) || strings.HasPrefix(od.ClientOrderID, "ban")
-		if isShort == isSell {
-			// 入场订单，开多或开空
-			if isShort {
-				if isBot {
-					shortBot += od.Filled
-				} else {
-					shortOther += od.Filled
-				}
-			} else {
-				if isBot {
-					longBot += od.Filled
-				} else {
-					longOther += od.Filled
-				}
-			}
-		} else {
-			// 出场订单，平多或平空
-			var curBot = longBot
-			var curOther = longOther
-			if isShort {
-				curBot = shortBot
-				curOther = shortOther
-			}
-			if isBot {
-				if curBot >= od.Filled*0.99 {
-					curBot -= od.Filled
-					curBot = max(curBot, 0)
-				} else {
-					// 机器人开单仓位不足，使用其他端仓位
-					curOther -= od.Filled - curBot
-					curBot = 0
-					curOther = max(curOther, 0)
-				}
-			} else {
-				if curOther >= od.Filled*0.99 {
-					curOther -= od.Filled
-					curOther = max(curOther, 0)
-				} else {
-					curBot -= od.Filled - curOther
-					curOther = 0
-					curBot = max(curBot, 0)
-				}
-			}
-			if isShort {
-				shortBot, shortOther = curBot, curOther
-			} else {
-				longBot, longOther = curBot, curOther
-			}
-		}
-	}
-	if longBot+longOther > longAmt+AmtDust {
-		longBot = min(longBot, longAmt)
-		longOther = longAmt - longBot
-	}
-	if shortBot+shortOther > shortAmt+AmtDust {
-		shortBot = min(shortBot, shortAmt)
-		shortOther = shortAmt - shortBot
-	}
-	return longBot, shortBot, longOther, shortOther
 }
 
 func getFeeNameCost(fee *banexg.Fee, pair, odType, side string, amount, price float64) (string, float64) {
