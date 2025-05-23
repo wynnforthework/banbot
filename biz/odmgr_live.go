@@ -161,7 +161,8 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 	}
 	lock.Unlock()
 	if duplicateOdNum > 0 {
-		log.Info("found duplicate orders in global Open orders", zap.Int("num", duplicateOdNum))
+		log.Info("found duplicate orders in global Open orders",
+			zap.String("acc", o.Account), zap.Int("num", duplicateOdNum))
 	}
 
 	// 对每个symbol的多空方向进行检查
@@ -218,7 +219,8 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 					closeAmt := part.HoldAmount()
 					err = part.LocalExit(0, core.ExitTagNoMatch, 0, "SyncLocalOrders", "")
 					if err != nil {
-						log.Error("force exit order fail", zap.String("key", part.Key()), zap.Error(err))
+						log.Error("force exit order fail", zap.String("acc", o.Account),
+							zap.String("key", part.Key()), zap.Error(err))
 						continue
 					}
 
@@ -227,7 +229,7 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 					closedList = append(closedList, part)
 					strat.FireOdChange(o.Account, part, strat.OdChgExitFill)
 				}
-				log.Warn("close extra local open orders", zap.String("pair", symbol),
+				log.Warn("close extra local open orders", zap.String("acc", o.Account), zap.String("pair", symbol),
 					zap.Float64("ExtraTotal", localAmt-posAmt), zap.Float64("ExtraLeft", overAmt),
 					zap.Float64("localAmt", localAmt), zap.Float64("exgAmt", posAmt),
 					zap.Int("odNum", len(closeOds)), zap.Strings("orders", closeOds))
@@ -312,7 +314,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 		}
 		err = o.restoreInOutOrder(od, exgOdMap)
 		if err != nil {
-			log.Error("restoreInOutOrder fail", zap.String("key", od.Key()), zap.Error(err))
+			log.Error("restoreInOutOrder fail", zap.String("acc", o.Account), zap.String("key", od.Key()), zap.Error(err))
 		}
 		if od.Status < ormo.InOutStatusFullExit {
 			lock.Lock()
@@ -322,7 +324,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 		}
 		err = od.Save(sess)
 		if err != nil {
-			log.Error("save order in SyncExgOrders fail", zap.String("key", od.Key()), zap.Error(err))
+			log.Error("save order in SyncExgOrders fail", zap.String("acc", o.Account), zap.String("key", od.Key()), zap.Error(err))
 		}
 	}
 	// Get exchange positions
@@ -404,7 +406,7 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 	}
 	err = ormo.SaveDirtyODs(orm.DbTrades, o.Account)
 	if err != nil {
-		log.Error("SaveDirtyODs fail", zap.Error(err))
+		log.Error("SaveDirtyODs fail", zap.String("acc", o.Account), zap.Error(err))
 	}
 	return oldList, newList, delList, nil
 }
@@ -472,8 +474,8 @@ func (o *LiveOrderMgr) restoreInOutOrder(od *ormo.InOutOrder, exgOdMap map[strin
 		} else if tryOd.Status > ormo.OdStatusInit {
 			// You shouldn't go here.
 			// 这里不应该走到
-			log.Error("Exit Status Invalid", zap.String("key", od.Key()), zap.Int64("sta", tryOd.Status),
-				zap.String("orderId", tryOd.OrderID))
+			log.Error("Exit Status Invalid", zap.String("acc", o.Account), zap.String("key", od.Key()),
+				zap.Int64("sta", tryOd.Status), zap.String("orderId", tryOd.OrderID))
 		} else {
 			// Here OrderID must be empty, and the number of entry orders must be filled.
 			// 这里OrderID一定为空，并且入场单数量一定有成交的。
@@ -584,7 +586,8 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				price := core.GetPrice(pair)
 				holdCost := odAmt * price
 				fillPct := math.Round(fillAmt * 100 / odAmt)
-				log.Error("position not match", zap.String("pair", pair), zap.String("key", iod.Key()),
+				log.Error("position not match", zap.String("acc", o.Account),
+					zap.String("pair", pair), zap.String("key", iod.Key()),
 					zap.Float64("holdCost", holdCost), zap.Float64("fillPct", fillPct))
 			}
 		}
@@ -660,7 +663,8 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 	if isShort == isSell {
 		// Open long or short 开多或开空
 		if defTF == "" {
-			log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("strat", config.TakeOverStrat))
+			log.Warn("take over job not found", zap.String("acc", o.Account),
+				zap.String("pair", od.Symbol), zap.String("strat", config.TakeOverStrat))
 			return ods, nil
 		}
 		tag := "[LONG]"
@@ -709,7 +713,8 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 		if !od.ReduceOnly && amount > AmtDust {
 			// Remaining quantity, create opposite order 剩余数量，创建相反订单
 			if defTF == "" {
-				log.Warn("take over job not found", zap.String("pair", od.Symbol), zap.String("stagy", config.TakeOverStrat))
+				log.Warn("take over job not found", zap.String("acc", o.Account),
+					zap.String("pair", od.Symbol), zap.String("stagy", config.TakeOverStrat))
 				return ods, nil
 			}
 			tag := "[long]"
@@ -827,7 +832,8 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 		err := iod.LocalExit(0, core.ExitTagForceExit, iod.InitPrice, "not entered", "")
 		strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
 		if err != nil {
-			log.Error("local exit no enter order fail", zap.String("key", iod.Key()), zap.Error(err))
+			log.Error("local exit no enter order fail", zap.String("acc", o.Account),
+				zap.String("key", iod.Key()), zap.Error(err))
 		}
 		return filled, feeCost, iod
 	}
@@ -997,12 +1003,14 @@ func (o *LiveOrderMgr) handleOrderQueue(od *ormo.InOutOrder, action string) {
 		return
 	}
 	if err != nil {
-		log.Error("ConsumeOrderQueue error", zap.String("action", action), zap.Error(err))
+		log.Error("ConsumeOrderQueue error", zap.String("acc", o.Account),
+			zap.String("action", action), zap.Error(err))
 	}
 	if od.IsDirty() {
 		err = od.Save(nil)
 		if err != nil {
-			log.Error("save od for exg status fail", zap.String("key", od.Key()), zap.Error(err))
+			log.Error("save od for exg status fail", zap.String("acc", o.Account),
+				zap.String("key", od.Key()), zap.Error(err))
 		}
 	}
 	logFields := []zap.Field{zap.String("acc", o.Account), zap.String("key", od.Key())}
@@ -1032,7 +1040,7 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 		banexg.ParamAccount: o.Account,
 	})
 	if err != nil {
-		log.Error("WatchMyTrades fail", zap.Error(err))
+		log.Error("WatchMyTrades fail", zap.String("acc", o.Account), zap.Error(err))
 		return
 	}
 	o.isWatchMyTrade = true
@@ -1084,11 +1092,17 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 			lock.Unlock()
 		}
 		if iod == nil {
-			// No matching order, recorded in unMatchTrades
-			// 没有匹配订单，记录到unMatchTrades
-			o.lockUnMatches.Lock()
-			o.unMatchTrades[tradeKey] = trade
-			o.lockUnMatches.Unlock()
+			if orderId > 0 {
+				// 可能订单已完成，从OpenODs中移除了
+				log.Error("no order found in OpenODs", zap.String("acc", o.Account),
+					zap.String("clientID", trade.ClientID), zap.Int64("inoutId", orderId))
+			} else {
+				// No matching order, recorded in unMatchTrades
+				// 没有匹配订单，记录到unMatchTrades
+				o.lockUnMatches.Lock()
+				o.unMatchTrades[tradeKey] = trade
+				o.lockUnMatches.Unlock()
+			}
 			return
 		}
 	}
@@ -1101,7 +1115,7 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	defer lock.Unlock()
 	err := o.updateByMyTrade(iod, trade)
 	if err != nil {
-		log.Error("updateByMyTrade fail", zap.String("key", iod.Key()),
+		log.Error("updateByMyTrade fail", zap.String("acc", o.Account), zap.String("key", iod.Key()),
 			zap.String("trade", trade.ID), zap.Error(err))
 	}
 	subOd := iod.Exit
@@ -1111,13 +1125,13 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 	if subOd != nil {
 		err = o.consumeUnMatches(iod, subOd)
 		if err != nil {
-			log.Error("consumeUnMatches for WatchMyTrades fail", zap.String("key", iod.Key()),
-				zap.Error(err))
+			log.Error("consumeUnMatches for WatchMyTrades fail", zap.String("acc", o.Account),
+				zap.String("key", iod.Key()), zap.Error(err))
 		}
 	} else {
-		log.Error("handleMyTrade: subOd nil", zap.String("key", iod.Key()), zap.String("trade", trade.ID),
-			zap.String("side", trade.Side), zap.String("clientId", trade.ClientID),
-			zap.String("order", trade.Order))
+		log.Error("handleMyTrade: subOd nil", zap.String("acc", o.Account), zap.String("key", iod.Key()),
+			zap.String("trade", trade.ID), zap.String("side", trade.Side),
+			zap.String("clientId", trade.ClientID), zap.String("order", trade.Order))
 	}
 	if iod.IsDirty() {
 		if iod.Status == ormo.InOutStatusFullEnter {
@@ -1128,14 +1142,15 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 		}
 		err = iod.Save(nil)
 		if err != nil {
-			log.Error("save od from myTrade fail", zap.String("key", iod.Key()), zap.Error(err))
+			log.Error("save od from myTrade fail", zap.String("acc", o.Account),
+				zap.String("key", iod.Key()), zap.Error(err))
 		}
 	}
 }
 
 /*
 Parse the order ClientID passed into the exchange, generally in the form of: botName_inOutId_randNum
-解析传入交易所的订单ClientID，一般形如：botName_inOutId_randNum
+解析传入交易所的订单ClientID，一般形如：botName_inOutId_randNum_
 */
 func getClientOrderId(clientId string) int64 {
 	arr := strings.Split(clientId, "_")
@@ -1184,7 +1199,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 					err := o.updateByMyTrade(iod, trade)
 					lock.Unlock()
 					if err != nil {
-						log.Error("updateByMyTrade fail", zap.String("key", iod.Key()),
+						log.Error("updateByMyTrade fail", zap.String("acc", o.Account), zap.String("key", iod.Key()),
 							zap.String("trade", trade.ID), zap.Error(err))
 					}
 					continue
@@ -1203,7 +1218,7 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			for _, trades := range pairTrades {
 				exOd, err := banexg.MergeMyTrades(trades)
 				if err != nil {
-					log.Error("MergeMyTrades fail", zap.Int("num", len(trades)), zap.Error(err))
+					log.Error("MergeMyTrades fail", zap.String("acc", o.Account), zap.Int("num", len(trades)), zap.Error(err))
 					continue
 				}
 				if o.exitByMyOrder(exOd) {
@@ -1214,11 +1229,11 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 				unHandleNum += 1
 			}
 			if unHandleNum > 0 {
-				log.Warn(fmt.Sprintf("expired unmatch orders: %v", unHandleNum))
+				log.Warn(fmt.Sprintf("expired unmatch orders %s: %v", o.Account, unHandleNum))
 			}
 			err := ormo.SaveDirtyODs(orm.DbTrades, o.Account)
 			if err != nil {
-				log.Error("SaveDirtyODs fail", zap.Error(err))
+				log.Error("SaveDirtyODs fail", zap.String("acc", o.Account), zap.Error(err))
 			}
 		}
 	}()
@@ -1252,7 +1267,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 			od.SetExit(0, core.ExitTagTakeProfit, banexg.OdTypeTakeProfit, 0)
 		} else {
 			// TODO: 检查是否是用户主动平仓，用户可能一次性平仓多个，需要更新相关订单状态
-			log.Error(fmt.Sprintf("%s subOd %s nil, trade state: %s", od.Key(), dirtTag, trade.State))
+			log.Error(fmt.Sprintf("%s %s subOd %s nil, trade state: %s", o.Account, od.Key(), dirtTag, trade.State))
 			return nil
 		}
 		subOd = od.Exit
@@ -1262,7 +1277,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 		return nil
 	}
 	if subOd.Status == ormo.OdStatusClosed {
-		log.Debug(fmt.Sprintf("%s %s complete, skip trade: %v", od.Key(), dirtTag, trade.ID))
+		log.Debug(fmt.Sprintf("%s %s %s complete, skip trade: %v", o.Account, od.Key(), dirtTag, trade.ID))
 		return nil
 	}
 	if subOd.Enter {
@@ -1313,7 +1328,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 			od.DirtyMain = true
 		}
 	} else {
-		log.Error(fmt.Sprintf("unknown bnb order status: %s", state))
+		log.Error(fmt.Sprintf("unknown bnb order status %s: %s", o.Account, state))
 	}
 	if od.Status == ormo.InOutStatusFullExit {
 		// May be triggered by stop loss or take profit, delete and set to completed
@@ -1345,16 +1360,16 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 	}
 	odKey := od.Key()
 	forceDelOd := func(err *errs.Error) {
-		log.Error("del enter order", zap.String("key", odKey), zap.Error(err))
+		log.Error("del enter order", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
 		sess, conn, err := ormo.Conn(orm.DbTrades, true)
 		if err != nil {
-			log.Error("get db sess fail", zap.Error(err))
+			log.Error("get db sess fail", zap.String("acc", o.Account), zap.Error(err))
 			return
 		}
 		defer conn.Close()
 		err = sess.DelOrder(od)
 		if err != nil {
-			log.Error("del order fail", zap.String("key", odKey), zap.Error(err))
+			log.Error("del order fail", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
 		}
 	}
 	var err *errs.Error
@@ -1371,7 +1386,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 					err = od.LocalExit(0, core.ExitTagFatalErr, od.InitPrice, msg, "")
 					strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 					if err != nil {
-						log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
+						log.Error("local exit order fail", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
 					}
 					return errs.NewMsg(core.ErrRunTime, msg+odKey)
 				}
@@ -1392,11 +1407,11 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 	err = o.submitExgOrder(od, true)
 	if err != nil {
 		msg := "submit order fail, local exit"
-		log.Error(msg, zap.String("key", odKey), zap.Error(err))
+		log.Error(msg, zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
 		err = od.LocalExit(0, core.ExitTagFatalErr, od.InitPrice, msg, "")
 		strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 		if err != nil {
-			log.Error("local exit order fail", zap.String("key", odKey), zap.Error(err))
+			log.Error("local exit order fail", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
 		}
 	}
 	return nil
@@ -1413,11 +1428,12 @@ func (o *LiveOrderMgr) tryExitPendingEnter(od *ormo.InOutOrder) *errs.Error {
 			banexg.ParamAccount: o.Account,
 		})
 		if err != nil {
-			log.Error("cancel order fail", zap.String("key", od.Key()), zap.String("err", err.Short()))
+			log.Error("cancel order fail", zap.String("acc", o.Account),
+				zap.String("key", od.Key()), zap.String("err", err.Short()))
 		} else {
 			err = o.updateOdByExgRes(od, true, order)
 			if err != nil {
-				log.Error("apply cancel res fail", zap.String("key", od.Key()), zap.Error(err))
+				log.Error("apply cancel res fail", zap.String("acc", o.Account), zap.String("key", od.Key()), zap.Error(err))
 			}
 		}
 	}
@@ -1547,7 +1563,7 @@ func (o *LiveOrderMgr) submitExgOrder(od *ormo.InOutOrder, isEnter bool) *errs.E
 	if err != nil {
 		if !isEnter && err.BizCode == -2022 {
 			msg := "ReduceOnly Order is rejected."
-			log.Error("close exg pos fail", zap.String("key", od.Key()), zap.Error(err))
+			log.Error("close exg pos fail", zap.String("acc", o.Account), zap.String("key", od.Key()), zap.Error(err))
 			err = od.LocalExit(btime.UTCStamp(), core.ExitTagNoMatch, price, msg, banexg.OdTypeMarket)
 			if err != nil {
 				return err
@@ -1744,7 +1760,7 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 	// 无效或过期，需要重新计算
 	avgVol, lastVol, err := getPairMinsVol(pair, 5)
 	if err != nil {
-		log.Error("getPairMinsVol fail for getLimitPrice", zap.String("pair", pair), zap.Error(err))
+		log.Error("getPairMinsVol fail for getLimitPrice", zap.String("acc", o.Account), zap.String("pair", pair), zap.Error(err))
 	}
 	secsFlt := float64(waitSecs)
 	// 5-minute trading volume per second * waiting seconds * 2: The final multiplication by 2 here is to prevent the trading volume from being too low
@@ -1754,7 +1770,7 @@ func (o *LiveOrderMgr) getLimitPrice(pair string, waitSecs int) (float64, float6
 	var buyPrice, sellPrice float64
 	if err != nil {
 		buyPrice, sellPrice = 0, 0
-		log.Error("get odBook fail", zap.String("pair", pair), zap.Error(err))
+		log.Error("get odBook fail", zap.String("acc", o.Account), zap.String("pair", pair), zap.Error(err))
 	} else {
 		buyPrice, _, _ = book.AvgPrice(banexg.OdSideBuy, depth)
 		sellPrice, _, _ = book.AvgPrice(banexg.OdSideSell, depth)
