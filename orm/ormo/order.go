@@ -41,7 +41,7 @@ type InOutOrder struct {
 	DirtyEnter bool                   `json:"-"` // Enter has unsaved temporary changes 有未保存的临时修改
 	DirtyExit  bool                   `json:"-"` // Exit has unsaved temporary changes 有未保存的临时修改
 	DirtyInfo  bool                   `json:"-"` // Info has unsaved temporary changes 有未保存的临时修改
-	idKey      string                 `json:"-"` // Key to distinguish orders 区分订单的key
+	idKey      string                 // Key to distinguish orders 区分订单的key
 }
 
 type InOutEdit struct {
@@ -1167,15 +1167,18 @@ func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
 	b.WriteString("and inout_id in (")
 	isFirst := true
 	for _, od := range iorders {
-		itemMap[od.ID] = &InOutOrder{
+		iod := &InOutOrder{
 			IOrder: od,
 		}
+		iod.loadInfo()
+		itemMap[od.ID] = iod
 		if !isFirst {
 			b.WriteString(",")
 		}
 		b.WriteString(fmt.Sprintf("$%v", len(sqlParams)+1))
 		sqlParams = append(sqlParams, od.ID)
 		isFirst = false
+
 	}
 	b.WriteString(")")
 	exOrders, err := q.getExOrders(b.String(), sqlParams)

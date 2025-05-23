@@ -165,6 +165,7 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 	}
 
 	// 对每个symbol的多空方向进行检查
+	var curMS = btime.UTCStamp()
 	var closedList []*ormo.InOutOrder
 	for symbol, sideOds := range odMap {
 		pos, hasPair := posMap[symbol]
@@ -178,8 +179,14 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 
 			// 计算本地订单总量
 			var localAmt float64
+			var maxEntMS int64
 			for _, od := range curOds {
 				localAmt += od.HoldAmount()
+				maxEntMS = max(maxEntMS, od.RealEnterMS())
+			}
+			if curMS-maxEntMS < 20000 {
+				// 最新订单不足20秒，可能状态未更新完成，跳过
+				continue
 			}
 
 			// 如果本地订单量大于实际持仓量,需要关闭部分订单
@@ -209,7 +216,7 @@ func (o *LiveOrderMgr) SyncLocalOrders() ([]*ormo.InOutOrder, *errs.Error) {
 						part = od.CutPart(overAmt, 0)
 					}
 					closeAmt := part.HoldAmount()
-					err = part.LocalExit(0, core.ExitTagNoMatch, 0, "", "")
+					err = part.LocalExit(0, core.ExitTagNoMatch, 0, "SyncLocalOrders", "")
 					if err != nil {
 						log.Error("force exit order fail", zap.String("key", part.Key()), zap.Error(err))
 						continue
@@ -588,7 +595,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			longCost := math.Round(longPosAmt*price*100) / 100
 			shortCost := math.Round(shortPosAmt*price*100) / 100
 			if longCost > 1 || shortCost > 1 {
-				log.Error("unknown exchange position for bot", zap.String("pair", pair),
+				log.Error("unknown exchange position for bot", zap.String("acc", o.Account), zap.String("pair", pair),
 					zap.Float64("long", longCost), zap.Float64("short", shortCost))
 			}
 		}
