@@ -23,7 +23,7 @@ banbot is a high-performance, easy-to-use, multi-symbol, multi-strategy, multi-p
 * hyper opt: support bayes/tpe/random/cmaes/ipop-cmaes/bipop-cmaes
 
 ### Supported Exchanges
-banbot support exchanges powered by [banexg](https://github/banbox/banexg):
+banbot support exchanges powered by [banexg](https://github.com/banbox/banexg):
 
 | logo                                                                                                            | id      | name              | ver | websocket | 
 |-----------------------------------------------------------------------------------------------------------------|---------|-------------------|-----|-----------|
