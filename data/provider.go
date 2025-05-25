@@ -90,7 +90,7 @@ func (p *Provider[IKlineFeeder]) SubWarmPairs(items map[string]map[string]int, d
 				newHolds = append(newHolds, hold)
 			} else {
 				since, _ := oldSince[pair]
-				oldSince[pair] = max(since, hold.getStates()[0].NextMS)
+				oldSince[pair] = max(since, hold.getStates()[0].SubNextMS)
 			}
 			if len(newTfs) > 0 {
 				warmJobs = append(warmJobs, &WarmJob{
@@ -242,7 +242,7 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 			since = defSince
 		}
 		holders[pair] = hold
-		if hold.getNextMS() == 0 || hold.getStates()[0].NextMS != since {
+		if hold.getNextMS() == 0 || hold.getStates()[0].SubNextMS != since {
 			// Ignore here the targets that still exist after refreshing the trading pairs.
 			// 这里忽略刷新交易对后，仍然存在的标的
 			hold.SetSeek(since)
@@ -263,7 +263,7 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 		}
 		holders[pair] = hold
 		sta := staArr[0]
-		hold.SetSeek(sta.NextMS)
+		hold.SetSeek(sta.SubNextMS)
 	}
 	// Delete items that are not warmed up
 	// 删除未预热的项

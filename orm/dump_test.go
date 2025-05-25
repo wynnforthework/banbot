@@ -11,6 +11,7 @@ import (
 	"github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"testing"
@@ -33,14 +34,103 @@ func TestKLineConsistency(t *testing.T) {
 	gob.Register([]*DumpRow{})
 	dec := gob.NewDecoder(file)
 
-	lastKline := make(map[string]*banexg.Kline)
-	reachLive := false // 头部有些预热的K线需过滤，检查是否预热完成
-	prevMS := int64(0)
-	delayMS := int64(3000) //两个记录间隔低于此视为预热
-	checkNum, totalNum := 0, 0
+	err2 := initApp()
+	if err2 != nil {
+		panic(err2)
+	}
+
+	exgName, market := "binance", "linear"
+	gpKlines := make(map[string][]*banexg.Kline) // map[pair_tf]klines
+	endMS := int64(0)
+	totalNum := 0
 	printStat := func() {
-		msg := fmt.Sprintf("total: %v check: %v", totalNum, checkNum)
-		log.Info(msg)
+		for key, arr := range gpKlines {
+			envKeyArr := strings.Split(key, "_")
+			symbol, tf := envKeyArr[0], envKeyArr[1]
+			tfMSecs := int64(utils.TFToSecs(tf)) * 1000
+			exs := GetExSymbol2(exgName, market, symbol)
+			startMS := arr[0].Time
+			_, kline, err2 := GetOHLCV(exs, tf, startMS, endMS, 0, false)
+			if err2 != nil {
+				t.Error("get ohlcv fail", symbol, tf, err2)
+				continue
+			}
+			ida := 0
+			ka := arr[0]
+			for _, k := range kline {
+				if k.Time < ka.Time {
+					continue
+				}
+				for k.Time > ka.Time && ida+1 < len(arr) {
+					// 本地有K线，实盘无K线；
+					ida += 1
+					ka = arr[ida]
+				}
+				if k.Time > ka.Time {
+					// 没有更多实盘K线
+					break
+				}
+				// 时间相同，比较K线是否相同
+				openDiff := math.Abs(k.Open-ka.Open) / max(k.Open, ka.Open)
+				highDiff := math.Abs(k.High-ka.High) / max(k.High, ka.High)
+				lowDiff := math.Abs(k.Low-ka.Low) / max(k.Low, ka.Low)
+				closeDiff := math.Abs(k.Close-ka.Close) / max(k.Close, ka.Close)
+				volDiff := math.Abs(k.Volume-ka.Volume) / max(k.Volume, ka.Volume)
+				infoDiff := math.Abs(k.Info-ka.Info) / max(k.Info, ka.Info)
+				var fields []string
+				if openDiff > 0.01 {
+					fields = append(fields, fmt.Sprintf("open: %f - %f", k.Open, ka.Open))
+				}
+				if highDiff > 0.01 {
+					fields = append(fields, fmt.Sprintf("high: %f - %f", k.High, ka.High))
+				}
+				if lowDiff > 0.01 {
+					fields = append(fields, fmt.Sprintf("low: %f - %f", k.Low, ka.Low))
+				}
+				if closeDiff > 0.01 {
+					fields = append(fields, fmt.Sprintf("close: %f - %f", k.Close, ka.Close))
+				}
+				if volDiff > 0.01 {
+					fields = append(fields, fmt.Sprintf("vol: %f - %f", k.Volume, ka.Volume))
+				}
+				if infoDiff > 0.01 {
+					fields = append(fields, fmt.Sprintf("info: %f - %f", k.Info, ka.Info))
+				}
+				if len(fields) > 0 {
+					curDateStr := btime.ToDateStr(ka.Time, core.DefaultDateFmt)
+					fmt.Printf("%s[%d] kline diff %s: %s\n", key, ida, curDateStr, strings.Join(fields, ", "))
+				}
+				ida += 1
+				if ida < len(arr) {
+					ka = arr[ida]
+				} else {
+					break
+				}
+			}
+			num := (endMS - startMS) / tfMSecs
+			checkLacks := func(bars []*banexg.Kline) []int {
+				var flags = make([]int, num)
+				for _, b := range bars {
+					idx := int((b.Time - startMS) / tfMSecs)
+					flags[idx] = 1
+				}
+				var res = make([]int, 0, num)
+				for i, flag := range flags {
+					if flag == 0 {
+						res = append(res, i)
+					}
+				}
+				return res
+			}
+			endDateStr := btime.ToDateStr(endMS, core.DefaultDateFmt)
+			startDateStr := btime.ToDateStr(startMS, core.DefaultDateFmt)
+			liveLacks := checkLacks(arr)
+			localLacks := checkLacks(kline)
+			diffNum := len(arr) - len(kline)
+			fmt.Printf("%s %s - %s, live: %v, local: %v, numDiff: %v\n",
+				key, startDateStr, endDateStr, liveLacks, localLacks, diffNum)
+		}
+		fmt.Printf("total: %v, pairs: %d \n\n", totalNum, len(gpKlines))
 	}
 	for {
 		var rows []*DumpRow
@@ -59,10 +149,9 @@ func TestKLineConsistency(t *testing.T) {
 				printStat()
 				dateStr := btime.ToDateStr(row.Time, core.DefaultDateFmt)
 				log.Info("receive other", zap.String("src", row.Type), zap.String("date", dateStr))
-				lastKline = make(map[string]*banexg.Kline)
-				prevMS = int64(0)
-				reachLive = false
-				checkNum, totalNum = 0, 0
+				gpKlines = make(map[string][]*banexg.Kline)
+				endMS = int64(0)
+				totalNum = 0
 				continue
 			}
 
@@ -72,38 +161,21 @@ func TestKLineConsistency(t *testing.T) {
 				continue
 			}
 			totalNum += 1
-			if !reachLive && (prevMS == 0 || row.Time-prevMS < delayMS) {
-				prevMS = row.Time
-				continue
-			}
+			endMS = row.Time
 
 			envKeyArr := strings.Split(row.Key, "_")
 			symbol, tf := envKeyArr[0], envKeyArr[1]
 
-			dateStr := btime.ToDateStr(kline.Time, core.DefaultDateFmt)
-			fmt.Printf("%s %s %s %.6f %.6f\n", dateStr, tf, symbol, kline.Close, kline.Volume)
-
 			tfMSecs := int64(utils.TFToSecs(tf)) * 1000
-			timeDiff := (row.Time - kline.Time) / 60000
+			timeDiff := (row.Time - kline.Time - tfMSecs) / 60000
 			if timeDiff > 1 {
-				if reachLive {
-					t.Errorf("K-line time (%d) differs from row time (%d) by more than 2 minutes for symbol %s timeframe %s",
-						kline.Time, row.Time, symbol, envKeyArr[1])
-				}
+				t.Errorf("K-line time (%d) differs from row time (%d) by more than 2 minutes for symbol %s timeframe %s",
+					kline.Time, row.Time, symbol, envKeyArr[1])
 				continue
-			} else if !reachLive {
-				reachLive = true
 			}
-			checkNum += 1
 
-			if prev, ok := lastKline[row.Key]; ok {
-				interval := kline.Time - prev.Time
-				if interval != tfMSecs {
-					t.Errorf("K-line interval mismatch for %s: expected %dms, got %dms. Missing K-lines between %d and %d",
-						row.Key, tfMSecs, interval, prev.Time, kline.Time)
-				}
-			}
-			lastKline[row.Key] = &kline
+			arr, _ := gpKlines[row.Key]
+			gpKlines[row.Key] = append(arr, &kline)
 		}
 	}
 	printStat()

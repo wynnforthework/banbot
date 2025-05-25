@@ -187,14 +187,14 @@ Check whether there are any missing K lines, and automatically query and update 
 检查是否有缺失的K线，有则自动查询更新（一般在刚启动时，收到的爬虫推送1mK线不含前面的，需要下载前面的并保存到WaitBar中）
 */
 func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64) ([]*banexg.Kline, *errs.Error) {
-	if j.NextMS == 0 || j.NextMS >= startMS {
-		j.NextMS = endMS
+	if j.SubNextMS == 0 || j.SubNextMS >= startMS {
+		j.SubNextMS = endMS
 		return nil, nil
 	}
 	// 这里NextMS < startMS，出现了bar缺失，查询更新。
 	fetchTF := utils2.SecsToTF(subTfSecs)
 	tfMSecs := int64(j.TFSecs * 1000)
-	bigStartMS := utils2.AlignTfMSecs(j.NextMS, tfMSecs)
+	bigStartMS := utils2.AlignTfMSecs(j.SubNextMS, tfMSecs)
 	exs, err := orm.GetExSymbolCur(pair)
 	if err != nil {
 		return nil, err
@@ -213,7 +213,7 @@ func (j *PairTFCache) fillLacks(pair string, subTfSecs int, startMS, endMS int64
 			doneBars = oldBars[:len(oldBars)-1]
 		}
 	}
-	j.NextMS = endMS
+	j.SubNextMS = endMS
 	return doneBars, nil
 }
 

@@ -107,7 +107,7 @@ func (w *KLineWatcher) WatchJobs(exgName, marketType, jobType string, jobs ...Wa
 			tags = append(tags, prefix+j.Symbol)
 		}
 		pairs = append(pairs, j.Symbol)
-		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, NextMS: j.Since,
+		w.jobs[jobKey] = &PairTFCache{TimeFrame: j.TimeFrame, TFSecs: tfSecs, SubNextMS: j.Since,
 			AlignOffMS: int64(exg.GetAlignOff(exgID, tfSecs) * 1000)}
 		if j.Since > 0 {
 			// 尽早启动延迟监听

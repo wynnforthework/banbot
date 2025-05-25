@@ -29,7 +29,8 @@ type FnGetInt64 = func() int64
 type PairTFCache struct {
 	TimeFrame  string
 	TFSecs     int
-	NextMS     int64         // Record the start timestamp of the next bar expected to be received. If it is inconsistent, the bar is missing and needs to be queried and updated. 记录下一个期待收到的bar起始时间戳，如果不一致，则出现了bar缺失，需查询更新。
+	SubNextMS  int64         // Record the start timestamp of the next bar expected to be received. If it is inconsistent, the bar is missing and needs to be queried and updated. 记录子周期K线下一个期待收到的bar起始时间戳，如果不一致，则出现了bar缺失，需查询更新。
+	NextMS     int64         // 当前周期下一个K线期望的时间戳
 	WaitBar    *banexg.Kline // Record unfinished bars. Should be set to nil when completed 记录尚未完成的bar。已完成时应置为nil
 	Latest     *banexg.Kline // Record the latest bar data, which may not be completed or may be completed 记录最新bar数据，可能未完成，可能已完成
 	AlignOffMS int64
@@ -198,16 +199,14 @@ func (f *Feeder) onStateOhlcvs(state *PairTFCache, bars []*banexg.Kline, lastOk 
 	if len(bars) == 0 {
 		return nil
 	}
+	state.Latest = bars[len(bars)-1]
+	if state.WaitBar != nil && state.WaitBar.Time < bars[0].Time {
+		bars = append([]*banexg.Kline{state.WaitBar}, bars...)
+	}
+	state.WaitBar = nil
 	finishBars := bars
 	if !lastOk {
 		finishBars = bars[:len(bars)-1]
-	}
-	if state.WaitBar != nil && state.WaitBar.Time < bars[0].Time {
-		finishBars = append([]*banexg.Kline{state.WaitBar}, finishBars...)
-	}
-	state.Latest = bars[len(bars)-1]
-	state.WaitBar = nil
-	if !lastOk {
 		state.WaitBar = state.Latest
 	}
 	tfMSecs := int64(state.TFSecs * 1000)
@@ -456,7 +455,7 @@ func (f *KlineFeeder) warmTf(tf string, bars []*banexg.Kline) int64 {
 	}
 	for _, sta := range f.States {
 		if sta.TimeFrame == tf {
-			sta.NextMS = lastMS
+			sta.SubNextMS = lastMS
 			break
 		}
 	}
@@ -513,6 +512,7 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 			// 这里应该保留最后未完成的数据
 			ohlcvs, _ = utils.BuildOHLCV(bars, staMSecs, f.PreFire, nil, barTfMSecs, state.AlignOffMS, infoBy)
 		} else {
+			// 前面过滤了>，这里一定相等
 			ohlcvs = bars
 		}
 		for i := len(f.States) - 1; i >= 1; i-- {
@@ -527,7 +527,11 @@ func (f *KlineFeeder) onNewBars(barTfMSecs int64, bars []*banexg.Kline) (bool, *
 			} else {
 				bars = ohlcvs
 			}
-			var olds []*banexg.Kline
+			subEndMS := bars[len(bars)-1].Time + srcMSecs
+			olds, err := state.fillLacks(f.Symbol, int(srcMSecs/1000), bars[0].Time, subEndMS)
+			if err != nil {
+				return false, err
+			}
 			if state.WaitBar != nil {
 				olds = append(olds, state.WaitBar)
 			}
