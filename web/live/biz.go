@@ -7,6 +7,7 @@ import (
 	"github.com/banbox/banbot/opt"
 	"github.com/banbox/banexg/binance"
 	"math"
+	"math/rand"
 	"slices"
 	"sort"
 	"strconv"
@@ -574,7 +575,8 @@ func postCloseExgPos(c *fiber.Ctx) error {
 				side = "buy"
 			}
 			params := map[string]interface{}{
-				banexg.ParamAccount: acc,
+				banexg.ParamAccount:       acc,
+				banexg.ParamClientOrderId: fmt.Sprintf("bandash_%v", rand.Intn(1000)),
 			}
 			if banexg.IsContract(core.Market) {
 				params[banexg.ParamPositionSide] = strings.ToUpper(q.Side)

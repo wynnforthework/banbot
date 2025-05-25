@@ -17,7 +17,7 @@
   import { pagination, orderCard } from '$lib/Snippets.svelte';
   import {makePeriod} from "$lib/kline/coms";
   import type {ExSymbol} from "$lib/dev/common";
-  import {OrderDetail} from "$lib/order";
+  import {InOutOrderDetail} from "$lib/order";
   import {getFirstValid} from "$lib/common";
   import _ from "lodash"
 
@@ -446,5 +446,5 @@ ${m.holding()}: ${fmtDuration(td.exit_at - enterMS)}`;
   </div>
 
   <!-- 订单详情弹窗 -->
-  <OrderDetail bind:show={showOrderModal} order={detailOrder} editable={false} />
+  <InOutOrderDetail bind:show={showOrderModal} order={detailOrder} editable={false} />
 </div>

@@ -49,6 +49,83 @@ export interface InOutOrder extends IOrder {
   curPrice?: number;
 }
 
+export interface BanExgOrder {
+  info: Record<string, any>;
+  id: string;
+  clientOrderId: string;
+  datetime: string;
+  timestamp: number;
+  lastTradeTimestamp: number;
+  lastUpdateTimestamp: number;
+  status: string;
+  symbol: string;
+  type: string;
+  timeInForce: string;
+  positionSide: string;
+  side: string;
+  price: number;
+  average: number;
+  amount: number;
+  filled: number;
+  remaining: number;
+  triggerPrice: number;
+  stopPrice: number;
+  takeProfitPrice: number;
+  stopLossPrice: number;
+  cost: number;
+  postOnly: boolean;
+  reduceOnly: boolean;
+  trades: BanTrade[];
+  fee: Fee;
+}
+
+export interface BanTrade{
+  id: string;
+  symbol: string;
+  side: string;
+  type: string;
+  amount: number;
+  price: number;
+  cost: number;
+  order: string;
+  timestamp: number;
+  maker: boolean;
+  fee: Fee;
+  info: Record<string, any>;
+}
+
+export interface Fee {
+  isMaker: boolean;
+  currency: string;
+  cost: number;
+  rate: number;
+}
+
+export interface Position{
+  id: string;
+  symbol: string;
+  timestamp: number;
+  isolated: boolean;
+  hedged: boolean;
+  side: string;
+  contracts: number;
+  contractSize: number;
+  entryPrice: number;
+  markPrice: number;
+  notional: number;
+  leverage: number;
+  collateral: number;
+  initialMargin: number;
+  maintenanceMargin: number;
+  initialMarginPercentage: number;
+  maintenanceMarginPercentage: number;
+  unrealizedPnl: number;
+  liquidationPrice: number;
+  marginMode: string;
+  marginRatio: number;
+  percentage: number;
+  info: Record<string, any>;
+}
 
 export interface OdGroup {
   key: string;

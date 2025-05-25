@@ -11,7 +11,7 @@
   import { site } from '$lib/stores/site';
   import { showPairs } from '$lib/dev/common';
   import type { BacktestDetail, BackTestTask, ExSymbol } from '$lib/dev/common';
-  import { OrderDetail, type InOutOrder } from '$lib/order';
+  import { InOutOrderDetail, type InOutOrder } from '$lib/order';
   import { TreeView, type Tree, type Node, buildTree } from '$lib/treeview';
 	import { writable } from 'svelte/store';
   import RangeSlider from '$lib/dev/RangeSlider.svelte';
@@ -878,7 +878,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
   </div>
 
   <!-- 订单详情弹窗 -->
-  <OrderDetail bind:show={showOrderModal} order={detailOrder} editable={false} />
+  <InOutOrderDetail bind:show={showOrderModal} order={detailOrder} editable={false} />
 </div>
 
 {#snippet statCard(title: string, claName: string, value: string | number, desc: string)}

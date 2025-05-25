@@ -6,25 +6,29 @@
   import {modals} from '$lib/stores/modals';
   import Modal from '$lib/kline/Modal.svelte';
   import { fmtDateStr, toUTCStamp, curTZ } from '$lib/dateutil';
-  import { OrderDetail, type InOutOrder } from '$lib/order';
+  import { InOutOrderDetail, ExgOrderDetail, ExgPositionDetail } from '$lib/order';
+  import type { InOutOrder, BanExgOrder, Position } from '$lib/order';
   import {getFirstValid} from "$lib/common";
   import { pagination } from '$lib/Snippets.svelte';
 
   let tabName = $state('bot'); // bot/exchange/position
   let banodList = $state<InOutOrder[]>([]);
-  let exgodList = $state<any[]>([]);
-  let exgposList = $state<any[]>([]);
+  let exgodList = $state<BanExgOrder[]>([]);
+  let exgposList = $state<Position[]>([]);
   let pageSize = $state(15);
   let limitSize = $state(30);
   let currentPage = $state(1);
   let showOdDetail = $state(false);
   let showExOdDetail = $state(false);
+  let showExgPosDetail = $state(false);
   let showOpenOrder = $state(false);
   let showCloseExg = $state(false);
   let openingOd = $state(false);
   let closingExgPos = $state(false);
   let exFilter = $state('');
   let selectedOrder = $state<InOutOrder|null>(null);
+  let selectedExgOrder = $state<BanExgOrder|null>(null);
+  let selectedExgPos = $state<Position|null>(null);
   let pageFirst = $state(0);
   let pageLast = $state(0);
 
@@ -148,11 +152,11 @@
       selectedOrder = banodList[idx];
       showOdDetail = true;
     } else if (tabName === 'exchange') {
-      selectedOrder = exgodList[idx];
+      selectedExgOrder = exgodList[idx];
       showExOdDetail = true;
     } else if (tabName === 'position') {
-      selectedOrder = exgposList[idx];
-      showExOdDetail = true;
+      selectedExgPos = exgposList[idx];
+      showExgPosDetail = true;
     }
   }
 
@@ -288,13 +292,13 @@
     {#if tabName !== 'position'}
       <div class="flex flex-wrap gap-4">
         {#if tabName === 'bot'}
-          <select class="select select-sm focus:outline-none text-sm w-36" bind:value={search.status}>
+          <select class="select select-sm focus:outline-none text-sm w-24" bind:value={search.status}>
             <option value="">{m.any_status()}</option>
             <option value="open">{m.pos_opened()}</option>
             <option value="his">{m.closed()}</option>
           </select>
         {/if}
-        <select class="select select-sm focus:outline-none text-sm w-36" bind:value={search.dirt}>
+        <select class="select select-sm focus:outline-none text-sm w-24" bind:value={search.dirt}>
           <option value="">{m.any_dirt()}</option>
           <option value="long">{m.long()}</option>
           <option value="short">{m.short()}</option>
@@ -312,7 +316,7 @@
         {#if tabName === 'bot'}
           <input type="text" class="input input-sm focus:outline-none text-sm font-mono w-48" placeholder="20231012" bind:value={search.stopMs} />
         {:else}
-          <input type="number" class="input input-sm focus:outline-none text-sm font-mono w-48" bind:value={limitSize} />
+          <input type="number" class="input input-sm focus:outline-none text-sm font-mono w-24" placeholder="limit" bind:value={limitSize} />
         {/if}
 
         <button 
@@ -405,7 +409,7 @@
                 <td>{order.clientOrderId}</td>
                 <td>{order.symbol}</td>
                 <td>{fmtDateStr(order.timestamp)}</td>
-                <td>{order.side.toLowerCase() === 'buy' ? m.long() : m.short()}</td>
+                <td>{order.positionSide.toLowerCase() === 'long' ? m.long() : m.short()}</td>
                 <td>{order.reduceOnly ? m.close_position() : m.open_position()}</td>
                 <td>{order.average || order.price || '-'}</td>
                 <td>{order.amount}</td>
@@ -474,13 +478,9 @@
 </div>
 
 <!-- Modals -->
-<OrderDetail bind:show={showOdDetail} order={selectedOrder} editable={(selectedOrder?.status ?? 0) < 4 } />
-
-<Modal title={m.exchange_details()} bind:show={showExOdDetail} width={800}>
-  {#if selectedOrder}
-    <pre class="whitespace-pre-wrap break-all">{JSON.stringify(selectedOrder, null, 2)}</pre>
-  {/if}
-</Modal>
+<InOutOrderDetail bind:show={showOdDetail} order={selectedOrder} editable={(selectedOrder?.status ?? 0) < 4 } />
+<ExgOrderDetail bind:show={showExOdDetail} order={selectedExgOrder} />
+<ExgPositionDetail bind:show={showExgPosDetail} pos={selectedExgPos} />
 
 <Modal title={m.open_order()} bind:show={showOpenOrder} width={800} buttons={[]}>
   <div class="space-y-4 p-4">
