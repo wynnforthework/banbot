@@ -126,9 +126,8 @@ func TestKLineConsistency(t *testing.T) {
 			startDateStr := btime.ToDateStr(startMS, core.DefaultDateFmt)
 			liveLacks := checkLacks(arr)
 			localLacks := checkLacks(kline)
-			diffNum := len(arr) - len(kline)
-			fmt.Printf("%s %s - %s, live: %v, local: %v, numDiff: %v\n",
-				key, startDateStr, endDateStr, liveLacks, localLacks, diffNum)
+			fmt.Printf("%s %s - %s, live: %v, local: %v\n",
+				key, startDateStr, endDateStr, liveLacks, localLacks)
 		}
 		fmt.Printf("total: %v, pairs: %d \n\n", totalNum, len(gpKlines))
 	}
