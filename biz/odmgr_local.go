@@ -593,6 +593,9 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 	lowP := bar.Low
 	closeP := bar.Close
 
+	if rate == 0 {
+		return openP
+	}
 	if rate >= 0.999 {
 		return closeP
 	}

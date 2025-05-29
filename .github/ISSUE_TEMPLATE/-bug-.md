@@ -7,18 +7,18 @@ assignees: ''
 
 ---
 
-**Bug描述 Describe the bug**
+**Bug描述 Describe the bug**  
 
 
-**具体复现流程？Steps To Reproduce**
+**具体复现流程？Steps To Reproduce**  
 1. 
 2. 
 3. 
 
-**期望行为 Expected behavior**
+**期望行为 Expected behavior**  
 
 
-**截图 Screenshots**
+**截图 Screenshots**  
 
 
 **运行环境 Running Environment**
@@ -27,4 +27,7 @@ assignees: ''
 - Version: 
 
 
-**其他信息 Additional context**
+**其他信息 Additional context**  
+
+
+**微信/QQ/Telegram/Discord/Email**
