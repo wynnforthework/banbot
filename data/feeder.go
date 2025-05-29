@@ -649,7 +649,14 @@ func (f *DBKlineFeeder) CallNext() {
 			f.OnEnvEnd(&banexg.PairTFKline{
 				Symbol:    f.Symbol,
 				TimeFrame: tf,
-				Kline:     *old,
+				Kline: banexg.Kline{
+					Time:   old.Time + f.TFMSecs,
+					Open:   old.Close,
+					High:   old.Close,
+					Low:    old.Close,
+					Close:  old.Close,
+					Volume: old.Close,
+				},
 			}, f.adj)
 			// Warm up again
 			// 重新复权预热

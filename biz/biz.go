@@ -38,6 +38,10 @@ var configLocalData []byte
 
 func SetupComs(args *config.CmdArgs) *errs.Error {
 	args.Init()
+	if core.LiveMode {
+		// 实时模式下启用死锁检测
+		deadlock.Opts.Disable = false
+	}
 	errs.PrintErr = utils.PrintErr
 	ctx, cancel := context.WithCancel(context.Background())
 	core.Ctx = ctx

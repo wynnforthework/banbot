@@ -167,7 +167,7 @@ func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
 	name, subArgs := sysArgs[0], sysArgs[1:]
 	var args config.CmdArgs
 	var sub = flag.NewFlagSet(name, flag.ExitOnError)
-	err_ := bindSubFlags(&args, sub, job.Options...)
+	err_ := bindSubFlags(&args, sub, job.NoOptions, job.Options...)
 	if err_ == nil {
 		err_ = sub.Parse(subArgs)
 	}
@@ -203,8 +203,8 @@ func runJobCmd(sysArgs []string, job *CmdJob, fallback func(e error)) {
 	}
 }
 
-func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, opts ...string) error {
-	args.BindToFlag(cmd)
+func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, noOpts []string, opts ...string) error {
+	args.BindToFlag(cmd, noOpts)
 	cmd.BoolVar(&core.CPUProfile, "cpu-profile", false, "enable cpu profile")
 	cmd.BoolVar(&core.MemProfile, "mem-profile", false, "enable memory profile")
 

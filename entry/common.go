@@ -22,12 +22,13 @@ var (
 )
 
 type CmdJob struct {
-	Name    string
-	Parent  string
-	Run     FuncEntry
-	Options []string
-	RunRaw  func(args []string) error
-	Help    string
+	Name      string
+	Parent    string
+	Run       FuncEntry
+	Options   []string
+	NoOptions []string // dlock
+	RunRaw    func(args []string) error
+	Help      string
 }
 
 type JobGroup struct {
@@ -66,10 +67,11 @@ func init() {
 
 	// Root command group
 	AddCmdJob(&CmdJob{
-		Name:    "trade",
-		Run:     RunTrade,
-		Options: []string{"stake_amount", "pairs", "with_spider", "out"},
-		Help:    "live trade",
+		Name:      "trade",
+		Run:       RunTrade,
+		Options:   []string{"stake_amount", "pairs", "with_spider", "out"},
+		NoOptions: []string{"dlock"},
+		Help:      "live trade",
 	})
 	AddCmdJob(&CmdJob{
 		Name:    "backtest",
@@ -78,9 +80,10 @@ func init() {
 		Help:    "backtest with strategies and data",
 	})
 	AddCmdJob(&CmdJob{
-		Name: "spider",
-		Run:  RunSpider,
-		Help: "start the spider",
+		Name:      "spider",
+		Run:       RunSpider,
+		NoOptions: []string{"dlock"},
+		Help:      "start the spider",
 	})
 	AddCmdJob(&CmdJob{
 		Name:    "optimize",

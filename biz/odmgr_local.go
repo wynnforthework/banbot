@@ -13,6 +13,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
+	"maps"
 	"strings"
 )
 
@@ -455,11 +456,11 @@ func (o *LocalOrderMgr) OnEnvEnd(bar *banexg.PairTFKline, adj *orm.AdjInfo) *err
 	err := o.exitAndFill(nil, &strat.ExitReq{
 		Tag:  core.ExitTagEnvEnd,
 		Dirt: core.OdDirtBoth,
-	}, &orm.InfoKline{PairTFKline: bar, Adj: adj})
+	}, &orm.InfoKline{PairTFKline: bar, Adj: adj}, true)
 	return err
 }
 
-func (o *LocalOrderMgr) exitAndFill(sess *ormo.Queries, req *strat.ExitReq, bar *orm.InfoKline) *errs.Error {
+func (o *LocalOrderMgr) exitAndFill(sess *ormo.Queries, req *strat.ExitReq, bar *orm.InfoKline, noEnter bool) *errs.Error {
 	pairs := ""
 	if bar != nil {
 		pairs = bar.Symbol
@@ -473,10 +474,15 @@ func (o *LocalOrderMgr) exitAndFill(sess *ormo.Queries, req *strat.ExitReq, bar 
 		for _, od := range orders {
 			odMap[od.ID] = true
 		}
-		backUntil, _ := core.NoEnterUntil[o.Account]
-		core.NoEnterUntil[o.Account] = btime.TimeMS() + 72*3600*1000
+		backUntil := int64(0)
+		if noEnter {
+			backUntil, _ = core.NoEnterUntil[o.Account]
+			core.NoEnterUntil[o.Account] = btime.TimeMS() + 72*3600*1000
+		}
 		_, err = o.fillPendingOrdersAll(orders, odMap, bar)
-		core.NoEnterUntil[o.Account] = backUntil
+		if noEnter {
+			core.NoEnterUntil[o.Account] = backUntil
+		}
 		if err != nil {
 			return err
 		}
@@ -508,12 +514,26 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 		Dirt:  core.OdDirtBoth,
 		Force: true,
 	}
-	err := o.exitAndFill(nil, exitReq, nil)
+	openOds, lock := ormo.GetOpenODs(o.Account)
+	lock.Lock()
+	oldOpens := maps.Clone(openOds)
+	lock.Unlock()
+	err := o.exitAndFill(nil, exitReq, nil, false)
 	if err != nil {
 		return err
 	}
-	openOds, lock := ormo.GetOpenODs(o.Account)
 	lock.Lock()
+	// 检查已平仓订单，将平仓时间大于当前时间的，置为BotStop退出
+	for oid := range openOds {
+		delete(oldOpens, oid)
+	}
+	curMS := btime.UTCStamp()
+	for _, od := range oldOpens {
+		if od.ExitTag != "" && od.ExitAt > curMS && od.ExitTag != core.ExitTagBotStop {
+			od.ExitTag = core.ExitTagBotStop
+			// 回测无需持久化
+		}
+	}
 	openOdList := utils.ValsOfMap(openOds)
 	lock.Unlock()
 	if len(openOdList) > 0 {
