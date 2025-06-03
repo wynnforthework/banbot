@@ -92,7 +92,8 @@
   }
 
   async function startBuild() {
-    if (!selectedOS || !selectedArch) return;
+    const path = downPath;
+    if(!path)return ;
     const ok = await modals.confirm(m.confirm_build());
     if (!ok) return;
     
@@ -100,8 +101,7 @@
     try {
       const rsp = await postApi('/dev/build', {
         os: selectedOS,
-        arch: selectedArch,
-        path: `$/bot_${selectedOS}_${selectedArch}`
+        arch: selectedArch, path
       });
       
       if (rsp.code != 200) {
@@ -115,9 +115,18 @@
     }
   }
 
-  let downloadUrl = $derived.by(() => {
+  let downPath = $derived.by(() => {
     if (!selectedOS || !selectedArch) return;
-    const path = `$/bot_${selectedOS}_${selectedArch}`;
+    let path = `$/bot_${selectedOS}_${selectedArch}`;
+    if(selectedOS === 'windows'){
+      path = path +'.exe'
+    }
+    return path;
+  })
+
+  let downloadUrl = $derived.by(() => {
+    const path = downPath;
+    if(!path)return ;
     return `${$site.apiHost}/api/dev/download?path=${path}`;
   })
 
