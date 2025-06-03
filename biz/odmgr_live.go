@@ -501,7 +501,10 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	// Get exchange order history and try to restore the order status.
 	// 从交易所获取订单记录，尝试恢复订单状态。
 	// 这里必须指定sinceMS，避免获取过早的订单创建冗余本地记录
-	exOrders, err = exg.Default.FetchOrders(pair, sinceMS, 300, map[string]interface{}{
+	// TODO 币安单次只可查询7天内的数据，暂时固定，后期考虑在banexg中重复查询。
+	weekMSecs := int64(utils2.TFToSecs("1w") * 1000)
+	minSince := curMS - weekMSecs - 60000
+	exOrders, err = exg.Default.FetchOrders(pair, max(sinceMS, minSince), 300, map[string]interface{}{
 		banexg.ParamAccount: o.Account,
 		banexg.ParamUntil:   curMS,
 	})
