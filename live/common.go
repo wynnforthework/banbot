@@ -17,8 +17,11 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -168,6 +171,44 @@ func CronKlineSummary() {
 	})
 	if err_ != nil {
 		log.Error("add Receive Klines Summary fail", zap.Error(err_))
+	}
+}
+
+func CronDumpStratOutputs() {
+	_, err_ := core.Cron.Add("31 * * * * *", func() {
+		groups := make(map[string][]string)
+		for _, items := range strat.PairStrats {
+			for _, stgy := range items {
+				if len(stgy.Outputs) == 0 {
+					continue
+				}
+				rows, _ := groups[stgy.Name]
+				groups[stgy.Name] = append(rows, stgy.Outputs...)
+				stgy.Outputs = nil
+			}
+		}
+		for name, lines := range groups {
+			name = strings.ReplaceAll(name, ":", "_")
+			fname := fmt.Sprintf("%s_%s.log", config.Name, name)
+			outPath := filepath.Join(config.GetLogsDir(), fname)
+			file, err := os.OpenFile(outPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				log.Error("create strategy output file fail", zap.String("name", name), zap.Error(err))
+				continue
+			}
+			_, err = file.WriteString(strings.Join(lines, "\n"))
+			if err != nil {
+				log.Error("write strategy output fail", zap.String("name", name), zap.Error(err))
+			}
+			_, _ = file.WriteString("\n")
+			err = file.Close()
+			if err != nil {
+				log.Error("close strategy output fail", zap.String("name", name), zap.Error(err))
+			}
+		}
+	})
+	if err_ != nil {
+		log.Error("add CronDumpStratOutputs fail", zap.Error(err_))
 	}
 }
 

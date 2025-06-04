@@ -183,6 +183,8 @@ func (t *CryptoTrader) startJobs() {
 	// The timer output is executed every 5 minutes: 01:30 06:30 11:30
 	// 定时输出收到K线情况，每5分钟执行：01:30  06:30  11:30
 	CronKlineSummary()
+	// 每分钟定时输出策略Outputs信息到BanDataDir/logs/[name]_[strat].log
+	CronDumpStratOutputs()
 	if core.EnvReal {
 		// Check if the limit order submission is triggered at 15th secs of every minute
 		// 每分钟第15s检查是否触发限价单提交

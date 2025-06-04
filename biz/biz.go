@@ -159,6 +159,7 @@ InitOdSubs 为所有策略OnOrderChange注册订单事件监听。
 只需在LoadStratJobs后调用一次，交易的Accounts不变就始终生效
 */
 func InitOdSubs() {
+	// 这里只调用成员函数，不读取变量，所以每个策略只存储一个实例即可
 	var subStgys = map[string]*strat.TradeStrat{}
 	for _, items := range strat.PairStrats {
 		for stgName, stagy := range items {

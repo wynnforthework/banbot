@@ -2,6 +2,7 @@ package strat
 
 import (
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm/ormo"
@@ -31,6 +32,14 @@ func (s *TradeStrat) GetStakeAmount(j *StratJob) float64 {
 		amount = pref.GetAmount(amount)
 	}
 	return amount
+}
+
+func (s *TradeStrat) WriteOutput(line string, date bool) {
+	if date {
+		prefix := btime.ToDateStr(btime.TimeMS(), core.DefaultDateFmt)
+		line = prefix + " " + line
+	}
+	s.Outputs = append(s.Outputs, line)
 }
 
 /*

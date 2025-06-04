@@ -14,7 +14,7 @@ var (
 	Envs        = make(map[string]*ta.BarEnv)                      // pair_tf: BarEnv
 	AccJobs     = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID]StratJob
 	AccInfoJobs = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID_pair]StratJob 额外订阅
-	PairStrats  = make(map[string]map[string]*TradeStrat)          // pair:[stratID]TradeStrat 所有的订阅策略
+	PairStrats  = make(map[string]map[string]*TradeStrat)          // pair:[stratID]TradeStrat 所有的订阅策略，注意有些策略对象虽然Name相同但不是同一个实例
 	ForbidJobs  = make(map[string]map[string]bool)                 // pair_tf: [stratID] occupy
 	WsSubJobs   = make(map[string]map[string]map[*StratJob]bool)   // msgType: pair: job
 
