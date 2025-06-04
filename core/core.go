@@ -20,6 +20,10 @@ func SetRunEnv(env string) {
 }
 
 func Sleep(d time.Duration) bool {
+	if Ctx == nil {
+		time.Sleep(d)
+		return true
+	}
 	select {
 	case <-time.After(d):
 		return true

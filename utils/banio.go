@@ -277,7 +277,7 @@ func (c *BanConn) LoopPing(intvSecs int) {
 	failNum := 0
 	addrField := zap.String("addr", c.Remote)
 	for {
-		time.Sleep(time.Duration(intvSecs) * time.Second)
+		core.Sleep(time.Duration(intvSecs) * time.Second)
 		if !c.IsReading {
 			continue
 		}

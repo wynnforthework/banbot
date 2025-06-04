@@ -8,12 +8,13 @@ import (
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
+	"github.com/banbox/banexg/bntp"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
 	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
-	"strings"
+	"maps"
 	"time"
 )
 
@@ -35,46 +36,11 @@ type KLineMsg struct {
 	Pair    string // symbol  币种
 }
 
-/*
-getCheckInterval
-Based on the trading pair and timeframe being monitored. Calculate the minimum check interval.
-
-< 60s to fetch data through WebSocket, check the update interval can be relatively small.
-
-	If the data is 1 m or more and obtained through the second-level interface of the API, it will be updated once every 3s
-
-根据监听的交易对和时间帧。计算最小检查间隔。
-
-	<60s的通过WebSocket获取数据，检查更新间隔可以比较小。
-	1m及以上的通过API的秒级接口获取数据，3s更新一次
-*/
-func getCheckInterval(tfSecs int) float64 {
-	var checkIntv float64
-
-	switch {
-	case tfSecs <= 3:
-		checkIntv = 0.5
-	case tfSecs <= 10:
-		checkIntv = float64(tfSecs) * 0.35
-	case tfSecs <= 60:
-		checkIntv = float64(tfSecs) * 0.2
-	case tfSecs <= 300:
-		checkIntv = float64(tfSecs) * 0.15
-	case tfSecs <= 900:
-		checkIntv = float64(tfSecs) * 0.1
-	case tfSecs <= 3600:
-		checkIntv = float64(tfSecs) * 0.07
-	default:
-		// 超过1小时维度的，10分钟刷新一次
-		checkIntv = 600
-	}
-	return checkIntv
-}
-
 /** *******************************  Spider 爬虫部分   ****************************
  */
 var (
-	writeQ = make(chan *SaveKline, 1000)
+	writeQ           = make(chan *SaveKline, 1000)
+	KlineParallelNum = 6 // 抓取K线时的同时并发数
 )
 
 type SaveKline struct {
@@ -142,11 +108,16 @@ type Miner struct {
 	Market       string
 	exchange     banexg.BanExchange
 	Fetchs       map[string]*FetchJob
+	KLineApis    *PairSubs
 	KLines       *PairSubs
 	Trades       *PairSubs
 	Depths       *PairSubs
 	IsWatchPrice bool
-	klineStates  map[string]*SubKLineState
+	IsLoopKline  bool
+	klineStates  map[string]*KLineState
+	klineLasts   map[string]int64 //ws订阅k线的上次时间戳
+	lockBarState deadlock.Mutex
+	lockBarLasts deadlock.Mutex
 }
 
 type PairSubs struct {
@@ -219,6 +190,13 @@ func (s *PairSubs) Keys() []string {
 	return keys
 }
 
+func (s *PairSubs) KeyMap() map[string]bool {
+	s.m.Lock()
+	res := maps.Clone(s.pairs)
+	s.m.Unlock()
+	return res
+}
+
 type LiveSpider struct {
 	*utils.ServerIO
 	miners map[string]*Miner
@@ -228,11 +206,15 @@ type LiveSpider struct {
 func (s *LiveSpider) monitorSubscriptions() {
 	log.Info("Starting subscription monitor")
 	for {
-		time.Sleep(time.Second * 1)
+		core.Sleep(time.Second * 1)
 
 		// Check all miners for failed subscriptions
 		for key, miner := range s.miners {
 			curMS := btime.UTCStamp()
+			if miner.KLineApis.Len() > 0 && !miner.IsLoopKline {
+				miner.startLoopKLines()
+			}
+
 			// Check KLine subscriptions
 			klineNum := miner.KLines.Len()
 			if klineNum > 0 && miner.KLines.Status == 0 && curMS > retryWaits.NextRetry("watchKLines") {
@@ -280,10 +262,12 @@ func newMiner(spider *LiveSpider, exgName, market string) (*Miner, *errs.Error) 
 		Market:      market,
 		exchange:    exchange,
 		Fetchs:      map[string]*FetchJob{},
+		KLineApis:   NewPairSubs(),
 		KLines:      NewPairSubs(),
 		Trades:      NewPairSubs(),
 		Depths:      NewPairSubs(),
-		klineStates: map[string]*SubKLineState{},
+		klineStates: map[string]*KLineState{},
+		klineLasts:  make(map[string]int64),
 	}, nil
 }
 
@@ -322,7 +306,9 @@ func (m *Miner) SubPairs(jobType string, pairs ...string) *errs.Error {
 	}
 	if jobType == core.WsSubDepth {
 		m.watchOdBooks(valids)
-	} else if jobType == "ohlcv" || jobType == core.WsSubKLine {
+	} else if jobType == "ohlcv" {
+		m.loopKLines(valids)
+	} else if jobType == core.WsSubKLine {
 		m.watchKLines(valids)
 	} else if jobType == "price" {
 		m.watchPrices()
@@ -342,7 +328,13 @@ func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
 			return m.exchange.UnWatchOrderBooks(removes, nil)
 		}
 		return nil
-	} else if jobType == "ohlcv" || jobType == core.WsSubKLine {
+	} else if jobType == "ohlcv" {
+		m.KLineApis.Remove(pairs...)
+		for _, p := range pairs {
+			delete(m.klineStates, p)
+		}
+		return nil
+	} else if jobType == core.WsSubKLine {
 		timeFrame := "1s"
 		if banexg.IsContract(m.Market) {
 			timeFrame = "1m"
@@ -500,11 +492,10 @@ func (m *Miner) watchOdBooks(pairs []string) {
 	}()
 }
 
-type SubKLineState struct {
-	Sid        int32
-	LastNotify int64
-	ExpectMS   int64 // next bar start time
-	PrevBar    *banexg.Kline
+type KLineState struct {
+	Sid      int32
+	ExpectMS int64 // next bar start time
+	PrevBar  *banexg.Kline
 }
 
 /*
@@ -521,23 +512,14 @@ func (m *Miner) watchKLines(pairs []string) {
 		timeFrame = "1m"
 	}
 	tfSecs := utils2.TFToSecs(timeFrame)
-	tfMSecs := int64(tfSecs * 1000)
-	expectMS := utils2.AlignTfMSecs(btime.TimeMS(), tfMSecs)
+	curTimeMS := btime.TimeMS()
 	for _, p := range pairs {
 		jobs = append(jobs, [2]string{p, timeFrame})
-		if _, ok := m.klineStates[p]; !ok {
-			exs, err := orm.GetExSymbol(m.exchange, p)
-			if err != nil {
-				code := fmt.Sprintf("%s.%s.%s", m.ExgName, m.Market, p)
-				log.Error("invalid watchKLines", zap.String("pair", code), zap.Error(err))
-				continue
-			}
-			res := &SubKLineState{
-				Sid:      exs.ID,
-				ExpectMS: expectMS,
-			}
-			m.klineStates[p] = res
+		m.lockBarLasts.Lock()
+		if _, ok := m.klineLasts[p]; !ok {
+			m.klineLasts[p] = curTimeMS
 		}
+		m.lockBarLasts.Unlock()
 	}
 	out, err := m.exchange.WatchOHLCVs(jobs, nil)
 	if err != nil {
@@ -553,8 +535,7 @@ func (m *Miner) watchKLines(pairs []string) {
 	}
 	m.KLines.Status = 2
 	log.Info("start watch kline", zap.String("exg", m.ExgName), zap.Int("num", m.KLines.Len()))
-	prefix := fmt.Sprintf("ohlcv_%s_%s_", m.ExgName, m.Market)
-	unPrefix := "u" + prefix
+	unPrefix := fmt.Sprintf("uohlcv_%s_%s_", m.ExgName, m.Market)
 	intvMa := core.NewEMA(0.1)
 	// 5s统计更新一次K线全品种平均间隔到intvMa
 	ns := core.NewNumSet(5000, func(stamp int64, data map[string]float64) {
@@ -567,13 +548,13 @@ func (m *Miner) watchKLines(pairs []string) {
 
 	// The candlestick is received, sent to the robot, and saved to the database
 	// 收到K线，发送到机器人，保存到数据库
-	handleSubKLines := func(key string, arr []*banexg.Kline) {
-		parts := strings.Split(key, "_")
-		pair, curTF := parts[0], parts[1]
-		state, ok := m.klineStates[pair]
+	handleSubKLines := func(pair string, arr []*banexg.Kline) {
+		m.lockBarLasts.Lock()
+		lastNotify, ok := m.klineLasts[pair]
+		m.lockBarLasts.Unlock()
 		if !ok {
 			code := fmt.Sprintf("%s.%s.%s", m.ExgName, m.Market, pair)
-			log.Warn("no pair state: " + code)
+			log.Warn("no pair lasts: " + code)
 			return
 		}
 		// Send uohlcv subscription messages
@@ -588,42 +569,20 @@ func (m *Miner) watchKLines(pairs []string) {
 		})
 		curTS := btime.UTCStamp()
 		var intvMS float64
-		if curTS > state.LastNotify+900 {
+		if curTS > lastNotify+900 {
 			// 1s最多记录一次
-			if state.LastNotify > 0 {
-				intvMS = float64(curTS - state.LastNotify)
-				ns.Update(curTS, key, intvMS)
+			if lastNotify > 0 {
+				intvMS = float64(curTS - lastNotify)
+				ns.Update(curTS, pair, intvMS)
 			}
-			state.LastNotify = curTS
+			m.lockBarLasts.Lock()
+			m.klineLasts[pair] = curTS
+			m.lockBarLasts.Unlock()
 		}
 		if intvMa.Age > 3 && intvMS > intvMa.Val*5 {
 			// 间隔超过平均间隔的5倍，认为有缺失（也有可能是交易所数据无变化未推送）
-			log.Warn("ohlcv interval too big, may lost data", zap.String("k", key),
+			log.Warn("ohlcv interval too big, may lost data", zap.String("k", pair),
 				zap.Float64("intv", intvMS), zap.Float64("avgIntv", intvMa.Val))
-			state.PrevBar = nil
-		}
-		// Check the completed candlesticks
-		// 检查已完成的k线
-		finishes := arr[:len(arr)-1]
-		last := arr[len(arr)-1]
-		if state.PrevBar != nil && last.Time > state.PrevBar.Time {
-			if len(finishes) == 0 || state.PrevBar.Time < finishes[0].Time {
-				finishes = append([]*banexg.Kline{state.PrevBar}, finishes...)
-			}
-		}
-		if state.PrevBar == nil || last.Time >= state.PrevBar.Time {
-			state.PrevBar = last
-			state.ExpectMS = last.Time
-		}
-		if len(finishes) > 0 {
-			// There are completed k-lines, written to the database, and only then the message is broadcast
-			// 有已完成的k线，写入到数据库，然后才广播消息
-			writeQ <- &SaveKline{
-				Sid:       state.Sid,
-				TimeFrame: curTF,
-				Arr:       finishes,
-				MsgAction: prefix + pair,
-			}
 		}
 		if err_ != nil {
 			log.Error("broadCast kline fail", zap.String("pair", pair), zap.Error(err_))
@@ -644,12 +603,14 @@ func (m *Miner) watchKLines(pairs []string) {
 			prices := map[string]float64{}
 			for _, val := range klines {
 				prices[val.Symbol] = val.Close
-				valKey := fmt.Sprintf("%s_%s", val.Symbol, val.TimeFrame)
-				arr, _ := cache[valKey]
-				if len(arr) > 0 && arr[len(arr)-1].Time == val.Time {
-					arr[len(arr)-1] = &val.Kline
+				arr, _ := cache[val.Symbol]
+				if len(arr) > 0 {
+					last := arr[len(arr)-1]
+					if last.Time == val.Time && val.Volume > last.Volume {
+						arr[len(arr)-1] = &val.Kline
+					}
 				} else {
-					cache[valKey] = append(arr, &val.Kline)
+					cache[val.Symbol] = append(arr, &val.Kline)
 				}
 			}
 			if tfSecs < 60 {
@@ -667,47 +628,121 @@ func (m *Miner) watchKLines(pairs []string) {
 			}
 		}
 	}()
+}
 
-	// 交易所ws可能偶发故障，这里定期检查，通过rest获取k线(约1m一次)
-	delayMS := int64(3000)
-	minMSecs := int64(60000)
-	go func() {
-		for {
-			time.Sleep(time.Second * 2)
-			curMS := btime.TimeMS()
-			curMinuteMS := utils2.AlignTfMSecs(curMS, minMSecs)
-			if curMS-curMinuteMS < delayMS {
-				continue
+func (m *Miner) loopKLines(pairs []string) {
+	newPairs := m.KLineApis.GetNewSubs(pairs)
+	if len(newPairs) > 0 {
+		startMs := utils2.AlignTfMSecs(bntp.UTCStamp(), 60000)
+		for _, p := range newPairs {
+			m.lockBarState.Lock()
+			state, ok := m.klineStates[p]
+			m.lockBarState.Unlock()
+			if !ok {
+				exs, err := orm.GetExSymbol(m.exchange, p)
+				if err != nil {
+					code := fmt.Sprintf("%s.%s.%s", m.ExgName, m.Market, p)
+					log.Error("invalid symbol", zap.String("pair", code), zap.Error(err))
+					continue
+				}
+				state = &KLineState{
+					Sid:      exs.ID,
+					ExpectMS: startMs,
+				}
+				m.lockBarState.Lock()
+				m.klineStates[p] = state
+				m.lockBarState.Unlock()
 			}
-			alignMS := utils2.AlignTfMSecs(curMS, tfMSecs)
-			adds := make(map[string]int)
-			for pair, sta := range m.klineStates {
-				if curMinuteMS > sta.ExpectMS+delayMS {
-					bars, err := m.exchange.FetchOHLCV(pair, timeFrame, sta.ExpectMS, 0, nil)
-					if err != nil {
-						log.Warn("FetchOHLCV fail", zap.String("pair", pair), zap.Error(err))
-						continue
+		}
+	}
+	if !m.IsLoopKline {
+		m.startLoopKLines()
+	}
+}
+
+func (m *Miner) startLoopKLines() {
+	if m.IsLoopKline {
+		return
+	}
+	m.IsLoopKline = true
+	mntMSecs := int64(60000)
+	curTF := "1m"
+	prefix := fmt.Sprintf("ohlcv_%s_%s_", m.ExgName, m.Market)
+	// 刷新K线
+	refreshKlines := func(curTimeMS int64) {
+		pairs := m.KLineApis.KeyMap()
+		if len(pairs) == 0 {
+			return
+		}
+		startMS := utils2.AlignTfMSecs(curTimeMS, mntMSecs)
+		retry := 0
+		delay := time.Duration(20)
+		initNum := len(pairs)
+		barNum := 0
+		for len(pairs) > 0 && retry < 3 {
+			if retry > 0 {
+				log.Info(fmt.Sprintf("retry %d fetch kline for %d/%d pairs", retry, len(pairs), initNum))
+			}
+			pairArr := utils.KeysOfMap(pairs)
+			_ = utils.ParallelRun(pairArr, KlineParallelNum, func(i int, p string) *errs.Error {
+				m.lockBarState.Lock()
+				sta, _ := m.klineStates[p]
+				m.lockBarState.Unlock()
+				if sta == nil {
+					return nil
+				}
+				bars, err := m.exchange.FetchOHLCV(p, curTF, sta.ExpectMS, 0, nil)
+				if err != nil {
+					code := fmt.Sprintf("%s.%s.%s", m.ExgName, m.Market, p)
+					log.Error("FetchOHLCV fail", zap.String("exg", code), zap.Error(err))
+					return nil
+				}
+				if len(bars) > 0 {
+					last := bars[len(bars)-1]
+					if last.Time >= startMS {
+						bars = bars[:len(bars)-1]
 					}
 					if len(bars) > 0 {
-						adds[pair] = len(bars)
-						key := fmt.Sprintf("%s_%s", pair, timeFrame)
-						last := bars[len(bars)-1]
-						if last.Time < alignMS {
-							// 交易所未返回未完成bar，添加最后一个未完成bar
-							bars = append(bars, &banexg.Kline{
-								Time:  last.Time + tfMSecs,
-								Open:  last.Close,
-								High:  last.Close,
-								Low:   last.Close,
-								Close: last.Close,
-							})
+						barNum += len(bars)
+						sta.ExpectMS = bars[len(bars)-1].Time + mntMSecs
+						// There are completed k-lines, written to the database, and only then the message is broadcast
+						// 有已完成的k线，写入到数据库，然后才广播消息
+						writeQ <- &SaveKline{
+							Sid:       sta.Sid,
+							TimeFrame: curTF,
+							Arr:       bars,
+							MsgAction: prefix + p,
 						}
-						handleSubKLines(key, bars)
 					}
 				}
+				delete(pairs, p)
+				return nil
+			})
+			if len(pairs) == 0 {
+				break
 			}
-			if len(adds) > 0 {
-				log.Warn("FetchOHLCV as ws timeout", zap.String("items", utils.MapToStr(adds, true, 0)))
+			retry += 1
+			core.Sleep(time.Millisecond * delay)
+			delay *= 2
+		}
+		fails := utils.KeysOfMap(pairs)
+		log.Info(fmt.Sprintf("fetched kline %d/%d pairs, retried: %d, total kline: %d at %d, fails: %v",
+			initNum-len(pairs), initNum, retry, barNum, curTimeMS, fails))
+	}
+	go func() {
+		defer func() {
+			m.IsLoopKline = false
+		}()
+		curMS := bntp.UTCStamp()
+		waitMS := utils2.AlignTfMSecs(curMS+mntMSecs, mntMSecs) - curMS
+		core.Sleep(time.Duration(waitMS) * time.Millisecond)
+		t := time.NewTicker(time.Duration(mntMSecs) * time.Millisecond)
+		for {
+			select {
+			case <-t.C:
+				refreshKlines(bntp.UTCStamp())
+			case <-core.Ctx.Done():
+				return
 			}
 		}
 	}()

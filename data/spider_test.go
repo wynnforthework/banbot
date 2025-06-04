@@ -11,7 +11,9 @@ import (
 	"github.com/banbox/banbot/utils"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
+	"github.com/banbox/banexg/log"
 	utils2 "github.com/banbox/banexg/utils"
+	"go.uber.org/zap"
 	"testing"
 )
 
@@ -25,7 +27,19 @@ func TestWatchOhlcv(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	market, quote := banexg.MarketSpot, "USDT"
+	client.OnKLineMsg = func(msg *KLineMsg) {
+		if len(msg.Arr) == 0 {
+			return
+		}
+		code := fmt.Sprintf("%s.%s.%s", msg.ExgName, msg.Market, msg.Pair)
+		k := msg.Arr[0]
+		dateStr := btime.ToDateStr(k.Time, core.DefaultDateFmt)
+		barStr := fmt.Sprintf("%f %f %f %f %f", k.Open, k.High, k.Low, k.Close, k.Volume)
+		log.Info("receive", zap.String("code", code), zap.Int("num", len(msg.Arr)),
+			zap.Int("tfSecs", msg.TFSecs), zap.Int("intv", msg.Interval),
+			zap.String("date", dateStr), zap.String("bar", barStr))
+	}
+	market, quote := banexg.MarketLinear, "USDT"
 	codes := []string{"BTC", "ETH", "SOL"}
 	jobs := make([]WatchJob, 0, len(codes))
 	for _, code := range codes {

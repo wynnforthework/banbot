@@ -296,7 +296,7 @@ func updateBtTaskResult(task *ormu.Task, errTask error) {
 func startBtTaskScheduler() {
 	go func() {
 		for {
-			time.Sleep(300 * time.Millisecond)
+			core.Sleep(300 * time.Millisecond)
 
 			runBtTasksMutex.Lock()
 			runningCount := len(runBtTasks)

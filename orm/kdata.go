@@ -368,7 +368,7 @@ func GetOHLCV(exs *ExSymbol, timeFrame string, startMS, endMS int64, limit int, 
 		if err != nil && err.Code == core.ErrDbConnFail && retry < maxRetry+1 {
 			// 连接被断开，等待一会，重试
 			retry += 1
-			time.Sleep(time.Millisecond * 1000 * time.Duration(retry))
+			core.Sleep(time.Millisecond * 1000 * time.Duration(retry))
 			continue
 		}
 		return adjs, klines, err

@@ -13,7 +13,6 @@ require (
 	github.com/muesli/kmeans v0.3.1
 	github.com/olekukonko/tablewriter v0.0.5
 	// github.com/pkujhd/goloader v0.0.0-20240113094056-ff3a1e01ffcb
-	github.com/robfig/cron/v3 v3.0.1
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/shopspring/decimal v1.4.0
 	github.com/xuri/excelize/v2 v2.9.0
@@ -26,6 +25,7 @@ require (
 )
 
 require (
+	github.com/anyongjin/cron v0.4.1
 	github.com/felixge/fgprof v0.9.5
 	github.com/flopp/go-findfont v0.1.0
 	github.com/fogleman/gg v1.3.0
@@ -78,7 +78,7 @@ require (
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/rogpeppe/go-internal v1.11.0 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/savsgio/gotils v0.0.0-20240704082632-aef3928b8a38 // indirect
 	github.com/tklauser/go-sysconf v0.3.14 // indirect
 	github.com/tklauser/numcpus v0.9.0 // indirect

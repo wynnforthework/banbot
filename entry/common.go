@@ -282,6 +282,12 @@ func init() {
 		Options: []string{"in", "out"},
 		Help:    "build backtest result from orders.gob and config",
 	})
+	AddCmdJob(&CmdJob{
+		Name:   "test_live_bars",
+		Parent: "tool",
+		RunRaw: biz.TestKLineConsistency,
+		Help:   "test kline bars from live trade with local klines",
+	})
 
 	AddCmdJob(&CmdJob{
 		Name:   "down_order",

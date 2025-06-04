@@ -29,7 +29,7 @@ var (
 
 func CronRefreshPairs(dp data.IProvider) {
 	if config.PairMgr.Cron != "" {
-		_, err_ := core.Cron.AddFunc(config.PairMgr.Cron, func() {
+		_, err_ := core.Cron.Add(config.PairMgr.Cron, func() {
 			curMS := btime.TimeMS()
 			if curMS-lastRefreshMS < config.MinPairCronGapMS {
 				return
@@ -49,7 +49,7 @@ func CronRefreshPairs(dp data.IProvider) {
 
 func CronLoadMarkets() {
 	// 2小时更新一次市场行情
-	_, err := core.Cron.AddFunc("30 3 */2 * * *", func() {
+	_, err := core.Cron.Add("30 3 */2 * * *", func() {
 		_, _ = orm.LoadMarkets(exg.Default, true)
 	})
 	if err != nil {
@@ -69,7 +69,7 @@ func CronFatalLossCheck() {
 	}
 	cronStr := fmt.Sprintf("35 */%v * * * *", min(5, minIntv))
 	maxIntv := slices.Max(checkIntvs)
-	_, err := core.Cron.AddFunc(cronStr, biz.MakeCheckFatalStop(maxIntv))
+	_, err := core.Cron.Add(cronStr, biz.MakeCheckFatalStop(maxIntv))
 	if err != nil {
 		log.Error("add CronFatalLossCheck fail", zap.Error(err))
 	}
@@ -90,7 +90,7 @@ func CronKlineDelays() {
 		}
 	}
 	stuckCount := 0
-	_, err_ := core.Cron.AddFunc("30 * * * * *", func() {
+	_, err_ := core.Cron.Add("30 * * * * *", func() {
 		curMS := btime.TimeMS()
 		delaySecs := int((curMS - core.LastCopiedMs) / 1000)
 		if delaySecs > 120 {
@@ -145,7 +145,7 @@ func CronKlineDelays() {
 }
 
 func CronKlineSummary() {
-	_, err_ := core.Cron.AddFunc("30 1-59/10 * * * *", func() {
+	_, err_ := core.Cron.Add("30 1-59/10 * * * *", func() {
 		core.TfPairHitsLock.Lock()
 		var pairGroups = make(map[string][]string)
 		for tf, tfMap := range core.TfPairHits {
@@ -174,7 +174,7 @@ func CronKlineSummary() {
 func CronCheckTriggerOds() {
 	// Check every minute 15 seconds to see if the limit order submission is triggered
 	// 在每分钟的15s检查是否触发限价单提交
-	_, err_ := core.Cron.AddFunc("15 * * * * *", biz.VerifyTriggerOds)
+	_, err_ := core.Cron.Add("15 * * * * *", biz.VerifyTriggerOds)
 	if err_ != nil {
 		log.Error("add VerifyTriggerOds fail", zap.Error(err_))
 	}

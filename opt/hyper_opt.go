@@ -321,7 +321,7 @@ func runOptimize(args *config.CmdArgs, minScore float64) (string, *errs.Error) {
 		startStr := strconv.FormatInt(config.TimeRange.StartMS/1000, 10)
 		endStr := strconv.FormatInt(config.TimeRange.EndMS/1000, 10)
 		err = utils.ParallelRun(groups, args.Concur, func(i int, pol *config.RunPolicyConfig) *errs.Error {
-			time.Sleep(time.Millisecond * time.Duration(1000*rand.Float64()+100*float64(i)))
+			core.Sleep(time.Millisecond * time.Duration(1000*rand.Float64()+100*float64(i)))
 			iStr := strconv.Itoa(i + 1)
 			cfgFile, err_ := os.CreateTemp("", "ban_opt"+iStr)
 			if err_ != nil {

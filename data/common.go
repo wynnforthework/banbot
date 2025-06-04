@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/utils"
@@ -176,7 +177,7 @@ func downKlineTo(sess *orm.Queries, sid int32, tf string, oldEndMS, toEndMS int6
 				"you may need delete ban_ntp.json in Temp directory and retry",
 				zap.String("pair", exs.Symbol), zap.Int("ins", saveNum),
 				zap.Int64("last", lastMS), zap.Int64("newEnd", newEndMS))
-			time.Sleep(time.Second * 2)
+			core.Sleep(time.Second * 2)
 		}
 	}
 	return newEndMS, nil
