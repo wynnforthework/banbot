@@ -2,6 +2,12 @@ package strat
 
 import (
 	"fmt"
+	"math"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -11,11 +17,6 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"go.uber.org/zap"
-	"math"
-	"slices"
-	"sort"
-	"strconv"
-	"strings"
 )
 
 type FuncMakeStrat = func(pol *config.RunPolicyConfig) *TradeStrat
@@ -164,6 +165,42 @@ func GetStratPerf(pair, strat string) *config.StratPerfConfig {
 //	goloader.RegTypes(symPtr, &PairSub{}, &EnterReq{}, &ExitReq{})
 //}
 
+func (q *EnterReq) Clone() *EnterReq {
+	res := &EnterReq{
+		Tag:             q.Tag,
+		StratName:       q.StratName,
+		Short:           q.Short,
+		OrderType:       q.OrderType,
+		Limit:           q.Limit,
+		CostRate:        q.CostRate,
+		LegalCost:       q.LegalCost,
+		Leverage:        q.Leverage,
+		Amount:          q.Amount,
+		StopLossVal:     q.StopLossVal,
+		StopLoss:        q.StopLoss,
+		StopLossLimit:   q.StopLossLimit,
+		StopLossRate:    q.StopLossRate,
+		StopLossTag:     q.StopLossTag,
+		TakeProfitVal:   q.TakeProfitVal,
+		TakeProfit:      q.TakeProfit,
+		TakeProfitLimit: q.TakeProfitLimit,
+		TakeProfitRate:  q.TakeProfitRate,
+		TakeProfitTag:   q.TakeProfitTag,
+		StopBars:        q.StopBars,
+		ClientID:        q.ClientID,
+		Log:             q.Log,
+	}
+
+	// 深度复制map字段Infos
+	if q.Infos != nil {
+		res.Infos = make(map[string]string, len(q.Infos))
+		for k, v := range q.Infos {
+			res.Infos[k] = v
+		}
+	}
+	return res
+}
+
 func (q *ExitReq) Clone() *ExitReq {
 	res := &ExitReq{
 		Tag:        q.Tag,
@@ -176,6 +213,7 @@ func (q *ExitReq) Clone() *ExitReq {
 		Amount:     q.Amount,
 		OrderID:    q.OrderID,
 		UnFillOnly: q.UnFillOnly,
+		FilledOnly: q.FilledOnly,
 		Force:      q.Force,
 	}
 	return res

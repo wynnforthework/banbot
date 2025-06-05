@@ -153,6 +153,13 @@ const (
 	OrderTypeLimitMaker
 )
 
+var OdTypeMap = map[int]string{
+	OrderTypeEmpty:      "empty",
+	OrderTypeMarket:     "market",
+	OrderTypeLimit:      "limit",
+	OrderTypeLimitMaker: "limit_maker",
+}
+
 const (
 	AdjNone   = 1
 	AdjFront  = 2

@@ -140,6 +140,7 @@ type EnterReq struct {
 	StopBars        int     // If the entry limit order exceeds how many bars and is not executed, it will be cancelled 入场限价单超过多少个bar未成交则取消
 	ClientID        string  // used as suffix of ClientOrderID to exchange
 	Infos           map[string]string
+	Log             bool // 是否自动记录错误日志
 }
 
 /*
@@ -159,6 +160,7 @@ type ExitReq struct {
 	UnFillOnly bool    // When True, exit orders which hasn't been filled only. True时只退出尚未入场的部分
 	FilledOnly bool    // Only exit orders that have already entered when True True时只退出已入场的订单
 	Force      bool    // Whether to force exit 是否强制退出
+	Log        bool    // 是否自动记录错误日志
 }
 
 type accStratLimits map[string]*stgLimits
