@@ -318,7 +318,15 @@ func InitExg(exchange banexg.BanExchange) *errs.Error {
 	}
 	marketType := exchange.Info().MarketType
 	if marketType == banexg.MarketLinear || marketType == banexg.MarketInverse {
-		return exchange.LoadLeverageBrackets(false, nil)
+		err = exchange.LoadLeverageBrackets(false, nil)
+		if err != nil {
+			log.Warn("LoadLeverageBrackets fail, skip, maint margin calculation may have large deviation",
+				zap.String("err", err.Short()))
+			err = exchange.InitLeverageBrackets()
+			if err != nil {
+				log.Warn("InitLeverageBrackets fail", zap.String("err", err.Short()))
+			}
+		}
 	}
 	return nil
 }
