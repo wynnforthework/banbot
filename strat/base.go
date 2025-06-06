@@ -304,8 +304,10 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 			req.StopBars = s.Strat.StopEnterBars
 		}
 	}
-	s.Entrys = append(s.Entrys, req)
-	s.OrderNum += 1
+	if !s.IsWarmUp {
+		s.Entrys = append(s.Entrys, req)
+		s.OrderNum += 1
+	}
 	return nil
 }
 
@@ -384,7 +386,9 @@ func (s *StratJob) closeOrders(req *ExitReq) *errs.Error {
 			req.Dirt = core.OdDirtShort
 		}
 	}
-	s.Exits = append(s.Exits, req)
+	if !s.IsWarmUp {
+		s.Exits = append(s.Exits, req)
+	}
 	return nil
 }
 

@@ -335,10 +335,7 @@ func (m *Miner) UnSubPairs(jobType string, pairs ...string) *errs.Error {
 		}
 		return nil
 	} else if jobType == core.WsSubKLine {
-		timeFrame := "1s"
-		if banexg.IsContract(m.Market) {
-			timeFrame = "1m"
-		}
+		timeFrame := "1m"
 		items := m.KLines.Remove(pairs...)
 		jobs := make([][2]string, len(items))
 		for _, p := range items {
@@ -507,10 +504,7 @@ func (m *Miner) watchKLines(pairs []string) {
 		return
 	}
 	jobs := make([][2]string, 0, len(pairs))
-	timeFrame := "1s"
-	if banexg.IsContract(m.Market) {
-		timeFrame = "1m"
-	}
+	timeFrame := "1m"
 	tfSecs := utils2.TFToSecs(timeFrame)
 	curTimeMS := btime.TimeMS()
 	for _, p := range pairs {
