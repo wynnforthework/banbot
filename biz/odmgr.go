@@ -527,6 +527,11 @@ func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.E
 		lock.Unlock()
 	}
 	if len(matches) == 0 {
+		if core.LiveMode {
+			fields := req.GetZapFields(nil, zap.String("acc", o.Account), zap.String("pair", pairs),
+				zap.Int("all", len(openOds)))
+			log.Warn("no match orders to exit", fields...)
+		}
 		return nil, nil
 	}
 	var exitAmount float64

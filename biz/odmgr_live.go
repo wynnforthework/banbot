@@ -29,9 +29,9 @@ type FuncHandleMyOrder = func(trade *banexg.Order) bool
 type LiveOrderMgr struct {
 	OrderMgr
 	queue            chan *OdQItem
-	doneKeys         map[string]bool             // Completed Orders 已完成的订单：symbol+orderId
+	doneKeys         map[string]int64            // Completed Orders 已完成的订单：symbol+orderId
 	exgIdMap         map[string]*ormo.InOutOrder // symbol+orderId: InOutOrder
-	doneTrades       map[string]bool             // Processed trades 已处理的交易：symbol+tradeId
+	doneTrades       map[string]int64            // Processed trades 已处理的交易：symbol+tradeId
 	lockDoneKeys     deadlock.Mutex
 	lockExgIdMap     deadlock.Mutex
 	lockDoneTrades   deadlock.Mutex
@@ -95,9 +95,9 @@ func newLiveOrderMgr(account string, callBack func(od *ormo.InOutOrder, isEnter 
 			Account:  account,
 		},
 		queue:         make(chan *OdQItem, 1000),
-		doneKeys:      map[string]bool{},
+		doneKeys:      map[string]int64{},
 		exgIdMap:      map[string]*ormo.InOutOrder{},
-		doneTrades:    map[string]bool{},
+		doneTrades:    map[string]int64{},
 		unMatchTrades: map[string]*banexg.MyTrade{},
 	}
 	res.afterEnter = makeAfterEnter(res)
@@ -284,14 +284,18 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 	}
 	defer conn.Close()
 	// Loading orders from the database
-	// 从数据库加载订单
+	// 从数据库加载未平仓订单
 	orders, err := sess.GetOrders(ormo.GetOrdersArgs{
 		TaskID: task.ID,
 		Status: 1,
-		Limit:  1000,
+		Limit:  10000,
 	})
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	if len(orders) >= 10000 {
+		log.Warn("local open orders may be too many to load", zap.String("acc", o.Account),
+			zap.Int("num", len(orders)))
 	}
 	// Query the most recent usage time period of a task
 	// 查询任务的最近使用时间周期
@@ -501,12 +505,13 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	// Get exchange order history and try to restore the order status.
 	// 从交易所获取订单记录，尝试恢复订单状态。
 	// 这里必须指定sinceMS，避免获取过早的订单创建冗余本地记录
-	// TODO 币安单次只可查询7天内的数据，暂时固定，后期考虑在banexg中重复查询。
-	weekMSecs := int64(utils2.TFToSecs("1w") * 1000)
-	minSince := curMS - weekMSecs - 60000
+	monMSecs := int64(utils2.TFToSecs("1M") * 1000)
+	minSince := curMS - monMSecs
 	exOrders, err = exg.Default.FetchOrders(pair, max(sinceMS, minSince), 300, map[string]interface{}{
-		banexg.ParamAccount: o.Account,
-		banexg.ParamUntil:   curMS,
+		banexg.ParamAccount:   o.Account,
+		banexg.ParamUntil:     curMS,
+		banexg.ParamLoopIntv:  int64(utils2.TFToSecs("7d") * 1000),
+		banexg.ParamDirection: "endToStart",
 	})
 	if err != nil {
 		return openOds, err
@@ -600,9 +605,25 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 			price := core.GetPrice(pair)
 			longCost := math.Round(longPosAmt*price*100) / 100
 			shortCost := math.Round(shortPosAmt*price*100) / 100
-			if longCost > 1 || shortCost > 1 {
-				log.Error("unknown exchange position for bot", zap.String("acc", o.Account), zap.String("pair", pair),
-					zap.Float64("long", longCost), zap.Float64("short", shortCost))
+			if longCost > 1 {
+				longOds := make([]string, 0, len(openOds)/2)
+				for _, od := range openOds {
+					if !od.Short {
+						longOds = append(longOds, od.Key())
+					}
+				}
+				log.Error("unknown long position", zap.String("acc", o.Account), zap.String("pair", pair),
+					zap.Float64("longAmt", longPosAmt), zap.Strings("local", longOds))
+			}
+			if shortCost > 1 {
+				shortOds := make([]string, 0, len(openOds)/2)
+				for _, od := range openOds {
+					if od.Short {
+						shortOds = append(shortOds, od.Key())
+					}
+				}
+				log.Error("unknown short position", zap.String("acc", o.Account), zap.String("pair", pair),
+					zap.Float64("shortAmt", longPosAmt), zap.Strings("local", shortOds))
 			}
 		}
 		return openOds, nil
@@ -1066,18 +1087,12 @@ func (o *LiveOrderMgr) handleMyTrade(trade *banexg.MyTrade) {
 		return
 	}
 	tradeKey := trade.Symbol + trade.ID
-	o.lockDoneTrades.Lock()
-	_, ok := o.doneTrades[tradeKey]
-	o.lockDoneTrades.Unlock()
-	if ok {
+	if o.checkTradeDone(tradeKey) {
 		// 交易已处理
 		return
 	}
 	odKey := trade.Symbol + trade.Order
-	o.lockDoneKeys.Lock()
-	_, ok = o.doneKeys[odKey]
-	o.lockDoneKeys.Unlock()
-	if ok {
+	if o.checkOrderDone(odKey) {
 		// 订单已完成
 		return
 	}
@@ -1180,8 +1195,33 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 			if !core.Sleep(time.Second * 3) {
 				return
 			}
+			curMS := btime.UTCStamp()
+			// 清理doneTrades中过期1分钟以上的
+			o.lockDoneTrades.Lock()
+			for td, stamp := range o.doneTrades {
+				if stamp+60000 < curMS {
+					delete(o.doneTrades, td)
+				}
+			}
+			o.lockDoneTrades.Unlock()
+			// 清理doneKeys中过期1分钟以上的
+			o.lockDoneKeys.Lock()
+			for od, stamp := range o.doneKeys {
+				if stamp+60000 < curMS {
+					delete(o.doneKeys, od)
+				}
+			}
+			o.lockDoneKeys.Unlock()
+			// 清理exgIdMap中过期5分钟的
+			o.lockExgIdMap.Lock()
+			for k, iod := range o.exgIdMap {
+				if iod.Exit != nil && iod.Exit.UpdateAt+300000 < curMS {
+					delete(o.exgIdMap, k)
+				}
+			}
+			o.lockExgIdMap.Unlock()
 			var pairTrades = make(map[string][]*banexg.MyTrade)
-			expireMS := btime.TimeMS() - 1000
+			expireMS := curMS - 1000
 			data := make(map[string]*banexg.MyTrade)
 			o.lockUnMatches.Lock()
 			for key, trade := range o.unMatchTrades {
@@ -1198,6 +1238,10 @@ func (o *LiveOrderMgr) TrialUnMatchesForever() {
 				iod, ok := o.exgIdMap[odKey]
 				o.lockExgIdMap.Unlock()
 				if ok {
+					if o.checkOrderDone(odKey) {
+						// 订单已完成
+						return
+					}
 					lock := iod.Lock()
 					err := o.updateByMyTrade(iod, trade)
 					lock.Unlock()
@@ -1246,6 +1290,16 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 	if trade.State == banexg.OdStatusOpen {
 		return nil
 	}
+	odId := getClientOrderId(trade.ClientID)
+	if odId > 0 && odId != od.ID {
+		log.Error("update order with wrong", zap.String("acc", o.Account), zap.String("trade", trade.ID),
+			zap.String("order", trade.Order), zap.String("client", trade.ClientID),
+			zap.String("for", od.Key()), zap.String("side", trade.Side))
+		return nil
+	}
+	o.lockDoneTrades.Lock()
+	o.doneTrades[trade.Symbol+trade.ID] = trade.Timestamp
+	o.lockDoneTrades.Unlock()
 	sl := od.GetStopLoss()
 	tp := od.GetTakeProfit()
 	isSell := trade.Side == banexg.OdSideSell
@@ -1612,7 +1666,7 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *ormo.InOutOrder, isEnter bool, res *
 		// If you modify the order price, order_id will change
 		// 如修改订单价格，order_id会变化
 		o.lockDoneKeys.Lock()
-		o.doneKeys[od.Symbol+subOd.OrderID] = true
+		o.doneKeys[od.Symbol+subOd.OrderID] = res.LastTradeTimestamp
 		o.lockDoneKeys.Unlock()
 	}
 	subOd.OrderID = res.ID
@@ -1695,12 +1749,9 @@ func (o *LiveOrderMgr) hasNewTrades(res *banexg.Order) bool {
 	}
 	for _, trade := range res.Trades {
 		key := res.Symbol + trade.ID
-		o.lockDoneTrades.Lock()
-		_, ok := o.doneTrades[key]
-		o.lockDoneTrades.Unlock()
-		if !ok {
+		if !o.checkTradeDone(key) {
 			o.lockDoneTrades.Lock()
-			o.doneTrades[key] = true
+			o.doneTrades[key] = trade.Timestamp
 			o.lockDoneTrades.Unlock()
 			return true
 		}
@@ -1726,10 +1777,12 @@ func (o *LiveOrderMgr) consumeUnMatches(od *ormo.InOutOrder, subOd *ormo.ExOrder
 		return nil
 	}
 	for key, trade := range data {
-		o.lockDoneTrades.Lock()
-		_, ok := o.doneTrades[key]
-		o.lockDoneTrades.Unlock()
-		if ok {
+		ok := o.checkTradeDone(key)
+		if ok || trade.Timestamp < subOd.UpdateAt {
+			continue
+		}
+		odKey := trade.Symbol + trade.Order
+		if o.checkOrderDone(odKey) {
 			continue
 		}
 		err := o.updateByMyTrade(od, trade)
@@ -2185,6 +2238,20 @@ func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
 	}
 }
 
+func (o *LiveOrderMgr) checkTradeDone(k string) bool {
+	o.lockDoneTrades.Lock()
+	_, ok := o.doneTrades[k]
+	o.lockDoneTrades.Unlock()
+	return ok
+}
+
+func (o *LiveOrderMgr) checkOrderDone(k string) bool {
+	o.lockDoneKeys.Lock()
+	_, ok := o.doneKeys[k]
+	o.lockDoneKeys.Unlock()
+	return ok
+}
+
 /*
 cancelTriggerOds
 Cancel the associated order of the order. When the order is closed, the associated stop loss order and take profit order will not be automatically exited, and this method needs to be called to exit
@@ -2234,14 +2301,15 @@ When the transaction is in progress, it will be saved to the database internally
 实盘时，内部会保存到数据库
 */
 func (o *LiveOrderMgr) finishOrder(od *ormo.InOutOrder, sess *ormo.Queries) *errs.Error {
+	curMS := btime.UTCStamp()
 	if od.Enter != nil && od.Enter.OrderID != "" {
 		o.lockDoneKeys.Lock()
-		o.doneKeys[od.Symbol+od.Enter.OrderID] = true
+		o.doneKeys[od.Symbol+od.Enter.OrderID] = curMS
 		o.lockDoneKeys.Unlock()
 	}
 	if od.Exit != nil && od.Exit.OrderID != "" {
 		o.lockDoneKeys.Lock()
-		o.doneKeys[od.Symbol+od.Exit.OrderID] = true
+		o.doneKeys[od.Symbol+od.Exit.OrderID] = curMS
 		o.lockDoneKeys.Unlock()
 	}
 	log.Info("Finish Order", zap.String("acc", o.Account), zap.String("key", od.Key()),

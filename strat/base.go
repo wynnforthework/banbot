@@ -111,50 +111,7 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	}
 	err := s.openOrder(req)
 	if err != nil && q != nil {
-		dirt := "long"
-		if q.Short {
-			dirt = "short"
-		}
-		fields := []zap.Field{zap.String("strat", s.Strat.Name), zap.String("pair", s.Symbol.Symbol),
-			zap.String("tf", s.TimeFrame), zap.String("tag", q.Tag), zap.String("dirt", dirt)}
-		if q.OrderType != core.OrderTypeEmpty {
-			odType, _ := core.OdTypeMap[q.OrderType]
-			if odType != "" {
-				fields = append(fields, zap.String("odType", odType))
-			}
-		}
-		if q.Limit != 0 {
-			fields = append(fields, zap.Float64("limit", q.Limit))
-		}
-		if q.CostRate > 0 && q.CostRate < 1 {
-			fields = append(fields, zap.Float64("costRate", q.CostRate))
-		}
-		if q.LegalCost > 0 {
-			fields = append(fields, zap.Float64("cost", q.LegalCost))
-		}
-		if q.Leverage > 0 {
-			fields = append(fields, zap.Float64("leverage", q.Leverage))
-		}
-		if q.Amount > 0 {
-			fields = append(fields, zap.Float64("amt", q.Amount))
-		}
-		if q.StopLossVal > 0 {
-			fields = append(fields, zap.Float64("slVal", q.StopLossVal))
-		} else if q.StopLoss > 0 {
-			fields = append(fields, zap.Float64("sl", q.StopLoss))
-		}
-		if q.TakeProfitVal > 0 {
-			fields = append(fields, zap.Float64("tpVal", q.TakeProfitVal))
-		} else if q.TakeProfit > 0 {
-			fields = append(fields, zap.Float64("tp", q.TakeProfit))
-		}
-		if q.StopBars > 0 {
-			fields = append(fields, zap.Int("stopBars", q.StopBars))
-		}
-		if q.ClientID != "" {
-			fields = append(fields, zap.String("clientId", q.ClientID))
-		}
-		log.Warn("OpenOrder fail", fields...)
+		log.Warn("OpenOrder fail", q.GetZapFields(s)...)
 	}
 	return err
 }
@@ -319,28 +276,7 @@ func (s *StratJob) CloseOrders(req *ExitReq) *errs.Error {
 	}
 	err := s.closeOrders(req)
 	if err != nil && q != nil {
-		fields := []zap.Field{zap.String("strat", s.Strat.Name), zap.String("pair", s.Symbol.Symbol),
-			zap.String("tf", s.TimeFrame), zap.String("tag", q.Tag)}
-
-		if q.Dirt != 0 {
-			fields = append(fields, zap.Int("dirt", q.Dirt))
-		}
-		if q.OrderType != core.OrderTypeEmpty {
-			odType, _ := core.OdTypeMap[q.OrderType]
-			if odType != "" {
-				fields = append(fields, zap.String("odType", odType))
-			}
-		}
-		if q.Limit != 0 {
-			fields = append(fields, zap.Float64("limit", q.Limit))
-		}
-		if q.ExitRate > 0 && q.ExitRate < 1 {
-			fields = append(fields, zap.Float64("exitRate", q.ExitRate))
-		}
-		if q.OrderID != 0 {
-			fields = append(fields, zap.Int64("orderId", q.OrderID))
-		}
-		log.Warn("CloseOrders fail", fields...)
+		log.Warn("CloseOrders fail", q.GetZapFields(s)...)
 	}
 	return err
 }

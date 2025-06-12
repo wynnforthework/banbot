@@ -201,6 +201,64 @@ func (q *EnterReq) Clone() *EnterReq {
 	return res
 }
 
+func (q *EnterReq) GetZapFields(s *StratJob, fields ...zap.Field) []zap.Field {
+	dirt := "long"
+	if q.Short {
+		dirt = "short"
+	}
+	stgName := q.StratName
+	if stgName == "" && s != nil {
+		stgName = s.Strat.Name
+	}
+	fields = append(fields, zap.String("strat", stgName), zap.String("tag", q.Tag),
+		zap.String("dirt", dirt))
+	if s != nil {
+		fields = append(fields, zap.String("acc", s.Account),
+			zap.String("pair", s.Symbol.Symbol), zap.String("tf", s.TimeFrame))
+	}
+	if q.OrderType != core.OrderTypeEmpty {
+		odType, _ := core.OdTypeMap[q.OrderType]
+		if odType != "" {
+			fields = append(fields, zap.String("odType", odType))
+		}
+	}
+	if q.Limit != 0 {
+		fields = append(fields, zap.Float64("limit", q.Limit))
+	}
+	if q.CostRate > 0 && q.CostRate < 1 {
+		fields = append(fields, zap.Float64("costRate", q.CostRate))
+	}
+	if q.LegalCost > 0 {
+		fields = append(fields, zap.Float64("cost", q.LegalCost))
+	}
+	if q.Leverage > 0 {
+		fields = append(fields, zap.Float64("leverage", q.Leverage))
+	}
+	if q.Amount > 0 {
+		fields = append(fields, zap.Float64("amt", q.Amount))
+	}
+	if q.StopLossVal > 0 {
+		fields = append(fields, zap.Float64("slVal", q.StopLossVal))
+	} else if q.StopLoss > 0 {
+		fields = append(fields, zap.Float64("sl", q.StopLoss))
+	}
+	if q.TakeProfitVal > 0 {
+		fields = append(fields, zap.Float64("tpVal", q.TakeProfitVal))
+	} else if q.TakeProfit > 0 {
+		fields = append(fields, zap.Float64("tp", q.TakeProfit))
+	}
+	if q.StopBars > 0 {
+		fields = append(fields, zap.Int("stopBars", q.StopBars))
+	}
+	if q.ClientID != "" {
+		fields = append(fields, zap.String("clientId", q.ClientID))
+	}
+	if len(q.Infos) > 0 {
+		fields = append(fields, zap.Any("info", q.Infos))
+	}
+	return fields
+}
+
 func (q *ExitReq) Clone() *ExitReq {
 	res := &ExitReq{
 		Tag:        q.Tag,
@@ -217,6 +275,53 @@ func (q *ExitReq) Clone() *ExitReq {
 		Force:      q.Force,
 	}
 	return res
+}
+
+func (q *ExitReq) GetZapFields(s *StratJob, fields ...zap.Field) []zap.Field {
+	stgName := q.StratName
+	if stgName == "" && s != nil {
+		stgName = s.Strat.Name
+	}
+	fields = append(fields, zap.String("strat", stgName), zap.String("tag", q.Tag))
+	if s != nil {
+		fields = append(fields, zap.String("acc", s.Account),
+			zap.String("pair", s.Symbol.Symbol), zap.String("tf", s.TimeFrame))
+	}
+
+	if q.Dirt != 0 {
+		fields = append(fields, zap.Int("dirt", q.Dirt))
+	}
+	if q.EnterTag != "" {
+		fields = append(fields, zap.String("entTag", q.EnterTag))
+	}
+	if q.OrderType != core.OrderTypeEmpty {
+		odType, _ := core.OdTypeMap[q.OrderType]
+		if odType != "" {
+			fields = append(fields, zap.String("odType", odType))
+		}
+	}
+	if q.Limit != 0 {
+		fields = append(fields, zap.Float64("limit", q.Limit))
+	}
+	if q.ExitRate > 0 && q.ExitRate < 1 {
+		fields = append(fields, zap.Float64("exitRate", q.ExitRate))
+	}
+	if q.Amount > 0 {
+		fields = append(fields, zap.Float64("amt", q.Amount))
+	}
+	if q.OrderID != 0 {
+		fields = append(fields, zap.Int64("orderId", q.OrderID))
+	}
+	if q.UnFillOnly {
+		fields = append(fields, zap.Int("unFillOnly", 1))
+	}
+	if q.FilledOnly {
+		fields = append(fields, zap.Int("fillOnly", 1))
+	}
+	if q.Force {
+		fields = append(fields, zap.Int("force", 1))
+	}
+	return fields
 }
 
 func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
@@ -243,6 +348,19 @@ func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 		}
 		s.OrderNum = len(s.LongOrders) + len(s.ShortOrders)
 		s.EnteredNum = enteredNum
+	}
+	if core.LiveMode && !s.IsWarmUp {
+		// print warning before clear
+		for i, q := range s.Entrys {
+			fields := q.GetZapFields(s)
+			fields = append(fields, zap.Int("i", i))
+			log.Warn("ignore unhandle Entry", fields...)
+		}
+		for i, q := range s.Exits {
+			fields := q.GetZapFields(s)
+			fields = append(fields, zap.Int("i", i))
+			log.Warn("ignore unhandle Exit", fields...)
+		}
 	}
 	s.Entrys = nil
 	s.Exits = nil

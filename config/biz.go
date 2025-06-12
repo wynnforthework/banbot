@@ -156,13 +156,17 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 }
 
 func ParseConfig(path string) (*Config, *errs.Error) {
-	var res Config
 	fileData, err := os.ReadFile(ParsePath(path))
 	if err != nil {
 		return nil, errs.NewFull(core.ErrIOReadFail, err, "Read %s Fail", path)
 	}
+	return ParseYmlConfig(fileData, path)
+}
+
+func ParseYmlConfig(fileData []byte, path string) (*Config, *errs.Error) {
+	var res Config
 	var unpak map[string]interface{}
-	err = yaml.Unmarshal(fileData, &unpak)
+	err := yaml.Unmarshal(fileData, &unpak)
 	if err != nil {
 		return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "Unmarshal %s Fail", path)
 	}

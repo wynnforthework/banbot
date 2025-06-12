@@ -68,7 +68,7 @@ func regApiDev(api fiber.Router) {
 	api.Get("/bt_html", getBtHtml)
 	api.Get("/bt_strat_tree", getBtStratTree)
 	api.Get("/bt_strat_text", getBtStratText)
-	api.Get("/symbols", getSymbols)
+	api.Get("/symbols", GetSymbolsHandler)
 	api.Post("/data_tools", handleDataTools)
 	api.Get("/download", handleDownload)
 	api.Get("/compare_assets", getCompareAssets)
@@ -1135,14 +1135,16 @@ func getBtStratText(c *fiber.Ctx) error {
 	})
 }
 
-// getSymbols 获取交易品种列表
-func getSymbols(c *fiber.Ctx) error {
+// GetSymbolsHandler 获取交易品种列表
+func GetSymbolsHandler(c *fiber.Ctx) error {
 	type SymbolArgs struct {
-		Exchange string `query:"exchange"`
-		Market   string `query:"market"`
+		Exchange string `query:"exchange" validate:"required"`
+		Market   string `query:"market" validate:"required"`
 		Symbol   string `query:"symbol"`
+		Settle   string `query:"settle"`
 		Limit    int    `query:"limit"`
 		AfterID  int32  `query:"after_id"`
+		Short    bool   `query:"short"`
 	}
 
 	var args = new(SymbolArgs)
@@ -1157,7 +1159,7 @@ func getSymbols(c *fiber.Ctx) error {
 		return fmt.Errorf("invalid market: %s", args.Market)
 	}
 
-	if args.Limit <= 0 {
+	if args.Limit <= 0 && !args.Short {
 		args.Limit = 20
 	}
 
@@ -1178,11 +1180,22 @@ func getSymbols(c *fiber.Ctx) error {
 
 	// 过滤
 	var filtered []*orm.ExSymbol
-	for _, s := range allSymbols {
-		if args.Symbol != "" && !strings.Contains(strings.ToLower(s.Symbol), strings.ToLower(args.Symbol)) {
-			continue
+	if args.Symbol != "" || args.Settle != "" {
+		lowSymbol := strings.ToLower(args.Symbol)
+		for _, s := range allSymbols {
+			if lowSymbol != "" && !strings.Contains(strings.ToLower(s.Symbol), lowSymbol) {
+				continue
+			}
+			if args.Settle != "" && !strings.HasSuffix(s.Symbol, args.Settle) {
+				continue
+			}
+			filtered = append(filtered, s)
 		}
-		filtered = append(filtered, s)
+	} else {
+		filtered = make([]*orm.ExSymbol, 0, len(allSymbols))
+		for _, exs := range allSymbols {
+			filtered = append(filtered, exs)
+		}
 	}
 
 	// 按ID排序
@@ -1204,8 +1217,19 @@ func getSymbols(c *fiber.Ctx) error {
 	}
 
 	// 截取limit个
-	if len(filtered) > args.Limit {
+	if args.Limit > 0 && len(filtered) > args.Limit {
 		filtered = filtered[:args.Limit]
+	}
+
+	if args.Short {
+		dataMap := make(map[string]int32)
+		for _, exs := range filtered {
+			dataMap[exs.Symbol] = exs.ID
+		}
+		return c.JSON(fiber.Map{
+			"total": total,
+			"data":  dataMap,
+		})
 	}
 
 	return c.JSON(fiber.Map{
