@@ -202,7 +202,7 @@ func SetDbPath(key, path string) {
 	dbPathLock.Unlock()
 }
 
-func DbLite(src string, path string, write bool) (*sql.DB, *errs.Error) {
+func DbLite(src string, path string, write bool, timeoutMs int64) (*sql.DB, *errs.Error) {
 	dbPathLock.Lock()
 	defer dbPathLock.Unlock()
 	if target, ok := dbPathMap[path]; ok {
@@ -211,6 +211,9 @@ func DbLite(src string, path string, write bool) (*sql.DB, *errs.Error) {
 	openFlag := "mode=ro"
 	if write {
 		openFlag = "cache=shared&mode=rw"
+	}
+	if timeoutMs > 0 {
+		openFlag += fmt.Sprintf("&_busy_timeout=%d", timeoutMs)
 	}
 	var connStr = fmt.Sprintf("file:%s?%s", path, openFlag)
 	db, err_ := sql.Open("sqlite", connStr)

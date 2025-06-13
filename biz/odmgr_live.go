@@ -108,6 +108,9 @@ func newLiveOrderMgr(account string, callBack func(od *ormo.InOutOrder, isEnter 
 	} else {
 		panic("unsupport exchange for LiveOrderMgr: " + core.ExgName)
 	}
+	if exg.AfterCreateOrder == nil {
+		exg.AfterCreateOrder = logPutOrder
+	}
 	return res
 }
 
@@ -1073,6 +1076,7 @@ func (o *LiveOrderMgr) WatchMyTrades() {
 			o.isWatchMyTrade = false
 		}()
 		for trade := range out {
+			orm.AddDumpRow(orm.DumpWsMyTrade, trade.Symbol+trade.ID, trade)
 			if trade.State == banexg.OdStatusOpen {
 				continue
 			}
@@ -2453,4 +2457,12 @@ func StartLiveOdMgr() {
 		// Monitor leverage changes 监听杠杆倍数变化
 		odMgr.WatchLeverages()
 	}
+}
+
+func logPutOrder(arg *exg.PutOrderRes) *errs.Error {
+	if arg.Err != nil {
+		return arg.Err
+	}
+	orm.AddDumpRow(orm.DumpApiOrder, arg.Symbol+arg.Order.ID, arg)
+	return nil
 }

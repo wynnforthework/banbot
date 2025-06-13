@@ -1162,6 +1162,8 @@ func TestKLineConsistency(args []string) error {
 
 	gob.Register(banexg.Kline{})
 	gob.Register([]*orm.DumpRow{})
+	gob.Register(banexg.MyTrade{})
+	gob.Register(exg.PutOrderRes{})
 	dec := gob.NewDecoder(file)
 
 	core.SetRunMode(core.RunModeLive)
@@ -1279,16 +1281,28 @@ func TestKLineConsistency(args []string) error {
 			if row == nil {
 				continue
 			}
-			if row.Type != orm.DumpKline {
+			if row.Type == orm.DumpStartUp {
 				err = printStat()
 				if err != nil {
 					return err
 				}
 				dateStr := btime.ToDateStr(row.Time, core.DefaultDateFmt)
-				log.Info("receive other", zap.String("src", row.Type), zap.String("date", dateStr))
+				log.Info("bot start up", zap.String("date", dateStr))
 				gpKlines = make(map[string][]*banexg.Kline)
 				endMS = int64(0)
 				totalNum = 0
+				continue
+			} else if row.Type != orm.DumpKline {
+				dateStr := btime.ToDateStr(row.Time, core.DefaultDateFmt+".000")
+				valStr := "nil"
+				if row.Val != nil {
+					valStr, err = utils2.MarshalString(row.Val)
+				}
+				if err != nil {
+					fmt.Printf("%s %s Err:%v\n", dateStr, row.Type, err)
+				} else {
+					fmt.Printf("%s %s %v\n", dateStr, row.Type, valStr)
+				}
 				continue
 			}
 			var kline *banexg.Kline

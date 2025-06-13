@@ -8,7 +8,7 @@ import (
 )
 
 func Conn() (*Queries, *sql.DB, *errs.Error) {
-	db, err := orm.DbLite(orm.DbUI, core.DevDbPath, true)
+	db, err := orm.DbLite(orm.DbUI, core.DevDbPath, true, 5000)
 	if err != nil {
 		return nil, nil, err
 	}

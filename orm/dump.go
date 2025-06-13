@@ -3,6 +3,7 @@ package orm
 import (
 	"encoding/gob"
 	"github.com/banbox/banbot/btime"
+	"github.com/banbox/banbot/exg"
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/log"
 	"github.com/sasha-s/go-deadlock"
@@ -25,12 +26,16 @@ var (
 )
 
 const (
-	DumpKline   = "kline"
-	DumpStartUp = "startup"
+	DumpKline     = "kline"
+	DumpStartUp   = "startup"
+	DumpApiOrder  = "api_order"
+	DumpWsMyTrade = "ws_my_trade"
 )
 
 func SetDump(file *os.File) {
 	gob.Register(banexg.Kline{})
+	gob.Register(banexg.MyTrade{})
+	gob.Register(exg.PutOrderRes{})
 	dumpLock.Lock()
 	dumpFile = file
 	dumpEncoder = gob.NewEncoder(file)

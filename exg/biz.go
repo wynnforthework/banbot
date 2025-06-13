@@ -79,7 +79,11 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	if core.RunEnv == core.RunEnvTest {
 		options[banexg.OptEnv] = core.RunEnv
 	}
-	return bex.New(name, options)
+	exchange, err := bex.New(name, options)
+	if err != nil {
+		return exchange, err
+	}
+	return &BotExchange{BanExchange: exchange}, nil
 }
 
 func GetWith(name, market, contractType string) (banexg.BanExchange, *errs.Error) {

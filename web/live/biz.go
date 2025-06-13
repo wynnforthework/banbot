@@ -623,14 +623,14 @@ func getIncomes(c *fiber.Ctx) error {
 
 func postDelayEntry(c *fiber.Ctx) error {
 	type DelayArgs struct {
-		Secs int64 `json:"secs" validate:"required"`
+		Secs float64 `json:"secs"`
 	}
 	var data = new(DelayArgs)
 	if err := base.VerifyArg(c, data, base.ArgBody); err != nil {
 		return err
 	}
 	return wrapAccount(c, func(acc string) error {
-		untilMS := btime.UTCStamp() + data.Secs*1000
+		untilMS := btime.UTCStamp() + int64(data.Secs*1000)
 		core.NoEnterUntil[acc] = untilMS
 		return c.JSON(fiber.Map{
 			"allowTradeAt": untilMS,
