@@ -8,7 +8,7 @@ go 1.23.0
 
 require (
 	github.com/anyongjin/go-bayesopt v1.0.2
-	github.com/banbox/banexg v0.2.31-beta.1
+	github.com/banbox/banexg v0.2.31-beta.2
 	github.com/banbox/banta v0.3.2
 	github.com/c-bata/goptuna v0.9.0
 	github.com/dgraph-io/ristretto v0.2.0

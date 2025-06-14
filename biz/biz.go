@@ -66,6 +66,11 @@ func SetupComs(args *config.CmdArgs) *errs.Error {
 	if err != nil {
 		return err
 	}
+	if config.Mail != nil && config.Mail.Enable {
+		c := config.Mail
+		utils.SetMailSender(c.Host, c.Port, c.Username, c.Password)
+	}
+	config.LoadLangMessages()
 	err = utils.Setup()
 	if err != nil {
 		return err

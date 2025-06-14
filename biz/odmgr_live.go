@@ -560,6 +560,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 					if err != nil {
 						return openOds, err
 					}
+					openOds = utils.RemoveFromArr(openOds, iod, 1)
 				}
 				continue
 			}
@@ -710,7 +711,6 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 	} else {
 		// Close long or short 平多或平空
 		var part *ormo.InOutOrder
-		var res []*ormo.InOutOrder
 		for _, iod := range ods {
 			if iod.Short != isShort || iod.RealEnterMS() > odTime {
 				continue
@@ -731,7 +731,6 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 				if err != nil {
 					return ods, err
 				}
-				res = append(res, iod)
 			}
 			if amount <= AmtDust {
 				break

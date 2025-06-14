@@ -1,11 +1,9 @@
 package dev
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"github.com/sasha-s/go-deadlock"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -161,7 +159,7 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 	// 处理标准输出
 	go func() {
 		defer wg.Done()
-		scanner := readScanner(stdOut)
+		scanner := utils2.ReadScanner(stdOut)
 		prefix := "uiPrg: "
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -182,7 +180,7 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 	// 处理错误输出
 	go func() {
 		defer wg.Done()
-		scanner := readScanner(stdErr)
+		scanner := utils2.ReadScanner(stdErr)
 		for scanner.Scan() {
 			b.WriteString(scanner.Text())
 			b.WriteString("\n")
@@ -210,13 +208,6 @@ func runBtCommand(cmd *exec.Cmd, task *ormu.Task) error {
 	}
 
 	return err
-}
-
-func readScanner(out io.ReadCloser) *bufio.Scanner {
-	scanner := bufio.NewScanner(out)
-	buf := make([]byte, 1024*1024)
-	scanner.Buffer(buf, 1024*1024)
-	return scanner
 }
 
 // 处理进度更新

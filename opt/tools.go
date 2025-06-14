@@ -5,16 +5,16 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/banbox/banbot/core"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
@@ -1011,4 +1011,194 @@ func BuildBtResult(args *config.CmdArgs) *errs.Error {
 	}
 	_, err = calcBtResult(orders, config.WalletAmounts, outDir)
 	return err
+}
+
+func BacktestToCompare() {
+	runArgs := make([]string, 0, 4)
+	runArgs = append(runArgs, "backtest")
+	btCfg := config.BTInLive
+	cfg := config.Data
+	account := config.DefAcc
+	if btCfg.Acount != "" && len(cfg.Accounts) > 0 {
+		accCfg, _ := cfg.Accounts[btCfg.Acount]
+		cfg.Accounts = make(map[string]*config.AccountConfig)
+		if accCfg != nil {
+			cfg.Accounts[btCfg.Acount] = accCfg
+			account = btCfg.Acount
+		}
+	}
+	posList, err2 := exg.Default.FetchAccountPositions(nil, map[string]interface{}{
+		banexg.ParamAccount: account,
+	})
+	if err2 != nil {
+		log.Error("FetchAccountPositions fail", zap.Error(err2))
+		return
+	}
+	liveOpens, lock := ormo.GetOpenODs(account)
+	if len(liveOpens) == 0 && len(posList) == 0 {
+		return
+	}
+	cfgData, err2 := cfg.DumpYaml()
+	if err2 != nil {
+		log.Error("dump config fail in BacktestToCompare", zap.Error(err2))
+		return
+	}
+	outPath := filepath.Join(config.GetDataDir(), "backtest", utils.MD5(cfgData)[:10])
+	err := utils.EnsureDir(outPath, 0755)
+	if err != nil {
+		log.Error("create backtest dir fail", zap.Error(err))
+		return
+	}
+	cfgPath := filepath.Join(outPath, "config.yml")
+	err = utils2.WriteFile(cfgPath, cfgData)
+	if err != nil {
+		log.Error("write backtest config.yml fail", zap.Error(err))
+		return
+	}
+	runArgs = append(runArgs, "-config", cfgPath, "-out", outPath)
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Error("get Executable fail", zap.Error(err))
+		return
+	}
+	curMS := btime.UTCStamp()
+	startMS := max(core.StartAt, curMS-86400000*30)
+	startStr := strconv.FormatInt(startMS, 10)
+	endStr := strconv.FormatInt(curMS, 10)
+	runArgs = append(runArgs, "-timeend", endStr, "-timestart", startStr)
+	cmd := exec.Command(exePath, runArgs...)
+	err = cmd.Run()
+	if err != nil {
+		log.Error("BacktestToCompare run fail", zap.Error(err))
+		return
+	}
+	outGobPath := filepath.Join(outPath, "orders.gob")
+	log.Info("bt_in_live done", zap.String("at", outGobPath))
+	btOds, err2 := ormo.LoadOrdersGob(outGobPath)
+	if err2 != nil {
+		log.Error("load bt orders fail", zap.Error(err2))
+		return
+	}
+	btOpens := make(map[string]*ormo.InOutOrder)
+	btAll := make(map[string]*ormo.InOutOrder)
+	localAmts := make(map[string]float64)
+	for _, od := range btOds {
+		keyAlign := od.KeyAlign()
+		if od.ExitTag == core.ExitTagBotStop {
+			btOpens[keyAlign] = od
+			key := od.Symbol + "_long"
+			if od.Short {
+				key = od.Symbol + "_short"
+			}
+			cum, _ := localAmts[key]
+			localAmts[key] = cum + od.Exit.Filled
+		}
+		btAll[keyAlign] = od
+	}
+	matchOpens := make([]string, 0, len(btOpens))
+	btMore := make(map[string]int64)
+	liveMore := make(map[string]int64)
+	liveAmts := make(map[string]float64)
+	lock.Lock()
+	for _, od := range liveOpens {
+		odKey := od.KeyAlign()
+		btOd, _ := btOpens[odKey]
+		if btOd != nil {
+			matchOpens = append(matchOpens, odKey)
+			delete(btOpens, odKey)
+		} else {
+			btOd, _ = btAll[odKey]
+			if btOd != nil {
+				liveMore[odKey] = btOd.ExitAt
+			} else {
+				liveMore[odKey] = 0
+			}
+		}
+		key := od.Symbol + "_long"
+		if od.Short {
+			key = od.Symbol + "_short"
+		}
+		cum, _ := liveAmts[key]
+		liveAmts[key] = cum + od.HoldAmount()
+	}
+	lock.Unlock()
+	for _, od := range btOpens {
+		btMore[od.KeyAlign()] = od.RealEnterMS()
+	}
+	exgMatch, exgDiff := compareLocalWithExg(posList, localAmts, liveAmts)
+	sendPosCompareReport(matchOpens, btMore, liveMore, exgMatch, exgDiff)
+}
+
+func compareLocalWithExg(posList []*banexg.Position, localAmts, liveAmts map[string]float64) (map[string]float64, map[string][3]float64) {
+	matchSizes := make(map[string]float64)
+	diffSizes := make(map[string][3]float64)
+	for _, p := range posList {
+		key := p.Symbol + "_" + p.Side
+		localAmt, _ := localAmts[key]
+		liveAmt, _ := liveAmts[key]
+		diffRate := math.Abs(p.Contracts-localAmt) / max(p.Contracts, localAmt)
+		if diffRate < 0.05 {
+			matchSizes[key] = p.Contracts
+		} else {
+			diffSizes[key] = [3]float64{p.Contracts, localAmt, liveAmt}
+		}
+	}
+	return matchSizes, diffSizes
+}
+
+func sendPosCompareReport(matchOpens []string, btMore, liveMore map[string]int64, exgMatch map[string]float64, exgDiff map[string][3]float64) {
+	lang := config.ShowLangCode
+	title := config.Name + " " + config.GetLangMsg(lang, "backtest_regular", "定期回测")
+	liveBadOpen := config.GetLangMsg(lang, "live_bad_open", "实盘误开")
+	liveNoOpen := config.GetLangMsg(lang, "live_no_open", "实盘未开")
+	liveBadPos := config.GetLangMsg(lang, "live_bad_pos", "仓位不符")
+	allMatch := true
+	if len(btMore) == 0 && len(liveMore) == 0 && len(exgDiff) == 0 {
+		title += config.GetLangMsg(lang, "normal", "正常")
+	} else {
+		allMatch = false
+		title += config.GetLangMsg(lang, "abnormal", "异常")
+		title += fmt.Sprintf(", %s: %d %s: %d",
+			liveBadOpen, len(liveMore), liveNoOpen, len(btMore),
+		)
+		if len(exgDiff) > 0 {
+			title += fmt.Sprintf(", %s: %d/%d", liveBadPos, len(exgDiff), len(exgMatch)+len(exgDiff))
+		}
+	}
+	var b strings.Builder
+	b.WriteString(liveBadOpen + ":\n")
+	for key, stamp := range liveMore {
+		b.WriteString(fmt.Sprintf("\t%s should close at %s\n", key, btime.ToDateStr(stamp, core.DefaultDateFmt)))
+	}
+	b.WriteString("\n" + liveNoOpen + ":\n")
+	for key, stamp := range btMore {
+		b.WriteString(fmt.Sprintf("\t%s should open at %s\n", key, btime.ToDateStr(stamp, core.DefaultDateFmt)))
+	}
+	liveOpenMatch := config.GetLangMsg(lang, "live_open_match", "开仓匹配")
+	b.WriteString("\n" + liveOpenMatch + ":\n")
+	for _, key := range matchOpens {
+		b.WriteString(fmt.Sprintf("\t%s\n", key))
+	}
+	b.WriteString("\n\n" + liveBadPos + ":\n")
+	for key, amts := range exgDiff {
+		b.WriteString(fmt.Sprintf("\t%s in exg: %.6f but in local: %.6f, and in live: %.6f\n",
+			key, amts[0], amts[1], amts[2]))
+	}
+	livePosMatch := config.GetLangMsg(lang, "live_pos_match", "交易所持仓匹配")
+	b.WriteString("\n" + livePosMatch + ":\n")
+	for key, amt := range exgMatch {
+		b.WriteString(fmt.Sprintf("\t%s with amt: %.6f\n", key, amt))
+	}
+	if len(config.BTInLive.MailTo) > 0 {
+		for _, user := range config.BTInLive.MailTo {
+			err := utils.SendEmailFrom("", user, title, b.String())
+			if err != nil {
+				log.Error("send mail fail", zap.String("to", user), zap.Error(err))
+			}
+		}
+	} else if !allMatch {
+		log.Error(title, zap.String("detail", b.String()))
+	} else {
+		log.Info(title)
+	}
 }

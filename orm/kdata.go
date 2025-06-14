@@ -22,8 +22,9 @@ import (
 )
 
 var (
-	adjMap = map[int32][]*AdjInfo{} // Cache of the target's weighting factor. 标的的复权因子缓存
-	amLock = deadlock.Mutex{}
+	adjMap         = map[int32][]*AdjInfo{} // Cache of the target's weighting factor. 标的的复权因子缓存
+	amLock         = deadlock.Mutex{}
+	DebugDownKLine = false
 )
 
 /*
@@ -72,7 +73,9 @@ func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeF
 	}
 	for since > 0 && until > since {
 		curSize := int((until - since) / tfMSecs)
-		data, err := exchange.FetchOHLCV(pair, timeFrame, since, curSize, nil)
+		data, err := exchange.FetchOHLCV(pair, timeFrame, since, curSize, map[string]interface{}{
+			banexg.ParamDebug: DebugDownKLine,
+		})
 		if err != nil {
 			return err
 		}

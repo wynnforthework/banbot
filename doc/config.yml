@@ -27,6 +27,10 @@ bt_net_cost: 15 # 回测时下单延迟，可用于模拟滑点，单位：秒�
 relay_sim_unfinish: false  # 交易新品种时(回测/实盘)，是否从开始时间未平仓订单接力开始交易
 order_bar_max: 500  # 查找开始时间未平仓订单向前模拟最大bar数量
 ntp_lang_code: none  # ntp真实时间同步，默认none不启用，支持的代码：zh-CN, zh-HK, zh-TW, ja-JP, ko-KR, zh-SG, global(表示全球ntp服务器：google、apple、facebook...)
+bt_in_live:  # 实盘时定期回测与实盘对比是否正常
+  cron: ''  # 回测的cron表达式间隔
+  account: ''  # 回测基于的账户
+  mail_to: [] # 回测结果邮件通知
 wallet_amounts:  # 钱包余额，用于回测
   USDT: 10000
 stake_currency: [USDT, TUSD]  # 限定只交易定价币为这些的交易对
@@ -163,6 +167,12 @@ rpc_channels:  # 支持的全部rpc渠道
     retry_num: 0  # 重试次数
     retry_delay: 1000  # 重试间隔
     disable: true  # 是否禁用
+mail:  # 发送邮件配置
+  enable: false
+  host: smtp.example.com
+  port: 465
+  username: user1
+  password: pwd
 webhook:  # 发送消息的配置
   entry:  # 入场消息
     content: "{name} {action}\n标的：{pair} {timeframe}\n信号：{strategy}  {enter_tag}\n价格：{price:.5f}\n花费：{value:.2f}"

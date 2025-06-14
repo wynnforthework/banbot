@@ -208,12 +208,14 @@ func DbLite(src string, path string, write bool, timeoutMs int64) (*sql.DB, *err
 	if target, ok := dbPathMap[path]; ok {
 		path = target
 	}
-	openFlag := "mode=ro"
-	if write {
-		openFlag = "cache=shared&mode=rw"
-	}
+	openFlag := ""
 	if timeoutMs > 0 {
 		openFlag += fmt.Sprintf("&_busy_timeout=%d", timeoutMs)
+	}
+	if write {
+		openFlag += "&cache=shared&mode=rw"
+	} else {
+		openFlag += "&mode=ro"
 	}
 	var connStr = fmt.Sprintf("file:%s?%s", path, openFlag)
 	db, err_ := sql.Open("sqlite", connStr)

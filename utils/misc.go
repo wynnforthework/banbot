@@ -11,6 +11,7 @@ import (
 	"github.com/anyongjin/cron"
 	"github.com/banbox/banbot/core"
 	"github.com/felixge/fgprof"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -540,4 +541,11 @@ readCache:
 		}
 	}
 	return result
+}
+
+func ReadScanner(out io.ReadCloser) *bufio.Scanner {
+	scanner := bufio.NewScanner(out)
+	buf := make([]byte, 1024*1024)
+	scanner.Buffer(buf, 1024*1024)
+	return scanner
 }

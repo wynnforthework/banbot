@@ -323,6 +323,14 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	if NTPLangCode == "" {
 		NTPLangCode = "none"
 	}
+	ShowLangCode = c.ShowLangCode
+	if ShowLangCode == "" {
+		ShowLangCode = "zh-CN"
+	}
+	BTInLive = c.BTInLive
+	if BTInLive == nil {
+		BTInLive = &BtInLiveConfig{}
+	}
 	OrderBarMax = c.OrderBarMax
 	if OrderBarMax == 0 {
 		OrderBarMax = 500
@@ -398,6 +406,10 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	}
 	APIServer = c.APIServer
 	RPCChannels = c.RPCChannels
+	Mail = c.Mail
+	if Mail == nil {
+		Mail = &MailConfig{}
+	}
 	Webhook = c.Webhook
 	return nil
 }
@@ -743,6 +755,8 @@ func (c *Config) Desensitize() *Config {
 			res.RPCChannels[channelName] = resChannel
 		}
 	}
+
+	res.Mail = nil
 
 	// 处理API服务器配置
 	if c.APIServer != nil {
@@ -1116,4 +1130,68 @@ func MergeAccounts() map[string]*AccountConfig {
 		DefAcc: merge,
 	}
 	return bakAccs
+}
+
+func ReadLangFile(lang, name string) (string, error) {
+	resDir := GetDataDir()
+	path := filepath.Join(resDir, lang, name)
+	if !utils2.Exists(path) {
+		path2 := filepath.Join(resDir, "en-US", name)
+		if !utils2.Exists(path2) {
+			return "", fmt.Errorf("lang file not found: %s", path)
+		}
+		path = path2
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(content), nil
+}
+
+var (
+	langMsgs = map[string]map[string]string{}
+)
+
+func LoadLangMessages() {
+	langCodes := []string{"zh-CN", "en-US"}
+	for _, lang := range langCodes {
+		text, err := ReadLangFile(lang, "messages.json")
+		if err != nil {
+			log.Error("load lang message fail", zap.String("lang", lang), zap.Error(err))
+			continue
+		}
+		var data = make(map[string]string)
+		err = utils.UnmarshalString(text, &data, utils.JsonNumDefault)
+		if err != nil {
+			log.Error("parse lang message fail", zap.String("lang", lang), zap.Error(err))
+		} else {
+			for code, val := range data {
+				langMap, ok := langMsgs[code]
+				if !ok {
+					langMap = make(map[string]string)
+					langMsgs[code] = langMap
+				}
+				langMap[lang] = val
+			}
+		}
+	}
+}
+
+func GetLangMsg(lang, code, defVal string) string {
+	langMap, ok := langMsgs[code]
+	if ok {
+		text, ok := langMap[lang]
+		if ok {
+			return text
+		} else {
+			for _, text = range langMap {
+				return text
+			}
+		}
+	}
+	if defVal != "" {
+		return defVal
+	}
+	return code
 }

@@ -151,6 +151,12 @@ func downKlineTo(sess *orm.Queries, sid int32, tf string, oldEndMS, toEndMS int6
 	}
 	var newEndMS = oldEndMS
 	var saveNum int
+	if tf == "1h" {
+		orm.DebugDownKLine = true
+		defer func() {
+			orm.DebugDownKLine = false
+		}()
+	}
 	for tryCount <= 5 {
 		tryCount += 1
 		saveNum, err = sess.DownOHLCV2DB(exchange, exs, tf, oldEndMS, toEndMS, nil)

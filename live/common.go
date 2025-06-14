@@ -221,6 +221,15 @@ func CronCheckTriggerOds() {
 	}
 }
 
+func CronBacktestInLive() {
+	if config.BTInLive != nil && config.BTInLive.Cron != "" {
+		_, err := core.Cron.Add(config.BTInLive.Cron, opt.BacktestToCompare)
+		if err != nil {
+			log.Error("add CronBacktestInLive fail", zap.Error(err))
+		}
+	}
+}
+
 func StartLoopBalancePositions() {
 	for account := range config.Accounts {
 		updateAccBalance(account)

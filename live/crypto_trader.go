@@ -185,6 +185,8 @@ func (t *CryptoTrader) startJobs() {
 	CronKlineSummary()
 	// 每分钟定时输出策略Outputs信息到BanDataDir/logs/[name]_[strat].log
 	CronDumpStratOutputs()
+	// 实盘中定期回测对比
+	CronBacktestInLive()
 	if core.EnvReal {
 		// Check if the limit order submission is triggered at 15th secs of every minute
 		// 每分钟第15s检查是否触发限价单提交

@@ -34,7 +34,9 @@ var (
 	BTNetCost        float64 // Order placement delay during backtesting, simulated slippage, unit seconds 回测时下单延迟，模拟滑点，单位秒
 	RelaySimUnFinish bool    // 交易新品种时(回测/实盘)，是否从开始时间未平仓订单接力开始交易
 	NTPLangCode      string  // NTP真实时间同步所用langCode，默认none不启用
-	OrderBarMax      int     // 查找开始时间未平仓订单向前模拟最大bar数量
+	ShowLangCode     string
+	BTInLive         *BtInLiveConfig
+	OrderBarMax      int // 查找开始时间未平仓订单向前模拟最大bar数量
 	MaxOpenOrders    int
 	MaxSimulOpen     int
 	WalletAmounts    map[string]float64
@@ -59,6 +61,7 @@ var (
 	SpiderAddr       string
 	APIServer        *APIServerConfig
 	RPCChannels      map[string]map[string]interface{}
+	Mail             *MailConfig
 	Webhook          map[string]map[string]string
 
 	outSaved = false // Docker外部传入配置是否已保存到config.local.yml
@@ -105,6 +108,8 @@ type Config struct {
 	BTNetCost        float64                           `yaml:"bt_net_cost,omitempty" mapstructure:"bt_net_cost"`
 	RelaySimUnFinish bool                              `yaml:"relay_sim_unfinish,omitempty" mapstructure:"relay_sim_unfinish"`
 	NTPLangCode      string                            `yaml:"ntp_lang_code,omitempty" mapstructure:"ntp_lang_code"`
+	ShowLangCode     string                            `yaml:"show_lang_code,omitempty" mapstructure:"show_lang_code"`
+	BTInLive         *BtInLiveConfig                   `yaml:"bt_in_live,omitempty" mapstructure:"bt_in_live"`
 	OrderBarMax      int                               `yaml:"order_bar_max,omitempty" mapstructure:"order_bar_max"`
 	MaxOpenOrders    int                               `yaml:"max_open_orders,omitempty" mapstructure:"max_open_orders"`
 	MaxSimulOpen     int                               `yaml:"max_simul_open,omitempty" mapstructure:"max_simul_open"`
@@ -131,6 +136,7 @@ type Config struct {
 	SpiderAddr       string                            `yaml:"spider_addr,omitempty" mapstructure:"spider_addr"`
 	APIServer        *APIServerConfig                  `yaml:"api_server,omitempty" mapstructure:"api_server"`
 	RPCChannels      map[string]map[string]interface{} `yaml:"rpc_channels,omitempty" mapstructure:"rpc_channels"`
+	Mail             *MailConfig                       `yaml:"mail,omitempty" mapstructure:"mail"`
 	Webhook          map[string]map[string]string      `yaml:"webhook,omitempty" mapstructure:"webhook"`
 }
 
@@ -153,6 +159,12 @@ type RunPolicyConfig struct {
 	defs          map[string]*core.Param
 	Score         float64
 	Index         int // index in run_policy array
+}
+
+type BtInLiveConfig struct {
+	Cron   string   `yaml:"cron" mapstructure:"cron"`
+	Acount string   `yaml:"account" mapstructure:"account"`
+	MailTo []string `yaml:"mail_to" mapstructure:"mail_to"`
 }
 
 type StratPerfConfig struct {
@@ -207,6 +219,14 @@ type TelegramChannel struct {
 	MsgTypes []string `yaml:"msg_types,flow" mapstructure:"msg_types"`
 	Token    string   `yaml:"token" mapstructure:"token"`
 	Channel  string   `yaml:"channel" mapstructure:"channel"`
+}
+
+type MailConfig struct {
+	Enable   bool   `yaml:"enable" mapstructure:"enable"`
+	Host     string `yaml:"host" mapstructure:"host"`
+	Port     int    `yaml:"port" mapstructure:"port"`
+	Username string `yaml:"username" mapstructure:"username"`
+	Password string `yaml:"password" mapstructure:"password"`
 }
 
 /** ********************************** Symbol FILTER标的筛选器  ******************************** */
