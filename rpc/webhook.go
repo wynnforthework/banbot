@@ -3,6 +3,7 @@ package rpc
 import (
 	"bytes"
 	"fmt"
+	"github.com/banbox/banbot/btime"
 	"io"
 	"net/http"
 	"strings"
@@ -22,6 +23,9 @@ type WebHook struct {
 	webHookItem
 	name       string
 	wg         sync.WaitGroup
+	msgArr     []map[string]string // 待发送列表
+	retryCnt   int                 // 重试次数，发送成功时重置
+	lastSentAt int64               // 上次发送时间戳
 	doSendMsgs func([]map[string]string) []map[string]string
 	Config     map[string]interface{}
 	MsgTypes   map[string]bool
@@ -29,14 +33,15 @@ type WebHook struct {
 	Queue      chan map[string]string
 }
 
+// 这是rpc_channels中的通用参数
 type webHookItem struct {
 	MsgTypesRaw []string `mapstructure:"msg_types"`
 	AccountsRaw []string `mapstructure:"accounts"`
 	Keywords    []string `mapstructure:"keywords"`
-	RetryNum    int      `mapstructure:"retry_num"`   // Retry times 重试次数
-	RetryDelay  int      `mapstructure:"retry_delay"` // Retry interval 重试间隔
-	Disable     bool     `mapstructure:"disable"`     // 是否禁用
-	ChlType     string   `mapstructure:"type"`        // Channel Type 渠道类型
+	RetryDelay  int      `mapstructure:"retry_delay"`   // Retry interval 重试间隔
+	MinIntvSecs int      `mapstructure:"min_intv_secs"` // 最小发送间隔(秒)
+	Disable     bool     `mapstructure:"disable"`       // 是否禁用
+	ChlType     string   `mapstructure:"type"`          // Channel Type 渠道类型
 }
 
 const (
@@ -156,35 +161,45 @@ func (h *WebHook) ConsumeForever() {
 		if !ok {
 			break
 		}
-		var cache = []map[string]string{first}
-	readCache:
-		for {
-			select {
-			case item, ok := <-h.Queue:
-				if !ok {
-					break readCache
-				}
-				cache = append(cache, item)
-			default:
-				break readCache
+		h.msgArr = append(h.msgArr, first)
+		h.doSend()
+	}
+}
+
+func (h *WebHook) readCache() {
+	for {
+		select {
+		case item, ok := <-h.Queue:
+			if !ok {
+				return
 			}
-		}
-		if len(cache) > 0 {
-			h.doSendRetry(cache)
+			h.msgArr = append(h.msgArr, item)
+		default:
+			return
 		}
 	}
 }
 
-func (h *WebHook) doSendRetry(msgList []map[string]string) {
-	attempts, totalNum := 0, len(msgList)
-	for len(msgList) > 0 && attempts < h.RetryNum+1 {
-		if attempts > 0 {
-			core.Sleep(time.Duration(h.RetryDelay) * time.Second)
-		}
-		attempts += 1
-		msgList = h.doSendMsgs(msgList)
+func (h *WebHook) doSend() {
+	minGapSecs := h.MinIntvSecs
+	if h.retryCnt > 0 {
+		minGapSecs = max(minGapSecs, h.RetryDelay)
 	}
-	h.wg.Add(0 - totalNum)
+	sleepMSecs := int64(minGapSecs)*1000 - (btime.UTCStamp() - h.lastSentAt)
+	if sleepMSecs > 0 {
+		time.Sleep(time.Duration(sleepMSecs) * time.Millisecond)
+	}
+	h.readCache()
+	beforeNum := len(h.msgArr)
+	h.msgArr = h.doSendMsgs(h.msgArr)
+	okNum := beforeNum - len(h.msgArr)
+	if okNum > 0 {
+		h.retryCnt = 0
+		h.lastSentAt = btime.UTCStamp()
+		h.wg.Add(0 - okNum)
+	} else {
+		h.retryCnt += 1
+	}
 }
 
 func request(method, url, body string) *banexg.HttpRes {

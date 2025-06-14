@@ -203,24 +203,6 @@ type UserConfig struct {
 
 /** ********************************** RPC Channel Configuration 渠道配置 ******************************** */
 
-type WeWorkChannel struct {
-	Enable     bool     `yaml:"enable" mapstructure:"enable"`
-	Type       string   `yaml:"type" mapstructure:"type"`
-	MsgTypes   []string `yaml:"msg_types,flow" mapstructure:"msg_types"`
-	AgentId    string   `yaml:"agentid,omitempty" mapstructure:"agentid"`
-	CorpId     string   `yaml:"corpid,omitempty" mapstructure:"corpid"`
-	CorpSecret string   `yaml:"corpsecret,omitempty" mapstructure:"corpsecret"`
-	Keywords   string   `yaml:"keywords" mapstructure:"keywords"`
-}
-
-type TelegramChannel struct {
-	Enable   bool     `yaml:"enable" mapstructure:"enable"`
-	Type     string   `yaml:"type" mapstructure:"type"`
-	MsgTypes []string `yaml:"msg_types,flow" mapstructure:"msg_types"`
-	Token    string   `yaml:"token" mapstructure:"token"`
-	Channel  string   `yaml:"channel" mapstructure:"channel"`
-}
-
 type MailConfig struct {
 	Enable   bool   `yaml:"enable" mapstructure:"enable"`
 	Host     string `yaml:"host" mapstructure:"host"`

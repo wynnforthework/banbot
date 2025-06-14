@@ -155,18 +155,23 @@ database:  # 数据库配置
   url: postgresql://postgres:123@[127.0.0.1]:5432/bantd3
 spider_addr: 127.0.0.1:6789  # 爬虫监听的端口和地址
 rpc_channels:  # 支持的全部rpc渠道
+  mail1:
+    type: mail
+    disable: true  # 是否禁用
+    msg_types: [exception]  # 允许发送的消息类型
+    accounts: []  # 允许的账户，为空允许所有
+    keywords: []  # 消息过滤关键词
+    retry_delay: 1000  # 重试间隔
+    min_intv_secs: 0 #  最小发送间隔(秒)
+    # 以上是通用字段
+    touser: 'example@abc.com'
   wx_notify:  # rpc的渠道名
+    type: wework  # rpc类型
+    disable: true  # 是否禁用
     corp_id: ww0f524655066bfb7f
     agent_id: '1000005'
     corp_secret: b4LSTYRiMkfT_1Cxx4xc1JFYB9K-Mu3rGI8MbJ4iBiw
     touser: '@all'
-    type: wework  # rpc类型
-    msg_types: [exception]  # 允许发送的消息类型
-    accounts: []  # 允许的账户，为空允许所有
-    keywords: []  # 消息过滤关键词
-    retry_num: 0  # 重试次数
-    retry_delay: 1000  # 重试间隔
-    disable: true  # 是否禁用
 mail:  # 发送邮件配置
   enable: false
   host: smtp.example.com

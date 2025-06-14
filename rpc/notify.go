@@ -57,6 +57,8 @@ func initWebHooks() *errs.Error {
 		switch chlType {
 		case "wework":
 			channel = NewWeWork(name, item)
+		case "mail", "email":
+			channel = NewEmail(name, item)
 		default:
 			return errs.NewMsg(core.ErrBadConfig, "RPCChannel not support: %v", chlType)
 		}
