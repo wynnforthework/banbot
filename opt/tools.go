@@ -1013,6 +1013,7 @@ func BuildBtResult(args *config.CmdArgs) *errs.Error {
 	return err
 }
 
+// BacktestToCompare 实盘时定期回测对比持仓
 func BacktestToCompare() {
 	runArgs := make([]string, 0, 4)
 	runArgs = append(runArgs, "backtest")
@@ -1036,6 +1037,7 @@ func BacktestToCompare() {
 	}
 	liveOpens, lock := ormo.GetOpenODs(account)
 	if len(liveOpens) == 0 && len(posList) == 0 {
+		// 没有持仓中订单，没有仓位，跳过回测
 		return
 	}
 	cfgData, err2 := cfg.DumpYaml()
@@ -1043,8 +1045,13 @@ func BacktestToCompare() {
 		log.Error("dump config fail in BacktestToCompare", zap.Error(err2))
 		return
 	}
-	outPath := filepath.Join(config.GetDataDir(), "backtest", utils.MD5(cfgData)[:10])
-	err := utils.EnsureDir(outPath, 0755)
+	// 固定回测保存在某个目录
+	outPath := filepath.Join(config.GetDataDir(), "backtest", "bt_in_live_"+config.Name)
+	err := os.RemoveAll(outPath)
+	if err != nil {
+		log.Error("BacktestToCompare clear fail", zap.Error(err))
+	}
+	err = utils.EnsureDir(outPath, 0755)
 	if err != nil {
 		log.Error("create backtest dir fail", zap.Error(err))
 		return
@@ -1072,6 +1079,7 @@ func BacktestToCompare() {
 		log.Error("BacktestToCompare run fail", zap.Error(err))
 		return
 	}
+	// 读取回测后订单记录
 	outGobPath := filepath.Join(outPath, "orders.gob")
 	log.Info("bt_in_live done", zap.String("at", outGobPath))
 	btOds, err2 := ormo.LoadOrdersGob(outGobPath)
@@ -1079,6 +1087,7 @@ func BacktestToCompare() {
 		log.Error("load bt orders fail", zap.Error(err2))
 		return
 	}
+	// 解析回测所有订单和未平仓订单
 	btOpens := make(map[string]*ormo.InOutOrder)
 	btAll := make(map[string]*ormo.InOutOrder)
 	localAmts := make(map[string]float64)
@@ -1095,6 +1104,7 @@ func BacktestToCompare() {
 		}
 		btAll[keyAlign] = od
 	}
+	// 将实盘未平仓订单和回测订单对比
 	matchOpens := make([]string, 0, len(btOpens))
 	btMore := make(map[string]int64)
 	liveMore := make(map[string]int64)
@@ -1125,7 +1135,9 @@ func BacktestToCompare() {
 	for _, od := range btOpens {
 		btMore[od.KeyAlign()] = od.RealEnterMS()
 	}
+	// 和交易所仓位对比
 	exgMatch, exgDiff := compareLocalWithExg(posList, localAmts, liveAmts)
+	// 发送对比邮件报告
 	sendPosCompareReport(matchOpens, btMore, liveMore, exgMatch, exgDiff)
 }
 
