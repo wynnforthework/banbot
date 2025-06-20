@@ -81,7 +81,6 @@ args: NoDefault, Configs, TimeRange, MaxPoolSize, StakeAmount, StakePct, TimeFra
 func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 	args.Init()
 	var paths []string
-	var res Config
 	if !args.NoDefault {
 		dataDir := GetDataDir()
 		if dataDir == "" {
@@ -123,6 +122,19 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 			paths = append(paths, args.Configs...)
 		}
 	}
+	res, err2 := ParseConfigs(paths, showLog)
+	if err2 != nil {
+		return nil, err2
+	}
+	err := res.Apply(args)
+	if err != nil {
+		return nil, errs.New(errs.CodeRunTime, err)
+	}
+	return res, nil
+}
+
+func ParseConfigs(paths []string, showLog bool) (*Config, *errs.Error) {
+	var res Config
 	var merged = make(map[string]interface{})
 	for _, path := range paths {
 		if showLog {
@@ -147,10 +159,6 @@ func GetConfig(args *CmdArgs, showLog bool) (*Config, *errs.Error) {
 	err := mapstructure.Decode(merged, &res)
 	if err != nil {
 		return nil, errs.NewFull(errs.CodeUnmarshalFail, err, "decode Config Fail")
-	}
-	err = res.Apply(args)
-	if err != nil {
-		return nil, errs.New(errs.CodeRunTime, err)
 	}
 	return &res, nil
 }

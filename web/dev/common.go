@@ -91,7 +91,7 @@ func executeBtTask(task *ormu.Task) {
 	// 构建命令
 	cmdArgsStr := "backtest " + task.Args
 	cmd := exec.Command(exePath, strings.Split(cmdArgsStr, " ")...)
-	cmd.Env = append(cmd.Env, "BanDataDir="+config.GetDataDir())
+	cmd.Env = append(os.Environ(), "BanDataDir="+config.GetDataDir())
 	cmd.Env = append(cmd.Env, "BanStratDir="+config.GetStratDir())
 
 	// 添加到运行列表

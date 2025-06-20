@@ -139,7 +139,7 @@ func postLogin(c *fiber.Ctx) error {
 		if expHours == 0 {
 			expHours = 168
 		}
-		token, err := createAuthToken(u.Username, config.APIServer.JWTSecretKey, expHours)
+		token, err := CreateAuthToken(u.Username, config.APIServer.JWTSecretKey, expHours)
 		if err != nil {
 			return err
 		}
@@ -166,13 +166,13 @@ type AuthClaims struct {
 	jwt.RegisteredClaims
 }
 
-func createAuthToken(user string, secret string, expHours float64) (string, error) {
+func CreateAuthToken(user string, secret string, expHours float64) (string, error) {
 	now := bntp.Now()
 	claims := AuthClaims{
 		User: user,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(expHours*60) * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(expHours) * time.Hour)),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -187,18 +187,21 @@ func AuthMiddleware(secret string) fiber.Handler {
 		}
 		tokenArr := strings.Split(tokenStr, " ")
 		if len(tokenArr) != 2 || tokenArr[0] != "Bearer" {
-			return fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid token1")
 		}
 		token, err := jwt.Parse(tokenArr[1], func(token *jwt.Token) (interface{}, error) {
 			// Validate the algorithm
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+				return nil, fiber.NewError(fiber.StatusUnauthorized, "invalid token2")
 			}
 			return []byte(secret), nil
 		})
 
 		if err != nil || !token.Valid {
-			return fiber.NewError(fiber.StatusUnauthorized, "invalid token")
+			if err != nil {
+				log.Warn("invalid token3", zap.String("token", tokenStr), zap.Error(err))
+			}
+			return fiber.NewError(fiber.StatusUnauthorized, "invalid token3")
 		}
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			user := claims["user"]

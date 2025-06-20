@@ -97,18 +97,29 @@ database:
   url: postgresql://postgres:123@[127.0.0.1]:5432/ban
 spider_addr: 127.0.0.1:6789
 rpc_channels:
+  mail1:
+    type: mail
+    disable: true
+    msg_types: [exception]
+    accounts: []
+    keywords: []
+    retry_delay: 1000
+    min_intv_secs: 0
+    touser: 'example@abc.com'
   wx_notify:
+    type: wework
+    disable: true
     corp_id: ww0f12345678b7e
     agent_id: '1000002'
     corp_secret: b123456789_1Cx1234YB9K-MuVW1234
     touser: '@all'
-    type: wework
     msg_types: [exception]
-    accounts: []
-    keywords: []
-    retry_num: 0
-    retry_delay: 1000
-    disable: true
+mail:
+  enable: false
+  host: smtp.example.com
+  port: 465
+  username: user1@example.com
+  password: pwd
 webhook:
   entry:
     content: "{name} {action}\nSymbol: {pair} {timeframe}\nTag: {strategy}  {enter_tag}\nPrice: {price:.5f}\nCost: {value:.2f}"

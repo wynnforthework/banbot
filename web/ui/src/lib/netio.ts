@@ -87,6 +87,10 @@ async function accApiRequest(method: ApiType, path: string,
     });
   }
   const accShot = get(acc);
+  if(!accShot.account || !accShot.token){
+    console.error(new Error('invalid account'), accShot);
+    return {code: 401, msg: `invalid account: ${accShot}`};
+  }
   const url = `${accShot.url}/api/bot${path}`;
   const headers = {
     'X-Account': accShot.account, 

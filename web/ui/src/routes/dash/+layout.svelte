@@ -15,6 +15,15 @@
   let collapsed = $state(false);
   let showAddBot = $state(false);
   $site.apiReady = false;
+
+  // 检查是否在iframe中
+  function checkIfInIframe() {
+    try {
+      $site.isInIframe = window.self !== window.top;
+    } catch (e) {
+      $site.isInIframe = true;
+    }
+  }
   
   let menuItems = $state([
     { path: localizeHref('/dash/board'), icon: 'home', text: m.home() },
@@ -47,6 +56,7 @@
   }
 
   onMount(async () => {
+    checkIfInIframe();
     loadAccounts().then(() => {
       if($acc.env === 'dry_run'){
         menuItems.splice(5, 1);
@@ -93,6 +103,7 @@
   </aside> 
 	
 	<div class="flex-1 flex flex-col bg-base-100">
+    {#if !$site.isInIframe}
     <header class="navbar bg-base-100 shadow-sm h-12 px-3 border-b border-base-200">
       <div class="navbar-start">
         <button class="btn btn-ghost btn-sm btn-circle hover:bg-base-200 transition-colors" onclick={toggleCollapse}>
@@ -127,9 +138,20 @@
         <button class="btn btn-ghost btn-sm normal-case text-sm hover:bg-base-200" onclick={() => showAddBot = true}>{m.add_bot()}</button>
       </div>
     </header>
+    {/if}
 		
-		<main class="flex-1 flex flex-col">
+		<main class="flex-1 flex flex-col relative">
 			{@render children()}
+
+			<!-- 悬浮菜单控制按钮 - 仅在iframe模式下显示 -->
+			{#if $site.isInIframe}
+			<button
+				class="fixed bottom-4 left-4 z-50 btn btn-circle btn-primary shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
+				onclick={toggleCollapse}
+			>
+				<Icon name={collapsed ? 'double-right' : 'double-left'} class="w-5 h-5" />
+			</button>
+			{/if}
 		</main>
 	</div>
 </div>

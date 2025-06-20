@@ -10,6 +10,7 @@ class SiteState {
   heavyName: string = ''
   heavyProgress: number = 0
   loading: boolean = false
+  isInIframe: boolean = false // 是否在iframe中
 }
 
 export const site = writable(new SiteState())

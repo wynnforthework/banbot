@@ -165,7 +165,6 @@ rpc_channels:  # ${m.cfg_rpc_channels()}
     msg_types: [exception]  # ${m.cfg_rpc_msg_types()}
     accounts: []  # ${m.cfg_rpc_account()}
     keywords: []  # ${m.cfg_rpc_keyword()}
-    retry_num: 0
     retry_delay: 1000
     disable: true
 webhook:  # ${m.cfg_webhook()}

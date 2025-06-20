@@ -401,8 +401,7 @@ func handleBuild(c *fiber.Ctx) error {
 
 	// 准备编译命令
 	cmd := exec.Command("go", "build", "-o", outputPath)
-	env := os.Environ()
-	env = append(env, fmt.Sprintf("GOARCH=%s", targetArch))
+	env := append(os.Environ(), fmt.Sprintf("GOARCH=%s", targetArch))
 	env = append(env, fmt.Sprintf("GOOS=%s", targetOS))
 	cmd.Env = env
 
