@@ -334,6 +334,13 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 			log.Error("save order in SyncExgOrders fail", zap.String("acc", o.Account), zap.String("key", od.Key()), zap.Error(err))
 		}
 	}
+	if !banexg.IsContract(core.Market) {
+		// 非合约市场，无法获取仓位，直接返回
+		lock.Lock()
+		oldList := utils2.ValsOfMap(openOds)
+		lock.Unlock()
+		return oldList, nil, nil, nil
+	}
 	// Get exchange positions
 	// 获取交易所仓位
 	posList, err := exchange.FetchAccountPositions(nil, map[string]interface{}{
