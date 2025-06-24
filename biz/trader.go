@@ -131,6 +131,9 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 			return err
 		}
 		defer conn.Close()
+		numStr := fmt.Sprintf("%d/%d", len(curOrders), len(openOds))
+		log.Info("onAccountKline", zap.String("acc", account), zap.String("pair", bar.Symbol),
+			zap.String("tf", bar.TimeFrame), zap.String("odNum", numStr))
 	}
 	for _, job := range jobs {
 		job.IsWarmUp = isWarmup

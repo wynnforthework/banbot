@@ -2,6 +2,7 @@ package ormo
 
 import (
 	"database/sql"
+	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
@@ -9,6 +10,7 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
+	"maps"
 )
 
 var (
@@ -59,6 +61,18 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *deadlock.Mutex) {
 		val = make(map[int64]*InOutOrder)
 		accOpenODs[account] = val
 	}
+	if core.LiveMode {
+		curMS := btime.UTCStamp()
+		stamp, _ := accSyncStamps[account]
+		if curMS-stamp > odSyncIntvMS {
+			// 超过同步间隔，强制同步一次
+			accSyncStamps[account] = curMS
+			err := loadOpenODs(account, val)
+			if err != nil {
+				log.Error("loadOpenODs fail", zap.String("acc", account), zap.Error(err))
+			}
+		}
+	}
 	lock, ok2 := lockOpenMap[account]
 	if !ok2 {
 		lock = &deadlock.Mutex{}
@@ -66,6 +80,43 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *deadlock.Mutex) {
 	}
 	mOpenLock.Unlock()
 	return val, lock
+}
+
+func loadOpenODs(account string, odMap map[int64]*InOutOrder) *errs.Error {
+	sess, conn, err := Conn(orm.DbTrades, false)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	taskId := GetTaskID(account)
+	orders, err := sess.GetOrders(GetOrdersArgs{
+		TaskID: taskId,
+		Status: 1,
+	})
+	if err != nil {
+		return err
+	}
+	var missKeys = map[int64]string{}
+	var dump = maps.Clone(odMap)
+	for _, od := range orders {
+		if _, ok := odMap[od.ID]; !ok {
+			odMap[od.ID] = od
+			missKeys[od.ID] = od.Key()
+		} else {
+			delete(dump, od.ID)
+		}
+	}
+	var dupKeys = make(map[int64]string)
+	if len(dump) > 0 {
+		for key, od := range dump {
+			dupKeys[key] = od.Key()
+		}
+	}
+	if len(missKeys) > 0 || len(dupKeys) > 0 {
+		log.Error("loadOpenODs diff", zap.String("acc", account), zap.Any("dup", dupKeys),
+			zap.Any("miss", missKeys))
+	}
+	return nil
 }
 
 func GetTriggerODs(account string) (map[string]map[int64]*InOutOrder, *deadlock.Mutex) {
