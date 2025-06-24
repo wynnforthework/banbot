@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/utils"
+	"maps"
 	"math"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/btime"
@@ -1013,6 +1015,9 @@ func BuildBtResult(args *config.CmdArgs) *errs.Error {
 	return err
 }
 
+var odNextMS = make(map[string]int64)
+var odNextLock sync.Mutex
+
 // BacktestToCompare 实盘时定期回测对比持仓
 func BacktestToCompare() {
 	runArgs := make([]string, 0, 4)
@@ -1028,6 +1033,9 @@ func BacktestToCompare() {
 			account = btCfg.Acount
 		}
 	}
+	if !banexg.IsContract(core.Market) {
+		return
+	}
 	posList, err2 := exg.Default.FetchAccountPositions(nil, map[string]interface{}{
 		banexg.ParamAccount: account,
 	})
@@ -1035,8 +1043,18 @@ func BacktestToCompare() {
 		log.Error("FetchAccountPositions fail", zap.Error(err2))
 		return
 	}
+	odNextLock.Lock()
+	defer odNextLock.Unlock()
+	curMS := btime.UTCStamp()
 	liveOpens, lock := ormo.GetOpenODs(account)
-	if len(liveOpens) == 0 && len(posList) == 0 {
+	minStartMS := curMS
+	lock.Lock()
+	openNum := len(liveOpens)
+	for _, od := range liveOpens {
+		minStartMS = min(minStartMS, od.RealEnterMS())
+	}
+	lock.Unlock()
+	if openNum == 0 && len(posList) == 0 {
 		// 没有持仓中订单，没有仓位，跳过回测
 		return
 	}
@@ -1068,8 +1086,7 @@ func BacktestToCompare() {
 		log.Error("get Executable fail", zap.Error(err))
 		return
 	}
-	curMS := btime.UTCStamp()
-	startMS := max(core.StartAt, curMS-86400000*30)
+	startMS := min(minStartMS, max(core.StartAt, curMS-86400000*30))
 	startStr := strconv.FormatInt(startMS, 10)
 	endStr := strconv.FormatInt(curMS, 10)
 	runArgs = append(runArgs, "-timeend", endStr, "-timestart", startStr)
@@ -1109,11 +1126,17 @@ func BacktestToCompare() {
 	btMore := make(map[string]int64)
 	liveMore := make(map[string]int64)
 	liveAmts := make(map[string]float64)
+	dupNexts := maps.Clone(odNextMS)
 	lock.Lock()
 	for _, od := range liveOpens {
 		odKey := od.KeyAlign()
+		tfMSecs := int64(utils2.TFToSecs(od.Timeframe) * 1000)
+		odNext, _ := odNextMS[odKey]
+		odNextMS[odKey] = utils2.AlignTfMSecs(curMS, tfMSecs) + tfMSecs
 		btOd, _ := btOpens[odKey]
-		if btOd != nil {
+		delete(dupNexts, odKey)
+		if btOd != nil || curMS < odNext || curMS-od.RealEnterMS() < tfMSecs {
+			// 已匹配到，或尚未到下次可检查时间，或刚开仓，认为匹配
 			matchOpens = append(matchOpens, odKey)
 			delete(btOpens, odKey)
 		} else {
@@ -1132,6 +1155,10 @@ func BacktestToCompare() {
 		liveAmts[key] = cum + od.HoldAmount()
 	}
 	lock.Unlock()
+	// 清理已完成订单的key
+	for key := range dupNexts {
+		delete(odNextMS, key)
+	}
 	for _, od := range btOpens {
 		btMore[od.KeyAlign()] = od.RealEnterMS()
 	}
