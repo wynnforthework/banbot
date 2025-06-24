@@ -330,7 +330,8 @@ func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 	if s.IsWarmUp {
 		s.LongOrders = nil
 		s.ShortOrders = nil
-	} else if s.OrderNum > 0 {
+	} else if s.OrderNum > 0 || core.LiveMode {
+		// 针对实盘，重启后OrderNum状态重置，本地未平仓订单无法更新到StratJob中，这里每次都检查
 		s.LongOrders = nil
 		s.ShortOrders = nil
 		enteredNum := 0

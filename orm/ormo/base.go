@@ -113,8 +113,11 @@ func loadOpenODs(account string, odMap map[int64]*InOutOrder) *errs.Error {
 		}
 	}
 	if len(missKeys) > 0 || len(dupKeys) > 0 {
-		log.Error("loadOpenODs diff", zap.String("acc", account), zap.Any("dup", dupKeys),
-			zap.Any("miss", missKeys))
+		if btime.UTCStamp()-core.StartAt > 180000 {
+			// 启动超过3分钟，才打印日志，避免启动时的噪声
+			log.Error("loadOpenODs diff", zap.String("acc", account), zap.Any("dup", dupKeys),
+				zap.Any("miss", missKeys))
+		}
 	}
 	return nil
 }
