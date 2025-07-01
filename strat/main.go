@@ -384,11 +384,15 @@ func markStratJob(tf, polID string, exs *orm.ExSymbol, dirt int, accLimits accSt
 	for acc, jobs := range AccJobs {
 		envJobs, ok := jobs[envKey]
 		if !ok {
-			return errs.NewMsg(errs.CodeRunTime, "`envKey` for StratJob not found: %s", envKey)
+			// 对于多账户且品种数不一样时，忽略未配置的账户
+			log.Info("AccJobs not found, skip", zap.String("acc", acc), zap.String("env", envKey))
+			continue
 		}
 		job, ok := envJobs[polID]
 		if !ok {
-			return errs.NewMsg(errs.CodeRunTime, "`name` for StratJob not found: %s %s", polID, envKey)
+			log.Info("StratJob not found, skip", zap.String("acc", acc), zap.String("env", envKey),
+				zap.String("strat", polID))
+			continue
 		}
 		if accLimits.tryAdd(acc, polID) {
 			job.MaxOpenShort = job.Strat.EachMaxShort

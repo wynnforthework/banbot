@@ -37,7 +37,6 @@ func CronRefreshPairs(dp data.IProvider) {
 			if curMS-lastRefreshMS < config.MinPairCronGapMS {
 				return
 			}
-			log.Info("CronRefreshPairs")
 			lastRefreshMS = curMS
 			err := opt.RefreshPairJobs(dp, true, false, nil)
 			if err != nil {
