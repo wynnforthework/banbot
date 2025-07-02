@@ -3,6 +3,7 @@
   import * as m from '$lib/paraglide/messages';
   import { getAccApi } from '$lib/netio';
   import { fmtDateStr, curTZ } from '$lib/dateutil';
+  import { acc } from '$lib/dash/store';
 
   interface Income {
     tranId: string;
@@ -15,7 +16,7 @@
   }
 
   let searchData = $state({
-    intype: 'REFERRAL_KICKBACK',
+    intype: 'REALIZED_PNL',
     symbol: '',
     startTime: '',
     limit: '30',
@@ -31,13 +32,20 @@
     assets: ''
   });
 
-  const incomeTypes = [
+  const baseIncomeTypes = [
     { value: 'REALIZED_PNL', label: m.realized_pnl() },
     { value: 'FUNDING_FEE', label: m.funding_fee() },
     { value: 'COMMISSION', label: m.commission() },
     { value: 'REFERRAL_KICKBACK', label: m.referral_kickback() },
     { value: 'COMMISSION_REBATE', label: m.commission_rebate() }
   ];
+
+  // Filter out REFERRAL_KICKBACK for spot markets
+  const incomeTypes = $derived(
+    $acc.market === 'spot'
+      ? baseIncomeTypes.filter(type => type.value !== 'REFERRAL_KICKBACK')
+      : baseIncomeTypes
+  );
 
   function calcAssets(items: Income[]): string {
     const data: Record<string, number> = {};

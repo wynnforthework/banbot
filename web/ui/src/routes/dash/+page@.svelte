@@ -136,6 +136,7 @@
         user_name: pendingAuthData.username,
         password: '', // 不需要密码
         env: pendingAuthData.env,
+        market: pendingAuthData.market,
         name: pendingAuthData.name,
         token: pendingAuthData.token,
         accounts: pendingAuthData.accounts
@@ -167,7 +168,8 @@
             account: account,
             role: role,
             token: ticket.token || '',
-            env: ticket.env || ''
+            env: ticket.env || '',
+            market: ticket.market || ''
           });
         }
       }

@@ -7,6 +7,7 @@ export interface BotAccount{
   role: string
   token: string
   env?: string
+  market?: string
   status?: string
   dayDoneNum?: number
   dayDonePft?: number
@@ -22,6 +23,7 @@ export interface BotTicket{
   user_name: string
   password: string
   env: string
+  market: string
   name?: string // bot name
   token?: string
   accounts?: Record<string, string>

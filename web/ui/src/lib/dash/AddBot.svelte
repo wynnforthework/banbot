@@ -17,6 +17,7 @@
     user_name: '',
     password: '',
     env: '',
+    market: '',
     token: '',
     accounts: {},
   };
@@ -60,6 +61,7 @@
         model.name = data.name;
         model.token = data.token;
         model.env = data.env;
+        model.market = data.market;
         model.accounts = data.accounts || {};
         const oldNum = $save.tickets.filter(bot => bot.url === model.url && bot.user_name === model.user_name).length;
         const info = $state.snapshot(model);

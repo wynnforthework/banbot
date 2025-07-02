@@ -2,6 +2,9 @@ package live
 
 import (
 	"errors"
+	"strings"
+	"time"
+
 	"github.com/banbox/banbot/biz"
 	"github.com/banbox/banbot/core"
 	"github.com/banbox/banbot/orm"
@@ -10,8 +13,6 @@ import (
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/orm/ormo"
@@ -155,6 +156,7 @@ func postLogin(c *fiber.Ctx) error {
 			"name":     config.Name,
 			"token":    token,
 			"env":      core.RunEnv,
+			"market":   core.Market,
 			"accounts": u.AccRoles,
 		})
 	}

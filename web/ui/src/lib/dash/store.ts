@@ -68,7 +68,8 @@ export async function loadBotAccounts(bot: BotTicket, request: boolean = false):
       account: account,
       role: role,
       token: bot.token || '',
-      env: bot.env || ''
+      env: bot.env || '',
+      market: bot.market || ''
     };
     if (request) {
       if(allowApi){
