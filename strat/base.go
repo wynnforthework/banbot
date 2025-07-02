@@ -514,6 +514,22 @@ func (s *StratJob) GetOrderNum(dirt float64) int {
 	}
 }
 
+func (s *StratJob) GetAvgCostPrice(odList ...*ormo.InOutOrder) float64 {
+	if len(odList) == 0 {
+		return 0
+	}
+	totalCost := float64(0)
+	totalAmt := float64(0)
+	for _, od := range odList {
+		totalCost += od.EnterCost()
+		totalAmt += od.Enter.Filled
+	}
+	if totalAmt == 0 {
+		return 0
+	}
+	return totalCost / totalAmt
+}
+
 func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTrigger) {
 	if s.GetOrderNum(dirt) == 0 {
 		return
