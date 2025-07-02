@@ -108,6 +108,7 @@
   });
 </script>
 
+{#if $acc.env !== 'dry_run'}
 <div class="flex flex-col gap-4">
   <!-- Search Form -->
   <div class="card bg-base-100">
@@ -218,3 +219,16 @@
     </div>
   </div>
 </div>
+{:else}
+  <div class="flex flex-col items-center justify-center min-h-[400px] text-center">
+    <div class="text-base-content/60">
+      <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+      </svg>
+      <h3 class="text-lg font-medium mb-2">DryRun Mode</h3>
+      <p class="text-sm text-base-content/50 max-w-md">
+        Rebate information is not available in dry_run mode as no real exchange transactions occur.
+      </p>
+    </div>
+  </div>
+{/if}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as m from '$lib/paraglide/messages';
   import { getAccApi, postAccApi } from '$lib/netio';
+  import { acc } from '$lib/dash/store';
 
   let currentTool = $state('download_history');
   let searchData = $state({
@@ -57,6 +58,7 @@
   }
 </script>
 
+{#if $acc.env !== 'dry_run'}
 <div class="flex gap-4 p-4 min-h-screen">
   <!-- Left Menu -->
   <div class="w-[260px]">
@@ -147,3 +149,16 @@
     </div>
   </div>
 </div>
+{:else}
+  <div class="flex flex-col items-center justify-center min-h-[400px] text-center">
+    <div class="text-base-content/60">
+      <svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+      </svg>
+      <h3 class="text-lg font-medium mb-2">DryRun Mode</h3>
+      <p class="text-sm text-base-content/50 max-w-md">
+        Trading tools are not available in dry_run mode as they interact with real exchange data and operations.
+      </p>
+    </div>
+  </div>
+{/if}

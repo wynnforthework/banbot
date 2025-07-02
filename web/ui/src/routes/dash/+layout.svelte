@@ -59,7 +59,10 @@
     checkIfInIframe();
     loadAccounts().then(() => {
       if($acc.env === 'dry_run'){
-        menuItems.splice(5, 1);
+        // Remove rebate page (index 5) and tools page (index 7)
+        // Note: Remove in reverse order to maintain correct indices
+        menuItems.splice(7, 1); // Remove tools page
+        menuItems.splice(5, 1); // Remove rebate page
       }
       $site.apiHost = $acc.url;
       $site.apiReady = true;

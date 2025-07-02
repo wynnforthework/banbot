@@ -10,6 +10,7 @@
   import type { InOutOrder, BanExgOrder, Position } from '$lib/order';
   import {getFirstValid} from "$lib/common";
   import { pagination } from '$lib/Snippets.svelte';
+  import { acc } from '$lib/dash/store';
 
   let tabName = $state('bot'); // bot/exchange/position
   let banodList = $state<InOutOrder[]>([]);
@@ -229,27 +230,29 @@
     <!-- Tab Menu -->
     <div class="flex justify-between items-center">
       <div class="tabs tabs-boxed bg-base-200/50 p-1 rounded-md">
-        <button 
+        <button
           class="tab tab-sm transition-all duration-200 px-4 {tabName === 'bot' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
           onclick={() => tabName = 'bot'}
         >
           {m.bot_orders()}
         </button>
-        <button 
-          class="tab tab-sm transition-all duration-200 px-4 {tabName === 'exchange' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
-          onclick={() => tabName = 'exchange'}
-        >
-          {m.exchange_orders()}
-        </button>
-        <button 
-          class="tab tab-sm transition-all duration-200 px-4 {tabName === 'position' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
-          onclick={() => {
-            tabName = 'position';
-            loadData(1);
-          }}
-        >
-          {m.exchange_positions()}
-        </button>
+        {#if $acc.env !== 'dry_run'}
+          <button
+            class="tab tab-sm transition-all duration-200 px-4 {tabName === 'exchange' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
+            onclick={() => tabName = 'exchange'}
+          >
+            {m.exchange_orders()}
+          </button>
+          <button
+            class="tab tab-sm transition-all duration-200 px-4 {tabName === 'position' ? 'tab-active bg-primary/90 text-primary-content' : 'hover:bg-base-300'}"
+            onclick={() => {
+              tabName = 'position';
+              loadData(1);
+            }}
+          >
+            {m.exchange_positions()}
+          </button>
+        {/if}
       </div>
 
       <div class="flex gap-2 items-center">
@@ -386,7 +389,7 @@
             {/each}
           </tbody>
         </table>
-      {:else if tabName === 'exchange'}
+      {:else if tabName === 'exchange' && $acc.env !== 'dry_run'}
         <table class="table table-sm">
           <thead>
             <tr>
@@ -423,7 +426,7 @@
             {/each}
           </tbody>
         </table>
-      {:else}
+      {:else if tabName === 'position' && $acc.env !== 'dry_run'}
         <table class="table table-sm">
           <thead>
             <tr>
@@ -479,8 +482,10 @@
 
 <!-- Modals -->
 <InOutOrderDetail bind:show={showOdDetail} order={selectedOrder} editable={(selectedOrder?.status ?? 0) < 4 } />
-<ExgOrderDetail bind:show={showExOdDetail} order={selectedExgOrder} />
-<ExgPositionDetail bind:show={showExgPosDetail} pos={selectedExgPos} />
+{#if $acc.env !== 'dry_run'}
+  <ExgOrderDetail bind:show={showExOdDetail} order={selectedExgOrder} />
+  <ExgPositionDetail bind:show={showExgPosDetail} pos={selectedExgPos} />
+{/if}
 
 <Modal title={m.open_order()} bind:show={showOpenOrder} width={800} buttons={[]}>
   <div class="space-y-4 p-4">
@@ -563,56 +568,58 @@
   </div>
 </Modal>
 
-<Modal title={m.close_position()} bind:show={showCloseExg} width={800} buttons={[]}>
-  <div class="space-y-4 p-4">
-    <fieldset class="fieldset">
-      <label class="label" for="symbol">{m.pair()}</label>
-      <input id="symbol" type="text" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.symbol} disabled />
-    </fieldset>
-
-    <fieldset class="fieldset">
-      <label class="label" for="amount">{m.close_amount()}</label>
-      <input id="amount" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.amount} step="0.00000001" />
-    </fieldset>
-
-    <fieldset class="fieldset">
-      <label class="label" for="percent">{closeExgPos.percent}%</label>
-      <input id="percent" type="range" min="0" max="100" class="range range-primary range-sm" bind:value={closeExgPos.percent} 
-        onchange={() => onPosAmountChg(closeExgPos.percent)} />
-    </fieldset>
-
-    <fieldset class="fieldset">
-      <label class="label">{m.order_type()}</label>
-      <div class="flex gap-4 flex-1">
-        <label class="label cursor-pointer">
-          <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="market" />
-          <span class="ml-2">{m.market_order()}</span>
-        </label>
-        <label class="label cursor-pointer">
-          <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="limit" />
-          <span class="ml-2">{m.limit_order()}</span>
-        </label>
-      </div>
-    </fieldset>
-
-    {#if closeExgPos.orderType === 'limit'}
+{#if $acc.env !== 'dry_run'}
+  <Modal title={m.close_position()} bind:show={showCloseExg} width={800} buttons={[]}>
+    <div class="space-y-4 p-4">
       <fieldset class="fieldset">
-        <label class="label" for="limitPrice">{m.price()}</label>
-        <input id="limitPrice" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.price} step="0.00000001" />
+        <label class="label" for="symbol">{m.pair()}</label>
+        <input id="symbol" type="text" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.symbol} disabled />
       </fieldset>
-    {/if}
 
-    <div class="flex justify-end mt-4">
-      <button 
-        class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" 
-        disabled={!closeExgPos.symbol || !closeExgPos.amount}
-        onclick={() => closeExgPosition(false)}
-      >
-        {#if closingExgPos}
-          <span class="loading loading-spinner"></span>
-        {/if}
-        {m.save()}
-      </button>
+      <fieldset class="fieldset">
+        <label class="label" for="amount">{m.close_amount()}</label>
+        <input id="amount" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.amount} step="0.00000001" />
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label" for="percent">{closeExgPos.percent}%</label>
+        <input id="percent" type="range" min="0" max="100" class="range range-primary range-sm" bind:value={closeExgPos.percent}
+          onchange={() => onPosAmountChg(closeExgPos.percent)} />
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label">{m.order_type()}</label>
+        <div class="flex gap-4 flex-1">
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="market" />
+            <span class="ml-2">{m.market_order()}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={closeExgPos.orderType} value="limit" />
+            <span class="ml-2">{m.limit_order()}</span>
+          </label>
+        </div>
+      </fieldset>
+
+      {#if closeExgPos.orderType === 'limit'}
+        <fieldset class="fieldset">
+          <label class="label" for="limitPrice">{m.price()}</label>
+          <input id="limitPrice" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={closeExgPos.price} step="0.00000001" />
+        </fieldset>
+      {/if}
+
+      <div class="flex justify-end mt-4">
+        <button
+          class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none"
+          disabled={!closeExgPos.symbol || !closeExgPos.amount}
+          onclick={() => closeExgPosition(false)}
+        >
+          {#if closingExgPos}
+            <span class="loading loading-spinner"></span>
+          {/if}
+          {m.save()}
+        </button>
+      </div>
     </div>
-  </div>
-</Modal>
+  </Modal>
+{/if}
