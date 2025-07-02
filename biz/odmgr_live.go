@@ -316,6 +316,17 @@ func (o *LiveOrderMgr) SyncExgOrders() ([]*ormo.InOutOrder, []*ormo.InOutOrder, 
 		if od.Status >= ormo.InOutStatusFullExit {
 			continue
 		}
+		if od.Enter == nil {
+			err = sess.DelOrder(od)
+			fields := []zap.Field{zap.String("acc", o.Account), zap.String("od", od.Key())}
+			if err != nil {
+				fields = append(fields, zap.Error(err))
+				log.Error("del order fail", fields...)
+			} else {
+				log.Warn("del no enter order", fields...)
+			}
+			continue
+		}
 		if od.Enter.OrderID != "" {
 			lastOrderMS = max(lastOrderMS, od.RealEnterMS(), od.RealExitMS())
 		}
