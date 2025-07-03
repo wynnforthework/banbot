@@ -3,6 +3,9 @@ package strat
 import (
 	"flag"
 	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
 	"github.com/banbox/banbot/core"
@@ -16,8 +19,6 @@ import (
 	utils2 "github.com/banbox/banexg/utils"
 	ta "github.com/banbox/banta"
 	"go.uber.org/zap"
-	"sort"
-	"strings"
 )
 
 /*
@@ -253,6 +254,7 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 	for envKey := range Envs {
 		if _, ok := envKeys[envKey]; !ok {
 			delete(Envs, envKey)
+			delete(TmpEnvs, envKey)
 		}
 	}
 	// 从pairTfs中确认哪些要恢复

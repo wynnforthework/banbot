@@ -12,6 +12,7 @@ import (
 var (
 	Versions    = make(map[string]int)                             // stratName: int 策略版本号
 	Envs        = make(map[string]*ta.BarEnv)                      // pair_tf: BarEnv
+	TmpEnvs     = make(map[string]*ta.BarEnv)                      // pair_tf: BarEnv
 	AccJobs     = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID]StratJob
 	AccInfoJobs = make(map[string]map[string]map[string]*StratJob) // account: pair_tf: [stratID_pair]StratJob 额外订阅
 	PairStrats  = make(map[string]map[string]*TradeStrat)          // pair:[stratID]TradeStrat 所有的订阅策略，注意有些策略对象虽然Name相同但不是同一个实例
@@ -22,6 +23,7 @@ var (
 	LastBatchMS = int64(0)               // timeMS The timestamp of the last batch execution is only used for backtesting 上次批量执行的时间戳，仅用于回测
 
 	lockInfoJobs deadlock.Mutex
+	lockTmpEnv   deadlock.Mutex
 
 	accOdSubs = map[string][]FnOdChange{} // acc: listeners List of subscription order status change events 订阅订单状态变化事件列表
 	lockOdSub deadlock.Mutex

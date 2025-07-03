@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"github.com/sasha-s/go-deadlock"
 	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/sasha-s/go-deadlock"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -325,6 +326,7 @@ func ResetVars() {
 	ormo.HistODs = make([]*ormo.InOutOrder, 0)
 	ormo.ResetVars()
 	strat.Envs = make(map[string]*ta.BarEnv)
+	strat.TmpEnvs = make(map[string]*ta.BarEnv)
 	strat.AccJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.AccInfoJobs = make(map[string]map[string]map[string]*strat.StratJob)
 	strat.PairStrats = make(map[string]map[string]*strat.TradeStrat)
@@ -349,6 +351,7 @@ type VarsBackup struct {
 	OdBooks       map[string]*banexg.OrderBook
 	HistODs       []*ormo.InOutOrder
 	Envs          map[string]*ta.BarEnv
+	TmpEnvs       map[string]*ta.BarEnv
 	AccJobs       map[string]map[string]map[string]*strat.StratJob
 	AccInfoJobs   map[string]map[string]map[string]*strat.StratJob
 	PairStrats    map[string]map[string]*strat.TradeStrat
@@ -376,6 +379,7 @@ func BackupVars() *VarsBackup {
 		OdBooks:       core.OdBooks,
 		HistODs:       ormo.HistODs,
 		Envs:          strat.Envs,
+		TmpEnvs:       strat.TmpEnvs,
 		AccJobs:       strat.AccJobs,
 		AccInfoJobs:   strat.AccInfoJobs,
 		PairStrats:    strat.PairStrats,
@@ -406,6 +410,7 @@ func RestoreVars(backup *VarsBackup) {
 	core.OdBooks = backup.OdBooks
 	ormo.HistODs = backup.HistODs
 	strat.Envs = backup.Envs
+	strat.TmpEnvs = backup.TmpEnvs
 	strat.AccJobs = backup.AccJobs
 	strat.AccInfoJobs = backup.AccInfoJobs
 	strat.PairStrats = backup.PairStrats

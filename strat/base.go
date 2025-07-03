@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
+
+	utils2 "github.com/banbox/banexg/utils"
 
 	"github.com/banbox/banbot/btime"
 	"github.com/banbox/banbot/config"
@@ -13,6 +16,7 @@ import (
 	"github.com/banbox/banexg"
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
+	ta "github.com/banbox/banta"
 	"go.uber.org/zap"
 )
 
@@ -528,6 +532,43 @@ func (s *StratJob) GetAvgCostPrice(odList ...*ormo.InOutOrder) float64 {
 		return 0
 	}
 	return totalCost / totalAmt
+}
+
+func (s *StratJob) GetTmpEnv(stamp int64, o, h, l, c, v, i float64) *ta.BarEnv {
+	envKey := strings.Join([]string{s.Symbol.Symbol, s.TimeFrame}, "_")
+	lockTmpEnv.Lock()
+	e, ok := TmpEnvs[envKey]
+	if !ok {
+		e = s.Env.Clone()
+		TmpEnvs[envKey] = e
+	}
+	lockTmpEnv.Unlock()
+	if e.TimeStop < stamp {
+		// update on new data
+		barMs := utils2.AlignTfMSecs(stamp, e.TFMSecs)
+		if barMs > e.TimeStart && barMs == s.Env.TimeStop {
+			// enter new kline
+			e = s.Env.Clone()
+			lockTmpEnv.Lock()
+			TmpEnvs[envKey] = e
+			lockTmpEnv.Unlock()
+			e.OnBar2(barMs, stamp, o, o, o, o, 0, 0)
+		} else {
+			e.ResetTo(s.Env)
+		}
+		h1, l1 := e.High.Get(0), e.Low.Get(0)
+		if h1 < h {
+			e.High.Data[len(e.High.Data)-1] = h
+		}
+		if l1 > l {
+			e.Low.Data[len(e.Low.Data)-1] = l
+		}
+		e.Close.Data[len(e.Close.Data)-1] = c
+		e.Volume.Data[len(e.Volume.Data)-1] = v
+		e.Info.Data[len(e.Info.Data)-1] = i
+		e.TimeStop = stamp
+	}
+	return e
 }
 
 func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTrigger) {
