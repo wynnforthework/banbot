@@ -1,0 +1,12 @@
+{
+	"backtest_regular": "Regular Backtest",
+	"live_bad_open": " Live Bad Open",
+	"live_no_open": " Live No Open",
+	"live_bad_pos": " Live Bad Pos",
+	"normal": " Normal",
+	"abnormal": " Abnormal",
+	"live_open_match": " Live Open Match",
+	"live_pos_match": " Exchange Pos Match",
+	"user_active": "Your banbot account has been activated",
+	"user_ban": "Your banbot account has been suspended"
+}

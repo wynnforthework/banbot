@@ -1,0 +1,12 @@
+{
+	"backtest_regular": "定期回测",
+	"live_bad_open": "实盘误开",
+	"live_no_open": "实盘未开",
+	"live_bad_pos": "仓位不符",
+	"normal": "正常",
+	"abnormal": "异常",
+	"live_open_match": "开仓匹配",
+	"live_pos_match": "交易所持仓匹配",
+	"user_active": "您的banbot账户已被启用",
+	"user_ban": "您的banbot账户已被禁用"
+}

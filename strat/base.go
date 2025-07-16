@@ -115,7 +115,8 @@ func (s *StratJob) OpenOrder(req *EnterReq) *errs.Error {
 	}
 	err := s.openOrder(req)
 	if err != nil && q != nil {
-		log.Warn("OpenOrder fail", q.GetZapFields(s)...)
+		fields := append(q.GetZapFields(s), zap.String("err", err.Short()))
+		log.Warn("OpenOrder fail", fields...)
 	}
 	return err
 }
@@ -284,7 +285,8 @@ func (s *StratJob) CloseOrders(req *ExitReq) *errs.Error {
 	}
 	err := s.closeOrders(req)
 	if err != nil && q != nil {
-		log.Warn("CloseOrders fail", q.GetZapFields(s)...)
+		fields := append(q.GetZapFields(s), zap.String("err", err.Short()))
+		log.Warn("CloseOrders fail", fields...)
 	}
 	return err
 }

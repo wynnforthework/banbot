@@ -3,9 +3,12 @@ package biz
 import (
 	"context"
 	"database/sql"
+	"embed"
 	_ "embed"
 	"fmt"
 	"maps"
+	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -36,6 +39,12 @@ var configData []byte
 
 //go:embed config.local.yml
 var configLocalData []byte
+
+//go:embed zh-CN/*
+var zhCNData embed.FS
+
+//go:embed en-US/*
+var enUSData embed.FS
 
 func SetupComs(args *config.CmdArgs) *errs.Error {
 	args.Init()
@@ -442,16 +451,91 @@ func InitDataDir() *errs.Error {
 	}
 	configPath := filepath.Join(dataDir, "config.yml")
 	configLocalPath := filepath.Join(dataDir, "config.local.yml")
-	if utils.Exists(configPath) || utils.Exists(configLocalPath) {
+	if !utils.Exists(configPath) && !utils.Exists(configLocalPath) {
 		// dont init config in dataDir if any of config.yml/config.local.yml exist
-		return nil
+		err := utils.WriteFile(configPath, replaceDockerHosts(configData))
+		if err != nil {
+			return err
+		}
+		log.Info("init done", zap.String("p", configPath))
+		err = utils.WriteFile(configLocalPath, replaceDockerHosts(configLocalData))
+		log.Info("init done", zap.String("p", configLocalPath))
+		if err != nil {
+			return err
+		}
 	}
-	err := utils.WriteFile(configPath, replaceDockerHosts(configData))
-	if err != nil {
-		return err
+
+	// 初始化语言文件
+	for _, lang := range []string{"zh-CN", "en-US"} {
+		err := initLangFile(dataDir, lang)
+		if err != nil {
+			return err
+		}
 	}
-	log.Info("init done", zap.String("p", configPath))
-	err = utils.WriteFile(configLocalPath, replaceDockerHosts(configLocalData))
-	log.Info("init done", zap.String("p", configLocalPath))
-	return err
+
+	return nil
+}
+
+func initLangFile(dataDir, lang string) *errs.Error {
+	langDir := filepath.Join(dataDir, lang)
+	err_ := utils.EnsureDir(langDir, 0755)
+	if err_ != nil {
+		return errs.New(errs.CodeIOWriteFail, err_)
+	}
+
+	targetPath := filepath.Join(langDir, "messages.json")
+
+	// 从嵌入数据中读取
+	var sourceData []byte
+	var embedFS embed.FS
+	if lang == "zh-CN" {
+		embedFS = zhCNData
+	} else if lang == "en-US" {
+		embedFS = enUSData
+	} else {
+		return nil // 不支持的语言，跳过
+	}
+
+	sourceData, err_ = embedFS.ReadFile(path.Join(lang, "messages.json"))
+	if err_ != nil {
+		// 嵌入文件不存在，跳过
+		return errs.New(errs.CodeRunTime, err_)
+	}
+
+	if !utils.Exists(targetPath) {
+		// 直接复制
+		return utils.WriteFile(targetPath, sourceData)
+	}
+
+	// 合并更新
+	targetData, err_ := os.ReadFile(targetPath)
+	if err_ != nil {
+		return errs.New(errs.CodeIOReadFail, err_)
+	}
+
+	var sourceMap, targetMap map[string]string
+	if err := utils2.UnmarshalString(string(sourceData), &sourceMap, utils2.JsonNumDefault); err != nil {
+		return errs.New(errs.CodeUnmarshalFail, err)
+	}
+	if err := utils2.UnmarshalString(string(targetData), &targetMap, utils2.JsonNumDefault); err != nil {
+		return errs.New(errs.CodeUnmarshalFail, err)
+	}
+
+	updated := false
+	for key, value := range sourceMap {
+		if _, exists := targetMap[key]; !exists {
+			targetMap[key] = value
+			updated = true
+		}
+	}
+
+	if updated {
+		newData, err_ := utils2.MarshalString(targetMap)
+		if err_ != nil {
+			return errs.New(errs.CodeMarshalFail, err_)
+		}
+		return utils.WriteFile(targetPath, []byte(newData))
+	}
+
+	return nil
 }
