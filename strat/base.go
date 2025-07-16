@@ -127,9 +127,7 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 	if req.Tag == "" {
 		return errs.NewMsg(errs.CodeParamRequired, "tag is Required")
 	}
-	if req.StratName == "" {
-		req.StratName = s.Strat.Name
-	}
+	req.StratName = s.Strat.Name
 	isLiveMode := core.LiveMode
 	symbol := s.Symbol.Symbol
 	var dirType = core.OdDirtLong
@@ -197,6 +195,9 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 	if curSLPrice == 0 && s.Strat.StopLoss > 0 {
 		curSLPrice = enterPrice * (1 - s.Strat.StopLoss*dirFlag)
 	}
+	if req.StopLossLimit > 0 && req.StopLoss == 0 {
+		req.StopLoss = req.StopLossLimit
+	}
 	if req.StopLossVal > 0 {
 		curSLPrice = enterPrice - req.StopLossVal*dirFlag
 	} else if req.StopLoss != 0 {
@@ -229,6 +230,9 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 	curTPPrice := s.LongTPPrice
 	if req.Short {
 		curTPPrice = s.ShortTPPrice
+	}
+	if req.TakeProfitLimit > 0 && req.TakeProfit == 0 {
+		req.TakeProfit = req.TakeProfitLimit
 	}
 	if req.TakeProfitVal > 0 {
 		curTPPrice = enterPrice + req.TakeProfitVal*dirFlag
