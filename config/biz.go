@@ -407,6 +407,10 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	if err != nil {
 		return err
 	}
+	err = parsePairs()
+	if err != nil {
+		return err
+	}
 	Database = c.Database
 	SpiderAddr = strings.ReplaceAll(c.SpiderAddr, "host.docker.internal", "127.0.0.1")
 	if SpiderAddr == "" {
@@ -441,11 +445,6 @@ func SetRunPolicy(index bool, items ...*RunPolicyConfig) {
 			pol.PairParams = make(map[string]map[string]float64)
 		}
 		pol.defs = make(map[string]*core.Param)
-		if len(pol.Pairs) == 0 {
-			pol.Pairs = Pairs
-		} else {
-			pol.Pairs, _ = utils2.UniqueItems(pol.Pairs)
-		}
 	}
 	RunPolicy = items
 }
@@ -1202,4 +1201,34 @@ func GetLangMsg(lang, code, defVal string) string {
 		return defVal
 	}
 	return code
+}
+
+// parse short pairs to standard pair format
+func parsePairs() *errs.Error {
+	if core.ExgName == "china" {
+		return nil
+	}
+	quote := ""
+	if len(StakeCurrency) > 0 {
+		quote = StakeCurrency[0]
+	}
+	var result = make([]string, 0, len(Pairs))
+	for _, p := range Pairs {
+		if strings.Contains(p, "/") {
+			result = append(result, p)
+		} else if quote == "" {
+			return errs.NewMsg(core.ErrBadConfig, "`stake_currency` is required")
+		}
+		if core.Market == banexg.MarketSpot {
+			result = append(result, fmt.Sprintf("%s/%s", p, quote))
+		} else if core.Market == banexg.MarketLinear {
+			result = append(result, fmt.Sprintf("%s/%s:%s", p, quote, quote))
+		} else if core.Market == banexg.MarketInverse {
+			result = append(result, fmt.Sprintf("%s/%s:%s", p, quote, p))
+		} else {
+			return errs.NewMsg(core.ErrBadConfig, "option market don't support short pair")
+		}
+	}
+	Pairs = result
+	return nil
 }
