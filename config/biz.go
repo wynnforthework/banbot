@@ -1216,6 +1216,7 @@ func parsePairs() *errs.Error {
 	for _, p := range Pairs {
 		if strings.Contains(p, "/") {
 			result = append(result, p)
+			continue
 		} else if quote == "" {
 			return errs.NewMsg(core.ErrBadConfig, "`stake_currency` is required")
 		}
