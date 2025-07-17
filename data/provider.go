@@ -521,13 +521,18 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 			return
 		}
 		tfMSecs := int64(msg.TFSecs * 1000)
+		handleNewBars := func(bars []*banexg.Kline) {
+			go func() {
+				_, err := hold.onNewBars(tfMSecs, bars)
+				if err != nil {
+					log.Error("onNewBars fail", zap.String("p", msg.Pair), zap.Error(err))
+				}
+			}()
+		}
 		// The weighting factor has been calculated during the start-up or market break, and the weighting is automatically carried out internally
 		// 已在启动或休市期间计算复权因子，内部会自动进行复权
 		if msg.Interval >= msg.TFSecs {
-			_, err := hold.onNewBars(tfMSecs, msg.Arr)
-			if err != nil {
-				log.Error("onNewBars fail", zap.String("p", msg.Pair), zap.Error(err))
-			}
+			handleNewBars(msg.Arr)
 			return
 		}
 		// The frequency of updates is lower than the bar cycle, and what is received may not be completed
@@ -540,10 +545,7 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 			hold.setWaitBar(nil)
 		}
 		if len(doneArr) > 0 {
-			_, err := hold.onNewBars(tfMSecs, doneArr)
-			if err != nil {
-				log.Error("onNewBars fail", zap.String("p", msg.Pair), zap.Error(err))
-			}
+			handleNewBars(doneArr)
 			return
 		}
 		if msg.Interval <= 5 && hold.getStates()[0].TFSecs >= 60 {
@@ -558,10 +560,7 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 		if endLackSecs*2 < msg.Interval {
 			// The missing time is less than half of the update interval and is considered complete.
 			// 缺少的时间不足更新间隔的一半，认为完成。
-			_, err := hold.onNewBars(tfMSecs, []*banexg.Kline{lastBar})
-			if err != nil {
-				log.Error("onNewBars fail", zap.String("p", msg.Pair), zap.Error(err))
-			}
+			handleNewBars([]*banexg.Kline{lastBar})
 		} else {
 			hold.setWaitBar(lastBar)
 		}

@@ -151,7 +151,7 @@ func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 
 func (c *BanConn) Read() ([]byte, *errs.Error) {
 	if c.Conn == nil {
-		return nil, errs.NewMsg(core.ErrRunTime, "BanConn Read nil")
+		return nil, errs.NewMsg(core.ErrRunTime, "BanConn Read nil, connection already closed")
 	}
 	lenBuf := make([]byte, 4)
 	_, err_ := c.Conn.Read(lenBuf)
