@@ -29,7 +29,7 @@ import (
 
 const (
 	iOrderFields  = "id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_pft_rate, max_draw_down, profit_rate, profit, info"
-	exOrderFields = "id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_at, price, average, amount, filled, status, fee, fee_type, update_at"
+	exOrderFields = "id, task_id, inout_id, symbol, enter, order_type, order_id, side, create_at, price, average, amount, filled, status, fee, fee_quote, fee_type, update_at"
 )
 
 type InOutOrder struct {
@@ -207,11 +207,11 @@ func (i *InOutOrder) UpdateProfits(price float64) {
 		return
 	}
 	enterFee, exitFee := float64(0), float64(0)
-	if i.Enter != nil && !math.IsNaN(i.Enter.Fee) && !math.IsInf(i.Enter.Fee, 0) {
-		enterFee = i.Enter.Fee
+	if i.Enter != nil && !math.IsNaN(i.Enter.FeeQuote) && !math.IsInf(i.Enter.FeeQuote, 0) {
+		enterFee = i.Enter.FeeQuote
 	}
-	if i.Exit != nil && !math.IsNaN(i.Exit.Fee) && !math.IsInf(i.Exit.Fee, 0) {
-		exitFee = i.Exit.Fee
+	if i.Exit != nil && !math.IsNaN(i.Exit.FeeQuote) && !math.IsInf(i.Exit.FeeQuote, 0) {
+		exitFee = i.Exit.FeeQuote
 	}
 	i.Profit = profitVal - enterFee - exitFee
 	entPrice := i.InitPrice
@@ -263,6 +263,7 @@ func (i *InOutOrder) UpdateFee(price float64, forEnter bool, isHistory bool) *er
 		return err
 	}
 	exOrder.Fee = fee.Cost
+	exOrder.FeeQuote = fee.QuoteCost
 	exOrder.FeeType = fee.Currency
 	if forEnter {
 		i.DirtyEnter = true
@@ -870,6 +871,7 @@ func (i *ExOrder) saveAdd(sess *Queries) *errs.Error {
 		Filled:    i.Filled,
 		Status:    i.Status,
 		Fee:       i.Fee,
+		FeeQuote:  i.FeeQuote,
 		FeeType:   i.FeeType,
 		UpdateAt:  i.UpdateAt,
 	})
@@ -895,6 +897,7 @@ func (i *ExOrder) saveUpdate(sess *Queries) *errs.Error {
 		Filled:    i.Filled,
 		Status:    i.Status,
 		Fee:       i.Fee,
+		FeeQuote:  i.FeeQuote,
 		FeeType:   i.FeeType,
 		UpdateAt:  i.UpdateAt,
 		ID:        i.ID,
@@ -918,6 +921,7 @@ func (i *ExOrder) CutPart(rate float64, fill bool) *ExOrder {
 		Average:   i.Average,
 		Amount:    i.Amount * rate,
 		Fee:       i.Fee,
+		FeeQuote:  i.FeeQuote,
 		FeeType:   i.FeeType,
 		UpdateAt:  i.UpdateAt,
 	}
@@ -953,6 +957,7 @@ func (i *ExOrder) NanInfTo(v float64) {
 	}
 	i.Price = utils.NanInfTo(i.Price, v)
 	i.Fee = utils.NanInfTo(i.Fee, v)
+	i.FeeQuote = utils.NanInfTo(i.FeeQuote, v)
 }
 
 func (i *ExOrder) Clone() *ExOrder {
@@ -975,6 +980,7 @@ func (i *ExOrder) Clone() *ExOrder {
 		Filled:    i.Filled,
 		Status:    i.Status,
 		Fee:       i.Fee,
+		FeeQuote:  i.FeeQuote,
 		FeeType:   i.FeeType,
 		UpdateAt:  i.UpdateAt,
 	}
@@ -1045,6 +1051,7 @@ func (q *Queries) getExOrders(sql string, args []interface{}) ([]*ExOrder, *errs
 			&iod.Filled,
 			&iod.Status,
 			&iod.Fee,
+			&iod.FeeQuote,
 			&iod.FeeType,
 			&iod.UpdateAt,
 		)
@@ -1397,13 +1404,8 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 
 		rets := make([]float64, holdNum)
 		idx := 0
-		bCode, qCode, _, _ := core.SplitSymbol(od.Symbol)
 		if od.Enter != nil {
-			if od.Enter.FeeType == qCode {
-				rets[idx] -= od.Enter.Fee
-			} else if od.Enter.FeeType == bCode {
-				rets[idx] -= od.Enter.Fee * od.Enter.Average
-			}
+			rets[idx] -= od.Enter.FeeQuote
 		}
 
 		// 计算在每个时间单位上的回报
@@ -1427,11 +1429,7 @@ func CalcUnitReturns(odList []*InOutOrder, closes []float64, startMS, endMS, tfM
 			posPrice += priceStep
 		}
 		if idx-1 < len(rets) && od.Exit != nil {
-			if od.Exit.FeeType == qCode {
-				rets[idx-1] -= od.Exit.Fee
-			} else if od.Exit.FeeType == bCode {
-				rets[idx-1] -= od.Exit.Fee * od.Exit.Average
-			}
+			rets[idx-1] -= od.Exit.FeeQuote
 		}
 		// 累加利润
 		for j, v := range rets {

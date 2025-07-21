@@ -190,9 +190,9 @@ func (r *BTResult) Collect() {
 	tfHits := make(map[string]int)
 	for _, od := range orders {
 		sumProfit += od.Profit
-		sumFee += od.Enter.Fee
+		sumFee += od.Enter.FeeQuote
 		if od.Exit != nil {
-			sumFee += od.Exit.Fee
+			sumFee += od.Exit.FeeQuote
 		}
 		sumCost += od.EnterCost() / od.Leverage
 		if od.Profit > 0 {
@@ -714,7 +714,7 @@ func calcExOrder(od *ormo.ExOrder) (string, string, string, string) {
 	priceStr := strconv.FormatFloat(price, 'f', 8, 64)
 	amtStr := strconv.FormatFloat(od.Filled, 'f', 8, 64)
 	valStr := strconv.FormatFloat(exitGot, 'f', 4, 64)
-	feeStr := strconv.FormatFloat(od.Fee, 'f', 8, 64)
+	feeStr := strconv.FormatFloat(od.FeeQuote, 'f', 8, 64)
 	return priceStr, amtStr, valStr, feeStr
 }
 

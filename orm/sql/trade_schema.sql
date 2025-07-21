@@ -34,6 +34,7 @@ CREATE TABLE exorder
     filled     REAL    NOT NULL,
     status     INTEGER NOT NULL,
     fee        REAL    NOT NULL,
+    fee_quote  REAL    NOT NULL,
     fee_type   TEXT    NOT NULL,
     update_at  INTEGER NOT NULL
 );

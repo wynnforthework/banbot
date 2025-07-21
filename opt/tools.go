@@ -154,7 +154,7 @@ func CompareExgBTOrders(args []string) error {
 			exitMSStr := btime.ToDateStrLoc(iod.RealExitMS(), "")
 			entPriceStr := strconv.FormatFloat(iod.Enter.Price, 'f', 6, 64)
 			amtStr := strconv.FormatFloat(iod.Enter.Filled+iod.Exit.Filled, 'f', 6, 64)
-			feeStr := strconv.FormatFloat(iod.Enter.Fee+iod.Exit.Fee, 'f', 6, 64)
+			feeStr := strconv.FormatFloat(iod.Enter.FeeQuote+iod.Exit.FeeQuote, 'f', 6, 64)
 			exitPriceStr := strconv.FormatFloat(iod.Exit.Price, 'f', 6, 64)
 			profitStr := strconv.FormatFloat(iod.Profit, 'f', 6, 64)
 			err_ = writer.Write([]string{"bt", iod.Symbol, iod.Timeframe, dirt, entMSStr, exitMSStr, entPriceStr,
@@ -171,7 +171,7 @@ func CompareExgBTOrders(args []string) error {
 			exitMSStr := btime.ToDateStrLoc(matOd.RealExitMS(), "")
 			entPriceStr := strconv.FormatFloat(matOd.Enter.Average, 'f', 6, 64)
 			amtStr := strconv.FormatFloat(matOd.Enter.Filled+matOd.Exit.Filled, 'f', 6, 64)
-			feeStr := strconv.FormatFloat(matOd.Enter.Fee+matOd.Exit.Fee, 'f', 6, 64)
+			feeStr := strconv.FormatFloat(matOd.Enter.FeeQuote+matOd.Exit.FeeQuote, 'f', 6, 64)
 			profitStr := strconv.FormatFloat(matOd.Profit, 'f', 6, 64)
 			exitPriceStr := strconv.FormatFloat(matOd.Exit.Average, 'f', 6, 64)
 			entDelay := matOd.RealEnterMS() - iod.RealEnterMS()
@@ -182,8 +182,8 @@ func CompareExgBTOrders(args []string) error {
 			priceDiff := strconv.FormatFloat(priceDf*100/iod.Enter.Average, 'f', 1, 64)
 			amtDf := (matOd.Enter.Filled - iod.Enter.Filled) - (matOd.Exit.Filled - iod.Exit.Filled)
 			amountDiff := strconv.FormatFloat(amtDf*100/iod.Enter.Filled, 'f', 1, 64)
-			feeDf := (matOd.Enter.Fee - iod.Enter.Fee) + (matOd.Exit.Fee - iod.Exit.Fee)
-			feeDiff := strconv.FormatFloat(feeDf*50/iod.Enter.Fee, 'f', 1, 64)
+			feeDf := (matOd.Enter.FeeQuote - iod.Enter.FeeQuote) + (matOd.Exit.FeeQuote - iod.Exit.FeeQuote)
+			feeDiff := strconv.FormatFloat(feeDf*50/iod.Enter.FeeQuote, 'f', 1, 64)
 			profitDf := matOd.Profit - iod.Profit
 			profitDfPct := profitDf * 100 / iod.Profit
 			profitDiff := strconv.FormatFloat(profitDfPct, 'f', 1, 64)
@@ -222,7 +222,7 @@ func CompareExgBTOrders(args []string) error {
 			exitMSStr := btime.ToDateStrLoc(iod.RealExitMS(), "")
 			entPriceStr := strconv.FormatFloat(iod.Enter.Average, 'f', 6, 64)
 			amtStr := strconv.FormatFloat(iod.Enter.Filled+iod.Exit.Filled, 'f', 6, 64)
-			feeStr := strconv.FormatFloat(iod.Enter.Fee+iod.Exit.Fee, 'f', 6, 64)
+			feeStr := strconv.FormatFloat(iod.Enter.FeeQuote+iod.Exit.FeeQuote, 'f', 6, 64)
 			profitStr := strconv.FormatFloat(iod.Profit, 'f', 6, 64)
 			exitPriceStr := strconv.FormatFloat(iod.Exit.Average, 'f', 6, 64)
 			err_ = writer.Write([]string{"exg", iod.Symbol, iod.Timeframe, dirt, entMSStr, exitMSStr, entPriceStr,
@@ -350,17 +350,17 @@ func handleExitOrders(remainFilled float64, od *banexg.Order, odList []*ormo.InO
 			continue
 		}
 		part := iod
-		curFee := od.Fee.Cost
 		exitAmount := iod.Enter.Amount
+		var rate float64
 		if remainFilled < iod.Enter.Amount*0.99 {
 			exitAmount = remainFilled
 			part = iod.CutPart(remainFilled, remainFilled)
-			rate := remainFilled / od.Filled
-			curFee = od.Fee.Cost * rate
+			rate = remainFilled / od.Filled
 		} else {
-			rate := iod.Enter.Amount / od.Filled
-			curFee = od.Fee.Cost * rate
+			rate = iod.Enter.Amount / od.Filled
 		}
+		curFee := od.Fee.Cost * rate
+		curFeeQuote := od.Fee.QuoteCost * rate
 		part.ExitAt = od.LastUpdateTimestamp
 		part.Exit = &ormo.ExOrder{
 			Symbol:   part.Symbol,
@@ -371,6 +371,7 @@ func handleExitOrders(remainFilled float64, od *banexg.Order, odList []*ormo.InO
 			Amount:   part.Enter.Amount,
 			Filled:   part.Enter.Filled,
 			Fee:      curFee,
+			FeeQuote: curFeeQuote,
 		}
 		part.Status = ormo.InOutStatusFullExit
 		part.UpdateProfits(od.Average)
@@ -447,6 +448,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo
 				Amount:   ent.Filled,
 				Filled:   ent.Filled,
 				Fee:      ent.Fee.Cost,
+				FeeQuote: ent.Fee.QuoteCost,
 				OrderID:  ent.ClientOrderID,
 			},
 			Exit: &ormo.ExOrder{
@@ -458,6 +460,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo
 				Amount:   exit.Filled, // 使用入场订单的数量
 				Filled:   exit.Filled,
 				Fee:      exit.Fee.Cost,
+				FeeQuote: exit.Fee.QuoteCost,
 			},
 		}
 
@@ -474,6 +477,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo
 			iod.Exit.Amount = ent.Filled
 			iod.Exit.Filled = ent.Filled
 			iod.Exit.Fee = exit.Fee.Cost * (ent.Fee.Cost / exit.Fee.Cost)
+			iod.Exit.FeeQuote = exit.Fee.QuoteCost * (ent.Fee.QuoteCost / exit.Fee.QuoteCost)
 		} else if inoutRate < 0.99 {
 			// 未完全平仓
 			remainOrder := *ent
@@ -483,6 +487,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo
 			iod.Enter.Amount = exit.Filled
 			iod.Enter.Filled = exit.Filled
 			iod.Enter.Fee = ent.Fee.Cost * (exit.Fee.Cost / ent.Fee.Cost)
+			iod.Enter.FeeQuote = ent.Fee.QuoteCost * (exit.Fee.QuoteCost / ent.Fee.QuoteCost)
 		}
 		iod.UpdateProfits(exit.Average)
 	}
@@ -529,6 +534,7 @@ func buildExgOrders(ods []*banexg.Order, clientPrefix string) map[string][]*ormo
 					Amount:   remainFilled,
 					Filled:   remainFilled,
 					Fee:      od.Fee.Cost * (remainFilled / od.Filled),
+					FeeQuote: od.Fee.QuoteCost * (remainFilled / od.Filled),
 					OrderID:  od.ClientOrderID,
 				},
 			}

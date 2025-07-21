@@ -677,11 +677,11 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	return openOds, nil
 }
 
-func getFeeNameCost(fee *banexg.Fee, pair, odType, side string, amount, price float64) (string, float64) {
+func getFeeNameCost(fee *banexg.Fee, pair, odType, side string, amount, price float64) (string, float64, float64) {
 	isMaker := false
 	if fee != nil {
 		if fee.Cost > 0 {
-			return fee.Currency, fee.Cost
+			return fee.Currency, fee.Cost, fee.QuoteCost
 		}
 		isMaker = fee.IsMaker
 	} else {
@@ -690,9 +690,9 @@ func getFeeNameCost(fee *banexg.Fee, pair, odType, side string, amount, price fl
 	fee, err := exg.Default.CalculateFee(pair, odType, side, amount, price, isMaker, nil)
 	if err != nil {
 		log.Error("calc fee fail getFeeNameCost", zap.Error(err))
-		return "", 0
+		return "", 0, 0
 	}
-	return fee.Currency, fee.Cost
+	return fee.Currency, fee.Cost, fee.QuoteCost
 }
 
 func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder, od *banexg.Order, defTF string) ([]*ormo.InOutOrder, *errs.Error) {
@@ -702,7 +702,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 	if err != nil {
 		return ods, err
 	}
-	feeName, feeCost := getFeeNameCost(od.Fee, od.Symbol, od.Type, od.Side, od.Filled, od.Average)
+	feeName, feeCost, feeQuote := getFeeNameCost(od.Fee, od.Symbol, od.Type, od.Side, od.Filled, od.Average)
 	price, amount, odTime := od.Average, od.Filled, od.Timestamp
 	defTF = config.GetTakeOverTF(od.Symbol, defTF)
 
@@ -719,7 +719,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 		}
 		log.Info(fmt.Sprintf("%s %s: price:%.5f, amount: %.5f, %v, fee: %.5f, %v id:%v",
 			o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
-		iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, ormo.OdStatusClosed,
+		iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeQuote, feeName, odTime, ormo.OdStatusClosed,
 			od.ID, defTF)
 		err = iod.Save(sess)
 		if err != nil {
@@ -729,11 +729,14 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 	} else {
 		// Close long or short 平多或平空
 		var part *ormo.InOutOrder
+		var feeLeft float64
 		for _, iod := range ods {
 			if iod.Short != isShort || iod.RealEnterMS() > odTime {
 				continue
 			}
-			amount, feeCost, part = o.tryFillExit(iod, amount, price, odTime, od.ID, od.Type, feeName, feeCost)
+			amount, feeLeft, part = o.tryFillExit(iod, amount, price, odTime, od.ID, od.Type, feeName, feeCost, feeQuote)
+			feeCost *= feeLeft
+			feeQuote *= feeLeft
 			err = part.Save(sess)
 			if err != nil {
 				return ods, err
@@ -767,7 +770,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 			}
 			log.Info(fmt.Sprintf("%s %v: price:%.5f, amount: %.5f, %v, fee: %.5f %v id: %v",
 				o.Account, tag, price, amount, od.Type, feeCost, odTime, od.ID))
-			iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeName, odTime, ormo.OdStatusClosed,
+			iod := o.createInOutOd(exs, isShort, price, amount, od.Type, feeCost, feeQuote, feeName, odTime, ormo.OdStatusClosed,
 				od.ID, defTF)
 			err = iod.Save(sess)
 			if err != nil {
@@ -780,7 +783,7 @@ func (o *LiveOrderMgr) applyHisOrder(sess *ormo.Queries, ods []*ormo.InOutOrder,
 }
 
 func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, filled float64, odType string,
-	feeCost float64, feeName string, enterAt int64, entStatus int, entOdId string, defTF string) *ormo.InOutOrder {
+	feeCost float64, feeQuote float64, feeName string, enterAt int64, entStatus int, entOdId string, defTF string) *ormo.InOutOrder {
 	notional := average * filled
 	leverage, _ := exg.GetLeverage(exs.Symbol, notional, o.Account)
 	if leverage == 0 {
@@ -826,6 +829,7 @@ func (o *LiveOrderMgr) createInOutOd(exs *orm.ExSymbol, short bool, average, fil
 			Filled:    filled,
 			Status:    int64(entStatus),
 			Fee:       feeCost,
+			FeeQuote:  feeQuote,
 			FeeType:   feeName,
 			UpdateAt:  enterAt,
 		},
@@ -853,7 +857,7 @@ func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*orm
 	isShort := pos.Side == banexg.PosSideShort
 	// There is no handling fee for position information. The handling fee is inferred directly from the current robot order type, which may be different from the actual handling fee.
 	//持仓信息没有手续费，直接从当前机器人订单类型推断手续费，可能和实际的手续费不同
-	feeName, feeCost := getFeeNameCost(nil, pos.Symbol, "", pos.Side, pos.Contracts, pos.EntryPrice)
+	feeName, feeCost, feeQuote := getFeeNameCost(nil, pos.Symbol, "", pos.Side, pos.Contracts, pos.EntryPrice)
 	tag := "LONG"
 	if isShort {
 		tag = "SHORT"
@@ -861,7 +865,7 @@ func (o *LiveOrderMgr) createOdFromPos(pos *banexg.Position, defTF string) (*orm
 	log.Info(fmt.Sprintf("%s [Pos]%v: price:%.5f, amount:%.5f, fee: %.5f", o.Account, tag, average, filled, feeCost))
 	enterAt := btime.TimeMS()
 	entStatus := ormo.OdStatusClosed
-	iod := o.createInOutOd(exs, isShort, average, filled, entOdType, feeCost, feeName, enterAt, entStatus, "", defTF)
+	iod := o.createInOutOd(exs, isShort, average, filled, entOdType, feeCost, feeQuote, feeName, enterAt, entStatus, "", defTF)
 	return iod, nil
 }
 
@@ -871,7 +875,8 @@ Try to close a position, used to update the closing status of the robot's order 
 尝试平仓，用于从第三方交易中更新机器人订单的平仓状态
 */
 func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, odTime int64, orderID, odType,
-	feeName string, feeCost float64) (float64, float64, *ormo.InOutOrder) {
+	feeName string, feeCost float64, feeQuote float64) (float64, float64, *ormo.InOutOrder) {
+	orgFeeCost := feeCost
 	if iod.Enter.Filled == 0 {
 		err := iod.LocalExit(0, core.ExitTagForceExit, iod.InitPrice, "not entered", "")
 		strat.FireOdChange(o.Account, iod, strat.OdChgExitFill)
@@ -879,7 +884,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 			log.Error("local exit no enter order fail", zap.String("acc", o.Account),
 				zap.String("key", iod.Key()), zap.Error(err))
 		}
-		return filled, feeCost, iod
+		return filled, feeCost / orgFeeCost, iod
 	}
 	var avaAmount float64
 	// Should a small order be split?
@@ -901,7 +906,9 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 		part = iod.CutPart(fillAmt, 0)
 	}
 	curFeeCost := feeCost * curPartRate
+	curFeeQuote := feeQuote * curPartRate
 	feeCost -= curFeeCost
+	feeQuote -= curFeeQuote
 	if part.Exit == nil {
 		exitSide := banexg.OdSideSell
 		if part.Short {
@@ -923,6 +930,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 			Filled:    fillAmt,
 			Status:    ormo.OdStatusClosed,
 			Fee:       curFeeCost,
+			FeeQuote:  curFeeQuote,
 			FeeType:   feeName,
 			UpdateAt:  odTime,
 		}
@@ -934,6 +942,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 		part.Exit.Average = price
 		part.Exit.Status = ormo.OdStatusClosed
 		part.Exit.Fee = curFeeCost
+		part.Exit.FeeQuote = curFeeQuote
 		part.Exit.FeeType = feeName
 		part.Exit.UpdateAt = odTime
 	}
@@ -943,7 +952,7 @@ func (o *LiveOrderMgr) tryFillExit(iod *ormo.InOutOrder, filled, price float64, 
 	part.Status = ormo.InOutStatusFullExit
 	part.DirtyMain = true
 	strat.FireOdChange(o.Account, part, strat.OdChgExitFill)
-	return filled, feeCost, part
+	return filled, feeCost / orgFeeCost, part
 }
 
 func (o *LiveOrderMgr) ProcessOrders(sess *ormo.Queries, job *strat.StratJob) ([]*ormo.InOutOrder, []*ormo.InOutOrder, *errs.Error) {
@@ -1394,6 +1403,7 @@ func (o *LiveOrderMgr) updateByMyTrade(od *ormo.InOutOrder, trade *banexg.MyTrad
 		if trade.Fee != nil {
 			subOd.FeeType = trade.Fee.Currency
 			subOd.Fee = trade.Fee.Cost
+			subOd.FeeQuote = trade.Fee.QuoteCost
 		}
 	} else if banexg.IsOrderDone(state) {
 		subOd.Status = ormo.OdStatusClosed
@@ -1718,6 +1728,7 @@ func (o *LiveOrderMgr) updateOdByExgRes(od *ormo.InOutOrder, isEnter bool, res *
 			subOd.Filled = res.Filled
 			if res.Fee != nil && res.Fee.Cost > 0 {
 				subOd.Fee = res.Fee.Cost
+				subOd.FeeQuote = res.Fee.QuoteCost
 				subOd.FeeType = res.Fee.Currency
 			}
 			subOd.Status = ormo.OdStatusPartOK

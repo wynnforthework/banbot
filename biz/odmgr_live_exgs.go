@@ -33,18 +33,22 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			return false
 		}
 		filled := od.Filled
-		feeName, feeCost := "", float64(0)
+		feeName, feeCost, feeQuote := "", float64(0), float64(0)
 		if od.Fee != nil {
 			feeName = od.Fee.Currency
 			feeCost = od.Fee.Cost
+			feeQuote = od.Fee.QuoteCost
 		}
 		var err *errs.Error
 		var part *ormo.InOutOrder
 		var doneParts []*ormo.InOutOrder
+		var feeLeft float64
 		for _, iod := range openOds {
 			lock2 := iod.Lock()
-			filled, feeCost, part = o.tryFillExit(iod, filled, od.Average, od.Timestamp, od.ID, od.Type, feeName, feeCost)
+			filled, feeLeft, part = o.tryFillExit(iod, filled, od.Average, od.Timestamp, od.ID, od.Type, feeName, feeCost, feeQuote)
 			lock2.Unlock()
+			feeCost *= feeLeft
+			feeQuote *= feeLeft
 			if part.Status == ormo.InOutStatusFullExit {
 				doneParts = append(doneParts, part)
 			}
@@ -75,7 +79,7 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			o.callBack(part, false)
 		}
 		if createInv {
-			iod := o.makeInOutOd(sess, od.Symbol, isShort, od.Average, filled, od.Type, feeCost, feeName,
+			iod := o.makeInOutOd(sess, od.Symbol, isShort, od.Average, filled, od.Type, feeCost, feeQuote, feeName,
 				od.Timestamp, ormo.OdStatusClosed, od.ID)
 			if iod != nil {
 				o.callBack(iod, true)
@@ -86,7 +90,7 @@ func bnbExitByMyOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 }
 
 func (o *LiveOrderMgr) makeInOutOd(sess *ormo.Queries, pair string, short bool, average, filled float64, odType string,
-	feeCost float64, feeName string, enterAt int64, entStatus int, entOdId string) *ormo.InOutOrder {
+	feeCost float64, feeQuote float64, feeName string, enterAt int64, entStatus int, entOdId string) *ormo.InOutOrder {
 	exs, err := orm.GetExSymbolCur(pair)
 	if err != nil {
 		log.Error("get exSymbol fail", zap.Error(err))
@@ -98,7 +102,7 @@ func (o *LiveOrderMgr) makeInOutOd(sess *ormo.Queries, pair string, short bool, 
 			zap.String("id", entOdId))
 		return nil
 	}
-	iod := o.createInOutOd(exs, short, average, filled, odType, feeCost, feeName, enterAt,
+	iod := o.createInOutOd(exs, short, average, filled, odType, feeCost, feeQuote, feeName, enterAt,
 		entStatus, entOdId, defTF)
 	err = iod.Save(sess)
 	if err != nil {
@@ -134,8 +138,8 @@ func bnbTraceExgOrder(o *LiveOrderMgr) FuncHandleMyOrder {
 			return true
 		}
 		defer conn.Close()
-		feeName, feeCost := getFeeNameCost(od.Fee, od.Symbol, od.Type, od.Side, od.Amount, od.Average)
-		iod := o.makeInOutOd(sess, od.Symbol, isShort, od.Average, od.Filled, od.Type, feeCost, feeName,
+		feeName, feeCost, feeQuote := getFeeNameCost(od.Fee, od.Symbol, od.Type, od.Side, od.Amount, od.Average)
+		iod := o.makeInOutOd(sess, od.Symbol, isShort, od.Average, od.Filled, od.Type, feeCost, feeQuote, feeName,
 			od.Timestamp, ormo.OdStatusClosed, od.ID)
 		if iod != nil {
 			o.callBack(iod, true)

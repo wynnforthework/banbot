@@ -518,7 +518,7 @@ func (w *BanWallets) ConfirmOdEnter(od *ormo.InOutOrder, enterPrice float64) {
 	}
 	subOd := od.Enter
 	quoteAmount := enterPrice * subOd.Amount
-	curFee := subOd.Fee
+	curFee := subOd.FeeQuote
 
 	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	if core.IsContract {
@@ -535,7 +535,7 @@ func (w *BanWallets) ConfirmOdEnter(od *ormo.InOutOrder, enterPrice float64) {
 	} else {
 		// Buy in spot, handling fee will be deducted
 		// 现货买，手续费扣币
-		baseAmt := subOd.Amount - curFee
+		baseAmt := subOd.Amount - curFee/enterPrice
 		w.ConfirmPending(od.Key(), quoteCode, quoteAmount, baseCode, baseAmt, false)
 	}
 }
@@ -588,7 +588,7 @@ func (w *BanWallets) ConfirmOdExit(od *ormo.InOutOrder, exitPrice float64) {
 		panic(fmt.Sprintf("EnterOd invalid sid of order: %v", od.Sid))
 	}
 	subOd := od.Exit
-	curFee := subOd.Fee
+	curFee := subOd.FeeQuote
 	baseCode, quoteCode, _, _ := core.SplitSymbol(exs.Symbol)
 	odKey := od.Key()
 	if banexg.IsContract(exs.Market) {
@@ -596,7 +596,7 @@ func (w *BanWallets) ConfirmOdExit(od *ormo.InOutOrder, exitPrice float64) {
 		//Here profit deducts the entry and exit handling fees. The entry handling fee has been deducted previously, so the entry handling fee needs to be added here.
 		//期货合约不涉及base币的变化。退出订单时，对锁定的定价币平仓释放
 		//这里profit扣除了入场和出场手续费，前面入场手续费已扣过了，所以这里需要加入场手续费
-		w.Cancel(odKey, quoteCode, od.Profit+od.Enter.Fee, false)
+		w.Cancel(odKey, quoteCode, od.Profit+od.Enter.FeeQuote, false)
 	} else if od.Short {
 		//For short orders, priority is given to buying from the frozen price of the quote. If it is not converted to base, it will be converted to the available price of the quote.
 		//空单，优先从quote的frozen买，不兑换为base，再换算为quote的avaiable
