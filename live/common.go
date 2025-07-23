@@ -254,10 +254,13 @@ func updateBalancePos() {
 		if odNum == 0 {
 			continue
 		}
-		odMgr := biz.GetLiveOdMgr(account)
-		_, err := odMgr.SyncLocalOrders()
-		if err != nil {
-			log.Error("SyncLocalOrders fail", zap.String("acc", account), zap.Error(err))
+		if core.Market == banexg.MarketLinear || core.Market == banexg.MarketInverse {
+			// 定期同步仓位检查不匹配订单，现货不支持
+			odMgr := biz.GetLiveOdMgr(account)
+			_, err := odMgr.SyncLocalOrders()
+			if err != nil {
+				log.Error("SyncLocalOrders fail", zap.String("acc", account), zap.Error(err))
+			}
 		}
 		updateAccBalance(account)
 	}
