@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banexg"
+	"github.com/olekukonko/tablewriter/renderer"
+	"github.com/olekukonko/tablewriter/tw"
 	"gonum.org/v1/gonum/floats"
 	"math"
 	"os"
@@ -235,55 +237,70 @@ func (r *BTResult) Collect() {
 }
 
 func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
-	var b bytes.Buffer
-	table := tablewriter.NewWriter(&b)
-	heads := []string{"Metric", "Value"}
-	table.SetHeader(heads)
-	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
-	table.SetCenterSeparator("|")
-	table.SetAlignment(tablewriter.ALIGN_RIGHT)
-	table.Append([]string{"Backtest From", btime.ToDateStr(r.StartMS, "")})
-	table.Append([]string{"Backtest To", btime.ToDateStr(r.EndMS, "")})
-	table.Append([]string{"Max Open Orders", strconv.Itoa(r.MaxOpenOrders)})
-	table.Append([]string{"Total Orders/BarNum", fmt.Sprintf("%v/%v", len(orders), r.BarNum)})
-	table.Append([]string{"Total Investment", strconv.FormatFloat(r.TotalInvest, 'f', 0, 64)})
-	table.Append([]string{"Final Balance", strconv.FormatFloat(r.FinBalance, 'f', 2, 64)})
-	table.Append([]string{"Final WithDraw", strconv.FormatFloat(r.FinWithdraw, 'f', 2, 64)})
-	table.Append([]string{"Absolute Profit", strconv.FormatFloat(r.TotProfit, 'f', 2, 64)})
+
 	totProfitPct := strconv.FormatFloat(r.TotProfitPct, 'f', 1, 64)
-	table.Append([]string{"Total Profit %", totProfitPct + "%"})
-	table.Append([]string{"Total Fee", strconv.FormatFloat(r.TotFee, 'f', 2, 64)})
 	avfProfit := strconv.FormatFloat(r.TotProfitPct*100/float64(len(orders)), 'f', 2, 64)
-	table.Append([]string{"Avg Profit %%", avfProfit + "%%"})
-	table.Append([]string{"Total Cost", strconv.FormatFloat(r.TotCost, 'f', 2, 64)})
 	avgCost := r.TotCost / float64(len(orders))
-	table.Append([]string{"Avg Cost", strconv.FormatFloat(avgCost, 'f', 2, 64)})
 	slices.SortFunc(orders, func(a, b *ormo.InOutOrder) int {
 		return int((a.Profit - b.Profit) * 100)
 	})
+	drawDownRate := strconv.FormatFloat(r.ShowDrawDownPct, 'f', 2, 64) + "%"
+	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 2, 64) + "%"
+	drawDownVal := strconv.FormatFloat(r.ShowDrawDownVal, 'f', 0, 64)
+	realDrawVal := strconv.FormatFloat(r.MaxDrawDownVal, 'f', 0, 64)
+	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
+	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
+	rows := [][]string{
+		{"Backtest From", btime.ToDateStr(r.StartMS, "")},
+		{"Backtest To", btime.ToDateStr(r.EndMS, "")},
+		{"Max Open Orders", strconv.Itoa(r.MaxOpenOrders)},
+		{"Total Orders/BarNum", fmt.Sprintf("%v/%v", len(orders), r.BarNum)},
+		{"Total Investment", strconv.FormatFloat(r.TotalInvest, 'f', 0, 64)},
+		{"Final Balance", strconv.FormatFloat(r.FinBalance, 'f', 2, 64)},
+		{"Final WithDraw", strconv.FormatFloat(r.FinWithdraw, 'f', 2, 64)},
+		{"Absolute Profit", strconv.FormatFloat(r.TotProfit, 'f', 2, 64)},
+		{"Total Profit %", totProfitPct + "%"},
+		{"Total Fee", strconv.FormatFloat(r.TotFee, 'f', 2, 64)},
+		{"Avg Profit %%", avfProfit + "%%"},
+		{"Total Cost", strconv.FormatFloat(r.TotCost, 'f', 2, 64)},
+		{"Avg Cost", strconv.FormatFloat(avgCost, 'f', 2, 64)},
+	}
+	rows2 := [][]string{
+		{"Max Assets", strconv.FormatFloat(r.MaxReal, 'f', 1, 64)},
+		{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)},
+		{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)},
+		{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownVal, realDrawVal)},
+		{"Max Fund Occupy", strconv.FormatFloat(r.MaxFundOccup, 'f', 0, 64)},
+		{"Max Occupy by Pair", strconv.FormatFloat(r.MaxOccupForPair, 'f', 0, 64)},
+		{"TimeFrames", sortTfMap(r.TfHits)},
+		{"Win Rate", strconv.FormatFloat(r.WinRatePct, 'f', 1, 64) + "%"},
+		{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr},
+	}
 	if len(orders) > 0 {
 		worstVal := strconv.FormatFloat(orders[0].Profit, 'f', 1, 64)
 		worstPct := strconv.FormatFloat(orders[0].ProfitRate*100, 'f', 1, 64)
 		bestVal := strconv.FormatFloat(orders[len(orders)-1].Profit, 'f', 1, 64)
 		bestPct := strconv.FormatFloat(orders[len(orders)-1].ProfitRate*100, 'f', 1, 64)
-		table.Append([]string{"Best Order", bestVal + "  " + bestPct + "%"})
-		table.Append([]string{"Worst Order", worstVal + "  " + worstPct + "%"})
+		rows = append(rows, []string{"Best Order", bestVal + "  " + bestPct + "%"})
+		rows = append(rows, []string{"Worst Order", worstVal + "  " + worstPct + "%"})
 	}
-	table.Append([]string{"Max Assets", strconv.FormatFloat(r.MaxReal, 'f', 1, 64)})
-	table.Append([]string{"Min Assets", strconv.FormatFloat(r.MinReal, 'f', 1, 64)})
-	drawDownRate := strconv.FormatFloat(r.ShowDrawDownPct, 'f', 2, 64) + "%"
-	realDrawDown := strconv.FormatFloat(r.MaxDrawDownPct, 'f', 2, 64) + "%"
-	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownRate, realDrawDown)})
-	drawDownVal := strconv.FormatFloat(r.ShowDrawDownVal, 'f', 0, 64)
-	realDrawVal := strconv.FormatFloat(r.MaxDrawDownVal, 'f', 0, 64)
-	table.Append([]string{"Max DrawDown", fmt.Sprintf("%v / %v", drawDownVal, realDrawVal)})
-	table.Append([]string{"Max Fund Occupy", strconv.FormatFloat(r.MaxFundOccup, 'f', 0, 64)})
-	table.Append([]string{"Max Occupy by Pair", strconv.FormatFloat(r.MaxOccupForPair, 'f', 0, 64)})
-	table.Append([]string{"TimeFrames", sortTfMap(r.TfHits)})
-	table.Append([]string{"Win Rate", strconv.FormatFloat(r.WinRatePct, 'f', 1, 64) + "%"})
-	sharpeStr := strconv.FormatFloat(r.SharpeRatio, 'f', 2, 64)
-	sortinoStr := strconv.FormatFloat(r.SortinoRatio, 'f', 2, 64)
-	table.Append([]string{"Sharpe/Sortino", sharpeStr + " / " + sortinoStr})
+	rows = append(rows, rows2...)
+	return renderTable([]string{"Metric", "Value"}, rows)
+}
+
+func renderTable(heads []string, rows [][]string) string {
+	var b bytes.Buffer
+	cfg := tw.Rendition{
+		Borders: tw.Border{Left: tw.On, Top: tw.Off, Right: tw.On, Bottom: tw.Off},
+	}
+	table := tablewriter.NewTable(&b,
+		tablewriter.WithRenderer(renderer.NewMarkdown(cfg)),
+	)
+	table.Header(heads)
+	table.Configure(func(cfg *tablewriter.Config) {
+		cfg.Row.Alignment.Global = tw.AlignLeft
+	})
+	table.Bulk(rows)
 	table.Render()
 	return b.String()
 }
@@ -505,8 +522,6 @@ func groupItems(orders []*ormo.InOutOrder, measure bool, getTag func(od *ormo.In
 }
 
 func printGroups(groups []*RowItem, title string, measure bool, extHeads []string, prcGrp func([]*ormo.InOutOrder) []string) string {
-	var b bytes.Buffer
-	table := tablewriter.NewWriter(&b)
 	heads := []string{title, "Count", "Avg Profit %", "Tot Profit %", "Sum Profit", "Duration(h'm)", "Win Rate"}
 	if measure {
 		heads = append(heads, "Sharpe/Sortino")
@@ -514,10 +529,7 @@ func printGroups(groups []*RowItem, title string, measure bool, extHeads []strin
 	if len(extHeads) > 0 {
 		heads = append(heads, extHeads...)
 	}
-	table.SetHeader(heads)
-	table.SetBorders(tablewriter.Border{Left: true, Top: false, Right: true, Bottom: false})
-	table.SetCenterSeparator("|")
-	table.SetAlignment(tablewriter.ALIGN_RIGHT)
+	var rows [][]string
 	for _, sta := range groups {
 		grpCount := len(sta.Orders)
 		numText := strconv.Itoa(grpCount)
@@ -536,10 +548,9 @@ func printGroups(groups []*RowItem, title string, measure bool, extHeads []strin
 			cols := prcGrp(sta.Orders)
 			row = append(row, cols...)
 		}
-		table.Append(row)
+		rows = append(rows, row)
 	}
-	table.Render()
-	return b.String()
+	return renderTable(heads, rows)
 }
 
 func CalcMeasureByOrders(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) {
