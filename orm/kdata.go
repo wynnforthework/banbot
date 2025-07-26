@@ -35,6 +35,9 @@ If you need to download from the end to the beginning, you should make startMS>e
 如果需要从后往前下载，应该使startMS>endMS
 */
 func FetchApiOHLCV(ctx context.Context, exchange banexg.BanExchange, pair, timeFrame string, startMS, endMS int64, out chan []*banexg.Kline) *errs.Error {
+	if core.NetDisable {
+		return nil
+	}
 	tfMSecs := int64(utils2.TFToSecs(timeFrame) * 1000)
 	if startMS < 1000000000000 {
 		panic(fmt.Sprintf("startMS should be milli seconds, cur: %v", startMS))
@@ -122,7 +125,7 @@ stepCB 用于更新进度，总值固定1000，避免内部下载区间大于传
 func downOHLCV2DBRange(sess *Queries, exchange banexg.BanExchange, exs *ExSymbol, timeFrame string, startMS, endMS,
 	oldStart, oldEnd int64, retry int, pBar *utils.PrgBar) (int, *errs.Error) {
 	if oldStart <= startMS && endMS <= oldEnd || startMS <= exs.ListMs && endMS <= exs.ListMs ||
-		exs.Combined || exs.DelistMs > 0 {
+		exs.Combined || exs.DelistMs > 0 || core.NetDisable {
 		// If you are completely in the downloaded interval or the download interval is less than the time of availability, you don't need to download it
 		// 完全处于已下载的区间 或 下载区间小于上市时间，无需下载
 		if pBar != nil {

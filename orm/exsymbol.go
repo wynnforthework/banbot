@@ -410,7 +410,7 @@ func EnsureListDates(sess *Queries, exchange banexg.BanExchange, exsMap map[int3
 	if len(emptys) == 0 {
 		return nil
 	}
-	hasFetch := exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType)
+	hasFetch := !core.NetDisable && exchange.HasApi(banexg.ApiFetchOHLCV, exInfo.MarketType)
 	var prgBar *utils.PrgBar
 	cacheNum := len(emptys)
 	if cacheNum > 10 && hasFetch {

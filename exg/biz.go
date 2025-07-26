@@ -83,6 +83,9 @@ func create(name, market, contractType string) (banexg.BanExchange, *errs.Error)
 	if err != nil {
 		return exchange, err
 	}
+	if core.NetDisable {
+		exchange.SetNetDisable(true)
+	}
 	return &BotExchange{BanExchange: exchange}, nil
 }
 

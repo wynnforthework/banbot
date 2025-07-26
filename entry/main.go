@@ -207,6 +207,7 @@ func bindSubFlags(args *config.CmdArgs, cmd *flag.FlagSet, noOpts []string, opts
 	args.BindToFlag(cmd, noOpts)
 	cmd.BoolVar(&core.CPUProfile, "cpu-profile", false, "enable cpu profile")
 	cmd.BoolVar(&core.MemProfile, "mem-profile", false, "enable memory profile")
+	cmd.BoolVar(&core.NetDisable, "net-off", false, "disable network request")
 
 	for _, key := range opts {
 		switch key {

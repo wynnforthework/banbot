@@ -285,21 +285,29 @@ func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
 		rows = append(rows, []string{"Worst Order", worstVal + "  " + worstPct + "%"})
 	}
 	rows = append(rows, rows2...)
-	return renderTable([]string{"Metric", "Value"}, rows)
+	return renderTable([]string{"Metric", "Value"}, rows, tw.AlignRight)
 }
 
-func renderTable(heads []string, rows [][]string) string {
+func renderTable(heads []string, rows [][]string, align tw.Align) string {
 	var b bytes.Buffer
 	cfg := tw.Rendition{
 		Borders: tw.Border{Left: tw.On, Top: tw.Off, Right: tw.On, Bottom: tw.Off},
 	}
 	table := tablewriter.NewTable(&b,
 		tablewriter.WithRenderer(renderer.NewMarkdown(cfg)),
+		tablewriter.WithConfig(tablewriter.Config{
+			Header: tw.CellConfig{
+				Alignment: tw.CellAlignment{Global: align},
+			},
+			Row: tw.CellConfig{
+				Alignment: tw.CellAlignment{Global: align},
+			},
+			Footer: tw.CellConfig{
+				Alignment: tw.CellAlignment{Global: align},
+			},
+		}),
 	)
 	table.Header(heads)
-	table.Configure(func(cfg *tablewriter.Config) {
-		cfg.Row.Alignment.Global = tw.AlignLeft
-	})
 	table.Bulk(rows)
 	table.Render()
 	return b.String()
@@ -550,7 +558,7 @@ func printGroups(groups []*RowItem, title string, measure bool, extHeads []strin
 		}
 		rows = append(rows, row)
 	}
-	return renderTable(heads, rows)
+	return renderTable(heads, rows, tw.AlignCenter)
 }
 
 func CalcMeasureByOrders(ods []*ormo.InOutOrder) (float64, float64, *errs.Error) {
