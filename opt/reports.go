@@ -50,6 +50,8 @@ type BTResult struct {
 	histOdOff       int            // 计算已完成订单利润的偏移
 	donePftLegal    float64        // 已完成订单利润
 	Plots           *PlotData      `json:"plots"`
+	EntLabels       []string       `json:"entLabels"`
+	EntDatasets     []*ChartDs     `json:"entDatasets"`
 	CreateMS        int64          `json:"createMS"`
 	StartMS         int64          `json:"startMS"`
 	EndMS           int64          `json:"endMS"`
@@ -91,7 +93,7 @@ type RowPart struct {
 	ProfitSum    float64            `json:"profitSum"`
 	ProfitPctSum float64            `json:"profitPctSum"`
 	CostSum      float64            `json:"costSum"`
-	Durations    []int              `json:"durations"`
+	Durations    []int              `json:"-"`
 	Orders       []*ormo.InOutOrder `json:"-"`
 	Sharpe       float64            `json:"sharpe"` // 夏普比率
 	Sortino      float64            `json:"sortino"`
@@ -223,6 +225,15 @@ func (r *BTResult) Collect() {
 		r.groupByProfits(orders)
 		r.groupByEnters(orders)
 		r.groupByExits(orders)
+		labels, dsList, err := CalcGroupCumProfits(orders, func(o *ormo.InOutOrder) string {
+			return fmt.Sprintf("%v:%v", o.Strategy, o.EnterTag)
+		}, ShowNum)
+		if err != nil {
+			log.Warn("calc cum profit for enter tags fail", zap.Error(err))
+		} else {
+			r.EntLabels = labels
+			r.EntDatasets = dsList
+		}
 	}
 	wallets := biz.GetWallets(config.DefAcc)
 	r.FinBalance = wallets.AvaLegal(nil)
@@ -830,10 +841,13 @@ func (r *BTResult) dumpGraph() {
 	}
 	// Draw cumulative profit curves for each entry tag separately
 	// 为入场标签分别绘制累计利润曲线
-	outPath = fmt.Sprintf("%s/enters.html", r.OutDir)
-	err = DumpEnterTagCumProfits(outPath, ormo.HistODs, 600)
-	if err != nil {
-		log.Error("DumpEnterTagCumProfits fail", zap.Error(err))
+	if len(r.EntLabels) > 0 {
+		outPath = fmt.Sprintf("%s/enters.html", r.OutDir)
+		title = "Strategy Enter Tag Cum Profits"
+		err = DumpChart(outPath, title, r.EntLabels, 3, nil, r.EntDatasets)
+		if err != nil {
+			log.Error("Dump EnterTag CumProfits fail", zap.Error(err))
+		}
 	}
 }
 
