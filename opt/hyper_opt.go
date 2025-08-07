@@ -903,7 +903,7 @@ func collectOptLog(paths []string, minScore float64, picker, pairSel string) (st
 					var dumpPath string
 					if best.ID != "" {
 						dumpPath = filepath.Join(detailDir, best.ID+".json")
-						btRes, err := parseBtResult(dumpPath)
+						btRes, err := ParseBtResult(dumpPath)
 						if err != nil {
 							log.Warn("parse BtResult fail", zap.String("err", err.Short()))
 							needRun = true
