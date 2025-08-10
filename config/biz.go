@@ -144,6 +144,7 @@ func ParseConfigs(paths []string, showLog bool) (*Config, *errs.Error) {
 		if err != nil {
 			return nil, errs.NewFull(core.ErrIOReadFail, err, "Read %s Fail", path)
 		}
+		fileData = []byte(os.ExpandEnv(string(fileData)))
 		var unpak map[string]interface{}
 		err = yaml.Unmarshal(fileData, &unpak)
 		if err != nil {
