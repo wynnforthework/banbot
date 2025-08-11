@@ -462,14 +462,36 @@ func (p *LiveProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 	}
 	if len(newHolds) > 0 {
 		var jobs []WatchJob
+		var down1mPairs = make(map[int32]*orm.ExSymbol)
+		var minSince = btime.UTCStamp()
 		for _, h := range newHolds {
-			symbol, timeFrame := h.getSymbol(), h.getStates()[0].TimeFrame
+			sta := h.getStates()[0]
+			symbol := h.getSymbol()
 			if since, ok := sinceMap[symbol]; ok {
 				jobs = append(jobs, WatchJob{
 					Symbol:    symbol,
-					TimeFrame: timeFrame,
+					TimeFrame: sta.TimeFrame,
 					Since:     since,
 				})
+				minSince = min(minSince, since)
+			}
+			if sta.TFSecs >= 3600 {
+				exs, err := orm.GetExSymbolCur(symbol)
+				if err != nil {
+					return err
+				}
+				down1mPairs[exs.ID] = exs
+			}
+		}
+		if len(down1mPairs) > 0 {
+			// 对1h及以上大周期，也需要对1m的K线数据提前下载到最新，避免spider下载耗时过久
+			exchange, err := exg.GetWith(core.ExgName, core.Market, "")
+			if err != nil {
+				return err
+			}
+			err = orm.BulkDownOHLCV(exchange, down1mPairs, "1m", minSince, btime.UTCStamp(), 0, nil)
+			if err != nil {
+				return err
 			}
 		}
 		err = p.WatchJobs(core.ExgName, core.Market, "ohlcv", jobs...)
