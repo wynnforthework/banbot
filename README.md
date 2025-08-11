@@ -13,6 +13,21 @@ banbot is a high-performance, easy-to-use, multi-symbol, multi-strategy, multi-p
 [discord-badge]: https://img.shields.io/discord/1289838115325743155.svg?logo=discord&style=flat-square
 [discord-url]: https://discord.com/invite/XXjA8ctqga
 
+
+<div align="center">
+  <!-- Keep these links. Translations will automatically update with the README. -->
+  <a href="https://www.readme-i18n.com/de/wynnforthework/banbot">Deutsch</a> | 
+  <a href="https://www.readme-i18n.com/es/wynnforthework/banbot">Español</a> | 
+  <a href="https://www.readme-i18n.com/fr/wynnforthework/banbot">français</a> | 
+  <a href="https://www.readme-i18n.com/ja/wynnforthework/banbot">日本語</a> | 
+  <a href="https://www.readme-i18n.com/ko/wynnforthework/banbot">한국어</a> | 
+  <a href="https://www.readme-i18n.com/pt/wynnforthework/banbot">Português</a> | 
+  <a href="https://www.readme-i18n.com/ru/wynnforthework/banbot">Русский</a> | 
+  <a href="https://www.readme-i18n.com/zh/wynnforthework/banbot">中文</a>
+</div>
+
+---
+
 ### Main Features
 * web ui: write strategy, backtest, and deploy without IDE.
 * high-performance: backtest for 1 year klines in seconds.
