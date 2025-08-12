@@ -415,6 +415,7 @@ func SortFeeders(holds []IHistKlineFeeder, hold IHistKlineFeeder, insert bool) [
 type LiveProvider struct {
 	Provider[IKlineFeeder]
 	*KLineWatcher
+	OnMinKlines func(msg *KLineMsg, bars []*banexg.Kline) *errs.Error
 }
 
 func NewLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) (*LiveProvider, *errs.Error) {
@@ -548,6 +549,12 @@ func makeOnKlineMsg(p *LiveProvider) func(msg *KLineMsg) {
 				_, err := hold.onNewBars(tfMSecs, bars)
 				if err != nil {
 					log.Error("onNewBars fail", zap.String("p", msg.Pair), zap.Error(err))
+				}
+				if p.OnMinKlines != nil {
+					err = p.OnMinKlines(msg, bars)
+					if err != nil {
+						log.Error("OnMinKlines fail", zap.String("p", msg.Pair), zap.Error(err))
+					}
 				}
 			}()
 		}
