@@ -396,7 +396,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
     winCount: number;
     profitSum: number;
     costSum: number;
-    durations: number[];
     sharpe: number;
     sortino: number;
     [key: string]: any;
@@ -627,7 +626,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                 { title: m.win_rate(), field: 'winCount', format: (v, g) => formatPercent(v * 100 / (g.orderNum || 1)) },
                 { title: m.tot_profit(), field: 'profitSum', format: v => formatNumber(v) },
                 { title: m.profit_rate(), field: 'profitSum', format: (v, g) => formatPercent(v * 100 / g.costSum) },
-                { title: m.avg_hold_time(), field: 'durations', format: (v: number[], g) => formatDuration(v.reduce((a, b) => a + b, 0) * 1000 / v.length) },
                 { title: m.sharpe_ratio() + '/' + m.sortino_ratio(), field: 'sharpe', format: (v, g) => `${formatNumber(v, 2)} / ${formatNumber(g.sortino, 2)}` }
               ])}
             {/if}
@@ -643,7 +641,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -654,7 +651,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                       </tr>
                     {/each}
                   </tbody>
@@ -673,7 +669,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -684,7 +679,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                       </tr>
                     {/each}
                   </tbody>
@@ -703,7 +697,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                       <th>{m.sharpe_ratio()}/{m.sortino_ratio()}</th>
                     </tr>
                   </thead>
@@ -715,7 +708,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                         <td>{formatNumber(group.sharpe, 2)} / {formatNumber(group.sortino, 2)}</td>
                       </tr>
                     {/each}
@@ -735,7 +727,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                       <th>{m.sharpe_ratio()}/{m.sortino_ratio()}</th>
                     </tr>
                   </thead>
@@ -747,7 +738,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                         <td>{formatNumber(group.sharpe, 2)} / {formatNumber(group.sortino, 2)}</td>
                       </tr>
                     {/each}

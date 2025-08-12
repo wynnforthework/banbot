@@ -11,7 +11,6 @@ export interface GroupItem {
   profitPctSum: number;
   profitSum: number;
   costSum: number;
-  durations: number[];
   sharpe: number;
   sortino: number;
 }
