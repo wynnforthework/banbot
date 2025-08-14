@@ -27,9 +27,9 @@ type FnOdCb = func(od *ormo.InOutOrder, isEnter bool)
 
 func InitLocalOrderMgr(callBack FnOdCb, showLog bool) {
 	for account := range config.Accounts {
-		mgr, ok := accOdMgrs[account]
+		_, ok := accOdMgrs[account]
 		if !ok {
-			mgr = &LocalOrderMgr{
+			odMgr := &LocalOrderMgr{
 				OrderMgr: OrderMgr{
 					callBack: callBack,
 					Account:  account,
@@ -37,7 +37,8 @@ func InitLocalOrderMgr(callBack FnOdCb, showLog bool) {
 				showLog:  showLog,
 				zeroAmts: make(map[string]int),
 			}
-			accOdMgrs[account] = mgr
+			odMgr.afterEnter = makeLocalAfterEnter(odMgr)
+			accOdMgrs[account] = odMgr
 		}
 	}
 }
@@ -857,4 +858,12 @@ func getExcPrice(od *ormo.InOutOrder, bar *banexg.Kline, trigPrice, limit, after
 		}
 	}
 	return 0
+}
+
+func makeLocalAfterEnter(o *LocalOrderMgr) FuncHandleIOrder {
+	return func(order *ormo.InOutOrder) *errs.Error {
+		// 伪时间增加1，避免同时多个订单下单key相同导致钱包扣除错误
+		btime.CurTimeMS += 1
+		return nil
+	}
 }
