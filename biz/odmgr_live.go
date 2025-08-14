@@ -965,7 +965,7 @@ func (o *LiveOrderMgr) ProcessOrders(sess *ormo.Queries, job *strat.StratJob) ([
 }
 
 func (o *LiveOrderMgr) EditOrder(od *ormo.InOutOrder, action string) {
-	if action == ormo.OdActionLimitEnter && isFarEnter(od) {
+	if isFarEnter(od) {
 		ormo.AddTriggerOd(o.Account, od)
 	} else {
 		o.queue <- &OdQItem{
@@ -1647,6 +1647,10 @@ func (o *LiveOrderMgr) submitExgOrder(od *ormo.InOutOrder, isEnter bool) *errs.E
 			params[banexg.ParamPositionSide] = "SHORT"
 		}
 	}
+	if isEnter && od.Stop > 0 {
+		// 设置触发价格
+		params[banexg.ParamTriggerPrice] = od.Stop
+	}
 	res, err := exchange.CreateOrder(od.Symbol, subOd.OrderType, side, amount, price, params)
 	if err != nil {
 		if !isEnter && err.BizCode == -2022 {
@@ -1918,31 +1922,40 @@ func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 }
 
 func isFarEnter(od *ormo.InOutOrder) bool {
-	if od.Status > ormo.InOutStatusPartEnter || od.Enter.Price == 0 ||
-		!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
-		// 跳过已完全入场，或者非限价单
+	if od.Status > ormo.InOutStatusPartEnter {
+		// 跳过已完全入场
+		return false
+	}
+	isLimit := od.Enter.Price > 0 && strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit)
+	if !isLimit && od.Stop <= 0 {
+		// 跳过非限价单、非触发单
 		return false
 	}
 	stopAfter := od.GetInfoInt64(ormo.OdInfoStopAfter)
 	if stopAfter == 0 || stopAfter <= btime.TimeMS() {
 		return false
 	}
-	return isFarLimit(od.Enter)
+	if od.Stop > 0 {
+		// 检查触发价格是否耗时较长
+		side := banexg.OdSideSell
+		if od.Short {
+			// 触发价格方向与订单入场方向相反
+			side = banexg.OdSideBuy
+		}
+		return isFarLimitTrigger(od.Symbol, side, od.Stop)
+	}
+	return isFarLimitTrigger(od.Symbol, od.Enter.Side, od.Enter.Price)
 }
 
 /*
 Determine whether an order is a limit order that is difficult to execute for a long time
 判断一个订单是否是长时间难以成交的限价单
 */
-func isFarLimit(od *ormo.ExOrder) bool {
-	if od.Price == 0 || !strings.Contains(od.OrderType, banexg.OdTypeLimit) {
-		// 非限价单，或没有指定价格，会很快成交
-		return false
-	}
-	secs, rate, err := getSecsByLimit(od.Symbol, od.Side, od.Price)
+func isFarLimitTrigger(pair, side string, price float64) bool {
+	secs, rate, err := getSecsByLimit(pair, side, price)
 	if err != nil {
-		log.Error("getSecsByLimit for isFarLimit fail", zap.String("pair", od.Symbol),
-			zap.String("side", od.Side), zap.Float64("price", od.Price), zap.Error(err))
+		log.Error("getSecsByLimit for isFarLimitTrigger fail", zap.String("pair", pair),
+			zap.String("side", side), zap.Float64("price", price), zap.Error(err))
 		return false
 	}
 	if secs < config.PutLimitSecs && rate >= 0.8 {

@@ -172,6 +172,7 @@ func (q *EnterReq) Clone() *EnterReq {
 		Short:           q.Short,
 		OrderType:       q.OrderType,
 		Limit:           q.Limit,
+		Stop:            q.Stop,
 		CostRate:        q.CostRate,
 		LegalCost:       q.LegalCost,
 		Leverage:        q.Leverage,
@@ -224,6 +225,9 @@ func (q *EnterReq) GetZapFields(s *StratJob, fields ...zap.Field) []zap.Field {
 	}
 	if q.Limit != 0 {
 		fields = append(fields, zap.Float64("limit", q.Limit))
+	}
+	if q.Stop != 0 {
+		fields = append(fields, zap.Float64("trigger", q.Stop))
 	}
 	if q.CostRate > 0 && q.CostRate < 1 {
 		fields = append(fields, zap.Float64("costRate", q.CostRate))

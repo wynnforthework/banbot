@@ -58,6 +58,9 @@ func (o *LocalOrderMgr) UpdateByBar(allOpens []*ormo.InOutOrder, bar *orm.InfoKl
 		if od.Symbol == bar.Symbol {
 			curOrders = append(curOrders, od)
 			curMap[od.ID] = true
+			if od.Exit != nil {
+				curMap[-od.ID] = true
+			}
 		}
 	}
 	if len(curOrders) == 0 && !core.CheckWallets {
@@ -106,10 +109,19 @@ func (o *LocalOrderMgr) fillPendingOrdersAll(orders []*ormo.InOutOrder, curMap m
 		var newOds []*ormo.InOutOrder
 		lock.Lock()
 		for _, od := range openOds {
-			if _, ok := curMap[od.ID]; !ok && (bar == nil || od.Symbol == bar.Symbol) {
+			if !(bar == nil || od.Symbol == bar.Symbol) {
+				continue
+			}
+			if _, ok := curMap[od.ID]; !ok {
 				newOds = append(newOds, od)
 				orders = append(orders, od)
 				curMap[od.ID] = true
+			}
+			if od.Exit != nil {
+				if _, ok := curMap[-od.ID]; !ok {
+					newOds = append(newOds, od)
+					curMap[-od.ID] = true
+				}
 			}
 		}
 		lock.Unlock()
@@ -168,11 +180,32 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 		odTFSecs := utils.TFToSecs(od.Timeframe)
 		fillMS := exOrder.CreateAt + int64(config.BTNetCost*1000)
 		barStartMS := utils.AlignTfMSecs(fillMS, int64(odTFSecs*1000))
+		odIsBuy := exOrder.Side == banexg.OdSideBuy
+		var minRate float64
 		var fillBarRate float64
+		var isStopEnter bool
+		if exOrder.Enter && od.Stop > 0 && bar != nil {
+			// 使用触发价格，enterOrder中已判断有效性
+			trigPrice := od.Stop
+			if !odIsBuy && trigPrice < bar.Low || odIsBuy && trigPrice > bar.High {
+				continue
+			}
+			price = trigPrice
+			od.Stop = 0
+			if odType == banexg.OdTypeLimit && exOrder.Price > 0 && (exOrder.Price > trigPrice) == od.Short {
+				// 触发价满足，有额外限价单
+				price = exOrder.Price
+			}
+			minRate = float64((exOrder.CreateAt-barStartMS)/1000) / float64(odTFSecs)
+			minRate = simMarketRate(&bar.Kline, trigPrice, odIsBuy, true, minRate)
+			fillBarRate = minRate
+			fillMS = bar.Time + int64(float64(odTFSecs)*minRate)*1000
+			isStopEnter = true
+		}
 		if bar == nil {
 			price = core.GetPrice(od.Symbol)
 		} else if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
-			if exOrder.Side == banexg.OdSideBuy {
+			if odIsBuy {
 				if price < bar.Low {
 					continue
 				} else if price > bar.Open {
@@ -180,7 +213,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 					// If the purchase price is higher than the market price, the transaction will be completed at the market price.
 					price = bar.Open
 				}
-			} else if exOrder.Side == banexg.OdSideSell {
+			} else {
 				if price > bar.High {
 					continue
 				} else if price < bar.Open {
@@ -189,11 +222,12 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 					price = bar.Open
 				}
 			}
-			odIsBuy := exOrder.Side == banexg.OdSideBuy
-			minRate := float64((exOrder.CreateAt-barStartMS)/1000) / float64(odTFSecs)
+			if minRate == 0 {
+				minRate = float64((exOrder.CreateAt-barStartMS)/1000) / float64(odTFSecs)
+			}
 			fillBarRate = simMarketRate(&bar.Kline, exOrder.Price, odIsBuy, false, minRate)
 			fillMS = bar.Time + int64(float64(odTFSecs)*fillBarRate)*1000
-		} else {
+		} else if !isStopEnter {
 			// 按网络延迟，模拟成交价格，和开盘价接近According to the network delay, the simulated transaction price is close to the opening price
 			fillBarRate = float64((fillMS-barStartMS)/1000) / float64(odTFSecs)
 			price = simMarketPrice(&bar.Kline, fillBarRate)
@@ -406,7 +440,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 		odType = banexg.OdTypeLimit
 		rate += simMarketRate(bar, fillPrice, od.Short, true, afterRate)
 	} else {
-		// Trigger time + network delay
+		// Stop time + network delay
 		// 触发时间+网络延迟
 		rate += simMarketRate(bar, trigPrice, od.Short, true, afterRate)
 		// Stop loss at market price and sell immediately
@@ -477,6 +511,9 @@ func (o *LocalOrderMgr) exitAndFill(sess *ormo.Queries, req *strat.ExitReq, bar 
 		odMap := make(map[int64]bool)
 		for _, od := range orders {
 			odMap[od.ID] = true
+			if od.Exit != nil {
+				odMap[-od.ID] = true
+			}
 		}
 		backUntil := int64(0)
 		if noEnter {
@@ -551,6 +588,9 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 			}
 			exitOds = append(exitOds, iod)
 			odMap[iod.ID] = true
+			if iod.Exit != nil {
+				odMap[-iod.ID] = true
+			}
 		}
 		if err == nil {
 			core.NoEnterUntil[o.Account] = btime.TimeMS() + 72*3600*1000

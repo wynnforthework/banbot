@@ -123,6 +123,7 @@ type EnterReq struct {
 	Short           bool    // Whether to short sell or not 是否做空
 	OrderType       int     // 订单类型, core.OrderType*
 	Limit           float64 // The entry price of a limit order will be submitted as a limit order when specified 限价单入场价格，指定时订单将作为限价单提交
+	Stop            float64 // Stop price, buy orders enter when the price rises to the trigger price (vice versa for sell orders). 止损(触发价格)，做多订单时价格上涨到触发价格才入场（做空相反）
 	CostRate        float64 // The opening ratio is set to 1 times by default according to the configuration. Used for calculating LegalList 开仓倍率、默认按配置1倍。用于计算LegalCost
 	LegalCost       float64 // Spend the amount in fiat currency. Ignore CostRate when specified 花费法币金额。指定时忽略CostRate
 	Leverage        float64 // Leverage ratio 杠杆倍数

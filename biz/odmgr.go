@@ -311,6 +311,7 @@ func (o *OrderMgr) RelayOrders(sess *ormo.Queries, orders []*ormo.InOutOrder) *e
 				Status:    odr.Status,
 				EnterTag:  odr.EnterTag,
 				InitPrice: odr.InitPrice,
+				Stop:      odr.Stop,
 				QuoteCost: odr.QuoteCost,
 				ExitTag:   odr.ExitTag,
 				Leverage:  odr.Leverage,
@@ -387,9 +388,14 @@ func (o *OrderMgr) enterOrder(sess *ormo.Queries, exs *orm.ExSymbol, tf string, 
 		}
 	}
 	stgVer, _ := strat.Versions[req.StratName]
+	price := core.GetPrice(exs.Symbol)
 	odSide := banexg.OdSideBuy
 	if req.Short {
 		odSide = banexg.OdSideSell
+	}
+	if (price > req.Stop) != req.Short {
+		// 立即触发，置为0
+		req.Stop = 0
 	}
 	curTimeMS := btime.TimeMS()
 	taskId := ormo.GetTaskID(o.Account)
@@ -402,7 +408,8 @@ func (o *OrderMgr) enterOrder(sess *ormo.Queries, exs *orm.ExSymbol, tf string, 
 			Short:     req.Short,
 			Status:    ormo.InOutStatusInit,
 			EnterTag:  req.Tag,
-			InitPrice: core.GetPrice(exs.Symbol),
+			InitPrice: price,
+			Stop:      req.Stop,
 			Leverage:  req.Leverage,
 			EnterAt:   curTimeMS,
 			Strategy:  req.StratName,

@@ -301,6 +301,7 @@ func (i *InOutOrder) SetExit(exitAt int64, tag, orderType string, limit float64)
 		if i.Short {
 			odSide = banexg.OdSideBuy
 		}
+		core.NewNumInSim += 1
 		i.Exit = &ExOrder{
 			TaskID:    i.TaskID,
 			InoutID:   i.ID,

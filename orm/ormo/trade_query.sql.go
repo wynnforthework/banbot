@@ -63,10 +63,10 @@ func (q *Queries) AddExOrder(ctx context.Context, arg AddExOrderParams) (int64, 
 
 const addIOrder = `-- name: AddIOrder :one
 insert into iorder ("task_id", "symbol", "sid", "timeframe", "short", "status",
-                    "enter_tag", "init_price", "quote_cost", "exit_tag", "leverage",
+                    "enter_tag", "init_price", "stop", "quote_cost", "exit_tag", "leverage",
                     "enter_at", "exit_at", "strategy", "stg_ver", "max_pft_rate", "max_draw_down",
                     "profit_rate", "profit", "info")
-values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id
 `
 
@@ -78,6 +78,7 @@ type AddIOrderParams struct {
 	Short       bool    `json:"short"`
 	Status      int64   `json:"status"`
 	EnterTag    string  `json:"enter_tag"`
+	Stop        float64 `json:"stop"`
 	InitPrice   float64 `json:"init_price"`
 	QuoteCost   float64 `json:"quote_cost"`
 	ExitTag     string  `json:"exit_tag"`
@@ -102,6 +103,7 @@ func (q *Queries) AddIOrder(ctx context.Context, arg AddIOrderParams) (int64, er
 		arg.Short,
 		arg.Status,
 		arg.EnterTag,
+		arg.Stop,
 		arg.InitPrice,
 		arg.QuoteCost,
 		arg.ExitTag,
@@ -234,7 +236,7 @@ func (q *Queries) GetExOrders(ctx context.Context, inoutID int64) ([]*ExOrder, e
 }
 
 const getIOrder = `-- name: GetIOrder :one
-select id, task_id, symbol, sid, timeframe, short, status, enter_tag, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_pft_rate, max_draw_down, profit_rate, profit, info from iorder
+select id, task_id, symbol, sid, timeframe, short, status, enter_tag, stop, init_price, quote_cost, exit_tag, leverage, enter_at, exit_at, strategy, stg_ver, max_pft_rate, max_draw_down, profit_rate, profit, info from iorder
 where id = ?
 `
 
@@ -250,6 +252,7 @@ func (q *Queries) GetIOrder(ctx context.Context, id int64) (*IOrder, error) {
 		&i.Short,
 		&i.Status,
 		&i.EnterTag,
+		&i.Stop,
 		&i.InitPrice,
 		&i.QuoteCost,
 		&i.ExitTag,
@@ -469,6 +472,7 @@ update iorder set
                   "short" = ?,
                   "status" = ?,
                   "enter_tag" = ?,
+                  "stop" = ?,
                   "init_price" = ?,
                   "quote_cost" = ?,
                   "exit_tag" = ?,
@@ -493,6 +497,7 @@ type SetIOrderParams struct {
 	Short       bool    `json:"short"`
 	Status      int64   `json:"status"`
 	EnterTag    string  `json:"enter_tag"`
+	Stop        float64 `json:"stop"`
 	InitPrice   float64 `json:"init_price"`
 	QuoteCost   float64 `json:"quote_cost"`
 	ExitTag     string  `json:"exit_tag"`
@@ -518,6 +523,7 @@ func (q *Queries) SetIOrder(ctx context.Context, arg SetIOrderParams) error {
 		arg.Short,
 		arg.Status,
 		arg.EnterTag,
+		arg.Stop,
 		arg.InitPrice,
 		arg.QuoteCost,
 		arg.ExitTag,

@@ -93,9 +93,11 @@ func tryFillLocalLiveOrder(o *LocalLiveOrderMgr, od *ormo.InOutOrder, isEnter bo
 	if exOd.OrderType != "" {
 		odType = exOd.OrderType
 	}
-	if !strings.Contains(odType, banexg.OdTypeMarket) {
+	if !strings.Contains(odType, banexg.OdTypeMarket) || od.Stop > 0 {
+		// 限价单或触发价格，按推送价格处理
 		return nil
 	}
+	// 市价单立刻撮合成交
 	ask, bid, err := getAskBidPrice(od.Symbol)
 	if err != nil {
 		return err
