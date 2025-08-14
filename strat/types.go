@@ -24,6 +24,7 @@ type TradeStrat struct {
 	MinTfScore    float64 // Minimum time cycle quality, default 0.8 最小时间周期质量，默认0.8
 	WsSubs        map[string]string
 	DrawDownExit  bool
+	HedgeOff      bool    // turn off future hedge mode 关闭合约双向持仓
 	BatchInOut    bool    // Whether to batch execute entry/exit 是否批量执行入场/出场
 	BatchInfo     bool    // whether to perform batch processing after OninfoBar 是否对OnInfoBar后执行批量处理
 	StakeRate     float64 // Relative basic amount billing rate 相对基础金额开单倍率

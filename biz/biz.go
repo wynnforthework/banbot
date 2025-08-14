@@ -178,7 +178,7 @@ func InitOdSubs() {
 	var subStgys = map[string]*strat.TradeStrat{}
 	for _, items := range strat.PairStrats {
 		for stgName, stagy := range items {
-			if stagy.OnOrderChange != nil {
+			if stagy.OnOrderChange != nil || stagy.HedgeOff {
 				subStgys[stgName] = stagy
 			}
 		}
@@ -205,7 +205,13 @@ func InitOdSubs() {
 			}
 			job, _ := its[od.Strategy]
 			if job != nil {
-				stgy.OnOrderChange(job, od, evt)
+				if stgy.HedgeOff && evt == strat.OdChgEnterFill {
+					// 策略为单向持仓，成交时尝试关闭另一侧订单
+					closeSideOrders(job, !od.Short)
+				}
+				if stgy.OnOrderChange != nil {
+					stgy.OnOrderChange(job, od, evt)
+				}
 				if len(job.Entrys) > 0 || len(job.Exits) > 0 {
 					_, _, err := GetOdMgr(acc).ProcessOrders(nil, job)
 					if err != nil {
@@ -214,6 +220,25 @@ func InitOdSubs() {
 				}
 			}
 		})
+	}
+}
+
+func closeSideOrders(s *strat.StratJob, isShort bool) {
+	var closeList = s.LongOrders
+	if isShort {
+		closeList = s.ShortOrders
+	}
+	if len(closeList) > 0 {
+		for _, o := range closeList {
+			if o.Status >= ormo.InOutStatusPartEnter && o.Status <= ormo.InOutStatusPartExit {
+				_ = s.CloseOrders(&strat.ExitReq{
+					Tag:     core.ExitTagHedgeOff,
+					OrderID: o.ID,
+					Force:   true,
+					Log:     true,
+				})
+			}
+		}
 	}
 }
 
