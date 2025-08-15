@@ -328,7 +328,7 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = entPrice
 	exOrder.Status = ormo.OdStatusClosed
-	err = od.UpdateFee(entPrice, true, false)
+	err = od.UpdateFee(entPrice, true)
 	if err != nil {
 		return err
 	}
@@ -354,7 +354,7 @@ func (o *LocalOrderMgr) fillPendingExit(od *ormo.InOutOrder, price float64, fill
 	exOrder.Price = price
 	exOrder.Filled = exOrder.Amount
 	exOrder.Average = price
-	err := od.UpdateFee(price, false, false)
+	err := od.UpdateFee(price, false)
 	if err != nil {
 		return err
 	}
@@ -844,17 +844,17 @@ func getExcPrice(od *ormo.InOutOrder, bar *banexg.Kline, trigPrice, limit, after
 			// 多单，平仓限价高于bar最高，不触发
 			return -1
 		}
-		if od.Short && limit < trigPrice || !od.Short && limit > trigPrice {
-			// Short order, the closing limit price is lower than the trigger price, it may be a limit order
+		if od.Short && limit <= trigPrice || !od.Short && limit >= trigPrice {
+			// 简单起见，指定了Limit限价出场，则默认限价单成交，不考虑时间
+			return limit
 			// 空单，平仓限价低于触发价，可能是限价单
-			// For long orders, the closing limit price is higher than the trigger price, which may be a limit order.
 			// 多单，平仓限价高于触发价，可能是限价单
-			trigRate := simMarketRate(bar, trigPrice, od.Short, true, afterRate)
-			rate := simMarketRate(bar, limit, od.Short, true, afterRate)
-			if (rate-trigRate)*tfSecs > 30 {
-				// 触发后，限价单超过30s成交，认为限价单
-				return limit
-			}
+			//trigRate := simMarketRate(bar, trigPrice, od.Short, true, afterRate)
+			//rate := simMarketRate(bar, limit, od.Short, true, afterRate)
+			//if (rate-trigRate)*tfSecs > 30 {
+			//	// 触发后，限价单超过30s成交，认为限价单
+			//	return limit
+			//}
 		}
 	}
 	return 0

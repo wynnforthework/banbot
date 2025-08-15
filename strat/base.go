@@ -158,6 +158,10 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 		dirFlag = -1.0
 	}
 	enterPrice := core.GetPrice(symbol)
+	isLimit := core.IsLimitOrder(req.OrderType)
+	if isLimit && req.Limit == 0 {
+		req.Limit = enterPrice
+	}
 	if req.Limit > 0 {
 		if (req.Limit-enterPrice)*dirFlag < 0 {
 			enterPrice = req.Limit
@@ -266,7 +270,7 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 	if req.Limit > 0 && req.OrderType == 0 {
 		req.OrderType = core.OrderTypeLimit
 	}
-	if req.Limit > 0 && core.IsLimitOrder(req.OrderType) {
+	if req.Limit > 0 {
 		// 是限价入场单
 		if req.StopBars == 0 {
 			req.StopBars = s.Strat.StopEnterBars

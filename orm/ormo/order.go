@@ -243,21 +243,14 @@ UpdateFee
 Calculates commission for entry/exit orders. Must be called after Filled is assigned a value, otherwise the calculation is empty
 为入场/出场订单计算手续费，必须在Filled赋值后调用，否则计算为空
 */
-func (i *InOutOrder) UpdateFee(price float64, forEnter bool, isHistory bool) *errs.Error {
+func (i *InOutOrder) UpdateFee(price float64, forEnter bool) *errs.Error {
 	exchange := exg.Default
 	exOrder := i.Enter
 	if !forEnter {
 		exOrder = i.Exit
 	}
-	var maker = false
-	if exOrder.OrderType != banexg.OdTypeMarket {
-		if isHistory {
-			// 历史已完成订单，不使用当前价格判断是否为maker，直接认为maker
-			maker = true
-		} else {
-			maker = core.IsMaker(i.Symbol, exOrder.Side, price)
-		}
-	}
+	//  dry-run 不用core.IsMaker最新价格判断是否限价单，因也是bar，会错取取close
+	var maker = strings.Contains(exOrder.OrderType, "limit")
 	fee, err := exchange.CalculateFee(i.Symbol, exOrder.OrderType, exOrder.Side, exOrder.Filled, price, maker, nil)
 	if err != nil {
 		return err
@@ -350,7 +343,7 @@ func (i *InOutOrder) LocalExit(exitAt int64, tag string, price float64, msg, odT
 	}
 	if i.Enter.Status < OdStatusClosed {
 		i.Enter.Status = OdStatusClosed
-		err := i.UpdateFee(price, true, true)
+		err := i.UpdateFee(price, true)
 		if err != nil {
 			return err
 		}
@@ -364,7 +357,7 @@ func (i *InOutOrder) LocalExit(exitAt int64, tag string, price float64, msg, odT
 	i.Exit.Filled = i.Enter.Filled
 	i.Exit.Average = i.Exit.Price
 	i.Status = InOutStatusFullExit
-	err := i.UpdateFee(price, false, true)
+	err := i.UpdateFee(price, false)
 	if err != nil {
 		return err
 	}
