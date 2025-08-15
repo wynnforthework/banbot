@@ -1137,8 +1137,8 @@ func getBtStratText(c *fiber.Ctx) error {
 // GetSymbolsHandler 获取交易品种列表
 func GetSymbolsHandler(c *fiber.Ctx) error {
 	type SymbolArgs struct {
-		Exchange string `query:"exchange" validate:"required"`
-		Market   string `query:"market" validate:"required"`
+		Exchange string `query:"exchange"`
+		Market   string `query:"market"`
 		Symbol   string `query:"symbol"`
 		Settle   string `query:"settle"`
 		Limit    int    `query:"limit"`
@@ -1149,6 +1149,12 @@ func GetSymbolsHandler(c *fiber.Ctx) error {
 	var args = new(SymbolArgs)
 	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
 		return err
+	}
+	if strings.TrimSpace(args.Exchange) == "" {
+		args.Exchange = core.ExgName
+	}
+	if strings.TrimSpace(args.Market) == "" {
+		args.Market = core.Market
 	}
 
 	if _, ok := exg.AllowExgIds[args.Exchange]; !ok && args.Exchange != "" {
@@ -1226,14 +1232,18 @@ func GetSymbolsHandler(c *fiber.Ctx) error {
 			dataMap[exs.Symbol] = exs.ID
 		}
 		return c.JSON(fiber.Map{
-			"total": total,
-			"data":  dataMap,
+			"total":    total,
+			"data":     dataMap,
+			"exchange": args.Exchange,
+			"market":   args.Market,
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"total": total,
-		"data":  filtered,
+		"total":    total,
+		"data":     filtered,
+		"exchange": args.Exchange,
+		"market":   args.Market,
 	})
 }
 

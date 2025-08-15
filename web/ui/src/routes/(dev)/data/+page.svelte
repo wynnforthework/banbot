@@ -35,6 +35,8 @@
     });
     symbols = rsp.data;
     totalCount = rsp.total;
+    selectedExchange = rsp.exchange || "";
+    selectedMarket = rsp.market || "";
   }
 
   // 应用筛选
