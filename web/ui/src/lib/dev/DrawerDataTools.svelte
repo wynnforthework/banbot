@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getApi, postApi } from '$lib/netio';
   import SuggestTags from '$lib/SuggestTags.svelte';
-  import { markets, periods, exchanges } from '$lib/common';
+  import { periods, exchanges, getMarkets } from '$lib/common';
   import {alerts} from '$lib/stores/alerts';
   import type { ExSymbol } from '$lib/dev/common';
   import {toUTCStamp} from '$lib/dateutil'
@@ -18,6 +18,8 @@
   }: {
     show: boolean
   } = $props();
+
+  let marketOptions = getMarkets();
   
   let theme: Extension | null = $state(oneDark);
   let editor: CodeMirror | null = $state(null);
@@ -240,8 +242,8 @@
             <label class="label" for="market">{m.market()}</label>
             <select id="market" class="select" required bind:value={form.market}>
               <option value="">{m.any()}</option>
-              {#each markets as market}
-                <option value={market}>{market}</option>
+              {#each marketOptions as market}
+                <option value={market.value}>{market.title}</option>
               {/each}
             </select>
           </fieldset>

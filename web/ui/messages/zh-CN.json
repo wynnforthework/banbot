@@ -895,5 +895,9 @@
   "percentage_change": "百分比变化",
   "collateral": "抵押品",
   "liquidation_price": "清算价格",
-  "isolated": "逐仓模式"
+  "isolated": "逐仓模式",
+  "market_spot": "现货",
+  "market_linear": "U本位合约",
+  "market_inverse": "币本位合约",
+  "market_option": "期权"
 }
