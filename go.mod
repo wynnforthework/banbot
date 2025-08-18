@@ -9,14 +9,14 @@ go 1.23.0
 
 require (
 	github.com/anyongjin/go-bayesopt v1.0.2
-	github.com/banbox/banexg v0.2.33-beta.4
+	github.com/banbox/banexg v0.2.33
 	github.com/banbox/banta v0.3.4
 	github.com/c-bata/goptuna v0.9.0
 	github.com/dgraph-io/ristretto v0.2.0
 	github.com/jackc/pgx/v5 v5.7.5
 	github.com/muesli/clusters v0.0.0-20200529215643-2700303c1762
 	github.com/muesli/kmeans v0.3.1
-	github.com/olekukonko/tablewriter v1.0.8
+	github.com/olekukonko/tablewriter v1.0.9
 	// github.com/pkujhd/goloader v0.0.0-20240113094056-ff3a1e01ffcb
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/shopspring/decimal v1.4.0

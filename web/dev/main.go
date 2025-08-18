@@ -50,7 +50,11 @@ func Run(args []string) error {
 
 	// 检查并设置日志文件输出
 	if ag.LogFile == "" {
-		logDir := filepath.Join(os.TempDir(), "banbot")
+		cacheDir, err_ := utils2.GetCacheDir()
+		if err_ != nil {
+			return err_
+		}
+		logDir := filepath.Join(cacheDir, "banbot")
 		if err := os.MkdirAll(logDir, 0755); err != nil {
 			return fmt.Errorf("failed to create log directory: %v", err)
 		}
