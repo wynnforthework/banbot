@@ -175,6 +175,27 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 			AddBatchJob(account, bar.TimeFrame, job, env)
 		}
 	}
+	if env.VNum > 1000 && !isWarmup {
+		// Series过多，检查是否有内存泄露
+		keyAt := "first_hit_at"
+		keyNum := "first_hit_vnum"
+		if cacheVal, ok := env.Data[keyAt]; ok {
+			firstAt, _ := cacheVal.(int)
+			firstNum, _ := env.Data[keyNum].(int)
+			if env.BarNum-firstAt > 10 {
+				if env.VNum-firstNum > 0 {
+					// 相比第一次有Series异常新增
+					addNum := env.VNum - firstNum
+					addFor := env.BarNum - firstAt
+					errMsg := "series too many (total %v), new add %v in %v bars, try replace `NewSeries` with `Series.To`"
+					return errs.NewMsg(errs.CodeRunTime, errMsg, env.VNum, addNum, addFor)
+				}
+			}
+		} else {
+			env.Data[keyAt] = env.BarNum
+			env.Data[keyNum] = env.VNum
+		}
+	}
 	return nil
 }
 
