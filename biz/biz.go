@@ -313,6 +313,9 @@ func TryFireBatches(currMS int64, isWarmUp bool) int {
 				infoJobs[task.Symbol] = task
 			}
 		}
+		if stgy == nil {
+			continue
+		}
 		arr := strings.Split(key, "_")
 		timeframe, account := arr[0], arr[1]
 		openOds, lock := ormo.GetOpenODs(account)

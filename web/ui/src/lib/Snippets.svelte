@@ -80,8 +80,8 @@
       </div>
 
       <div class="flex justify-between text-xs text-base-content/60">
-        <div class="tooltip" data-tip={m.exit_time()}>
-          {fmtDateStr(order.exit_at)}
+        <div class="tooltip" data-tip={m.enter_time()}>
+          {fmtDateStr(order.enter_at)}
         </div>
         <div class="tooltip" data-tip={m.strategy()}>
           {order.strategy}

@@ -53,6 +53,14 @@
   let startMS = $state(0);
   let endMS = $state(0);
   let odNums = $state<number[]>();
+  
+  // 排序相关状态
+  let sortField = $state('');
+  let sortOrder = $state<'asc' | 'desc'>('asc');
+  
+  // 时间筛选器状态
+  let startDate = $state('');
+  let endDate = $state('');
 
   // 日志相关状态
   let logs = $state('');
@@ -114,7 +122,7 @@
   }
 
   async function loadOrders() {
-    const rsp = await getApi('/dev/bt_orders', {
+    const params: any = {
       task_id: id,
       page: currentPage,
       page_size: pageSize,
@@ -122,9 +130,17 @@
       strategy,
       enter_tag: enterTag,
       exit_tag: exitTag,
-      start_ms: startMS,
-      end_ms: endMS
-    });
+      start_ms: startMS || (startDate ? new Date(startDate).getTime() : 0),
+      end_ms: endMS || (endDate ? new Date(endDate + ' 23:59:59').getTime() : 0)
+    };
+    
+    // 添加排序参数
+    if (sortField) {
+      params.sort_field = sortField;
+      params.sort_order = sortOrder;
+    }
+    
+    const rsp = await getApi('/dev/bt_orders', params);
     if(rsp.code != 200) {
       alerts.error(rsp.msg || 'load orders failed');
       return;
@@ -409,6 +425,25 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
   function handlePageSizeChange(newSize: number) {
     pageSize = newSize;
     loadOrders();
+  }
+  
+  // 处理排序变化
+  function handleSort(field: string) {
+    if (sortField === field) {
+      // 切换排序顺序
+      sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      // 新字段，默认降序
+      sortField = field;
+      sortOrder = 'desc';
+    }
+    loadOrders();
+  }
+  
+  // 获取排序图标
+  function getSortIcon(field: string): string {
+    if (sortField !== field) return '↕';
+    return sortOrder === 'asc' ? '↑' : '↓';
   }
 
   // 定义导航菜单项
@@ -762,38 +797,114 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
       {:else if activeTab === 'orders'}
         <div class="flex flex-col gap-4 flex-1">
           <!-- 过滤器 -->
-          <div class="flex flex-wrap gap-4">
-            <input type="text" placeholder={m.symbol()} class="input w-32"
-              bind:value={symbol} onchange={loadOrders}
-            />
-            <input type="text" placeholder={m.strategy()} class="input w-32"
-              bind:value={strategy} onchange={loadOrders}
-            />
-            <input type="text" placeholder={m.enter_tag()} class="input w-32"
-              bind:value={enterTag} onchange={loadOrders}
-            />
-            <input type="text" placeholder={m.exit_tag()} class="input w-32"
-              bind:value={exitTag} onchange={loadOrders}
-            />
+          <div class="flex flex-wrap gap-3 items-end">
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.symbol()}</span>
+              </label>
+              <input type="text" placeholder={m.symbol()} class="input input-sm w-28"
+                bind:value={symbol} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.strategy()}</span>
+              </label>
+              <input type="text" placeholder={m.strategy()} class="input input-sm w-28"
+                bind:value={strategy} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.enter_tag()}</span>
+              </label>
+              <input type="text" placeholder={m.enter_tag()} class="input input-sm w-28"
+                bind:value={enterTag} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.exit_tag()}</span>
+              </label>
+              <input type="text" placeholder={m.exit_tag()} class="input input-sm w-28"
+                bind:value={exitTag} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.start_time()}</span>
+              </label>
+              <input type="date" class="input input-sm w-36"
+                bind:value={startDate} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.end_time()}</span>
+              </label>
+              <input type="date" class="input input-sm w-36"
+                bind:value={endDate} onchange={loadOrders}
+              />
+            </div>
+            <button class="btn btn-sm btn-primary" onclick={loadOrders}>
+              {m.query()}
+            </button>
+            <button class="btn btn-sm btn-ghost" onclick={() => {
+              symbol = '';
+              strategy = '';
+              enterTag = '';
+              exitTag = '';
+              startDate = '';
+              endDate = '';
+              sortField = '';
+              sortOrder = 'asc';
+              loadOrders();
+            }}>
+              {m.reset()}
+            </button>
           </div>
 
           <!-- 订单表格 -->
           <div class="overflow-x-auto">
-            <table class="table">
+            <table class="table table-sm">
               <thead>
                 <tr>
-                  <th>{m.symbol()}</th>
-                  <th>{m.direction()}</th>
-                  <th>{m.leverage()}</th>
-                  <th>{m.enter_at()}({curTZ()})</th>
-                  <th>{m.enter_tag()}</th>
-                  <th>{m.enter_price()}</th>
-                  <th>{m.enter_amount()}</th>
-                  <th>{m.exit_at()}({curTZ()})</th>
-                  <th>{m.exit_tag()}</th>
-                  <th>{m.exit_price()}</th>
-                  <th>{m.exit_amount()}</th>
-                  <th>{m.profit()}</th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('symbol')}>
+                    {m.symbol()} <span class="text-xs opacity-60">{getSortIcon('symbol')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('direction')}>
+                    {m.direction()} <span class="text-xs opacity-60">{getSortIcon('direction')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('leverage')}>
+                    {m.leverage()} <span class="text-xs opacity-60">{getSortIcon('leverage')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_at')}>
+                    {m.enter_at()}({curTZ()}) <span class="text-xs opacity-60">{getSortIcon('enter_at')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_tag')}>
+                    {m.enter_tag()} <span class="text-xs opacity-60">{getSortIcon('enter_tag')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_price')}>
+                    {m.enter_price()} <span class="text-xs opacity-60">{getSortIcon('enter_price')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_amount')}>
+                    {m.enter_amount()} <span class="text-xs opacity-60">{getSortIcon('enter_amount')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_at')}>
+                    {m.exit_at()}({curTZ()}) <span class="text-xs opacity-60">{getSortIcon('exit_at')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_tag')}>
+                    {m.exit_tag()} <span class="text-xs opacity-60">{getSortIcon('exit_tag')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_price')}>
+                    {m.exit_price()} <span class="text-xs opacity-60">{getSortIcon('exit_price')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_amount')}>
+                    {m.exit_amount()} <span class="text-xs opacity-60">{getSortIcon('exit_amount')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('profit')}>
+                    {m.profit()} <span class="text-xs opacity-60">{getSortIcon('profit')}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>

@@ -188,6 +188,7 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 					addNum := env.VNum - firstNum
 					addFor := env.BarNum - firstAt
 					errMsg := "series too many (total %v), new add %v in %v bars, try replace `NewSeries` with `Series.To`"
+					core.BotRunning = false
 					return errs.NewMsg(errs.CodeRunTime, errMsg, env.VNum, addNum, addFor)
 				}
 			}
