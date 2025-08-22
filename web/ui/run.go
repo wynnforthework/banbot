@@ -74,6 +74,7 @@ func downNewUI(errMsg, uiDistDir, verPath string) error {
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == 404 && !strings.Contains(downUrl, "github") {
 			// 非github下载404，尝试从github下载
+			downUrl = strings.Replace(downUrl, "gitee", "github", 1)
 			log.Warn("download 404, retry from github")
 			resp, err = http.Get(downUrl)
 			if err != nil {
