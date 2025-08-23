@@ -1,17 +1,9 @@
 <script lang="ts" module>
   import type {InOutOrder} from "$lib/order";
   import { fmtDateStr } from '$lib/dateutil';
+  import { fmtNumber } from '$lib/common';
   import * as m from '$lib/paraglide/messages.js'
   export {orderCard, pagination}
-
-    
-  function formatNumber(num: number, decimals = 2) {
-    if(!num) return '0';
-    if(decimals >= 6 && num > 1){
-      decimals = 4;
-    }
-    return num.toFixed(decimals);
-  }
 
   function formatPercent(num: number, decimals = 1) {
     if(!num) return '0%';
@@ -44,9 +36,8 @@
 {/snippet}
 
 {#snippet orderCard(order: InOutOrder, isSelected: boolean, onAnalysis: () => void, onDetail: (e: Event) => void)}
-  <div class="w-[15em] mr-2 mb-3 bg-base-200 hover:bg-base-300 cursor-pointer shadow-sm hover:shadow-md transition-all rounded-lg"
+  <div class="w-[15em] mr-2 mb-3 bg-base-200 hover:bg-base-300 cursor-pointer shadow-sm hover:shadow-md transition-all rounded-lg {isSelected ? 'ring-2 ring-primary bg-primary/10' : ''}"
     onclick={onAnalysis}
-    class:bg-slate-200={isSelected}
   >
     <div class="p-3.5">
       <div class="flex mb-2.5 items-center justify-between">
@@ -60,10 +51,7 @@
           {order.enter_tag}
         </div>
         <div class="tooltip font-medium" data-tip={m.enter_price()}>
-          {formatNumber(order.enter?.average||order.enter?.price || 0, 8)}
-        </div>
-        <div class="tooltip opacity-75" data-tip={m.enter_amount()}>
-          {formatNumber(order.enter?.filled ||order.enter?.amount || 0, 8)}
+          {fmtNumber(order.enter?.average||order.enter?.price || 0)}
         </div>
       </div>
 

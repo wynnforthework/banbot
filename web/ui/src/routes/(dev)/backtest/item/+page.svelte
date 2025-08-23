@@ -4,6 +4,7 @@
   import { getApi } from '$lib/netio';
   import { alerts } from "$lib/stores/alerts";
   import CodeMirror from '$lib/dev/CodeMirror.svelte';
+  import Icon from '$lib/Icon.svelte';
   import { oneDark } from '@codemirror/theme-one-dark';
   import type { Extension } from '@codemirror/state';
   import * as m from '$lib/paraglide/messages.js';
@@ -13,7 +14,7 @@
   import type { BacktestDetail, BackTestTask, ExSymbol } from '$lib/dev/common';
   import { InOutOrderDetail, type InOutOrder } from '$lib/order';
   import { TreeView, type Tree, type Node, buildTree } from '$lib/treeview';
-	import { writable } from 'svelte/store';
+  import { writable } from 'svelte/store';
   import RangeSlider from '$lib/dev/RangeSlider.svelte';
   import { ChartCtx, ChartSave } from '$lib/kline/chart';
   import { persisted } from 'svelte-persisted-store';
@@ -23,7 +24,7 @@
   import type { OverlayCreate } from 'klinecharts';
   import type { TradeInfo } from '$lib/kline/types';
   import { pagination, orderCard } from '$lib/Snippets.svelte';
-  import {getFirstValid} from "$lib/common";
+  import {getFirstValid, fmtNumber} from "$lib/common";
 
   let id = $state('');
   let btPath = $state('');
@@ -448,31 +449,54 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
 
   // 定义导航菜单项
   let navItems = $derived.by(() => {
-    const items = [];
+    const items = []
     
     if (task?.status == 3) {
       if (detail) {
         items.push(
-          { id: 'overview', label: m.overview() },
-          { id: 'assets', label: m.bt_assets() },
-          { id: 'enters', label: m.bt_enters() }
+          { id: 'overview', label: m.overview(), icon: 'home' },
+          { id: 'assets', label: m.bt_assets(), icon: 'chart-bar' },
+          { id: 'enters', label: m.bt_enters(), icon: 'double-right' }
         );
       }
       
-      items.push({ id: 'config', label: m.configuration() });
+      items.push({ id: 'config', label: m.configuration(), icon: 'config' });
       
       if (detail) {
         items.push(
-          { id: 'orders', label: m.orders() },
-          { id: 'analysis', label: m.bt_analysis() },
-          { id: 'strat_code', label: m.bt_strat_code() }
+          { id: 'orders', label: m.orders(), icon: 'number-list' },
+          { id: 'analysis', label: m.bt_analysis(), icon: 'calculate' },
+          { id: 'strat_code', label: m.bt_strat_code(), icon: 'code' }
         );
       }
     }
     
-    items.push({ id: 'logs', label: m.bt_logs() });
+    items.push({ id: 'logs', label: m.bt_logs(), icon: 'document-text' });
     return items;
   });
+
+  // 组织次要统计信息的数据，返回最大3列的二维数组
+  function getInfoColumns() {
+    if (!detail || !task) return [];
+    return [
+      [
+        { label: m.strategy(), value: task?.strats || '-' },
+        { label: m.time_period(), value: task?.periods || '-' },
+        { label: m.start_time(), value: fmtDateStr(detail.startMS), value_tip: curTZ() },
+        { label: m.end_time(), value: fmtDateStr(detail.endMS), value_tip: curTZ() },
+      ],[
+        { label: m.total_invest(), value: task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest) },
+        { label: m.final_balance(), value: formatNumber(detail.finBalance) },
+        { label: m.total_withdraw(), value: formatNumber(detail.finWithdraw) },
+        { label: m.tot_fee(), value: `${formatNumber(detail.totFee)} (${formatPercent(detail.totFee/detail.totProfit*100)})` },
+      ],[
+        { label: m.max_drawdown(), value: `${formatPercent(detail.maxDrawDownPct)} (${formatNumber(detail.maxDrawDownVal)} USD)`},
+        { label: m.bar_num(), value: detail.barNum.toString() },
+        { label: m.symbol(), value: task?.pairs ? showPairs(task.pairs) : '-' },
+        { label: m.max_open_orders(), value: detail.maxOpenOrders.toString() }
+      ]
+    ];
+  }
 
   function setActiveTab(tab: string) {
     activeTab = tab;
@@ -499,8 +523,14 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
 
 <div class="px-4 py-6 flex-1 flex flex-col">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold">{m.bt_report()}: {id}</h1>
-    <div class="text-sm opacity-75">{btPath}</div>
+    <div class="flex items-center gap-4">
+      <h1 class="text-2xl font-bold">{m.bt_report()}: {id}</h1>
+      <div class="text-sm opacity-75">{btPath}</div>
+    </div>
+    <button class="btn btn-sm btn-ghost gap-2" onclick={() => history.back()}>
+      <Icon name="double-left" class="size-4" />
+      {m.back()}
+    </button>
   </div>
 
   <div class="flex gap-4 flex-1">
@@ -510,6 +540,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         {#each navItems as item}
           <li>
             <button class:menu-active={activeTab === item.id} onclick={() => setActiveTab(item.id)}>
+              <Icon name={item.icon} class="size-4" />
               {item.label}
             </button>
           </li>
@@ -582,16 +613,9 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
             formatPercent(detail.winRatePct),
             `${m.order_num()} ${detail.orderNum}`
           )}
-
-          {@render statCard(
-            m.max_drawdown(),
-            'text-warning',
-            formatPercent(detail.maxDrawDownPct),
-            `${formatNumber(detail.maxDrawDownVal)} USD`
-          )}
           
           {@render statCard(
-            m.show_drawdown(),
+            m.max_drawdown(),
             'text-warning',
             formatPercent(detail.showDrawDownPct),
             `${formatNumber(detail.showDrawDownVal)} USD`
@@ -605,16 +629,22 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         </div>
 
         <!-- 次要统计信息 -->
-        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {@render infoCard(m.bt_range() + ` (${curTZ()})`, `${fmtDateStr(detail.startMS)} ~ ${fmtDateStr(detail.endMS)}`)}
-          {@render infoCard(
-            `${m.total_invest()}/${m.final_balance()}/${m.total_withdraw()}`,
-            `${task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest)} / ${formatNumber(detail.finBalance)} / ${formatNumber(detail.finWithdraw)}`
-          )}
-          {@render infoCard(m.tot_fee(), `${formatNumber(detail.totFee)} (${formatPercent(detail.totFee/detail.totProfit*100)})`)}
-          {@render infoCard(m.strategy(), task?.strats || '-')}
-          {@render infoCard(`${m.time_period()}/${m.bar_num()}`, `${task?.periods || '-'} / ${detail.barNum}`)}
-          {@render infoCard(m.symbol() + '/' + m.max_open_orders(), `${task?.pairs ? showPairs(task.pairs) : '-'} / ${detail.maxOpenOrders}`)}
+        {@const infoColumns = getInfoColumns()}
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+          {#each infoColumns as column, idx}
+            <!-- 使用响应式类控制显示 -->
+            <div class="bg-base-200 rounded-box p-4 
+                        {idx === 2 ? 'lg:col-span-2 xl:col-span-1' : ''}">
+              <div class="space-y-3">
+                {#each column as item}
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm opacity-75">{item.label}</span>
+                    <span class="text-sm font-medium" title="{item.value_tip}">{item.value}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/each}
         </div>
 
         <!-- 分组统计 -->
@@ -625,30 +655,35 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                 class="tab" 
                 class:tab-active={activeGroupTab === 'pairs'}
                 onclick={() => activeGroupTab = 'pairs'}>
+                <Icon name="chart-bar" class="size-4 mr-2" />
                 {m.stat_by_pairs()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'dates'}
                 onclick={() => activeGroupTab = 'dates'}>
+                <Icon name="calender" class="size-4 mr-2" />
                 {m.stat_by_dates()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'profits'}
                 onclick={() => activeGroupTab = 'profits'}>
+                <Icon name="dollar" class="size-4 mr-2" />
                 {m.stat_by_profits()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'enters'}
                 onclick={() => activeGroupTab = 'enters'}>
+                <Icon name="chevron-right" class="size-4 mr-2" />
                 {m.stat_by_enters()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'exits'}
                 onclick={() => activeGroupTab = 'exits'}>
+                <Icon name="chevron-down" class="size-4 mr-2" />
                 {m.stat_by_exits()}
               </button>
             </div>
@@ -915,12 +950,12 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                     <td>{order.leverage}x</td>
                     <td>{fmtDateStr(order.enter_at)}</td>
                     <td>{order.enter_tag}</td>
-                    <td>{formatNumber(order.enter?.average||order.enter?.price || 0, 8)}</td>
-                    <td>{formatNumber(order.enter?.filled ||order.enter?.amount || 0, 8)}</td>
+                    <td>{fmtNumber(order.enter?.average||order.enter?.price || 0)}</td>
+                    <td>{fmtNumber(order.enter?.filled ||order.enter?.amount || 0)}</td>
                     <td>{fmtDateStr(order.exit_at)}</td>
                     <td>{order.exit_tag}</td>
-                    <td>{formatNumber(order.exit?.average||order.exit?.price || 0, 8)}</td>
-                    <td>{formatNumber(order.exit?.filled ||order.exit?.amount || 0, 8)}</td>
+                    <td>{fmtNumber(order.exit?.average||order.exit?.price || 0)}</td>
+                    <td>{fmtNumber(order.exit?.filled ||order.exit?.amount || 0)}</td>
                     <td>{formatNumber(order.profit)}</td>
                   </tr>
                 {/each}
