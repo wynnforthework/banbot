@@ -210,6 +210,12 @@ func InitOdSubs() {
 					closeSideOrders(job, !od.Short)
 				}
 				if stgy.OnOrderChange != nil {
+					if evt == strat.OdChgExitFill {
+						openOds, lock := ormo.GetOpenODs(acc)
+						lock.Lock()
+						job.UpdateOrders(utils.ValsOfMap(openOds))
+						lock.Unlock()
+					}
 					stgy.OnOrderChange(job, od, evt)
 				}
 				if len(job.Entrys) > 0 || len(job.Exits) > 0 {

@@ -328,6 +328,26 @@ func (q *ExitReq) GetZapFields(s *StratJob, fields ...zap.Field) []zap.Field {
 	return fields
 }
 
+func (s *StratJob) UpdateOrders(curOrders []*ormo.InOutOrder) {
+	s.LongOrders = nil
+	s.ShortOrders = nil
+	enteredNum := 0
+	for _, od := range curOrders {
+		if od.Symbol == s.Symbol.Symbol && od.Timeframe == s.TimeFrame && od.Strategy == s.Strat.Name {
+			if od.Status >= ormo.InOutStatusPartEnter && od.Status <= ormo.InOutStatusPartExit {
+				enteredNum += 1
+			}
+			if od.Short {
+				s.ShortOrders = append(s.ShortOrders, od)
+			} else {
+				s.LongOrders = append(s.LongOrders, od)
+			}
+		}
+	}
+	s.OrderNum = len(s.LongOrders) + len(s.ShortOrders)
+	s.EnteredNum = enteredNum
+}
+
 func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 	s.CheckMS = btime.TimeMS()
 	s.LastBarMS = s.Env.TimeStop
@@ -336,23 +356,7 @@ func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 		s.ShortOrders = nil
 	} else if s.OrderNum > 0 || core.LiveMode {
 		// 针对实盘，重启后OrderNum状态重置，本地未平仓订单无法更新到StratJob中，这里每次都检查
-		s.LongOrders = nil
-		s.ShortOrders = nil
-		enteredNum := 0
-		for _, od := range curOrders {
-			if od.Symbol == s.Symbol.Symbol && od.Timeframe == s.TimeFrame && od.Strategy == s.Strat.Name {
-				if od.Status >= ormo.InOutStatusPartEnter && od.Status <= ormo.InOutStatusPartExit {
-					enteredNum += 1
-				}
-				if od.Short {
-					s.ShortOrders = append(s.ShortOrders, od)
-				} else {
-					s.LongOrders = append(s.LongOrders, od)
-				}
-			}
-		}
-		s.OrderNum = len(s.LongOrders) + len(s.ShortOrders)
-		s.EnteredNum = enteredNum
+		s.UpdateOrders(curOrders)
 	}
 	if core.LiveMode && !s.IsWarmUp {
 		// print warning before clear
