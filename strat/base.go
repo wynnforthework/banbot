@@ -157,7 +157,8 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 	if req.Short {
 		dirFlag = -1.0
 	}
-	enterPrice := core.GetPrice(symbol)
+	curPrice := core.GetPrice(symbol)
+	enterPrice := curPrice
 	isLimit := core.IsLimitOrder(req.OrderType)
 	if isLimit && req.Limit == 0 {
 		req.Limit = enterPrice
@@ -275,6 +276,17 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 		if req.StopBars == 0 {
 			req.StopBars = s.Strat.StopEnterBars
 		}
+		if req.OrderType == core.OrderTypeLimitMaker {
+			if req.Short {
+				if req.Limit < curPrice {
+					// 做空卖出，价格更低，立刻成交，maker不满足退出
+					return errs.NewMsg(errs.CodeParamInvalid, "[short] Limit %f must >= market price %f", req.Limit, curPrice)
+				}
+			} else if req.Limit > curPrice {
+				// 做多买入，价格更高，立刻成交，maker不满足退出
+				return errs.NewMsg(errs.CodeParamInvalid, "[long] Limit %f must <= market price %f", req.Limit, curPrice)
+			}
+		}
 	}
 	if !s.IsWarmUp {
 		s.Entrys = append(s.Entrys, req)
@@ -324,18 +336,43 @@ func (s *StratJob) closeOrders(req *ExitReq) *errs.Error {
 	if req.Limit > 0 && req.OrderType == 0 {
 		req.OrderType = core.OrderTypeLimit
 	}
-	if req.Limit > 0 && req.Dirt == core.OdDirtBoth {
+	if req.Limit > 0 {
 		if !core.IsLimitOrder(req.OrderType) {
 			return errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Limit` is invalid for Market order")
 		}
 		hasLong := len(s.LongOrders) > 0
 		hasShort := len(s.ShortOrders) > 0
-		if hasLong && hasShort {
-			return errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Dirt` is required for Limit order")
-		} else if hasLong {
-			req.Dirt = core.OdDirtLong
-		} else if hasShort {
-			req.Dirt = core.OdDirtShort
+		if req.Dirt == core.OdDirtBoth {
+			if hasLong && hasShort {
+				return errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Dirt` is required for Limit order")
+			} else if hasLong {
+				req.Dirt = core.OdDirtLong
+			} else if hasShort {
+				req.Dirt = core.OdDirtShort
+			}
+		}
+		if req.Limit > 0 && req.OrderType == core.OrderTypeLimitMaker {
+			curPrice := core.GetPrice(s.Symbol.Symbol)
+			sl := &ormo.ExitTrigger{
+				Price: req.Limit,
+				Limit: req.Limit,
+				Tag:   req.Tag,
+			}
+			if req.Dirt == core.OdDirtShort {
+				if req.Limit > curPrice {
+					// 平空买入，价格更高，立刻成交，maker改为限价止损
+					for _, od := range s.ShortOrders {
+						od.SetStopLoss(sl)
+					}
+					return nil
+				}
+			} else if req.Limit < curPrice {
+				// 平多卖出，价格更低，立刻成交，maker改为限价止损
+				for _, od := range s.LongOrders {
+					od.SetStopLoss(sl)
+				}
+				return nil
+			}
 		}
 	}
 	if !s.IsWarmUp {
