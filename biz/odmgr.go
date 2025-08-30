@@ -697,7 +697,7 @@ func (o *OrderMgr) exitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat
 		}
 		return o.exitOrder(sess, part, req)
 	}
-	od.SetExit(0, req.Tag, odType, 0)
+	od.SetExit(0, req.Tag, odType, req.Limit)
 	return o.postOrderExit(sess, od)
 }
 
