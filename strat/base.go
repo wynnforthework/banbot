@@ -344,7 +344,7 @@ func (s *StratJob) closeOrders(req *ExitReq) *errs.Error {
 		hasShort := len(s.ShortOrders) > 0
 		if req.Dirt == core.OdDirtBoth {
 			if hasLong && hasShort {
-				return errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Dirt` is required for Limit order")
+				return errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Dirt` is required with long & short positions")
 			} else if hasLong {
 				req.Dirt = core.OdDirtLong
 			} else if hasShort {
@@ -512,6 +512,11 @@ func (s *StratJob) customExit(od *ormo.InOutOrder) (*ExitReq, *errs.Error) {
 		req = s.Strat.OnCheckExit(s, od)
 		if req != nil {
 			req.OrderID = od.ID
+			if od.Short {
+				req.Dirt = core.OdDirtShort
+			} else {
+				req.Dirt = core.OdDirtLong
+			}
 		}
 	}
 	if req == nil && s.Strat.DrawDownExit && od.Status >= ormo.InOutStatusFullEnter {

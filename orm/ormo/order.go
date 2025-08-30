@@ -251,6 +251,13 @@ func (i *InOutOrder) UpdateFee(price float64, forEnter bool) *errs.Error {
 	}
 	//  dry-run 不用core.IsMaker最新价格判断是否限价单，因也是bar，会错取取close
 	var maker = strings.Contains(exOrder.OrderType, "limit")
+	if exOrder.OrderType == banexg.OdTypeLimit {
+		if maker {
+			exOrder.OrderType = banexg.OdTypeLimitMaker
+		} else {
+			exOrder.OrderType = "limit_taker"
+		}
+	}
 	fee, err := exchange.CalculateFee(i.Symbol, exOrder.OrderType, exOrder.Side, exOrder.Filled, price, maker, nil)
 	if err != nil {
 		return err

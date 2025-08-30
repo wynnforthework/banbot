@@ -48,7 +48,7 @@ var (
 	NewNumInSim   int  // 撮合时创建新订单的数量
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "v0.2.22-beta.11"
+	Version   = "v0.2.22-beta.12"
 	UIVersion = "v0.2.22-beta.9"
 	SysLang   string // language code for current system 当前系统语言设置
 	LogFile   string
@@ -138,9 +138,9 @@ var (
 )
 
 var (
-	OrderTypeEnums = []string{"", banexg.OdTypeMarket, banexg.OdTypeLimit, banexg.OdTypeStopLoss,
+	OrderTypeEnums = []string{"", banexg.OdTypeMarket, banexg.OdTypeLimit, banexg.OdTypeLimitMaker, banexg.OdTypeStopLoss,
 		banexg.OdTypeStopLossLimit, banexg.OdTypeTakeProfit, banexg.OdTypeTakeProfitLimit,
-		banexg.OdTypeStop, banexg.OdTypeLimitMaker}
+		banexg.OdTypeStop}
 	WsSubMap = map[string]bool{
 		WsSubKLine: true,
 		WsSubDepth: true,

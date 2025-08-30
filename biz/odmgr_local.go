@@ -193,7 +193,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 			}
 			price = trigPrice
 			od.Stop = 0
-			if odType == banexg.OdTypeLimit && exOrder.Price > 0 && (exOrder.Price > trigPrice) == od.Short {
+			if strings.Contains(odType, "limit") && exOrder.Price > 0 && (exOrder.Price > trigPrice) == od.Short {
 				// 触发价满足，有额外限价单
 				price = exOrder.Price
 			}
@@ -205,7 +205,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 		}
 		if bar == nil {
 			price = core.GetPrice(od.Symbol)
-		} else if odType == banexg.OdTypeLimit && exOrder.Price > 0 {
+		} else if strings.Contains(odType, "limit") && exOrder.Price > 0 {
 			if odIsBuy {
 				if price < bar.Low {
 					continue
