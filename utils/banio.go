@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
+	"github.com/google/uuid"
 	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"io"
@@ -29,25 +30,35 @@ type IBanConn interface {
 	WriteMsg(msg *IOMsg) *errs.Error
 	Write(data []byte, locked bool) *errs.Error
 	ReadMsg() (*IOMsgRaw, *errs.Error)
-	Subscribe(tags ...string)
-	UnSubscribe(tags ...string)
+
+	SetData(val interface{}, tags ...string)
+	GetData(key string) (interface{}, bool)
+	DeleteData(tags ...string)
+
+	SetWait(key string, size int) string
+	GetWaitChan(key string) (chan []byte, bool)
+	CloseWaitChan(key string)
+	SendWaitRes(key string, data interface{}) *errs.Error
+	WaitResult(key string, timeout time.Duration) ([]byte, error)
+
 	GetRemote() string
 	IsClosed() bool
-	HasTag(tag string) bool
 	RunForever() *errs.Error
 }
 
 type BanConn struct {
-	Conn        net.Conn          // Original socket connection 原始的socket连接
-	Tags        map[string]bool   // Message subscription list 消息订阅列表
-	Remote      string            // Remote Name 远端名称
-	Listens     map[string]ConnCB // Message processing function 消息处理函数
-	RefreshMS   int64             // Connection ready timestamp 连接就绪的时间戳
+	Conn        net.Conn               // Original socket connection 原始的socket连接
+	Data        map[string]interface{} // Message subscription list 消息订阅列表
+	Remote      string                 // Remote Name 远端名称
+	Listens     map[string]ConnCB      // Message processing function 消息处理函数
+	waits       map[string]chan []byte // 用于等待结果的chan
+	RefreshMS   int64                  // Connection ready timestamp 连接就绪的时间戳
 	Ready       bool
 	IsReading   bool
 	lockConnect deadlock.Mutex
 	lockWrite   deadlock.Mutex
-	lockTag     deadlock.Mutex
+	lockData    deadlock.Mutex
+	lockWait    deadlock.Mutex
 	heartBeatMs int64               // Timestamp of the latest received ping/pong
 	DoConnect   func(conn *BanConn) // Reconnect function, no attempt to reconnect provided 重新连接函数，未提供不尝试重新连接
 	ReInitConn  func()              // Initialize callback function after successful reconnection 重新连接成功后初始化回调函数
@@ -74,11 +85,11 @@ func (c *BanConn) GetRemote() string {
 func (c *BanConn) IsClosed() bool {
 	return c.Conn == nil || !c.Ready
 }
-func (c *BanConn) HasTag(tag string) bool {
-	c.lockTag.Lock()
-	_, ok := c.Tags[tag]
-	c.lockTag.Unlock()
-	return ok
+func (c *BanConn) GetData(key string) (interface{}, bool) {
+	c.lockData.Lock()
+	val, ok := c.Data[key]
+	c.lockData.Unlock()
+	return val, ok
 }
 
 func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
@@ -173,19 +184,92 @@ func (c *BanConn) Read() ([]byte, *errs.Error) {
 	return buf, nil
 }
 
-func (c *BanConn) Subscribe(tags ...string) {
-	c.lockTag.Lock()
+func (c *BanConn) SetData(val interface{}, tags ...string) {
+	c.lockData.Lock()
 	for _, tag := range tags {
-		c.Tags[tag] = true
+		c.Data[tag] = val
 	}
-	c.lockTag.Unlock()
+	c.lockData.Unlock()
 }
-func (c *BanConn) UnSubscribe(tags ...string) {
-	c.lockTag.Lock()
+func (c *BanConn) DeleteData(tags ...string) {
+	c.lockData.Lock()
 	for _, tag := range tags {
-		delete(c.Tags, tag)
+		delete(c.Data, tag)
 	}
-	c.lockTag.Unlock()
+	c.lockData.Unlock()
+}
+
+// SetWait set chan for key to wait async
+func (c *BanConn) SetWait(key string, size int) string {
+	if key == "" {
+		key = uuid.New().String()
+	}
+	c.lockWait.Lock()
+	c.waits[key] = make(chan []byte, size)
+	c.lockWait.Unlock()
+	return key
+}
+
+// GetWaitChan get chan for key to wait or set
+func (c *BanConn) GetWaitChan(key string) (chan []byte, bool) {
+	c.lockWait.Lock()
+	out, ok := c.waits[key]
+	c.lockWait.Unlock()
+	if !ok {
+		return nil, false
+	}
+	return out, true
+}
+
+func (c *BanConn) CloseWaitChan(key string) {
+	c.lockWait.Lock()
+	if out, ok := c.waits[key]; ok {
+		close(out)
+		delete(c.waits, key)
+	}
+	c.lockWait.Unlock()
+}
+
+// SetWaitResult set result for key
+func (c *BanConn) SetWaitResult(key string, data []byte) error {
+	out, ok := c.GetWaitChan(key)
+	if !ok {
+		return fmt.Errorf("key not found: %s", key)
+	}
+	out <- data
+	return nil
+}
+
+func (c *BanConn) SendWaitRes(key string, data interface{}) *errs.Error {
+	raw, err_ := utils.Marshal(data)
+	if err_ != nil {
+		return errs.New(core.ErrMarshalFail, err_)
+	}
+	compressed, err := compress(raw)
+	if err != nil {
+		return err
+	}
+	return c.WriteMsg(&IOMsg{
+		Action: "__res__" + key,
+		Data:   compressed,
+	})
+}
+
+// WaitResult wait result for key with specified timeout; wait __res__[key] to be trigger
+func (c *BanConn) WaitResult(key string, timeout time.Duration) ([]byte, error) {
+	out, ok := c.GetWaitChan(key)
+	if !ok {
+		return nil, fmt.Errorf("key not found: %s", key)
+	}
+	var res []byte
+	select {
+	case res = <-out:
+		c.CloseWaitChan(key)
+		return res, nil
+	case <-time.After(timeout):
+		c.CloseWaitChan(key)
+		return nil, fmt.Errorf("timeout waiting for key: %s", key)
+	}
 }
 
 /*
@@ -228,6 +312,12 @@ func (c *BanConn) RunForever() *errs.Error {
 				continue
 			}
 			return err
+		}
+		if strings.HasPrefix(msg.Action, "__res__") {
+			if out, ok := c.GetWaitChan(msg.Action[7:]); ok {
+				out <- msg.Data
+			}
+			continue
 		}
 		isMatch := false
 		for prefix, handle := range c.Listens {
@@ -312,10 +402,10 @@ func (c *BanConn) LoopPing(intvSecs int) {
 
 func (c *BanConn) initListens() {
 	c.Listens["subscribe"] = makeArrStrHandle(func(arr []string) {
-		c.Subscribe(arr...)
+		c.SetData(true, arr...)
 	})
 	c.Listens["unsubscribe"] = makeArrStrHandle(func(arr []string) {
-		c.UnSubscribe(arr...)
+		c.DeleteData(arr...)
 	})
 	c.Listens["ping"] = func(s string, i []byte) {
 		var val int64
@@ -520,7 +610,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 			continue
 		}
 		allConns = append(allConns, conn)
-		if conn.HasTag(msg.Action) {
+		if _, ok := conn.GetData(msg.Action); ok {
 			curConns = append(curConns, conn)
 		}
 	}
@@ -551,7 +641,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 	res := &BanConn{
 		Conn:      conn,
-		Tags:      map[string]bool{},
+		Data:      map[string]interface{}{},
 		Listens:   map[string]ConnCB{},
 		RefreshMS: btime.TimeMS(),
 		Ready:     true,
@@ -565,10 +655,7 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 			return
 		}
 		val := s.GetVal(key)
-		err := res.WriteMsg(&IOMsg{Action: "onGetValRes", Data: &IOKeyVal{
-			Key: key,
-			Val: val,
-		}})
+		err := res.SendWaitRes(key, []byte(val))
 		if err != nil {
 			log.Error("write val res fail", zap.Error(err))
 		}
@@ -591,8 +678,7 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 
 type ClientIO struct {
 	BanConn
-	Addr  string
-	waits map[string]chan string
+	Addr string
 }
 
 func NewClientIO(addr string) (*ClientIO, *errs.Error) {
@@ -604,26 +690,12 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 		Addr: addr,
 		BanConn: BanConn{
 			Conn:      conn,
-			Tags:      map[string]bool{},
+			Data:      map[string]interface{}{},
 			Remote:    conn.RemoteAddr().String(),
 			Listens:   map[string]ConnCB{},
 			RefreshMS: btime.TimeMS(),
 			Ready:     true,
 		},
-		waits: map[string]chan string{},
-	}
-	res.Listens["onGetValRes"] = func(_ string, data []byte) {
-		var val IOKeyVal
-		err := utils.Unmarshal(data, &val, utils.JsonNumDefault)
-		if err != nil {
-			log.Error("onGetValRes unmarshal fail", zap.String("raw", string(data)), zap.Error(err))
-		} else {
-			out, ok := res.waits[val.Key]
-			if !ok {
-				return
-			}
-			out <- val.Val
-		}
 	}
 	res.initListens()
 	// This is only responsible for connection, no initialization required, leave it to connect for initialization
@@ -656,26 +728,23 @@ const (
 )
 
 func (c *ClientIO) GetVal(key string, timeout int) (string, *errs.Error) {
+	c.SetWait(key, 1)
 	err := c.WriteMsg(&IOMsg{
 		Action: "onGetVal",
 		Data:   key,
 	})
 	if err != nil {
+		c.CloseWaitChan(key)
 		return "", err
 	}
 	if timeout == 0 {
 		timeout = readTimeout
 	}
-	out := make(chan string)
-	c.waits[key] = out
-	var res string
-	select {
-	case res = <-out:
-	case <-time.After(time.Second * time.Duration(timeout)):
-		close(out)
-		delete(c.waits, key)
+	res, err_ := c.WaitResult(key, time.Second*time.Duration(timeout))
+	if err_ != nil {
+		return "", errs.New(core.ErrTimeout, err_)
 	}
-	return res, nil
+	return string(res), nil
 }
 
 func (c *ClientIO) SetVal(args *KeyValExpire) *errs.Error {
