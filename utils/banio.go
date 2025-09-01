@@ -241,17 +241,9 @@ func (c *BanConn) SetWaitResult(key string, data []byte) error {
 }
 
 func (c *BanConn) SendWaitRes(key string, data interface{}) *errs.Error {
-	raw, err_ := utils.Marshal(data)
-	if err_ != nil {
-		return errs.New(core.ErrMarshalFail, err_)
-	}
-	compressed, err := compress(raw)
-	if err != nil {
-		return err
-	}
 	return c.WriteMsg(&IOMsg{
 		Action: "__res__" + key,
-		Data:   compressed,
+		Data:   data,
 	})
 }
 

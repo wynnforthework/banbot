@@ -9,7 +9,7 @@ go 1.23.0
 
 require (
 	github.com/anyongjin/go-bayesopt v1.0.2
-	github.com/banbox/banexg v0.2.33
+	github.com/banbox/banexg v0.2.34-beta.1
 	github.com/banbox/banta v0.3.4
 	github.com/c-bata/goptuna v0.9.0
 	github.com/dgraph-io/ristretto v0.2.0
@@ -39,6 +39,7 @@ require (
 	github.com/gofiber/contrib/websocket v1.3.4
 	github.com/gofiber/fiber/v2 v2.52.9
 	github.com/golang-jwt/jwt/v5 v5.2.3
+	github.com/google/uuid v1.6.0
 	github.com/sasha-s/go-deadlock v0.3.5
 	github.com/shirou/gopsutil/v4 v4.25.6
 	golang.org/x/image v0.29.0
@@ -62,7 +63,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
