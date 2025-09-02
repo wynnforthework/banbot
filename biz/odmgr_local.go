@@ -336,6 +336,13 @@ func (o *LocalOrderMgr) fillPendingEnter(od *ormo.InOutOrder, price float64, fil
 	od.Status = ormo.InOutStatusFullEnter
 	od.DirtyEnter = true
 	od.DirtyMain = true
+	if core.LiveMode {
+		err = od.Save(nil)
+		if err != nil {
+			log.Error("save order fail", zap.String("acc", o.Account),
+				zap.String("key", od.Key()), zap.Error(err))
+		}
+	}
 	o.callBack(od, true)
 	strat.FireOdChange(o.Account, od, strat.OdChgEnterFill)
 	return nil
@@ -363,6 +370,13 @@ func (o *LocalOrderMgr) fillPendingExit(od *ormo.InOutOrder, price float64, fill
 	od.DirtyExit = true
 	_ = o.finishOrder(od, nil)
 	wallets.ConfirmOdExit(od, price)
+	if core.LiveMode {
+		err = od.Save(nil)
+		if err != nil {
+			log.Error("save order fail", zap.String("acc", o.Account),
+				zap.String("key", od.Key()), zap.Error(err))
+		}
+	}
 	o.callBack(od, false)
 	strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
 	return nil

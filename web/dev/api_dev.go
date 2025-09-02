@@ -605,6 +605,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 	type RunBtArgs struct {
 		Separate bool              `json:"separate"`
 		Configs  map[string]string `json:"configs" validate:"required"`
+		Paths    []string          `json:"paths"`
 		DupMode  string            `json:"dupMode"`
 	}
 
@@ -623,7 +624,6 @@ func handleRunBacktest(c *fiber.Ctx) error {
 
 	// 写入配置内容
 	var realPath string
-	var paths []string
 	for path, text := range args.Configs {
 		if strings.TrimSpace(text) == "" {
 			continue
@@ -635,6 +635,13 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		err2 := utils.WriteFile(realPath, []byte(text))
 		if err2 != nil {
 			return err2
+		}
+	}
+	var paths []string
+	for _, path := range args.Paths {
+		realPath, err = parsePath(path)
+		if err != nil {
+			return err
 		}
 		paths = append(paths, realPath)
 	}
@@ -717,7 +724,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		}
 		backupPath := ""
 		if args.DupMode == "" {
-			return errs.NewMsg(errs.CodeParamRequired, "already_exist")
+			return fmt.Errorf("already_exist")
 		} else if args.DupMode == "backup" {
 			backupPath = hashVal + "_bak"
 			if old != nil {

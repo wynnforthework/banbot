@@ -269,6 +269,7 @@
     "load": "Load",
     "any_status": "Any Status",
     "pos_opened": "Opened",
+    "filled": "Filled",
     "closed": "Closed",
     "symbol": "Symbol",
     "symbols": "Symbols",
