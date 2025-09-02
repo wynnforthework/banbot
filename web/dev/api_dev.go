@@ -614,16 +614,9 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		return err
 	}
 
-	// 创建临时文件存储配置
-	tmpFile, err := os.CreateTemp(os.TempDir(), "tmp_cfg_*.yml")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-
 	// 写入配置内容
 	var realPath string
+	var err error
 	for path, text := range args.Configs {
 		if strings.TrimSpace(text) == "" {
 			continue
@@ -645,21 +638,9 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		}
 		paths = append(paths, realPath)
 	}
-	skips := []string{"name", "env", "webhook", "rpc_channels", "api_server"}
-	content, err := config.MergeConfigPaths(paths, skips...)
-	if err != nil {
-		return err
-	}
-	if _, err = tmpFile.WriteString(content); err != nil {
-		return err
-	}
-	tmpFile.Close()
 
 	// 加载并验证配置
-	cfg, err2 := config.GetConfig(&config.CmdArgs{
-		Configs:   []string{tmpPath},
-		NoDefault: true,
-	}, false)
+	cfg, err2 := config.GetConfig(&config.CmdArgs{Configs: paths, NoDefault: true}, false)
 	if err2 != nil {
 		return err2
 	}
@@ -730,7 +711,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 			if old != nil {
 				backupPath = hashVal + "_" + strconv.FormatInt(old.ID, 10)
 			}
-			realPath := config.ParsePath(fmt.Sprintf("$backtest/%s", backupPath))
+			realPath = config.ParsePath(fmt.Sprintf("$backtest/%s", backupPath))
 			err = utils.CopyDir(absPath, realPath)
 			if err != nil {
 				return err
@@ -746,7 +727,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 			}
 		}
 	}
-	if err = os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+	if err = os.WriteFile(cfgPath, cfgData, 0644); err != nil {
 		return err
 	}
 
