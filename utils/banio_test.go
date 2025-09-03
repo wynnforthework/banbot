@@ -11,7 +11,7 @@ import (
 
 func TestBanServer(t *testing.T) {
 	core.SetRunMode(core.RunModeLive)
-	server := NewBanServer("127.0.0.1:6789", "spider")
+	server := NewBanServer("127.0.0.1:6789", "")
 	go func() {
 		for {
 			time.Sleep(time.Millisecond * 300)
@@ -38,7 +38,7 @@ func TestBanClient(t *testing.T) {
 	core.Ctx = ctx
 	core.StopAll = cancel
 	log.Setup("debug", "")
-	client, err := NewClientIO("127.0.0.1:6789")
+	client, err := NewClientIO("127.0.0.1:6789", "")
 	if err != nil {
 		panic(err)
 	}

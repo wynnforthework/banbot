@@ -747,7 +747,7 @@ func (m *Miner) startLoopKLines() {
 }
 
 func RunSpider(addr string) *errs.Error {
-	server := utils.NewBanServer(addr, "spider")
+	server := utils.NewBanServer(addr, "")
 	Spider = &LiveSpider{
 		ServerIO: server,
 		miners:   map[string]*Miner{},

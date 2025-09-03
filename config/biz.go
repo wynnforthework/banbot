@@ -277,6 +277,9 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	if AccountPullSecs == 0 {
 		AccountPullSecs = 60
 	}
+	if c.Exchange == nil {
+		return errs.NewMsg(core.ErrBadConfig, "exchange in yaml is required")
+	}
 	core.ExgName = c.Exchange.Name
 	core.Market = c.MarketType
 	if core.Market == banexg.MarketSpot || core.Market == banexg.MarketMargin {

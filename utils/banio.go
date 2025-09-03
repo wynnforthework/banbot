@@ -56,6 +56,7 @@ type BanConn struct {
 	RefreshMS   int64                  // Connection ready timestamp 连接就绪的时间戳
 	Ready       bool
 	IsReading   bool
+	aesKey      string
 	lockConnect deadlock.Mutex
 	lockWrite   deadlock.Mutex
 	lockData    deadlock.Mutex
@@ -112,6 +113,12 @@ func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
 	if err != nil {
 		return err
 	}
+	if c.aesKey != "" {
+		compressed, err_ = EncryptData(compressed, c.aesKey)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+	}
 	return c.Write(compressed, false)
 }
 
@@ -155,6 +162,13 @@ func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 	compressed, err := c.Read()
 	if err != nil {
 		return nil, err
+	}
+	if c.aesKey != "" {
+		var err_ error
+		compressed, err_ = DecryptData(compressed, c.aesKey)
+		if err_ != nil {
+			return nil, errs.New(errs.CodeRunTime, err_)
+		}
 	}
 	data, err := deCompress(compressed)
 	if err != nil {
@@ -519,7 +533,7 @@ func getErrType(err error) (int, string) {
 
 type ServerIO struct {
 	Addr     string
-	Name     string
+	aesKey   string
 	Conns    []IBanConn
 	Data     map[string]string // Cache data available for remote access 缓存的数据，可供远程端访问
 	DataExp  map[string]int64  // Cache data expiration timestamp, 13 bits 缓存数据的过期时间戳，13位
@@ -530,10 +544,10 @@ var (
 	banServer *ServerIO
 )
 
-func NewBanServer(addr, name string) *ServerIO {
+func NewBanServer(addr, aesKey string) *ServerIO {
 	var server ServerIO
 	server.Addr = addr
-	server.Name = name
+	server.aesKey = aesKey
 	server.Data = map[string]string{}
 	banServer = &server
 	return &server
@@ -545,7 +559,7 @@ func (s *ServerIO) RunForever() *errs.Error {
 		return errs.New(core.ErrNetConnect, err_)
 	}
 	defer ln.Close()
-	log.Info("banio started", zap.String("name", s.Name), zap.String("addr", s.Addr))
+	log.Info("banio started", zap.String("addr", s.Addr))
 	for {
 		conn_, err_ := ln.Accept()
 		if err_ != nil {
@@ -626,6 +640,12 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	if err != nil {
 		return err
 	}
+	if s.aesKey != "" {
+		compressed, err_ = EncryptData(compressed, s.aesKey)
+		if err_ != nil {
+			return errs.New(errs.CodeRunTime, err_)
+		}
+	}
 	for _, conn := range curConns {
 		go func(c IBanConn) {
 			err = c.Write(compressed, false)
@@ -647,6 +667,7 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 		RefreshMS: btime.TimeMS(),
 		Ready:     true,
 		Remote:    conn.RemoteAddr().String(),
+		aesKey:    s.aesKey,
 	}
 	res.Listens["onGetVal"] = func(action string, data []byte) {
 		var key string
@@ -682,7 +703,7 @@ type ClientIO struct {
 	Addr string
 }
 
-func NewClientIO(addr string) (*ClientIO, *errs.Error) {
+func NewClientIO(addr, aesKey string) (*ClientIO, *errs.Error) {
 	conn, err_ := net.Dial("tcp", addr)
 	if err_ != nil {
 		return nil, errs.New(core.ErrNetConnect, err_)
@@ -697,6 +718,7 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 			waits:     make(map[string]chan []byte),
 			RefreshMS: btime.TimeMS(),
 			Ready:     true,
+			aesKey:    aesKey,
 		},
 	}
 	res.initListens()

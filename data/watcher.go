@@ -43,7 +43,7 @@ func (j *PairTFCache) getFinishes(ohlcvs []*banexg.Kline, lastFinish bool) []*ba
 }
 
 func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
-	client, err := utils.NewClientIO(addr)
+	client, err := utils.NewClientIO(addr, "")
 	if err != nil {
 		return nil, err
 	}
