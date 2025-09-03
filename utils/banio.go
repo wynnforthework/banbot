@@ -42,6 +42,7 @@ type IBanConn interface {
 	WaitResult(key string, timeout time.Duration) ([]byte, error)
 
 	GetRemote() string
+	GetRemoteHost() string
 	IsClosed() bool
 	RunForever() *errs.Error
 }
@@ -80,6 +81,13 @@ var (
 )
 
 func (c *BanConn) GetRemote() string {
+	return c.Remote
+}
+func (c *BanConn) GetRemoteHost() string {
+	end := strings.Index(c.Remote, ":")
+	if end > 0 {
+		return c.Remote[:end]
+	}
 	return c.Remote
 }
 func (c *BanConn) IsClosed() bool {
@@ -635,6 +643,7 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 		Conn:      conn,
 		Data:      map[string]interface{}{},
 		Listens:   map[string]ConnCB{},
+		waits:     make(map[string]chan []byte),
 		RefreshMS: btime.TimeMS(),
 		Ready:     true,
 		Remote:    conn.RemoteAddr().String(),
@@ -685,6 +694,7 @@ func NewClientIO(addr string) (*ClientIO, *errs.Error) {
 			Data:      map[string]interface{}{},
 			Remote:    conn.RemoteAddr().String(),
 			Listens:   map[string]ConnCB{},
+			waits:     make(map[string]chan []byte),
 			RefreshMS: btime.TimeMS(),
 			Ready:     true,
 		},
