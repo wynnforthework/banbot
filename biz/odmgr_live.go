@@ -645,7 +645,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 					}
 				}
 				log.Error("unknown short position", zap.String("acc", o.Account), zap.String("pair", pair),
-					zap.Float64("shortAmt", longPosAmt), zap.Strings("local", shortOds))
+					zap.Float64("shortAmt", shortPosAmt), zap.Strings("local", shortOds))
 			}
 		}
 		return openOds, nil

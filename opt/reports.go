@@ -1478,6 +1478,9 @@ func SampleOdNums(odList []*ormo.InOutOrder, num int) ([]int, int64, int64) {
 		maxTimeMS = max(od.RealExitMS(), maxTimeMS)
 	}
 	gapMS := (maxTimeMS - minTimeMS) / int64(num)
+	if gapMS == 0 {
+		return make([]int, num), 0, 0
+	}
 	for _, od := range odList {
 		startIdx := int((od.RealEnterMS() - minTimeMS) / gapMS)
 		endPos := len(nums)
