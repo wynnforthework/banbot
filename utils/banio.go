@@ -28,7 +28,7 @@ type ConnCB = func(string, []byte)
 
 type IBanConn interface {
 	WriteMsg(msg *IOMsg) *errs.Error
-	Write(data []byte, doConvert, locked bool) *errs.Error
+	Write(data []byte, doConvert bool) *errs.Error
 	ReadMsg() (*IOMsgRaw, *errs.Error)
 
 	SetData(val interface{}, tags ...string)
@@ -125,10 +125,10 @@ func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
 	if err_ = enc.Encode(msgRaw); err_ != nil {
 		return errs.New(core.ErrMarshalFail, err_)
 	}
-	return c.Write(buf.Bytes(), true, false)
+	return c.Write(buf.Bytes(), true)
 }
 
-func (c *BanConn) Write(data []byte, doConvert, locked bool) *errs.Error {
+func (c *BanConn) Write(data []byte, doConvert bool) *errs.Error {
 	if doConvert {
 		var err *errs.Error
 		data, err = convertData(data, c.aesKey)
@@ -136,17 +136,20 @@ func (c *BanConn) Write(data []byte, doConvert, locked bool) *errs.Error {
 			return err
 		}
 	}
-	return c.write(data, locked)
+	return c.write(data)
 }
 
-func (c *BanConn) write(data []byte, locked bool) *errs.Error {
+func (c *BanConn) write(data []byte) *errs.Error {
 	if c.Conn == nil {
 		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
 	}
-	if !locked {
-		c.lockWrite.Lock()
-		defer c.lockWrite.Unlock()
-	}
+	c.lockWrite.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			c.lockWrite.Unlock()
+		}
+	}()
 	dataLen := uint32(len(data))
 	lenBt := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBt, dataLen)
@@ -157,8 +160,10 @@ func (c *BanConn) write(data []byte, locked bool) *errs.Error {
 			errCode, errType := getErrType(err_)
 			if c.DoConnect != nil && errCode == core.ErrNetConnect {
 				log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
+				c.lockWrite.Unlock()
+				locked = false
 				c.connect()
-				return c.write(data, true)
+				return c.write(data)
 			}
 			return errs.New(errCode, err_)
 		}
@@ -323,6 +328,7 @@ func (c *BanConn) RunForever() *errs.Error {
 			if err_ != nil {
 				log.Error("close conn fail", zap.String("remote", c.Remote), zap.Error(err_))
 			}
+			log.Info("close banConn as RunForever exit")
 			c.Conn = nil
 		}
 	}()
@@ -372,25 +378,27 @@ A function used for reconnecting.
 */
 func (c *BanConn) connect() {
 	c.lockConnect.Lock()
-	defer c.lockConnect.Unlock()
 	if c.Ready && btime.TimeMS()-c.RefreshMS < 2000 {
 		// 连接已经刷新，跳过本次重试
+		c.lockConnect.Unlock()
 		return
 	}
 	c.Ready = false
 	if c.Conn != nil {
 		_ = c.Conn.Close()
 		c.Conn = nil
+		log.Info("closed old banConn for reconnect")
 	}
 	core.Sleep(time.Second * 3)
 	c.DoConnect(c)
 	c.RefreshMS = btime.TimeMS()
 	if c.Conn != nil {
-		if c.ReInitConn != nil {
-			c.ReInitConn()
-		}
 		c.Ready = true
 		log.Info("reconnect ok", zap.String("remote", c.Remote))
+	}
+	c.lockConnect.Unlock()
+	if c.Conn != nil && c.ReInitConn != nil {
+		c.ReInitConn()
 	}
 }
 
@@ -692,7 +700,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	}
 	for _, conn := range curConns {
 		go func(c IBanConn) {
-			err = c.Write(compressed, false, false)
+			err = c.Write(compressed, false)
 			if err != nil {
 				log.Warn("broadcast fail", zap.String("remote", c.GetRemote()),
 					zap.String("tag", msg.Action), zap.Error(err))

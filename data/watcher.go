@@ -61,7 +61,7 @@ func NewKlineWatcher(addr string) (*KLineWatcher, *errs.Error) {
 			return
 		}
 		for _, msg := range res.initMsgs {
-			err := res.WriteMsg(msg)
+			err = res.WriteMsg(msg)
 			if err != nil {
 				msgText, _ := utils2.MarshalString(msg)
 				log.Error("re init conn fail", zap.String("msg", msgText))
