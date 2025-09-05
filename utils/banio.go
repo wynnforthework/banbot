@@ -338,21 +338,29 @@ func (c *BanConn) RunForever() *errs.Error {
 			return err
 		}
 		if strings.HasPrefix(msg.Action, "__res__") {
-			if out, ok := c.GetWaitChan(msg.Action[7:]); ok {
-				out <- msg.Data
+			requestID := msg.Action[7:]
+			if out, ok := c.GetWaitChan(requestID); ok {
+				select {
+				case out <- msg.Data:
+					break
+				default:
+					log.Error("wait chan full, closing and skip", zap.String("requestID", requestID))
+					c.CloseWaitChan(requestID)
+				}
 			}
 			continue
 		}
-		isMatch := false
+		var matchHandle ConnCB
 		for prefix, handle := range c.Listens {
 			if strings.HasPrefix(msg.Action, prefix) {
-				isMatch = true
-				handle(msg.Action, msg.Data)
+				matchHandle = handle
 				break
 			}
 		}
-		if !isMatch {
+		if matchHandle == nil {
 			log.Info("unhandle msg", zap.String("action", msg.Action))
+		} else {
+			go matchHandle(msg.Action, msg.Data)
 		}
 	}
 }
