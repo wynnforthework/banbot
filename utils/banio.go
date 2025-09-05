@@ -28,7 +28,7 @@ type ConnCB = func(string, []byte)
 
 type IBanConn interface {
 	WriteMsg(msg *IOMsg) *errs.Error
-	Write(data []byte, locked bool) *errs.Error
+	Write(data []byte, doConvert, locked bool) *errs.Error
 	ReadMsg() (*IOMsgRaw, *errs.Error)
 
 	SetData(val interface{}, tags ...string)
@@ -109,20 +109,21 @@ func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
 	if err_ != nil {
 		return errs.New(core.ErrMarshalFail, err_)
 	}
-	compressed, err := compress(raw)
-	if err != nil {
-		return err
-	}
-	if c.aesKey != "" {
-		compressed, err_ = EncryptData(compressed, c.aesKey)
-		if err_ != nil {
-			return errs.New(errs.CodeRunTime, err_)
-		}
-	}
-	return c.Write(compressed, false)
+	return c.Write(raw, true, false)
 }
 
-func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
+func (c *BanConn) Write(data []byte, doConvert, locked bool) *errs.Error {
+	if doConvert {
+		var err *errs.Error
+		data, err = convertData(data, c.aesKey)
+		if err != nil {
+			return err
+		}
+	}
+	return c.write(data, locked)
+}
+
+func (c *BanConn) write(data []byte, locked bool) *errs.Error {
 	if c.Conn == nil {
 		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
 	}
@@ -141,7 +142,7 @@ func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
 			if c.DoConnect != nil && errCode == core.ErrNetConnect {
 				log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
 				c.connect()
-				return c.Write(data, true)
+				return c.write(data, true)
 			}
 			return errs.New(errCode, err_)
 		}
@@ -163,14 +164,7 @@ func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 	if err != nil {
 		return nil, err
 	}
-	if c.aesKey != "" {
-		var err_ error
-		compressed, err_ = DecryptData(compressed, c.aesKey)
-		if err_ != nil {
-			return nil, errs.New(errs.CodeRunTime, err_)
-		}
-	}
-	data, err := deCompress(compressed)
+	data, err := deConvertData(compressed, c.aesKey)
 	if err != nil {
 		return nil, err
 	}
@@ -457,6 +451,37 @@ func makeArrStrHandle(cb func(arr []string)) func(s string, data []byte) {
 	}
 }
 
+func convertData(data []byte, aesKey string) ([]byte, *errs.Error) {
+	var err *errs.Error
+	data, err = compress(data)
+	if err != nil {
+		return data, err
+	}
+	if aesKey != "" {
+		var err_ error
+		data, err_ = EncryptData(data, aesKey)
+		if err_ != nil {
+			return data, errs.New(errs.CodeRunTime, err_)
+		}
+	}
+	return data, nil
+}
+
+func deConvertData(compressed []byte, aesKey string) ([]byte, *errs.Error) {
+	if aesKey != "" {
+		var err_ error
+		compressed, err_ = DecryptData(compressed, aesKey)
+		if err_ != nil {
+			return nil, errs.New(errs.CodeRunTime, err_)
+		}
+	}
+	data, err := deCompress(compressed)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func compress(data []byte) ([]byte, *errs.Error) {
 	var b bytes.Buffer
 	w := zlib.NewWriter(&b)
@@ -636,19 +661,13 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	if err_ != nil {
 		return errs.New(core.ErrMarshalFail, err_)
 	}
-	compressed, err := compress(raw)
+	compressed, err := convertData(raw, s.aesKey)
 	if err != nil {
 		return err
 	}
-	if s.aesKey != "" {
-		compressed, err_ = EncryptData(compressed, s.aesKey)
-		if err_ != nil {
-			return errs.New(errs.CodeRunTime, err_)
-		}
-	}
 	for _, conn := range curConns {
 		go func(c IBanConn) {
-			err = c.Write(compressed, false)
+			err = c.Write(compressed, false, false)
 			if err != nil {
 				log.Warn("broadcast fail", zap.String("remote", c.GetRemote()),
 					zap.String("tag", msg.Action), zap.Error(err))

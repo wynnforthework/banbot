@@ -48,7 +48,7 @@ var (
 	NewNumInSim   int  // 撮合时创建新订单的数量
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "v0.2.22-beta.19"
+	Version   = "v0.2.22-beta.20"
 	UIVersion = "v0.2.22-beta.16"
 	SysLang   string // language code for current system 当前系统语言设置
 	LogFile   string
@@ -161,6 +161,14 @@ var OdTypeMap = map[int]string{
 	OrderTypeLimit:      "limit",
 	OrderTypeLimitMaker: "limit_maker",
 }
+
+const (
+	OdChgNew       = iota // New order 新订单
+	OdChgEnter            // Create an entry order 创建入场订单
+	OdChgEnterFill        // Order entry completed 订单入场完成
+	OdChgExit             // Order request to exit  订单请求退出
+	OdChgExitFill         // Order exit completed 订单退出完成
+)
 
 const (
 	AdjNone   = 1
