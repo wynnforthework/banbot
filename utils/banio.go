@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
-	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"github.com/banbox/banbot/btime"
@@ -72,8 +72,8 @@ type IOMsg struct {
 }
 
 type IOMsgRaw struct {
-	Action string          `json:"action"`
-	Data   json.RawMessage `json:"data"`
+	Action string `json:"action"`
+	Data   []byte `json:"data"`
 }
 
 var (
@@ -102,14 +102,30 @@ func (c *BanConn) GetData(key string) (interface{}, bool) {
 }
 
 func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
+	if msg == nil {
+		return nil
+	}
 	if c.Conn == nil {
 		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
 	}
-	raw, err_ := utils.Marshal(*msg)
-	if err_ != nil {
+	var err_ error
+	data, isBytes := msg.Data.([]byte)
+	if !isBytes {
+		data, err_ = utils.Marshal(msg.Data)
+		if err_ != nil {
+			return errs.New(core.ErrMarshalFail, err_)
+		}
+	}
+	msgRaw := &IOMsgRaw{
+		Action: msg.Action,
+		Data:   data,
+	}
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err_ = enc.Encode(msgRaw); err_ != nil {
 		return errs.New(core.ErrMarshalFail, err_)
 	}
-	return c.Write(raw, true, false)
+	return c.Write(buf.Bytes(), true, false)
 }
 
 func (c *BanConn) Write(data []byte, doConvert, locked bool) *errs.Error {
@@ -169,8 +185,8 @@ func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 		return nil, err
 	}
 	var msg IOMsgRaw
-	err_ := utils.Unmarshal(data, &msg, utils.JsonNumDefault)
-	if err_ != nil {
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	if err_ := dec.Decode(&msg); err_ != nil {
 		return nil, errs.New(errs.CodeUnmarshalFail, err_)
 	}
 	return &msg, nil
@@ -575,6 +591,7 @@ func NewBanServer(addr, aesKey string) *ServerIO {
 	server.aesKey = aesKey
 	server.Data = map[string]string{}
 	banServer = &server
+	gob.Register(IOMsgRaw{})
 	return &server
 }
 
@@ -727,6 +744,7 @@ func NewClientIO(addr, aesKey string) (*ClientIO, *errs.Error) {
 	if err_ != nil {
 		return nil, errs.New(core.ErrNetConnect, err_)
 	}
+	gob.Register(IOMsgRaw{})
 	res := &ClientIO{
 		Addr: addr,
 		BanConn: BanConn{
