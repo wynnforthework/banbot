@@ -60,7 +60,7 @@ func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
 	barExpired := delaySecs >= max(60, tfSecs/2)
 	if barExpired {
 		if core.LiveMode && !bar.IsWarmUp {
-			log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delaySecs))
+			log.Warn(fmt.Sprintf("%s/%s delay %v s, open order disabled for this K-line", bar.Symbol, bar.TimeFrame, delaySecs))
 		} else {
 			barExpired = false
 		}

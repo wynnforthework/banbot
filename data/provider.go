@@ -447,12 +447,12 @@ func NewLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) (*LiveProvider, *e
 	watcher.OnTrades = makeOnTrade(provider)
 	watcher.OnDepth = makeOnDepth(provider)
 	// 立刻订阅实时价格
-	err = watcher.SendMsg("subscribe", []string{
-		fmt.Sprintf("price_%s_%s", core.ExgName, core.Market),
-	})
-	if err != nil {
-		return nil, err
-	}
+	//err = watcher.SendMsg("subscribe", []string{
+	//	fmt.Sprintf("price_%s_%s", core.ExgName, core.Market),
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
 	return provider, nil
 }
 
