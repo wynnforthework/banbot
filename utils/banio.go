@@ -39,7 +39,7 @@ type IBanConn interface {
 	GetWaitChan(key string) (chan []byte, bool)
 	CloseWaitChan(key string)
 	SendWaitRes(key string, data interface{}) *errs.Error
-	WaitResult(key string, timeout time.Duration) ([]byte, error)
+	WaitResult(key string, timeout time.Duration) ([]byte, *errs.Error)
 
 	GetRemote() string
 	GetRemoteHost() string
@@ -154,8 +154,8 @@ func (c *BanConn) write(data []byte) *errs.Error {
 	lenBt := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBt, dataLen)
 	if c.Conn != nil {
-		_, err_ := c.Conn.Write(lenBt)
-		if err_ != nil {
+		// 先写长度头
+		if err_ := c.writeFully(lenBt); err_ != nil {
 			c.Ready = false
 			errCode, errType := getErrType(err_)
 			if c.DoConnect != nil && errCode == core.ErrNetConnect {
@@ -167,9 +167,9 @@ func (c *BanConn) write(data []byte) *errs.Error {
 			}
 			return errs.New(errCode, err_)
 		}
+		// 再写数据内容
 		if c.Conn != nil {
-			_, err_ = c.Conn.Write(data)
-			if err_ != nil {
+			if err_ := c.writeFully(data); err_ != nil {
 				c.Ready = false
 				errCode, _ := getErrType(err_)
 				return errs.New(errCode, err_)
@@ -197,13 +197,39 @@ func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 	return &msg, nil
 }
 
+// readFully 确保完整读取指定长度的数据
+func (c *BanConn) readFully(buf []byte) error {
+	totalRead := 0
+	for totalRead < len(buf) {
+		n, err := c.Conn.Read(buf[totalRead:])
+		if err != nil {
+			return err
+		}
+		totalRead += n
+	}
+	return nil
+}
+
+// writeFully 确保完整写入指定长度的数据
+func (c *BanConn) writeFully(data []byte) error {
+	totalWritten := 0
+	for totalWritten < len(data) {
+		n, err := c.Conn.Write(data[totalWritten:])
+		if err != nil {
+			return err
+		}
+		totalWritten += n
+	}
+	return nil
+}
+
 func (c *BanConn) Read() ([]byte, *errs.Error) {
 	if c.Conn == nil {
 		return nil, errs.NewMsg(core.ErrRunTime, "BanConn Read nil, connection already closed")
 	}
+	// 读取长度头
 	lenBuf := make([]byte, 4)
-	_, err_ := c.Conn.Read(lenBuf)
-	if err_ != nil {
+	if err_ := c.readFully(lenBuf); err_ != nil {
 		errCode, errType := getErrType(err_)
 		if c.DoConnect != nil && errCode == core.ErrNetConnect {
 			log.Warn("read fail, wait 3s and retry", zap.String("type", errType))
@@ -212,10 +238,14 @@ func (c *BanConn) Read() ([]byte, *errs.Error) {
 		}
 		return nil, errs.New(errCode, err_)
 	}
+	// 获取数据长度
 	dataLen := binary.LittleEndian.Uint32(lenBuf)
+	if dataLen == 0 {
+		return []byte{}, nil
+	}
+	// 读取完整的数据
 	buf := make([]byte, dataLen)
-	_, err_ = c.Conn.Read(buf)
-	if err_ != nil {
+	if err_ := c.readFully(buf); err_ != nil {
 		return nil, errs.New(core.ErrNetReadFail, err_)
 	}
 	return buf, nil
@@ -285,10 +315,10 @@ func (c *BanConn) SendWaitRes(key string, data interface{}) *errs.Error {
 }
 
 // WaitResult wait result for key with specified timeout; wait __res__[key] to be trigger
-func (c *BanConn) WaitResult(key string, timeout time.Duration) ([]byte, error) {
+func (c *BanConn) WaitResult(key string, timeout time.Duration) ([]byte, *errs.Error) {
 	out, ok := c.GetWaitChan(key)
 	if !ok {
-		return nil, fmt.Errorf("key not found: %s", key)
+		return nil, errs.NewMsg(errs.CodeRunTime, "key not found: %s", key)
 	}
 	var res []byte
 	select {
@@ -297,7 +327,7 @@ func (c *BanConn) WaitResult(key string, timeout time.Duration) ([]byte, error) 
 		return res, nil
 	case <-time.After(timeout):
 		c.CloseWaitChan(key)
-		return nil, fmt.Errorf("timeout waiting for key: %s", key)
+		return nil, errs.NewMsg(errs.CodeRunTime, "timeout waiting for key: %s", key)
 	}
 }
 
@@ -817,9 +847,9 @@ func (c *ClientIO) GetVal(key string, timeout int) (string, *errs.Error) {
 	if timeout == 0 {
 		timeout = readTimeout
 	}
-	res, err_ := c.WaitResult(key, time.Second*time.Duration(timeout))
-	if err_ != nil {
-		return "", errs.New(core.ErrTimeout, err_)
+	res, err := c.WaitResult(key, time.Second*time.Duration(timeout))
+	if err != nil {
+		return "", err
 	}
 	return string(res), nil
 }
