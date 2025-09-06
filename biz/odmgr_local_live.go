@@ -183,3 +183,33 @@ func CallLocalLiveOdMgrsKline(msg *data.KLineMsg, bars []*banexg.Kline) *errs.Er
 	}
 	return nil
 }
+
+func (o *LocalLiveOrderMgr) CleanUp() *errs.Error {
+	openOds, lock := ormo.GetOpenODs(o.Account)
+	lock.Lock()
+	var needSaveOds []*ormo.InOutOrder
+	for _, od := range openOds {
+		if od.IsDirty() {
+			needSaveOds = append(needSaveOds, od)
+		}
+	}
+	lock.Unlock()
+
+	// 保存所有需要保存的订单到数据库
+	if len(needSaveOds) > 0 {
+		for _, od := range needSaveOds {
+			err := od.Save(nil)
+			if err != nil {
+				log.Warn("save order fail", zap.String("acc", o.Account),
+					zap.String("key", od.Key()), zap.Error(err))
+				return err
+			}
+		}
+	}
+	log.Info("cleanUp for LocalLiveOrderMgr", zap.Int("num", len(needSaveOds)))
+
+	if len(o.zeroAmts) > 0 {
+		log.Warn("prec amount to zero", zap.Any("times", o.zeroAmts))
+	}
+	return nil
+}

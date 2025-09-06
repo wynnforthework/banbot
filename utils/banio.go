@@ -108,24 +108,11 @@ func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
 	if c.Conn == nil {
 		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
 	}
-	var err_ error
-	data, isBytes := msg.Data.([]byte)
-	if !isBytes {
-		data, err_ = utils.Marshal(msg.Data)
-		if err_ != nil {
-			return errs.New(core.ErrMarshalFail, err_)
-		}
+	data, err := msg.Marshal()
+	if err != nil {
+		return err
 	}
-	msgRaw := &IOMsgRaw{
-		Action: msg.Action,
-		Data:   data,
-	}
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	if err_ = enc.Encode(msgRaw); err_ != nil {
-		return errs.New(core.ErrMarshalFail, err_)
-	}
-	return c.Write(buf.Bytes(), true)
+	return c.Write(data, true)
 }
 
 func (c *BanConn) Write(data []byte, doConvert bool) *errs.Error {
@@ -366,9 +353,9 @@ func (c *BanConn) RunForever() *errs.Error {
 	for {
 		msg, err := c.ReadMsg()
 		if err != nil {
-			if err.Code == core.ErrDeCompressFail {
-				// 无效消息，解压缩失败，忽略
-				log.Error("invalid banIO msg, deCompress fail", zap.Error(err))
+			if err.Code == core.ErrDeCompressFail || err.Code == errs.CodeUnmarshalFail || err.Code == core.ErrDecryptFail {
+				// 无效消息，忽略
+				log.Error("invalid banIO msg", zap.Error(err))
 				continue
 			}
 			return err
@@ -513,6 +500,38 @@ func makeArrStrHandle(cb func(arr []string)) func(s string, data []byte) {
 	}
 }
 
+func marshalAny(data interface{}) ([]byte, error) {
+	if strVal, isStr := data.(string); isStr {
+		return []byte(strVal), nil
+	}
+	var err_ error
+	byteRaw, isBytes := data.([]byte)
+	if !isBytes {
+		byteRaw, err_ = utils.Marshal(data)
+		if err_ != nil {
+			return nil, err_
+		}
+	}
+	return byteRaw, nil
+}
+
+func (msg *IOMsg) Marshal() ([]byte, *errs.Error) {
+	data, err_ := marshalAny(msg.Data)
+	if err_ != nil {
+		return nil, errs.New(core.ErrMarshalFail, err_)
+	}
+	msgRaw := &IOMsgRaw{
+		Action: msg.Action,
+		Data:   data,
+	}
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err_ = enc.Encode(msgRaw); err_ != nil {
+		return nil, errs.New(core.ErrMarshalFail, err_)
+	}
+	return buf.Bytes(), nil
+}
+
 func convertData(data []byte, aesKey string) ([]byte, *errs.Error) {
 	var err *errs.Error
 	data, err = compress(data)
@@ -523,7 +542,7 @@ func convertData(data []byte, aesKey string) ([]byte, *errs.Error) {
 		var err_ error
 		data, err_ = EncryptData(data, aesKey)
 		if err_ != nil {
-			return data, errs.New(errs.CodeRunTime, err_)
+			return data, errs.New(core.ErrEncryptFail, err_)
 		}
 	}
 	return data, nil
@@ -534,7 +553,7 @@ func deConvertData(compressed []byte, aesKey string) ([]byte, *errs.Error) {
 		var err_ error
 		compressed, err_ = DecryptData(compressed, aesKey)
 		if err_ != nil {
-			return nil, errs.New(errs.CodeRunTime, err_)
+			return nil, errs.New(core.ErrDecryptFail, err_)
 		}
 	}
 	data, err := deCompress(compressed)
@@ -574,7 +593,7 @@ func deCompress(compressed []byte) ([]byte, *errs.Error) {
 	// 将解压后的数据复制到 result 中
 	_, err = io.Copy(&result, r)
 	if err != nil {
-		return nil, errs.New(core.ErrIOReadFail, err)
+		return nil, errs.New(core.ErrDeCompressFail, err)
 	}
 
 	return result.Bytes(), nil
@@ -720,9 +739,9 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	if len(curConns) == 0 {
 		return nil
 	}
-	raw, err_ := utils.Marshal(*msg)
-	if err_ != nil {
-		return errs.New(core.ErrMarshalFail, err_)
+	raw, err := msg.Marshal()
+	if err != nil {
+		return err
 	}
 	compressed, err := convertData(raw, s.aesKey)
 	if err != nil {
