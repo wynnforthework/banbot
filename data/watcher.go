@@ -252,7 +252,7 @@ func (w *KLineWatcher) onPriceUpdate(key string, data []byte) {
 		log.Warn("onPriceUpdate receive invalid msg", zap.String("raw", string(data)), zap.Error(err))
 		return
 	}
-	core.SetPrices(msg)
+	core.SetPrices(msg, "")
 }
 
 func (w *KLineWatcher) onTrades(key string, data []byte) {
@@ -267,6 +267,13 @@ func (w *KLineWatcher) onTrades(key string, data []byte) {
 		log.Error("onTrades receive invalid data", zap.String("raw", string(data)),
 			zap.Error(err))
 		return
+	}
+	if len(trades) == 0 {
+		return
+	}
+	last := trades[len(trades)-1]
+	if _, ok := core.OdBooks[pair]; !ok {
+		core.SetPrice(pair, last.Price, last.Price)
 	}
 	w.OnTrades(exgName, market, pair, trades)
 }
@@ -292,6 +299,7 @@ func (w *KLineWatcher) onBook(key string, data []byte) {
 	if book.Symbol == "" {
 		return
 	}
+	core.SetPrice(pair, book.Asks.Price[0], book.Bids.Price[0])
 	core.OdBooks[pair] = &book
 	if w.OnDepth != nil {
 		w.OnDepth(&book)

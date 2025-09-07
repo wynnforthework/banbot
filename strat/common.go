@@ -787,3 +787,17 @@ func PrintStratGroups() {
 		}
 	}
 }
+
+func GetJobInOutNum(job *StratJob) (int, int) {
+	return len(job.Entrys), len(job.Exits)
+}
+
+func CheckJobInOutNum(job *StratJob, tag string, inNum, outNum int) {
+	msg := "not support, please call `biz.GetOdMgr(s.Account).ProcessOrders(nil, s)` manually"
+	if len(job.Entrys) > inNum {
+		log.Warn("OpenOrder "+msg, zap.String("method", tag))
+	}
+	if len(job.Exits) > outNum {
+		log.Warn("CloseOrder "+msg, zap.String("method", tag))
+	}
+}

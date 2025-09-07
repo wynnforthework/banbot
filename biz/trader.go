@@ -170,7 +170,9 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	// 此处不应允许开平仓或更新止盈止损等，否则订单的TimeFrame会出现歧义
 	for _, job := range infoJobs {
 		job.IsWarmUp = isWarmup
+		num1, num2 := strat.GetJobInOutNum(job)
 		job.Strat.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
+		strat.CheckJobInOutNum(job, "OnInfoBar", num1, num2)
 		if job.Strat.BatchInfo && job.Strat.OnBatchInfos != nil {
 			AddBatchJob(account, bar.TimeFrame, job, env)
 		}

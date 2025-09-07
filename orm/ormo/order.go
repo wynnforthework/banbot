@@ -337,7 +337,7 @@ When calling this function on a real drive, it will be saved to the database
 */
 func (i *InOutOrder) LocalExit(exitAt int64, tag string, price float64, msg, odType string) *errs.Error {
 	if price == 0 {
-		newPrice := core.GetPrice(i.Symbol)
+		newPrice := core.GetPrice(i.Symbol, "")
 		if newPrice > 0 {
 			price = newPrice
 		} else if i.Enter.Average > 0 {
@@ -1336,7 +1336,7 @@ func LegalDoneProfits(off int) float64 {
 	for i := off; i < len(HistODs); i++ {
 		od := HistODs[i]
 		_, quote, _, _ := core.SplitSymbol(od.Symbol)
-		price := core.GetPriceSafe(quote)
+		price := core.GetPriceSafe(quote, "")
 		if price == -1 {
 			skips = append(skips, quote)
 			continue

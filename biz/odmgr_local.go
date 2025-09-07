@@ -204,7 +204,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 			isStopEnter = true
 		}
 		if bar == nil {
-			price = core.GetPrice(od.Symbol)
+			price = core.GetPrice(od.Symbol, "")
 		} else if strings.Contains(odType, "limit") && exOrder.Price > 0 {
 			if odIsBuy {
 				if price < bar.Low {
@@ -555,7 +555,7 @@ func (o *LocalOrderMgr) ExitAndFill(sess *ormo.Queries, orders []*ormo.InOutOrde
 	}
 	timeMS := btime.TimeMS()
 	for _, od := range orders {
-		price := core.GetPrice(od.Symbol)
+		price := core.GetPrice(od.Symbol, "")
 		err := o.fillPendingExit(od, price, timeMS)
 		if err != nil {
 			return err

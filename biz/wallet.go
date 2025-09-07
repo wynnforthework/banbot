@@ -114,7 +114,7 @@ func (iw *ItemWallet) Used() float64 {
 FiatValue Get the fiat currency value of this wallet 获取此钱包的法币价值
 */
 func (iw *ItemWallet) FiatValue(withUpol bool) float64 {
-	return iw.Total(withUpol) * core.GetPrice(iw.Coin)
+	return iw.Total(withUpol) * core.GetPrice(iw.Coin, "")
 }
 
 /*
@@ -451,7 +451,7 @@ func (w *BanWallets) EnterOd(od *ormo.InOutOrder) (float64, *errs.Error) {
 	if od.Enter.Amount != 0 {
 		price := od.Enter.Average
 		if price == 0 {
-			price = core.GetPrice(od.Symbol)
+			price = core.GetPrice(od.Symbol, od.Enter.Side)
 		}
 		legalCost = od.Enter.Amount * price
 	} else {
@@ -693,7 +693,7 @@ func (w *BanWallets) UpdateOds(odList []*ormo.InOutOrder, currency string) *errs
 		if od.Enter == nil || od.Enter.Filled == 0 {
 			continue
 		}
-		curPrice := core.GetPrice(od.Symbol)
+		curPrice := core.GetPrice(od.Symbol, "")
 		// Calculate nominal value
 		// 计算名义价值
 		quoteValue := od.Enter.Filled * curPrice
@@ -740,7 +740,7 @@ func (w *BanWallets) UpdateOds(odList []*ormo.InOutOrder, currency string) *errs
 }
 
 func (w *BanWallets) GetAmountByLegal(symbol string, legalCost float64) float64 {
-	return legalCost / core.GetPrice(symbol)
+	return legalCost / core.GetPrice(symbol, "")
 }
 
 func (w *BanWallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols []string) ([]float64, []string, []float64) {
@@ -762,7 +762,7 @@ func (w *BanWallets) calcLegal(itemAmt func(item *ItemWallet) float64, symbols [
 	var skips []string
 
 	for key, item := range data {
-		var price = core.GetPriceSafe(key)
+		var price = core.GetPriceSafe(key, "")
 		if price == -1 {
 			skips = append(skips, key)
 			continue
@@ -896,7 +896,7 @@ func EnsurePricesLoaded() {
 		if err != nil {
 			log.Error("load ticker prices fail", zap.Error(err))
 		} else {
-			core.SetPrices(res)
+			core.SetPrices(res, "")
 		}
 	}
 }
@@ -934,7 +934,7 @@ func UpdateWalletByBalances(wallets *BanWallets, item *banexg.Balances) {
 			record.Frozens["*"] = it.Used
 		}
 		record.lock.Unlock()
-		coinPrice := core.GetPriceSafe(coin)
+		coinPrice := core.GetPriceSafe(coin, "")
 		if coinPrice == -1 {
 			skips = append(skips, coin)
 			continue

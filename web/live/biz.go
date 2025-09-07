@@ -108,7 +108,7 @@ func walletItems(wallet *biz.BanWallets) []map[string]interface{} {
 			"upol":       item.UnrealizedPOL,
 			"free":       item.Available,
 			"used":       item.Used(),
-			"total_fiat": total * core.GetPrice(coin),
+			"total_fiat": total * core.GetPrice(coin, ""),
 		})
 	}
 	return items
@@ -378,7 +378,7 @@ func getOrders(c *fiber.Ctx) error {
 			if od.ExitTag != "" && od.Exit != nil && od.Exit.Price > 0 {
 				price = od.Exit.Price
 			} else {
-				price = core.GetPriceSafe(od.Symbol)
+				price = core.GetPriceSafe(od.Symbol, "")
 				if price > 0 {
 					od.UpdateProfits(price)
 				}
@@ -467,7 +467,7 @@ func postCalcProfits(c *fiber.Ctx) error {
 		for _, it := range items {
 			prices[it.Symbol] = it.Price
 		}
-		core.SetPrices(prices)
+		core.SetPrices(prices, "")
 		fails := make(map[string]bool)
 		for _, od := range openOds {
 			if price, ok := prices[od.Symbol]; ok {
@@ -664,7 +664,7 @@ func getStratJobs(c *fiber.Ctx) error {
 		defer lock.Unlock()
 		for pairTF, jobMap := range jobs {
 			arr := strings.Split(pairTF, "_")
-			price := core.GetPriceSafe(arr[0])
+			price := core.GetPriceSafe(arr[0], "")
 			for stgName, job := range jobMap {
 				var odNum = 0
 				for _, od := range openOds {

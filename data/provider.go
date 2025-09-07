@@ -604,7 +604,9 @@ func makeOnTrade(p *LiveProvider) func(exgName, market, pair string, trades []*b
 		}
 		jobMap, _ := pairMap[pair]
 		for job := range jobMap {
+			num1, num2 := strat.GetJobInOutNum(job)
 			job.Strat.OnWsTrades(job, pair, trades)
+			strat.CheckJobInOutNum(job, "OnWsTrades", num1, num2)
 		}
 	}
 }
@@ -617,19 +619,29 @@ func makeOnDepth(p *LiveProvider) func(dep *banexg.OrderBook) {
 		}
 		jobMap, _ := pairMap[dep.Symbol]
 		for job := range jobMap {
+			num1, num2 := strat.GetJobInOutNum(job)
 			job.Strat.OnWsDepth(job, dep)
+			strat.CheckJobInOutNum(job, "OnWsDepth", num1, num2)
 		}
 	}
 }
 
 func fireWsKlines(msg *KLineMsg) {
+	if len(msg.Arr) == 0 {
+		return
+	}
+	last := msg.Arr[len(msg.Arr)-1]
+	if _, ok := core.OdBooks[msg.Pair]; !ok {
+		core.SetPrice(msg.Pair, last.Close, last.Close)
+	}
 	pairMap, _ := strat.WsSubJobs[core.WsSubKLine]
-	if len(pairMap) == 0 || len(msg.Arr) == 0 {
+	if len(pairMap) == 0 {
 		return
 	}
 	jobMap, _ := pairMap[msg.Pair]
-	last := msg.Arr[len(msg.Arr)-1]
 	for job := range jobMap {
+		num1, num2 := strat.GetJobInOutNum(job)
 		job.Strat.OnWsKline(job, msg.Pair, last)
+		strat.CheckJobInOutNum(job, "OnWsKline", num1, num2)
 	}
 }

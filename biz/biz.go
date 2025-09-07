@@ -333,7 +333,20 @@ func TryFireBatches(currMS int64, isWarmUp bool) int {
 			job.InitBar(allOrders)
 		}
 		if len(infoJobs) > 0 {
+			num1, num2 := 0, 0
+			for _, j := range infoJobs {
+				num1 += len(j.Job.Entrys)
+				num2 += len(j.Job.Exits)
+			}
 			stgy.OnBatchInfos(timeframe, infoJobs)
+			num3, num4 := 0, 0
+			for _, j := range infoJobs {
+				num3 += len(j.Job.Entrys)
+				num4 += len(j.Job.Exits)
+			}
+			if num3 > num1 || num4 > num2 {
+				log.Warn("Open/Close order in OnBatchInfos not support, please call `biz.GetOdMgr(s.Account).ProcessOrders(nil, s)` manually")
+			}
 		}
 		if len(mainJobs) > 0 {
 			// Check all batch tasks at this time and decide which ones to enter or exit

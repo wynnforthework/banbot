@@ -48,7 +48,7 @@ var (
 	NewNumInSim   int  // 撮合时创建新订单的数量
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "v0.2.22-beta.25"
+	Version   = "v0.2.22-beta.26"
 	UIVersion = "v0.2.22-beta.16"
 	SysLang   string // language code for current system 当前系统语言设置
 	LogFile   string
@@ -128,7 +128,8 @@ const (
 
 var (
 	barPrices      = make(map[string]float64) // Latest price of each coin from bar, only for backtesting etc. The key can be a trading pair or a coin code 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
-	prices         = make(map[string]float64) // The latest order book price of the trading pair is only used for real-time simulation or real trading. The key can be a trading pair or a coin code 交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
+	bidPrices      = make(map[string]float64) // The latest order book price of the trading pair is only used for real-time simulation or real trading. The key can be a trading pair or a coin code 交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
+	askPrices      = make(map[string]float64)
 	lockPrices     deadlock.RWMutex
 	lockBarPrices  deadlock.RWMutex
 	TfPairHitsLock deadlock.RWMutex

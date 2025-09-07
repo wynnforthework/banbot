@@ -157,7 +157,11 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 	if req.Short {
 		dirFlag = -1.0
 	}
-	curPrice := core.GetPrice(symbol)
+	odSide := banexg.OdSideBuy
+	if req.Short {
+		odSide = banexg.OdSideSell
+	}
+	curPrice := core.GetPrice(symbol, odSide)
 	enterPrice := curPrice
 	isLimit := core.IsLimitOrder(req.OrderType)
 	if isLimit && req.Limit == 0 {
@@ -352,7 +356,13 @@ func (s *StratJob) closeOrders(req *ExitReq) *errs.Error {
 			}
 		}
 		if req.Limit > 0 && req.OrderType == core.OrderTypeLimitMaker {
-			curPrice := core.GetPrice(s.Symbol.Symbol)
+			odSide := ""
+			if req.Dirt == core.OdDirtLong {
+				odSide = banexg.OdSideSell
+			} else if req.Dirt == core.OdDirtShort {
+				odSide = banexg.OdSideBuy
+			}
+			curPrice := core.GetPrice(s.Symbol.Symbol, odSide)
 			sl := &ormo.ExitTrigger{
 				Price: req.Limit,
 				Limit: req.Limit,
