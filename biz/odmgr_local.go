@@ -166,7 +166,7 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 		} else {
 			if od.ExitTag == "" && bar != nil {
 				// 已入场完成，尚未出现出场信号，检查是否触发止损The entry has been completed, but the exit signal has not yet appeared. Check whether the stop loss is triggered.
-				err := o.tryFillTriggers(od, &bar.Kline, 0)
+				err := o.tryFillTriggers(od, &bar.Kline)
 				if err != nil {
 					return 0, err
 				}
@@ -238,7 +238,8 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 			err = o.fillPendingEnter(od, price, fillMS)
 			if err == nil && bar != nil {
 				// 入场后可能立刻触发止损/止盈
-				err = o.tryFillTriggers(od, &bar.Kline, fillBarRate)
+				endBar := cutKlineFromRate(&bar.Kline, int64(odTFSecs*1000), fillBarRate)
+				err = o.tryFillTriggers(od, endBar)
 			}
 		} else {
 			err = o.fillPendingExit(od, price, fillMS)
@@ -382,7 +383,7 @@ func (o *LocalOrderMgr) fillPendingExit(od *ormo.InOutOrder, price float64, fill
 	return nil
 }
 
-func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, afterRate float64) *errs.Error {
+func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline) *errs.Error {
 	sl := od.GetStopLoss()
 	tp := od.GetTakeProfit()
 	if sl == nil && tp == nil {
@@ -415,7 +416,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 		// 触发止损，计算执行价格
 		trigPrice = sl.Price
 		amtRate = sl.Rate
-		fillPrice = getExcPrice(od, bar, sl.Price, sl.Limit, afterRate, tfSecs)
+		fillPrice = getExcPrice(od, bar, sl.Price, sl.Limit, 0, tfSecs)
 		if sl.Tag != "" {
 			exitTag = sl.Tag
 		} else {
@@ -430,7 +431,7 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 		// 触发止盈，计算执行价格
 		trigPrice = tp.Price
 		amtRate = tp.Rate
-		fillPrice = getExcPrice(od, bar, tp.Price, tp.Limit, afterRate, tfSecs)
+		fillPrice = getExcPrice(od, bar, tp.Price, tp.Limit, 0, tfSecs)
 		if fillPrice == 0 && tp.Limit > 0 {
 			// 设置了限价止盈，强制使用止盈价出场
 			fillPrice = tp.Limit
@@ -453,11 +454,11 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline, 
 	odType := banexg.OdTypeMarket
 	if fillPrice > 0 {
 		odType = banexg.OdTypeLimit
-		rate += simMarketRate(bar, fillPrice, od.Short, true, afterRate)
+		rate += simMarketRate(bar, fillPrice, od.Short, true, 0)
 	} else {
 		// Stop time + network delay
 		// 触发时间+网络延迟
-		rate += simMarketRate(bar, trigPrice, od.Short, true, afterRate)
+		rate += simMarketRate(bar, trigPrice, od.Short, true, 0)
 		// Stop loss at market price and sell immediately
 		// 市价止损，立刻卖出
 		fillPrice = simMarketPrice(bar, rate)
@@ -640,11 +641,11 @@ func (o *LocalOrderMgr) CleanUp() *errs.Error {
 	return nil
 }
 
-func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
+func simPriceByRate(bar *banexg.Kline, rate float64) (float64, float64, float64) {
 	var (
-		a, b, c, totalLen   float64
-		aEndRate, bEndRate  float64
-		start, end, posRate float64
+		a, b, c, pa, totalLen float64
+		aEndRate, bEndRate    float64
+		start, end, posRate   float64
 	)
 
 	openP := bar.Open
@@ -653,53 +654,82 @@ func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
 	closeP := bar.Close
 
 	if rate == 0 {
-		return openP
+		return openP, highP, lowP
 	}
 	if rate >= 0.999 {
-		return closeP
+		return closeP, highP, lowP
 	}
+	newHigh, newLow := highP, lowP
 
 	if openP <= closeP {
 		// close > open, generally first moves down to the lower shadow line, then rises to the highest point, and finally retreats slightly to form the upper shadow line.
 		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
-		a = openP - lowP
+		pa = (openP - lowP) * 0.3 // a向下前的小幅向上回调，模拟震荡
+		a = openP + pa - lowP
 		b = highP - lowP
-		c = highP - closeP
-		totalLen = a + b + c
+		c = (highP - closeP) * 1.3 // 多加些，模拟震荡
+		totalLen = a + b + c + pa
 		if totalLen == 0 {
-			return closeP
+			return closeP, highP, lowP
 		}
-		aEndRate = a / totalLen
-		bEndRate = (a + b) / totalLen
-		if rate <= aEndRate {
-			start, end, posRate = openP, lowP, rate/aEndRate
+		paEndRate := pa / totalLen
+		aEndRate = (pa + a) / totalLen
+		bEndRate = (pa + a + b) / totalLen
+		if rate <= paEndRate {
+			start, end, posRate = openP, openP+pa, rate/paEndRate
+		} else if rate <= aEndRate {
+			start, end, posRate = openP+pa, lowP, (rate-paEndRate)/(aEndRate-paEndRate)
 		} else if rate <= bEndRate {
 			start, end, posRate = lowP, highP, (rate-aEndRate)/(bEndRate-aEndRate)
+			newLow = closeP
 		} else {
 			start, end, posRate = highP, closeP, (rate-bEndRate)/(1-bEndRate)
+			newHigh, newLow = closeP, closeP
 		}
 	} else {
 		// close < open. generally rises first and goes out of the upper shadow line, then drops to the lowest point, and finally pulls back slightly to form a lower shadow line.
 		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
-		a = highP - openP
+		pa = (highP - openP) * 0.3 // a向上前的小幅向下回调，模拟震荡
+		a = highP - (openP - pa)
 		b = highP - lowP
-		c = closeP - lowP
-		totalLen = a + b + c
+		c = (closeP - lowP) * 1.3 // 模拟震荡
+		totalLen = a + b + c + pa
 		if totalLen == 0 {
-			return closeP
+			return closeP, highP, lowP
 		}
-		aEndRate = a / totalLen
-		bEndRate = (a + b) / totalLen
-		if rate <= aEndRate {
-			start, end, posRate = openP, highP, rate/aEndRate
+		paEndRate := pa / totalLen
+		aEndRate = (pa + a) / totalLen
+		bEndRate = (pa + a + b) / totalLen
+		if rate <= paEndRate {
+			start, end, posRate = openP, openP-pa, rate/paEndRate
+		} else if rate <= aEndRate {
+			start, end, posRate = openP-pa, highP, (rate-paEndRate)/(aEndRate-paEndRate)
 		} else if rate <= bEndRate {
 			start, end, posRate = highP, lowP, (rate-aEndRate)/(bEndRate-aEndRate)
+			highP = closeP
 		} else {
 			start, end, posRate = lowP, closeP, (rate-bEndRate)/(1-bEndRate)
+			newHigh, newLow = closeP, closeP
 		}
 	}
 
-	return start*(1-posRate) + end*posRate
+	newOpen := start*(1-posRate) + end*posRate
+	newHigh = max(newOpen, newHigh)
+	newLow = min(newOpen, newLow)
+	return newOpen, newHigh, newLow
+}
+
+func simMarketPrice(bar *banexg.Kline, rate float64) float64 {
+	start, _, _ := simPriceByRate(bar, rate)
+	return start
+}
+
+func cutKlineFromRate(bar *banexg.Kline, tfMSecs int64, rate float64) *banexg.Kline {
+	start, high, low := simPriceByRate(bar, rate)
+	return &banexg.Kline{
+		Time: bar.Time + int64(float64(tfMSecs)*rate),
+		Open: start, High: high, Low: low, Close: bar.Close, Volume: bar.Volume * (1 - rate), Info: bar.Info,
+	}
 }
 
 func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minRate float64) float64 {
@@ -719,7 +749,7 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minR
 	}
 
 	var (
-		a, b, c, totalLen float64
+		a, b, c, pa, totalLen float64
 	)
 
 	openP := bar.Open
@@ -730,66 +760,74 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minR
 	if openP <= closeP {
 		// close > open. generally first moves down to the lower shadow line, then rises to the highest point, and finally retreats slightly to form the upper shadow line.
 		// 阳线  一般是先下调走出下影线，然后上升到最高点，最后略微回撤，出现上影线
-		a = openP - lowP   // open~low. 开盘~最低
-		b = highP - lowP   // low~high. 最低~最高
-		c = highP - closeP // high~close. 最高~收盘
-		totalLen = a + b + c
+		pa = (openP - lowP) * 0.3  // a向下前的小幅向上回调，模拟震荡
+		a = openP + pa - lowP      // open~low. 开盘~最低
+		b = highP - lowP           // low~high. 最低~最高
+		c = (highP - closeP) * 1.3 // high~close. 最高~收盘，模拟震荡
+		totalLen = a + b + c + pa
 		if totalLen == 0 {
 			return 0.5
 		}
 		if isTrigger {
 			// Trigger price, no need to consider buying and selling direction, direct comparison
 			// 触发价格，无需考虑买卖方向，直接比较
-			if price < openP {
+			if price >= openP && price <= openP+pa {
+				// a向下前小幅向上回调时触发
+				rate := (price - openP) / totalLen
+				if rate >= minRate {
+					return rate
+				}
+			} else if price < openP {
 				// The trigger bid price is lower than the opening price, and it is triggered when the opening price is the lowest
 				// 触发买价低于开盘，在开盘~最低时触发
-				rate := (openP - price) / totalLen
+				rate := (pa + openP + pa - price) / totalLen
 				if rate >= minRate {
 					return rate
 				}
 			}
 			// Otherwise, it will be triggered from the lowest to the highest
 			// 否则在最低~最高中触发
-			rate := (a + price - lowP) / totalLen
+			rate := (pa + a + price - lowP) / totalLen
 			if rate >= minRate {
 				return rate
 			} else {
 				// Triggered during the highest to closing time
 				// 在最高~收盘中触发
-				return (a + b + highP - price) / totalLen
+				return (pa + a + b + highP - price) / totalLen
 			}
 		} else {
 			if isBuy {
 				// Buy order, triggered at opening ~ lowest price
 				// 买单，在开盘~最低时触发
-				rate := (openP - price) / totalLen
+				rate := (pa + openP + pa - price) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
 					// Trigger at minimum to maximum
 					// 在最低~最高时触发
-					return (a + price - lowP) / totalLen
+					return (pa + a + price - lowP) / totalLen
 				}
 			} else {
 				// Sell order, triggered between the lowest and highest levels
 				// 卖单，在最低~最高中触发
-				rate := (a + price - lowP) / totalLen
+				rate := (pa + a + price - lowP) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
 					// Triggered during the highest to closing time
 					// 在最高~收盘中触发
-					return (a + b + highP - price) / totalLen
+					return (pa + a + b + highP - price) / totalLen
 				}
 			}
 		}
 	} else {
 		// close < open. generally rises first and goes out of the upper shadow line, then drops to the lowest point, and finally pulls back slightly to form a lower shadow line.
 		// 阴线  一般是先上升走出上影线，然后下降到最低点，最后略微回调，出现下影线
-		a = highP - openP // 开盘~最高
-		b = highP - lowP  // 最高~最低
-		c = closeP - lowP // 最低~收盘
-		totalLen = a + b + c
+		pa = (highP - openP) * 0.3 // a向上前的小幅回调向下，模拟震荡
+		a = highP - (openP - pa)   // 开盘~最高
+		b = highP - lowP           // 最高~最低
+		c = (closeP - lowP) * 1.3  // 最低~收盘，模拟震荡
+		totalLen = a + b + c + pa
 		if totalLen == 0 {
 			return 0.5
 		}
@@ -797,50 +835,64 @@ func simMarketRate(bar *banexg.Kline, price float64, isBuy, isTrigger bool, minR
 			// Trigger price, no need to consider buying and selling direction, direct comparison
 			// 触发价格，无需考虑买卖方向，直接比较
 			if price < openP {
+				if price >= openP-pa {
+					// pa: 先小幅下降回调
+					rate := (openP - price) / totalLen
+					if rate >= minRate {
+						return rate
+					}
+				}
 				// If the trigger price is lower than the opening price, it must be triggered between the highest and lowest prices.
 				// 触发价低于开盘，必然在最高~最低中触发
-				rate := (a + highP - price) / totalLen
+				rate := (pa + a + highP - price) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
 					// Triggered at the lowest price ~ closing price
 					// 在最低~收盘中触发
-					return (a + b + price - lowP) / totalLen
+					return (pa + a + b + price - lowP) / totalLen
 				}
 			} else {
 				// The trigger price is higher than the opening price, and is triggered between the opening price and the highest price.
 				// 触发价高于开盘，在开盘~最高中触发
-				rate := (price - openP) / totalLen
+				rate := (pa + price - openP + pa) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
 					// Trigger between highest and lowest
 					// 在最高~最低中触发
-					return (a + highP - price) / totalLen
+					return (pa + a + highP - price) / totalLen
 				}
 			}
 		} else {
 			if isBuy {
+				if price >= openP-pa {
+					// 在向上前的小幅回调中触发
+					rate := (openP - price) / totalLen
+					if rate >= minRate {
+						return rate
+					}
+				}
 				// Buy orders must be triggered between the highest and lowest prices.
 				// 买单，必然在最高~最低中触发
-				rate := (a + highP - price) / totalLen
+				rate := (pa + a + highP - price) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
 					// Triggered at the lowest price ~ closing price
 					// 在最低~收盘中触发
-					return (a + b + price - lowP) / totalLen
+					return (pa + a + b + price - lowP) / totalLen
 				}
 			} else {
 				// Sell order, triggered from the opening to the highest price
 				// 卖单，在开盘~最高中触发
-				rate := (price - openP) / totalLen
+				rate := (pa + price - openP + pa) / totalLen
 				if rate >= minRate {
 					return rate
 				} else {
 					// Trigger between highest and lowest
 					// 在最高~最低中触发
-					return (a + highP - price) / totalLen
+					return (pa + a + highP - price) / totalLen
 				}
 			}
 		}

@@ -74,6 +74,7 @@ type BTResult struct {
 	FinWithdraw     float64        `json:"finWithdraw"`
 	SharpeRatio     float64        `json:"sharpeRatio"`
 	SortinoRatio    float64        `json:"sortinoRatio"`
+	CalcDiff        float64        `json:"calcDiff"`
 }
 
 type PlotData struct {
@@ -126,7 +127,9 @@ func (r *BTResult) printBtResult() {
 	r.Collect()
 	log.Info("BackTest Reports:\n" + r.cmdReports(ormo.HistODs))
 	log.Info("Saved", zap.String("at", r.OutDir))
-
+	if r.CalcDiff > 0.01 {
+		log.Error("TotInvestment + TotProfit != FinalBalance, may be bug, please report on github")
+	}
 	r.dumpBtFiles()
 }
 
@@ -246,6 +249,7 @@ func (r *BTResult) Collect() {
 	} else {
 		r.SharpeRatio, r.SortinoRatio = sharpe, sortino
 	}
+	r.CalcDiff = math.Abs((r.FinBalance-r.TotProfit)/r.TotalInvest - 1)
 }
 
 func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
@@ -1423,6 +1427,9 @@ func calcBtResult(odList []*ormo.InOutOrder, funds map[string]float64, outDir st
 		btRes.OutDir = outDir
 		btRes.dumpBtFiles()
 		log.Info("Saved", zap.String("at", outDir))
+	}
+	if btRes.CalcDiff > 0.01 {
+		log.Error("TotInvestment + TotProfit != FinalBalance, may be bug, please report on github")
 	}
 	return btRes, nil
 }

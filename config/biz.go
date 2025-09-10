@@ -174,6 +174,7 @@ func ParseConfig(path string) (*Config, *errs.Error) {
 
 func ParseYmlConfig(fileData []byte, path string) (*Config, *errs.Error) {
 	var res Config
+	fileData = []byte(os.ExpandEnv(string(fileData)))
 	var unpak map[string]interface{}
 	err := yaml.Unmarshal(fileData, &unpak)
 	if err != nil {
