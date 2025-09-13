@@ -19,6 +19,7 @@ import (
 var (
 	keySymbolMap = make(map[string]*ExSymbol)
 	idSymbolMap  = make(map[int32]*ExSymbol)
+	marketMap    = make(map[string]int)
 	symbolLock   deadlock.Mutex
 	tryListIds   = make(map[int32]bool)
 	tryListLock  deadlock.Mutex
@@ -32,8 +33,14 @@ func (q *Queries) LoadExgSymbols(exgName string) *errs.Error {
 	}
 	for _, exs := range exsList {
 		key := fmt.Sprintf("%s:%s:%s", exs.Exchange, exs.Market, exs.Symbol)
+		if _, ok := keySymbolMap[key]; ok {
+			continue
+		}
 		keySymbolMap[key] = exs
 		idSymbolMap[exs.ID] = exs
+		market := fmt.Sprintf("%s:%s", exs.Exchange, exs.Market)
+		pairNum, _ := marketMap[market]
+		marketMap[market] = pairNum + 1
 	}
 	return nil
 }
@@ -488,7 +495,25 @@ func ParseShort(exgName, short string) (*ExSymbol, *errs.Error) {
 	key := fmt.Sprintf("%s:%s:%s", exgName, market, symbol)
 	item, ok := keySymbolMap[key]
 	if !ok {
-		err := errs.NewMsg(core.ErrInvalidSymbol, "%s not exist in %d cache", symbol, len(keySymbolMap))
+		exgMarket := fmt.Sprintf("%s:%s", exgName, market)
+		pairNum, _ := marketMap[exgMarket]
+		if pairNum == 0 {
+			sess, conn, err := Conn(nil)
+			if err != nil {
+				return nil, err
+			}
+			defer conn.Release()
+			err = sess.LoadExgSymbols(exgName)
+			if err != nil {
+				return nil, err
+			}
+			item, ok = keySymbolMap[key]
+			if ok {
+				return item, nil
+			}
+			pairNum, _ = marketMap[exgMarket]
+		}
+		err := errs.NewMsg(core.ErrInvalidSymbol, "%s not exist in %d cache for %s", symbol, pairNum, exgMarket)
 		return nil, err
 	}
 	return item, nil
