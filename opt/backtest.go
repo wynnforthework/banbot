@@ -213,14 +213,14 @@ func (b *BackTest) FeedKLine(bar *orm.InfoKline) {
 }
 
 func (b *BackTest) Run() {
-	err := b.Init()
-	if err != nil {
-		log.Error("backtest init fail", zap.Error(err))
-		return
-	}
-	err = b.initRefreshCron()
+	err := b.initRefreshCron()
 	if err != nil {
 		log.Error("init pair cron fail", zap.Error(err))
+		return
+	}
+	err = b.Init()
+	if err != nil {
+		log.Error("backtest init fail", zap.Error(err))
 		return
 	}
 	if !b.isOpt {

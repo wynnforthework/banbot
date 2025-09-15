@@ -224,12 +224,6 @@ func (p *HistProvider) downIfNeed() *errs.Error {
 
 func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
 	newHolds, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther, p.pBar)
-	// Check whether the data needs to be downloaded during the backtest. If so, it will be downloaded automatically.
-	// 检查回测期间数据是否需要下载，如需要自动下载
-	err = p.downIfNeed()
-	if err != nil {
-		return err
-	}
 	maxSince := int64(0)
 	holders := make(map[string]IHistKlineFeeder)
 	defSince := btime.TimeMS()
@@ -276,6 +270,12 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 		for _, h := range holders {
 			h.SetEndMS(endMs)
 		}
+	}
+	// Check whether the data needs to be downloaded during the backtest. If so, it will be downloaded automatically.
+	// 检查回测期间数据是否需要下载，如需要自动下载
+	err = p.downIfNeed()
+	if err != nil {
+		return err
 	}
 	return err
 }
