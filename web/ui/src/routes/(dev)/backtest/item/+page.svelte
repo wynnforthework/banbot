@@ -4,6 +4,7 @@
   import { getApi } from '$lib/netio';
   import { alerts } from "$lib/stores/alerts";
   import CodeMirror from '$lib/dev/CodeMirror.svelte';
+  import Icon from '$lib/Icon.svelte';
   import { oneDark } from '@codemirror/theme-one-dark';
   import type { Extension } from '@codemirror/state';
   import * as m from '$lib/paraglide/messages.js';
@@ -13,7 +14,7 @@
   import type { BacktestDetail, BackTestTask, ExSymbol } from '$lib/dev/common';
   import { InOutOrderDetail, type InOutOrder } from '$lib/order';
   import { TreeView, type Tree, type Node, buildTree } from '$lib/treeview';
-	import { writable } from 'svelte/store';
+  import { writable } from 'svelte/store';
   import RangeSlider from '$lib/dev/RangeSlider.svelte';
   import { ChartCtx, ChartSave } from '$lib/kline/chart';
   import { persisted } from 'svelte-persisted-store';
@@ -23,7 +24,7 @@
   import type { OverlayCreate } from 'klinecharts';
   import type { TradeInfo } from '$lib/kline/types';
   import { pagination, orderCard } from '$lib/Snippets.svelte';
-  import {getFirstValid} from "$lib/common";
+  import {getFirstValid, fmtNumber} from "$lib/common";
 
   let id = $state('');
   let btPath = $state('');
@@ -53,6 +54,14 @@
   let startMS = $state(0);
   let endMS = $state(0);
   let odNums = $state<number[]>();
+  
+  // 排序相关状态
+  let sortField = $state('');
+  let sortOrder = $state<'asc' | 'desc'>('asc');
+  
+  // 时间筛选器状态
+  let startDate = $state('');
+  let endDate = $state('');
 
   // 日志相关状态
   let logs = $state('');
@@ -114,7 +123,7 @@
   }
 
   async function loadOrders() {
-    const rsp = await getApi('/dev/bt_orders', {
+    const params: any = {
       task_id: id,
       page: currentPage,
       page_size: pageSize,
@@ -122,9 +131,17 @@
       strategy,
       enter_tag: enterTag,
       exit_tag: exitTag,
-      start_ms: startMS,
-      end_ms: endMS
-    });
+      start_ms: startMS || (startDate ? new Date(startDate).getTime() : 0),
+      end_ms: endMS || (endDate ? new Date(endDate + ' 23:59:59').getTime() : 0)
+    };
+    
+    // 添加排序参数
+    if (sortField) {
+      params.sort_field = sortField;
+      params.sort_order = sortOrder;
+    }
+    
+    const rsp = await getApi('/dev/bt_orders', params);
     if(rsp.code != 200) {
       alerts.error(rsp.msg || 'load orders failed');
       return;
@@ -396,7 +413,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
     winCount: number;
     profitSum: number;
     costSum: number;
-    durations: number[];
     sharpe: number;
     sortino: number;
     [key: string]: any;
@@ -411,34 +427,76 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
     pageSize = newSize;
     loadOrders();
   }
+  
+  // 处理排序变化
+  function handleSort(field: string) {
+    if (sortField === field) {
+      // 切换排序顺序
+      sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      // 新字段，默认降序
+      sortField = field;
+      sortOrder = 'desc';
+    }
+    loadOrders();
+  }
+  
+  // 获取排序图标
+  function getSortIcon(field: string): string {
+    if (sortField !== field) return '↕';
+    return sortOrder === 'asc' ? '↑' : '↓';
+  }
 
   // 定义导航菜单项
   let navItems = $derived.by(() => {
-    const items = [];
+    const items = []
     
     if (task?.status == 3) {
       if (detail) {
         items.push(
-          { id: 'overview', label: m.overview() },
-          { id: 'assets', label: m.bt_assets() },
-          { id: 'enters', label: m.bt_enters() }
+          { id: 'overview', label: m.overview(), icon: 'home' },
+          { id: 'assets', label: m.bt_assets(), icon: 'chart-bar' },
+          { id: 'enters', label: m.bt_enters(), icon: 'double-right' }
         );
       }
       
-      items.push({ id: 'config', label: m.configuration() });
+      items.push({ id: 'config', label: m.configuration(), icon: 'config' });
       
       if (detail) {
         items.push(
-          { id: 'orders', label: m.orders() },
-          { id: 'analysis', label: m.bt_analysis() },
-          { id: 'strat_code', label: m.bt_strat_code() }
+          { id: 'orders', label: m.orders(), icon: 'number-list' },
+          { id: 'analysis', label: m.bt_analysis(), icon: 'calculate' },
+          { id: 'strat_code', label: m.bt_strat_code(), icon: 'code' }
         );
       }
     }
     
-    items.push({ id: 'logs', label: m.bt_logs() });
+    items.push({ id: 'logs', label: m.bt_logs(), icon: 'document-text' });
     return items;
   });
+
+  // 组织次要统计信息的数据，返回最大3列的二维数组
+  function getInfoColumns() {
+    if (!detail || !task) return [];
+    return [
+      [
+        { label: m.strategy(), value: task?.strats || '-' },
+        { label: m.time_period(), value: task?.periods || '-' },
+        { label: m.start_time(), value: fmtDateStr(detail.startMS), value_tip: curTZ() },
+        { label: m.end_time(), value: fmtDateStr(detail.endMS), value_tip: curTZ() },
+      ],[
+        { label: m.total_invest(), value: task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest) },
+        { label: m.final_balance(), value: formatNumber(detail.finBalance) },
+        { label: m.total_withdraw(), value: formatNumber(detail.finWithdraw) },
+        { label: m.tot_fee(), value: `${formatNumber(detail.totFee)} (${formatPercent(detail.totFee/detail.totProfit*100)})` },
+      ],[
+        { label: m.max_drawdown(), value: `${formatPercent(detail.maxDrawDownPct)} (${formatNumber(detail.maxDrawDownVal)} USD)`},
+        { label: m.bar_num(), value: detail.barNum.toString() },
+        { label: m.symbol(), value: task?.pairs ? showPairs(task.pairs) : '-' },
+        { label: m.max_open_orders(), value: detail.maxOpenOrders.toString() }
+      ]
+    ];
+  }
 
   function setActiveTab(tab: string) {
     activeTab = tab;
@@ -465,8 +523,14 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
 
 <div class="px-4 py-6 flex-1 flex flex-col">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-bold">{m.bt_report()}: {id}</h1>
-    <div class="text-sm opacity-75">{btPath}</div>
+    <div class="flex items-center gap-4">
+      <h1 class="text-2xl font-bold">{m.bt_report()}: {id}</h1>
+      <div class="text-sm opacity-75">{btPath}</div>
+    </div>
+    <button class="btn btn-sm btn-ghost gap-2" onclick={() => history.back()}>
+      <Icon name="double-left" class="size-4" />
+      {m.back()}
+    </button>
   </div>
 
   <div class="flex gap-4 flex-1">
@@ -476,6 +540,7 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         {#each navItems as item}
           <li>
             <button class:menu-active={activeTab === item.id} onclick={() => setActiveTab(item.id)}>
+              <Icon name={item.icon} class="size-4" />
               {item.label}
             </button>
           </li>
@@ -548,16 +613,9 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
             formatPercent(detail.winRatePct),
             `${m.order_num()} ${detail.orderNum}`
           )}
-
-          {@render statCard(
-            m.max_drawdown(),
-            'text-warning',
-            formatPercent(detail.maxDrawDownPct),
-            `${formatNumber(detail.maxDrawDownVal)} USD`
-          )}
           
           {@render statCard(
-            m.show_drawdown(),
+            m.max_drawdown(),
             'text-warning',
             formatPercent(detail.showDrawDownPct),
             `${formatNumber(detail.showDrawDownVal)} USD`
@@ -571,16 +629,22 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
         </div>
 
         <!-- 次要统计信息 -->
-        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {@render infoCard(m.bt_range() + ` (${curTZ()})`, `${fmtDateStr(detail.startMS)} ~ ${fmtDateStr(detail.endMS)}`)}
-          {@render infoCard(
-            `${m.total_invest()}/${m.final_balance()}/${m.total_withdraw()}`,
-            `${task?.walletAmount ? formatNumber(task.walletAmount) : formatNumber(detail.totalInvest)} / ${formatNumber(detail.finBalance)} / ${formatNumber(detail.finWithdraw)}`
-          )}
-          {@render infoCard(m.tot_fee(), `${formatNumber(detail.totFee)} (${formatPercent(detail.totFee/detail.totProfit*100)})`)}
-          {@render infoCard(m.strategy(), task?.strats || '-')}
-          {@render infoCard(`${m.time_period()}/${m.bar_num()}`, `${task?.periods || '-'} / ${detail.barNum}`)}
-          {@render infoCard(m.symbol() + '/' + m.max_open_orders(), `${task?.pairs ? showPairs(task.pairs) : '-'} / ${detail.maxOpenOrders}`)}
+        {@const infoColumns = getInfoColumns()}
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-6">
+          {#each infoColumns as column, idx}
+            <!-- 使用响应式类控制显示 -->
+            <div class="bg-base-200 rounded-box p-4 
+                        {idx === 2 ? 'lg:col-span-2 xl:col-span-1' : ''}">
+              <div class="space-y-3">
+                {#each column as item}
+                  <div class="flex justify-between items-center">
+                    <span class="text-sm opacity-75">{item.label}</span>
+                    <span class="text-sm font-medium" title="{item.value_tip}">{item.value}</span>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          {/each}
         </div>
 
         <!-- 分组统计 -->
@@ -591,30 +655,35 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                 class="tab" 
                 class:tab-active={activeGroupTab === 'pairs'}
                 onclick={() => activeGroupTab = 'pairs'}>
+                <Icon name="chart-bar" class="size-4 mr-2" />
                 {m.stat_by_pairs()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'dates'}
                 onclick={() => activeGroupTab = 'dates'}>
+                <Icon name="calender" class="size-4 mr-2" />
                 {m.stat_by_dates()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'profits'}
                 onclick={() => activeGroupTab = 'profits'}>
+                <Icon name="dollar" class="size-4 mr-2" />
                 {m.stat_by_profits()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'enters'}
                 onclick={() => activeGroupTab = 'enters'}>
+                <Icon name="chevron-right" class="size-4 mr-2" />
                 {m.stat_by_enters()}
               </button>
               <button role="tab" 
                 class="tab"
                 class:tab-active={activeGroupTab === 'exits'}
                 onclick={() => activeGroupTab = 'exits'}>
+                <Icon name="chevron-down" class="size-4 mr-2" />
                 {m.stat_by_exits()}
               </button>
             </div>
@@ -627,7 +696,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                 { title: m.win_rate(), field: 'winCount', format: (v, g) => formatPercent(v * 100 / (g.orderNum || 1)) },
                 { title: m.tot_profit(), field: 'profitSum', format: v => formatNumber(v) },
                 { title: m.profit_rate(), field: 'profitSum', format: (v, g) => formatPercent(v * 100 / g.costSum) },
-                { title: m.avg_hold_time(), field: 'durations', format: (v: number[], g) => formatDuration(v.reduce((a, b) => a + b, 0) * 1000 / v.length) },
                 { title: m.sharpe_ratio() + '/' + m.sortino_ratio(), field: 'sharpe', format: (v, g) => `${formatNumber(v, 2)} / ${formatNumber(g.sortino, 2)}` }
               ])}
             {/if}
@@ -643,7 +711,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -654,7 +721,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                       </tr>
                     {/each}
                   </tbody>
@@ -673,7 +739,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -684,7 +749,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                       </tr>
                     {/each}
                   </tbody>
@@ -703,7 +767,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                       <th>{m.sharpe_ratio()}/{m.sortino_ratio()}</th>
                     </tr>
                   </thead>
@@ -715,7 +778,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                         <td>{formatNumber(group.sharpe, 2)} / {formatNumber(group.sortino, 2)}</td>
                       </tr>
                     {/each}
@@ -735,7 +797,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                       <th>{m.win_rate()}</th>
                       <th>{m.tot_profit()}</th>
                       <th>{m.profit_rate()}</th>
-                      <th>{m.avg_hold_time()}</th>
                       <th>{m.sharpe_ratio()}/{m.sortino_ratio()}</th>
                     </tr>
                   </thead>
@@ -747,7 +808,6 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                         <td>{formatPercent(group.winCount * 100 / (group.orderNum || 1))}</td>
                         <td>{formatNumber(group.profitSum)}</td>
                         <td>{formatPercent(group.profitSum * 100 / group.costSum)}</td>
-                        <td>{formatDuration(group.durations.reduce((a: number, b: number) => a + b, 0) * 1000 / group.durations.length)}</td>
                         <td>{formatNumber(group.sharpe, 2)} / {formatNumber(group.sortino, 2)}</td>
                       </tr>
                     {/each}
@@ -772,38 +832,114 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
       {:else if activeTab === 'orders'}
         <div class="flex flex-col gap-4 flex-1">
           <!-- 过滤器 -->
-          <div class="flex flex-wrap gap-4">
-            <input type="text" placeholder={m.symbol()} class="input w-32"
-              bind:value={symbol} onchange={loadOrders}
-            />
-            <input type="text" placeholder={m.strategy()} class="input w-32"
-              bind:value={strategy} onchange={loadOrders}
-            />
-            <input type="text" placeholder={m.enter_tag()} class="input w-32"
-              bind:value={enterTag} onchange={loadOrders}
-            />
-            <input type="text" placeholder={m.exit_tag()} class="input w-32"
-              bind:value={exitTag} onchange={loadOrders}
-            />
+          <div class="flex flex-wrap gap-3 items-end">
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.symbol()}</span>
+              </label>
+              <input type="text" placeholder={m.symbol()} class="input input-sm w-28"
+                bind:value={symbol} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.strategy()}</span>
+              </label>
+              <input type="text" placeholder={m.strategy()} class="input input-sm w-28"
+                bind:value={strategy} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.enter_tag()}</span>
+              </label>
+              <input type="text" placeholder={m.enter_tag()} class="input input-sm w-28"
+                bind:value={enterTag} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.exit_tag()}</span>
+              </label>
+              <input type="text" placeholder={m.exit_tag()} class="input input-sm w-28"
+                bind:value={exitTag} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.start_time()}</span>
+              </label>
+              <input type="date" class="input input-sm w-36"
+                bind:value={startDate} onchange={loadOrders}
+              />
+            </div>
+            <div class="form-control">
+              <label class="label py-1">
+                <span class="label-text text-xs">{m.end_time()}</span>
+              </label>
+              <input type="date" class="input input-sm w-36"
+                bind:value={endDate} onchange={loadOrders}
+              />
+            </div>
+            <button class="btn btn-sm btn-primary" onclick={loadOrders}>
+              {m.query()}
+            </button>
+            <button class="btn btn-sm btn-ghost" onclick={() => {
+              symbol = '';
+              strategy = '';
+              enterTag = '';
+              exitTag = '';
+              startDate = '';
+              endDate = '';
+              sortField = '';
+              sortOrder = 'asc';
+              loadOrders();
+            }}>
+              {m.reset()}
+            </button>
           </div>
 
           <!-- 订单表格 -->
           <div class="overflow-x-auto">
-            <table class="table">
+            <table class="table table-sm">
               <thead>
                 <tr>
-                  <th>{m.symbol()}</th>
-                  <th>{m.direction()}</th>
-                  <th>{m.leverage()}</th>
-                  <th>{m.enter_at()}({curTZ()})</th>
-                  <th>{m.enter_tag()}</th>
-                  <th>{m.enter_price()}</th>
-                  <th>{m.enter_amount()}</th>
-                  <th>{m.exit_at()}({curTZ()})</th>
-                  <th>{m.exit_tag()}</th>
-                  <th>{m.exit_price()}</th>
-                  <th>{m.exit_amount()}</th>
-                  <th>{m.profit()}</th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('symbol')}>
+                    {m.symbol()} <span class="text-xs opacity-60">{getSortIcon('symbol')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('direction')}>
+                    {m.direction()} <span class="text-xs opacity-60">{getSortIcon('direction')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('leverage')}>
+                    {m.leverage()} <span class="text-xs opacity-60">{getSortIcon('leverage')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_at')}>
+                    {m.enter_at()}({curTZ()}) <span class="text-xs opacity-60">{getSortIcon('enter_at')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_tag')}>
+                    {m.enter_tag()} <span class="text-xs opacity-60">{getSortIcon('enter_tag')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_price')}>
+                    {m.enter_price()} <span class="text-xs opacity-60">{getSortIcon('enter_price')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('enter_amount')}>
+                    {m.enter_amount()} <span class="text-xs opacity-60">{getSortIcon('enter_amount')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_at')}>
+                    {m.exit_at()}({curTZ()}) <span class="text-xs opacity-60">{getSortIcon('exit_at')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_tag')}>
+                    {m.exit_tag()} <span class="text-xs opacity-60">{getSortIcon('exit_tag')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_price')}>
+                    {m.exit_price()} <span class="text-xs opacity-60">{getSortIcon('exit_price')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('exit_amount')}>
+                    {m.exit_amount()} <span class="text-xs opacity-60">{getSortIcon('exit_amount')}</span>
+                  </th>
+                  <th class="cursor-pointer hover:bg-base-200" onclick={() => handleSort('profit')}>
+                    {m.profit()} <span class="text-xs opacity-60">{getSortIcon('profit')}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -814,12 +950,12 @@ ${m.holding()}: ${fmtDuration((td.exit_at - td.enter_at) / 1000)}`;
                     <td>{order.leverage}x</td>
                     <td>{fmtDateStr(order.enter_at)}</td>
                     <td>{order.enter_tag}</td>
-                    <td>{formatNumber(order.enter?.average||order.enter?.price || 0, 8)}</td>
-                    <td>{formatNumber(order.enter?.filled ||order.enter?.amount || 0, 8)}</td>
+                    <td>{fmtNumber(order.enter?.average||order.enter?.price || 0)}</td>
+                    <td>{fmtNumber(order.enter?.filled ||order.enter?.amount || 0)}</td>
                     <td>{fmtDateStr(order.exit_at)}</td>
                     <td>{order.exit_tag}</td>
-                    <td>{formatNumber(order.exit?.average||order.exit?.price || 0, 8)}</td>
-                    <td>{formatNumber(order.exit?.filled ||order.exit?.amount || 0, 8)}</td>
+                    <td>{fmtNumber(order.exit?.average||order.exit?.price || 0)}</td>
+                    <td>{fmtNumber(order.exit?.filled ||order.exit?.amount || 0)}</td>
                     <td>{formatNumber(order.profit)}</td>
                   </tr>
                 {/each}

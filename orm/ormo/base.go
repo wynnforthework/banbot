@@ -55,24 +55,30 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *deadlock.Mutex) {
 	if !core.EnvReal {
 		account = config.DefAcc
 	}
+	isReload := false
 	mOpenLock.Lock()
-	val, ok := accOpenODs[account]
-	if !ok {
-		val = make(map[int64]*InOutOrder)
-		accOpenODs[account] = val
-	}
 	if core.LiveMode {
 		curMS := btime.UTCStamp()
 		stamp, _ := accSyncStamps[account]
 		if curMS-stamp > odSyncIntvMS {
 			// 超过同步间隔，强制同步一次
 			accSyncStamps[account] = curMS
-			err := loadOpenODs(account, val)
-			if err != nil {
-				log.Error("loadOpenODs fail", zap.String("acc", account), zap.Error(err))
-			}
+			isReload = true
 		}
 	}
+	val, ok := accOpenODs[account]
+	if !ok {
+		val = make(map[int64]*InOutOrder)
+		accOpenODs[account] = val
+	}
+	mOpenLock.Unlock()
+	if isReload {
+		err := loadOpenODs(account, val)
+		if err != nil {
+			log.Error("loadOpenODs fail", zap.String("acc", account), zap.Error(err))
+		}
+	}
+	mOpenLock.Lock()
 	lock, ok2 := lockOpenMap[account]
 	if !ok2 {
 		lock = &deadlock.Mutex{}

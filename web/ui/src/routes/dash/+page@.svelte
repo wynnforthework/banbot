@@ -453,9 +453,6 @@
                     <button class="btn btn-xs btn-error" onclick={() => delTicket(ticket)}>
                       {m.remove()}
                     </button>
-                    <button class="btn btn-xs btn-primary" onclick={() => showAdd = true}>
-                      {m.edit()}
-                    </button>
                   </td>
                 </tr>
               {/each}

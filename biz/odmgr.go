@@ -299,7 +299,7 @@ func (o *OrderMgr) RelayOrders(sess *ormo.Queries, orders []*ormo.InOutOrder) *e
 		if !ok {
 			return errs.NewMsg(errs.CodeNoMarketForPair, "%s not found", odr.Symbol)
 		}
-		price := core.GetPrice(odr.Symbol)
+		price := core.GetPrice(odr.Symbol, odr.Enter.Side)
 		curTime := btime.TimeMS()
 		od := &ormo.InOutOrder{
 			IOrder: &ormo.IOrder{
@@ -311,6 +311,7 @@ func (o *OrderMgr) RelayOrders(sess *ormo.Queries, orders []*ormo.InOutOrder) *e
 				Status:    odr.Status,
 				EnterTag:  odr.EnterTag,
 				InitPrice: odr.InitPrice,
+				Stop:      odr.Stop,
 				QuoteCost: odr.QuoteCost,
 				ExitTag:   odr.ExitTag,
 				Leverage:  odr.Leverage,
@@ -391,6 +392,11 @@ func (o *OrderMgr) enterOrder(sess *ormo.Queries, exs *orm.ExSymbol, tf string, 
 	if req.Short {
 		odSide = banexg.OdSideSell
 	}
+	price := core.GetPrice(exs.Symbol, odSide)
+	if (price > req.Stop) != req.Short {
+		// 立即触发，置为0
+		req.Stop = 0
+	}
 	curTimeMS := btime.TimeMS()
 	taskId := ormo.GetTaskID(o.Account)
 	od := &ormo.InOutOrder{
@@ -402,7 +408,8 @@ func (o *OrderMgr) enterOrder(sess *ormo.Queries, exs *orm.ExSymbol, tf string, 
 			Short:     req.Short,
 			Status:    ormo.InOutStatusInit,
 			EnterTag:  req.Tag,
-			InitPrice: core.GetPrice(exs.Symbol),
+			InitPrice: price,
+			Stop:      req.Stop,
 			Leverage:  req.Leverage,
 			EnterAt:   curTimeMS,
 			Strategy:  req.StratName,
@@ -560,7 +567,13 @@ func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.E
 				return nil, errs.NewMsg(errs.CodeParamInvalid, "ExitReq.Limit invalid for multi pairs")
 			}
 		}
-		price := core.GetPrice(symbol)
+		odSide := ""
+		if req.Dirt == core.OdDirtLong {
+			odSide = banexg.OdSideSell
+		} else if req.Dirt == core.OdDirtShort {
+			odSide = banexg.OdSideBuy
+		}
+		price := core.GetPrice(symbol, odSide)
 		if price > 0 && (req.Limit-price)*float64(req.Dirt) > 0 {
 			isTakeProfit = true
 		}
@@ -657,7 +670,13 @@ func (o *OrderMgr) ExitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat
 		return nil, errs.NewMsg(errs.CodeParamInvalid, "`ExitReq.Dirt` mismatch with Order")
 	}
 	if req.Limit > 0 && core.IsLimitOrder(req.OrderType) {
-		price := core.GetPrice(od.Symbol)
+		odSide := ""
+		if req.Dirt == core.OdDirtLong {
+			odSide = banexg.OdSideSell
+		} else if req.Dirt == core.OdDirtShort {
+			odSide = banexg.OdSideBuy
+		}
+		price := core.GetPrice(od.Symbol, odSide)
 		if price > 0 && (req.Limit-price)*float64(req.Dirt) > 0 {
 			// It is a valid limit order, set to take profit
 			// 是有效的限价出场单，设置到止盈中
@@ -690,7 +709,7 @@ func (o *OrderMgr) exitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat
 		}
 		return o.exitOrder(sess, part, req)
 	}
-	od.SetExit(0, req.Tag, odType, 0)
+	od.SetExit(0, req.Tag, odType, req.Limit)
 	return o.postOrderExit(sess, od)
 }
 

@@ -28,6 +28,7 @@ export interface IOrder {
   short: boolean;
   status: number;
   enter_tag: string;
+  stop: number;
   init_price: number;
   quote_cost: number;
   exit_tag: string;

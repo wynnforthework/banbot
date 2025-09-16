@@ -17,23 +17,25 @@ type FnOnPostApi func(client *core.ApiClient, msg map[string]interface{}, jobs m
 type Warms map[string]map[string]int
 
 type TradeStrat struct {
-	Name          string
-	Version       int
-	WarmupNum     int
-	OdBarMax      int     // default: 500. Estimated maximum bar hold number for orders (used to find unfinished positions for backtesting) 预计订单持仓最大bar数量（用于查找回测未完成持仓）
-	MinTfScore    float64 // Minimum time cycle quality, default 0.8 最小时间周期质量，默认0.8
-	WsSubs        map[string]string
-	DrawDownExit  bool
-	BatchInOut    bool    // Whether to batch execute entry/exit 是否批量执行入场/出场
-	BatchInfo     bool    // whether to perform batch processing after OninfoBar 是否对OnInfoBar后执行批量处理
-	StakeRate     float64 // Relative basic amount billing rate 相对基础金额开单倍率
-	StopLoss      float64 // Default stoploss without leverage 此策略默认止损比率，不带杠杆
-	StopEnterBars int
-	EachMaxLong   int      // max number of long open orders for one pair, -1 for disable
-	EachMaxShort  int      // max number of short open orders for one pair, -1 for disable
-	RunTimeFrames []string // Allow running time period, use global configuration when not provided 允许运行的时间周期，不提供时使用全局配置
-	Outputs       []string // The content of the text file output by the strategy, where each string is one line 策略输出的文本文件内容，每个字符串是一行
-	Policy        *config.RunPolicyConfig
+	Name            string
+	Version         int
+	WarmupNum       int
+	OdBarMax        int     // default: 500. Estimated maximum bar hold number for orders (used to find unfinished positions for backtesting) 预计订单持仓最大bar数量（用于查找回测未完成持仓）
+	MinTfScore      float64 // Minimum time cycle quality, default 0.8 最小时间周期质量，默认0.8
+	WsSubs          map[string]string
+	DrawDownExit    bool
+	HedgeOff        bool    // turn off future hedge mode 关闭合约双向持仓
+	BatchInOut      bool    // Whether to batch execute entry/exit 是否批量执行入场/出场
+	BatchInfo       bool    // whether to perform batch processing after OninfoBar 是否对OnInfoBar后执行批量处理
+	StakeRate       float64 // Relative basic amount billing rate 相对基础金额开单倍率
+	StopLoss        float64 // Default stoploss without leverage 此策略默认止损比率，不带杠杆
+	StopEnterBars   int
+	OrderOnRotation string   // close/hold/open 品种切换时旧的job：立刻平仓，允许持有不许开单，允许开单和持有
+	EachMaxLong     int      // max number of long open orders for one pair, -1 for disable, 0 for no limit
+	EachMaxShort    int      // max number of short open orders for one pair, -1 for disable, 0 for no limit
+	RunTimeFrames   []string // Allow running time period, use global configuration when not provided 允许运行的时间周期，不提供时使用全局配置
+	Outputs         []string // The content of the text file output by the strategy, where each string is one line 策略输出的文本文件内容，每个字符串是一行
+	Policy          *config.RunPolicyConfig
 
 	OnPairInfos         func(s *StratJob) []*PairSub
 	OnSymbols           func(items []string) []string // return modified pairs
@@ -123,6 +125,7 @@ type EnterReq struct {
 	Short           bool    // Whether to short sell or not 是否做空
 	OrderType       int     // 订单类型, core.OrderType*
 	Limit           float64 // The entry price of a limit order will be submitted as a limit order when specified 限价单入场价格，指定时订单将作为限价单提交
+	Stop            float64 // Stop price, buy orders enter when the price rises to the trigger price (vice versa for sell orders). 止损(触发价格)，做多订单时价格上涨到触发价格才入场（做空相反）
 	CostRate        float64 // The opening ratio is set to 1 times by default according to the configuration. Used for calculating LegalList 开仓倍率、默认按配置1倍。用于计算LegalCost
 	LegalCost       float64 // Spend the amount in fiat currency. Ignore CostRate when specified 花费法币金额。指定时忽略CostRate
 	Leverage        float64 // Leverage ratio 杠杆倍数

@@ -57,6 +57,7 @@ CREATE TABLE iorder
     short       BOOL    NOT NULL,
     status      INTEGER NOT NULL,
     enter_tag   TEXT    NOT NULL,
+    stop        REAL    NOT NULL,
     init_price  REAL    NOT NULL,
     quote_cost  REAL    NOT NULL,
     exit_tag    TEXT    NOT NULL,

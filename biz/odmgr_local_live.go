@@ -93,9 +93,11 @@ func tryFillLocalLiveOrder(o *LocalLiveOrderMgr, od *ormo.InOutOrder, isEnter bo
 	if exOd.OrderType != "" {
 		odType = exOd.OrderType
 	}
-	if !strings.Contains(odType, banexg.OdTypeMarket) {
+	if !strings.Contains(odType, banexg.OdTypeMarket) || od.Stop > 0 {
+		// 限价单或触发价格，按推送价格处理
 		return nil
 	}
+	// 市价单立刻撮合成交
 	ask, bid, err := getAskBidPrice(od.Symbol)
 	if err != nil {
 		return err
@@ -178,6 +180,36 @@ func CallLocalLiveOdMgrsKline(msg *data.KLineMsg, bars []*banexg.Kline) *errs.Er
 				log.Info("order status change", zap.String("od", od.Key()), zap.String("status", statusText))
 			}
 		}
+	}
+	return nil
+}
+
+func (o *LocalLiveOrderMgr) CleanUp() *errs.Error {
+	openOds, lock := ormo.GetOpenODs(o.Account)
+	lock.Lock()
+	var needSaveOds []*ormo.InOutOrder
+	for _, od := range openOds {
+		if od.IsDirty() {
+			needSaveOds = append(needSaveOds, od)
+		}
+	}
+	lock.Unlock()
+
+	// 保存所有需要保存的订单到数据库
+	if len(needSaveOds) > 0 {
+		for _, od := range needSaveOds {
+			err := od.Save(nil)
+			if err != nil {
+				log.Warn("save order fail", zap.String("acc", o.Account),
+					zap.String("key", od.Key()), zap.Error(err))
+				return err
+			}
+		}
+	}
+	log.Info("cleanUp for LocalLiveOrderMgr", zap.Int("num", len(needSaveOds)))
+
+	if len(o.zeroAmts) > 0 {
+		log.Warn("prec amount to zero", zap.Any("times", o.zeroAmts))
 	}
 	return nil
 }

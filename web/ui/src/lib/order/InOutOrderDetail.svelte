@@ -22,9 +22,22 @@
 
   // 订单状态数组
   const InOutStatus = [m.no_enter(), m.part_enter(), m.full_enter(), m.part_exit(), m.full_exit(), m.deleted()];
-  // 订单成交状态数组
-  const OdStatus = [m.no_filled(), m.part_ok(), m.closed()];
-  
+
+  function getExStatusText(status: number, filled: number): string {
+    if(status === 0){
+      return m.no_filled();
+    }else if (status === 1){
+      return m.part_ok();
+    }else if (status === 2){
+      if (filled && filled > 0){
+        return m.filled()
+      }
+      return m.closed();
+    }else{
+      return "unknown"
+    }
+  }
+
   // 获取状态对应的颜色类
   function getStatusColor(status: number): string {
     switch(status) {
@@ -57,7 +70,7 @@
 
 <Modal title={m.order_details()} bind:show={show} width={1200}>
   {#if currentOrder}
-  <div class="flex flex-col gap-2 max-h-[80vh] overflow-y-auto p-1 pr-2 custom-scrollbar">
+  <div class="flex flex-col gap-2 p-1 pr-2">
     <!-- 订单概览卡片 -->
     <div class="bg-base-100 rounded-lg shadow-sm border border-base-200">
       <!-- 卡片头部 -->
@@ -231,13 +244,13 @@
         </div>
         
         <div class="badge badge-sm">
-          {OdStatus[currentOrder.enter.status]}
+          {getExStatusText(currentOrder.enter.status, currentOrder.enter.filled)}
         </div>
       </div>
       
       <div class="p-3 grid grid-cols-2 md:grid-cols-6 gap-x-3 gap-y-2 text-xs">
         <!-- 入场原因 -->
-        <div class="md:col-span-2 space-y-0.5">
+        <div class="space-y-0.5">
           <div class="text-xs text-base-content/70">{m.enter_tag()}</div>
           {#if isEditable}
             <input type="text" class="input input-xs w-full h-6" bind:value={currentOrder.enter_tag}/>
@@ -268,7 +281,19 @@
             </div>
           {/if}
         </div>
-        
+
+        <!-- 价格 -->
+        <div class="space-y-0.5">
+          <div class="text-xs text-base-content/70">{m.trigger_price()}</div>
+          {#if isEditable}
+            <input type="text" class="input input-xs w-full h-6" value={currentOrder.stop?.toFixed(7) ?? ''}/>
+          {:else}
+            <div class="bg-base-200/30 p-1.5 rounded border border-base-300 text-xs font-mono">
+              {currentOrder.stop?.toFixed(7) ?? '-'}
+            </div>
+          {/if}
+        </div>
+
         <!-- 价格 -->
         <div class="space-y-0.5">
           <div class="text-xs text-base-content/70">{m.enter_price()}</div>
@@ -370,7 +395,7 @@
         </div>
         
         <div class="badge badge-sm">
-          {OdStatus[currentOrder.exit.status]}
+          {getExStatusText(currentOrder.exit.status, currentOrder.exit.filled)}
         </div>
       </div>
       

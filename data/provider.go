@@ -224,12 +224,6 @@ func (p *HistProvider) downIfNeed() *errs.Error {
 
 func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bool) *errs.Error {
 	newHolds, sinceMap, _, err := p.Provider.SubWarmPairs(items, delOther, p.pBar)
-	// Check whether the data needs to be downloaded during the backtest. If so, it will be downloaded automatically.
-	// 检查回测期间数据是否需要下载，如需要自动下载
-	err = p.downIfNeed()
-	if err != nil {
-		return err
-	}
 	maxSince := int64(0)
 	holders := make(map[string]IHistKlineFeeder)
 	defSince := btime.TimeMS()
@@ -276,6 +270,12 @@ func (p *HistProvider) SubWarmPairs(items map[string]map[string]int, delOther bo
 		for _, h := range holders {
 			h.SetEndMS(endMs)
 		}
+	}
+	// Check whether the data needs to be downloaded during the backtest. If so, it will be downloaded automatically.
+	// 检查回测期间数据是否需要下载，如需要自动下载
+	err = p.downIfNeed()
+	if err != nil {
+		return err
 	}
 	return err
 }
@@ -447,12 +447,12 @@ func NewLiveProvider(callBack FnPairKline, envEnd FuncEnvEnd) (*LiveProvider, *e
 	watcher.OnTrades = makeOnTrade(provider)
 	watcher.OnDepth = makeOnDepth(provider)
 	// 立刻订阅实时价格
-	err = watcher.SendMsg("subscribe", []string{
-		fmt.Sprintf("price_%s_%s", core.ExgName, core.Market),
-	})
-	if err != nil {
-		return nil, err
-	}
+	//err = watcher.SendMsg("subscribe", []string{
+	//	fmt.Sprintf("price_%s_%s", core.ExgName, core.Market),
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
 	return provider, nil
 }
 
@@ -604,7 +604,9 @@ func makeOnTrade(p *LiveProvider) func(exgName, market, pair string, trades []*b
 		}
 		jobMap, _ := pairMap[pair]
 		for job := range jobMap {
+			num1, num2 := strat.GetJobInOutNum(job)
 			job.Strat.OnWsTrades(job, pair, trades)
+			strat.CheckJobInOutNum(job, "OnWsTrades", num1, num2)
 		}
 	}
 }
@@ -617,19 +619,29 @@ func makeOnDepth(p *LiveProvider) func(dep *banexg.OrderBook) {
 		}
 		jobMap, _ := pairMap[dep.Symbol]
 		for job := range jobMap {
+			num1, num2 := strat.GetJobInOutNum(job)
 			job.Strat.OnWsDepth(job, dep)
+			strat.CheckJobInOutNum(job, "OnWsDepth", num1, num2)
 		}
 	}
 }
 
 func fireWsKlines(msg *KLineMsg) {
+	if len(msg.Arr) == 0 {
+		return
+	}
+	last := msg.Arr[len(msg.Arr)-1]
+	if _, ok := core.OdBooks[msg.Pair]; !ok {
+		core.SetPrice(msg.Pair, last.Close, last.Close)
+	}
 	pairMap, _ := strat.WsSubJobs[core.WsSubKLine]
-	if len(pairMap) == 0 || len(msg.Arr) == 0 {
+	if len(pairMap) == 0 {
 		return
 	}
 	jobMap, _ := pairMap[msg.Pair]
-	last := msg.Arr[len(msg.Arr)-1]
 	for job := range jobMap {
+		num1, num2 := strat.GetJobInOutNum(job)
 		job.Strat.OnWsKline(job, msg.Pair, last)
+		strat.CheckJobInOutNum(job, "OnWsKline", num1, num2)
 	}
 }

@@ -71,20 +71,42 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			return nil, nil, err
 		}
 		dirt := pol.OdDirt()
+		// 旧job允许开单的，先添加计数
+		oldAllowOpen := stgy.OrderOnRotation == "open"
+		oldAddPairs := make(map[string]bool)
+		for acc, accJobs := range AccJobs {
+			for _, jobs := range accJobs {
+				for stratId, job := range jobs {
+					if job.MaxOpenLong >= 0 || job.MaxOpenShort >= 0 {
+						holdNum += 1
+						oldAddPairs[job.Symbol.Symbol] = true
+						if !accLimits.tryAdd(acc, stratId) {
+							log.Error("old job num exceed limit", zap.String("acc", acc), zap.String("strat", stratId))
+						}
+					}
+				}
+			}
+		}
 		for _, exs := range exsList {
 			if holdNum >= stgyMaxNum {
 				break
+			}
+			var pairAdded bool
+			if oldAllowOpen {
+				_, pairAdded = oldAddPairs[exs.Symbol]
 			}
 			curStgy := stgy
 			scores, _ := tfScores[exs.Symbol]
 			tf := curStgy.pickTimeFrame(exs.Symbol, scores)
 			if tf == "" {
-				failTfScores[exs.Symbol] = scores
+				if !pairAdded {
+					failTfScores[exs.Symbol] = scores
+				}
 				continue
 			}
 			jobType := JobForbidType(exs.Symbol, tf, polID)
 			if jobType > 0 {
-				if jobType > 1 {
+				if jobType > 1 && !pairAdded {
 					// 任务禁止，但增加占位
 					holdNum += 1
 					for acc := range config.Accounts {
@@ -100,11 +122,14 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			}
 			if _, ok = items[polID]; ok {
 				// 当前pair+stratID已有任务，跳过
-				err = markStratJob(tf, polID, exs, dirt, accLimits)
+				newAdd := 0
+				newAdd, err = markStratJob(tf, polID, exs, dirt, accLimits)
 				if err != nil {
 					return nil, nil, err
 				}
-				holdNum += 1
+				if newAdd > 0 {
+					holdNum += 1
+				}
 				continue
 			}
 			// Check for proprietary parameters of the current target and reinitialize the strategy
@@ -381,8 +406,9 @@ func initBarEnv(exs *orm.ExSymbol, tf string) *ta.BarEnv {
 	return env
 }
 
-func markStratJob(tf, polID string, exs *orm.ExSymbol, dirt int, accLimits accStratLimits) *errs.Error {
+func markStratJob(tf, polID string, exs *orm.ExSymbol, dirt int, accLimits accStratLimits) (int, *errs.Error) {
 	envKey := strings.Join([]string{exs.Symbol, tf}, "_")
+	newAdd := 0
 	for acc, jobs := range AccJobs {
 		envJobs, ok := jobs[envKey]
 		if !ok {
@@ -396,7 +422,12 @@ func markStratJob(tf, polID string, exs *orm.ExSymbol, dirt int, accLimits accSt
 				zap.String("strat", polID))
 			continue
 		}
+		if job.MaxOpenShort >= 0 || job.MaxOpenLong >= 0 {
+			// 已事先允许，跳过避免重复计数
+			continue
+		}
 		if accLimits.tryAdd(acc, polID) {
+			newAdd += 1
 			job.MaxOpenShort = job.Strat.EachMaxShort
 			job.MaxOpenLong = job.Strat.EachMaxLong
 			if dirt == core.OdDirtShort {
@@ -406,7 +437,7 @@ func markStratJob(tf, polID string, exs *orm.ExSymbol, dirt int, accLimits accSt
 			}
 		}
 	}
-	return nil
+	return newAdd, nil
 }
 
 func ensureStratJob(stgy *TradeStrat, tf string, exs *orm.ExSymbol, env *ta.BarEnv, dirt int,
@@ -503,8 +534,10 @@ func resetJobs() {
 		for _, jobs := range accJobs {
 			for _, job := range jobs {
 				job.InitBar(odList)
-				job.MaxOpenLong = -1
-				job.MaxOpenShort = -1
+				if job.Strat.OrderOnRotation != "open" {
+					job.MaxOpenLong = -1
+					job.MaxOpenShort = -1
+				}
 			}
 		}
 	}

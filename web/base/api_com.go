@@ -112,7 +112,7 @@ func ErrHandler(c *fiber.Ctx, err error) error {
 		eCode := banErr.Code
 		if eCode == errs.CodeParamInvalid || eCode == errs.CodeParamRequired || eCode == core.ErrBadConfig {
 			code = fiber.StatusBadRequest
-		} else if name, ok := core.ErrCodeNames[eCode]; ok && strings.HasPrefix(name, "Invalid") {
+		} else if strings.HasPrefix(banErr.CodeName(), "Invalid") {
 			code = fiber.StatusBadRequest
 		}
 		errText = banErr.Short()

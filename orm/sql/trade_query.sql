@@ -43,10 +43,10 @@ where task_id=? and enter_at>=? and enter_at<=?;
 
 -- name: AddIOrder :one
 insert into iorder ("task_id", "symbol", "sid", "timeframe", "short", "status",
-                    "enter_tag", "init_price", "quote_cost", "exit_tag", "leverage",
+                    "enter_tag", "init_price", "stop", "quote_cost", "exit_tag", "leverage",
                     "enter_at", "exit_at", "strategy", "stg_ver", "max_pft_rate", "max_draw_down",
                     "profit_rate", "profit", "info")
-values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     RETURNING id;
 
 -- name: SetIOrder :exec
@@ -58,6 +58,7 @@ update iorder set
                   "short" = ?,
                   "status" = ?,
                   "enter_tag" = ?,
+                  "stop" = ?,
                   "init_price" = ?,
                   "quote_cost" = ?,
                   "exit_tag" = ?,

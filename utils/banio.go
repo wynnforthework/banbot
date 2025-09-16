@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"encoding/binary"
-	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"github.com/banbox/banbot/btime"
@@ -12,6 +12,7 @@ import (
 	"github.com/banbox/banexg/errs"
 	"github.com/banbox/banexg/log"
 	"github.com/banbox/banexg/utils"
+	"github.com/google/uuid"
 	"github.com/sasha-s/go-deadlock"
 	"go.uber.org/zap"
 	"io"
@@ -27,27 +28,39 @@ type ConnCB = func(string, []byte)
 
 type IBanConn interface {
 	WriteMsg(msg *IOMsg) *errs.Error
-	Write(data []byte, locked bool) *errs.Error
+	Write(data []byte, doConvert bool) *errs.Error
 	ReadMsg() (*IOMsgRaw, *errs.Error)
-	Subscribe(tags ...string)
-	UnSubscribe(tags ...string)
+
+	SetData(val interface{}, tags ...string)
+	GetData(key string) (interface{}, bool)
+	DeleteData(tags ...string)
+
+	SetWait(key string, size int) string
+	GetWaitChan(key string) (chan []byte, bool)
+	CloseWaitChan(key string)
+	SendWaitRes(key string, data interface{}) *errs.Error
+	WaitResult(key string, timeout time.Duration) ([]byte, *errs.Error)
+
 	GetRemote() string
+	GetRemoteHost() string
 	IsClosed() bool
-	HasTag(tag string) bool
 	RunForever() *errs.Error
 }
 
 type BanConn struct {
-	Conn        net.Conn          // Original socket connection 原始的socket连接
-	Tags        map[string]bool   // Message subscription list 消息订阅列表
-	Remote      string            // Remote Name 远端名称
-	Listens     map[string]ConnCB // Message processing function 消息处理函数
-	RefreshMS   int64             // Connection ready timestamp 连接就绪的时间戳
+	Conn        net.Conn               // Original socket connection 原始的socket连接
+	Data        map[string]interface{} // Message subscription list 消息订阅列表
+	Remote      string                 // Remote Name 远端名称
+	Listens     map[string]ConnCB      // Message processing function 消息处理函数
+	waits       map[string]chan []byte // 用于等待结果的chan
+	RefreshMS   int64                  // Connection ready timestamp 连接就绪的时间戳
 	Ready       bool
 	IsReading   bool
+	aesKey      string
 	lockConnect deadlock.Mutex
 	lockWrite   deadlock.Mutex
-	lockTag     deadlock.Mutex
+	lockData    deadlock.Mutex
+	lockWait    deadlock.Mutex
 	heartBeatMs int64               // Timestamp of the latest received ping/pong
 	DoConnect   func(conn *BanConn) // Reconnect function, no attempt to reconnect provided 重新连接函数，未提供不尝试重新连接
 	ReInitConn  func()              // Initialize callback function after successful reconnection 重新连接成功后初始化回调函数
@@ -59,8 +72,8 @@ type IOMsg struct {
 }
 
 type IOMsgRaw struct {
-	Action string          `json:"action"`
-	Data   json.RawMessage `json:"data"`
+	Action string `json:"action"`
+	Data   []byte `json:"data"`
 }
 
 var (
@@ -71,57 +84,79 @@ var (
 func (c *BanConn) GetRemote() string {
 	return c.Remote
 }
+func (c *BanConn) GetRemoteHost() string {
+	end := strings.Index(c.Remote, ":")
+	if end > 0 {
+		return c.Remote[:end]
+	}
+	return c.Remote
+}
 func (c *BanConn) IsClosed() bool {
 	return c.Conn == nil || !c.Ready
 }
-func (c *BanConn) HasTag(tag string) bool {
-	c.lockTag.Lock()
-	_, ok := c.Tags[tag]
-	c.lockTag.Unlock()
-	return ok
+func (c *BanConn) GetData(key string) (interface{}, bool) {
+	c.lockData.Lock()
+	val, ok := c.Data[key]
+	c.lockData.Unlock()
+	return val, ok
 }
 
 func (c *BanConn) WriteMsg(msg *IOMsg) *errs.Error {
+	if msg == nil {
+		return nil
+	}
 	if c.Conn == nil {
 		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
 	}
-	raw, err_ := utils.Marshal(*msg)
-	if err_ != nil {
-		return errs.New(core.ErrMarshalFail, err_)
-	}
-	compressed, err := compress(raw)
+	data, err := msg.Marshal()
 	if err != nil {
 		return err
 	}
-	return c.Write(compressed, false)
+	return c.Write(data, true)
 }
 
-func (c *BanConn) Write(data []byte, locked bool) *errs.Error {
+func (c *BanConn) Write(data []byte, doConvert bool) *errs.Error {
+	if doConvert {
+		var err *errs.Error
+		data, err = convertData(data, c.aesKey)
+		if err != nil {
+			return err
+		}
+	}
+	return c.write(data)
+}
+
+func (c *BanConn) write(data []byte) *errs.Error {
 	if c.Conn == nil {
 		return errs.NewMsg(errs.CodeIOWriteFail, "write fail as disconnected")
 	}
-	if !locked {
-		c.lockWrite.Lock()
-		defer c.lockWrite.Unlock()
-	}
+	c.lockWrite.Lock()
+	locked := true
+	defer func() {
+		if locked {
+			c.lockWrite.Unlock()
+		}
+	}()
 	dataLen := uint32(len(data))
 	lenBt := make([]byte, 4)
 	binary.LittleEndian.PutUint32(lenBt, dataLen)
 	if c.Conn != nil {
-		_, err_ := c.Conn.Write(lenBt)
-		if err_ != nil {
+		// 先写长度头
+		if err_ := c.writeFully(lenBt); err_ != nil {
 			c.Ready = false
 			errCode, errType := getErrType(err_)
 			if c.DoConnect != nil && errCode == core.ErrNetConnect {
 				log.Warn("write fail, wait 3s and retry", zap.String("type", errType))
+				c.lockWrite.Unlock()
+				locked = false
 				c.connect()
-				return c.Write(data, true)
+				return c.write(data)
 			}
 			return errs.New(errCode, err_)
 		}
+		// 再写数据内容
 		if c.Conn != nil {
-			_, err_ = c.Conn.Write(data)
-			if err_ != nil {
+			if err_ := c.writeFully(data); err_ != nil {
 				c.Ready = false
 				errCode, _ := getErrType(err_)
 				return errs.New(errCode, err_)
@@ -137,25 +172,51 @@ func (c *BanConn) ReadMsg() (*IOMsgRaw, *errs.Error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := deCompress(compressed)
+	data, err := deConvertData(compressed, c.aesKey)
 	if err != nil {
 		return nil, err
 	}
 	var msg IOMsgRaw
-	err_ := utils.Unmarshal(data, &msg, utils.JsonNumDefault)
-	if err_ != nil {
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	if err_ := dec.Decode(&msg); err_ != nil {
 		return nil, errs.New(errs.CodeUnmarshalFail, err_)
 	}
 	return &msg, nil
+}
+
+// readFully 确保完整读取指定长度的数据
+func (c *BanConn) readFully(buf []byte) error {
+	totalRead := 0
+	for totalRead < len(buf) {
+		n, err := c.Conn.Read(buf[totalRead:])
+		if err != nil {
+			return err
+		}
+		totalRead += n
+	}
+	return nil
+}
+
+// writeFully 确保完整写入指定长度的数据
+func (c *BanConn) writeFully(data []byte) error {
+	totalWritten := 0
+	for totalWritten < len(data) {
+		n, err := c.Conn.Write(data[totalWritten:])
+		if err != nil {
+			return err
+		}
+		totalWritten += n
+	}
+	return nil
 }
 
 func (c *BanConn) Read() ([]byte, *errs.Error) {
 	if c.Conn == nil {
 		return nil, errs.NewMsg(core.ErrRunTime, "BanConn Read nil, connection already closed")
 	}
+	// 读取长度头
 	lenBuf := make([]byte, 4)
-	_, err_ := c.Conn.Read(lenBuf)
-	if err_ != nil {
+	if err_ := c.readFully(lenBuf); err_ != nil {
 		errCode, errType := getErrType(err_)
 		if c.DoConnect != nil && errCode == core.ErrNetConnect {
 			log.Warn("read fail, wait 3s and retry", zap.String("type", errType))
@@ -164,28 +225,97 @@ func (c *BanConn) Read() ([]byte, *errs.Error) {
 		}
 		return nil, errs.New(errCode, err_)
 	}
+	// 获取数据长度
 	dataLen := binary.LittleEndian.Uint32(lenBuf)
+	if dataLen == 0 {
+		return []byte{}, nil
+	}
+	// 读取完整的数据
 	buf := make([]byte, dataLen)
-	_, err_ = c.Conn.Read(buf)
-	if err_ != nil {
+	if err_ := c.readFully(buf); err_ != nil {
 		return nil, errs.New(core.ErrNetReadFail, err_)
 	}
 	return buf, nil
 }
 
-func (c *BanConn) Subscribe(tags ...string) {
-	c.lockTag.Lock()
+func (c *BanConn) SetData(val interface{}, tags ...string) {
+	c.lockData.Lock()
 	for _, tag := range tags {
-		c.Tags[tag] = true
+		c.Data[tag] = val
 	}
-	c.lockTag.Unlock()
+	c.lockData.Unlock()
 }
-func (c *BanConn) UnSubscribe(tags ...string) {
-	c.lockTag.Lock()
+func (c *BanConn) DeleteData(tags ...string) {
+	c.lockData.Lock()
 	for _, tag := range tags {
-		delete(c.Tags, tag)
+		delete(c.Data, tag)
 	}
-	c.lockTag.Unlock()
+	c.lockData.Unlock()
+}
+
+// SetWait set chan for key to wait async
+func (c *BanConn) SetWait(key string, size int) string {
+	if key == "" {
+		key = uuid.New().String()
+	}
+	c.lockWait.Lock()
+	c.waits[key] = make(chan []byte, size)
+	c.lockWait.Unlock()
+	return key
+}
+
+// GetWaitChan get chan for key to wait or set
+func (c *BanConn) GetWaitChan(key string) (chan []byte, bool) {
+	c.lockWait.Lock()
+	out, ok := c.waits[key]
+	c.lockWait.Unlock()
+	if !ok {
+		return nil, false
+	}
+	return out, true
+}
+
+func (c *BanConn) CloseWaitChan(key string) {
+	c.lockWait.Lock()
+	if out, ok := c.waits[key]; ok {
+		close(out)
+		delete(c.waits, key)
+	}
+	c.lockWait.Unlock()
+}
+
+// SetWaitResult set result for key
+func (c *BanConn) SetWaitResult(key string, data []byte) error {
+	out, ok := c.GetWaitChan(key)
+	if !ok {
+		return fmt.Errorf("key not found: %s", key)
+	}
+	out <- data
+	return nil
+}
+
+func (c *BanConn) SendWaitRes(key string, data interface{}) *errs.Error {
+	return c.WriteMsg(&IOMsg{
+		Action: "__res__" + key,
+		Data:   data,
+	})
+}
+
+// WaitResult wait result for key with specified timeout; wait __res__[key] to be trigger
+func (c *BanConn) WaitResult(key string, timeout time.Duration) ([]byte, *errs.Error) {
+	out, ok := c.GetWaitChan(key)
+	if !ok {
+		return nil, errs.NewMsg(errs.CodeRunTime, "key not found: %s", key)
+	}
+	var res []byte
+	select {
+	case res = <-out:
+		c.CloseWaitChan(key)
+		return res, nil
+	case <-time.After(timeout):
+		c.CloseWaitChan(key)
+		return nil, errs.NewMsg(errs.CodeRunTime, "timeout waiting for key: %s", key)
+	}
 }
 
 /*
@@ -215,6 +345,7 @@ func (c *BanConn) RunForever() *errs.Error {
 			if err_ != nil {
 				log.Error("close conn fail", zap.String("remote", c.Remote), zap.Error(err_))
 			}
+			log.Info("close banConn as RunForever exit")
 			c.Conn = nil
 		}
 	}()
@@ -222,23 +353,37 @@ func (c *BanConn) RunForever() *errs.Error {
 	for {
 		msg, err := c.ReadMsg()
 		if err != nil {
-			if err.Code == core.ErrDeCompressFail {
-				// 无效消息，解压缩失败，忽略
-				log.Error("invalid banIO msg, deCompress fail", zap.Error(err))
+			if err.Code == core.ErrDeCompressFail || err.Code == errs.CodeUnmarshalFail || err.Code == core.ErrDecryptFail {
+				// 无效消息，忽略
+				log.Error("invalid banIO msg", zap.Error(err))
 				continue
 			}
 			return err
 		}
-		isMatch := false
+		if strings.HasPrefix(msg.Action, "__res__") {
+			requestID := msg.Action[7:]
+			if out, ok := c.GetWaitChan(requestID); ok {
+				select {
+				case out <- msg.Data:
+					break
+				default:
+					log.Error("wait chan full, closing and skip", zap.String("requestID", requestID))
+					c.CloseWaitChan(requestID)
+				}
+			}
+			continue
+		}
+		var matchHandle ConnCB
 		for prefix, handle := range c.Listens {
 			if strings.HasPrefix(msg.Action, prefix) {
-				isMatch = true
-				handle(msg.Action, msg.Data)
+				matchHandle = handle
 				break
 			}
 		}
-		if !isMatch {
+		if matchHandle == nil {
 			log.Info("unhandle msg", zap.String("action", msg.Action))
+		} else {
+			go matchHandle(msg.Action, msg.Data)
 		}
 	}
 }
@@ -250,25 +395,27 @@ A function used for reconnecting.
 */
 func (c *BanConn) connect() {
 	c.lockConnect.Lock()
-	defer c.lockConnect.Unlock()
 	if c.Ready && btime.TimeMS()-c.RefreshMS < 2000 {
 		// 连接已经刷新，跳过本次重试
+		c.lockConnect.Unlock()
 		return
 	}
 	c.Ready = false
 	if c.Conn != nil {
 		_ = c.Conn.Close()
 		c.Conn = nil
+		log.Info("closed old banConn for reconnect")
 	}
 	core.Sleep(time.Second * 3)
 	c.DoConnect(c)
 	c.RefreshMS = btime.TimeMS()
 	if c.Conn != nil {
-		if c.ReInitConn != nil {
-			c.ReInitConn()
-		}
 		c.Ready = true
 		log.Info("reconnect ok", zap.String("remote", c.Remote))
+	}
+	c.lockConnect.Unlock()
+	if c.Conn != nil && c.ReInitConn != nil {
+		c.ReInitConn()
 	}
 }
 
@@ -312,10 +459,10 @@ func (c *BanConn) LoopPing(intvSecs int) {
 
 func (c *BanConn) initListens() {
 	c.Listens["subscribe"] = makeArrStrHandle(func(arr []string) {
-		c.Subscribe(arr...)
+		c.SetData(true, arr...)
 	})
 	c.Listens["unsubscribe"] = makeArrStrHandle(func(arr []string) {
-		c.UnSubscribe(arr...)
+		c.DeleteData(arr...)
 	})
 	c.Listens["ping"] = func(s string, i []byte) {
 		var val int64
@@ -353,6 +500,69 @@ func makeArrStrHandle(cb func(arr []string)) func(s string, data []byte) {
 	}
 }
 
+func marshalAny(data interface{}) ([]byte, error) {
+	if strVal, isStr := data.(string); isStr {
+		return []byte(strVal), nil
+	}
+	var err_ error
+	byteRaw, isBytes := data.([]byte)
+	if !isBytes {
+		byteRaw, err_ = utils.Marshal(data)
+		if err_ != nil {
+			return nil, err_
+		}
+	}
+	return byteRaw, nil
+}
+
+func (msg *IOMsg) Marshal() ([]byte, *errs.Error) {
+	data, err_ := marshalAny(msg.Data)
+	if err_ != nil {
+		return nil, errs.New(core.ErrMarshalFail, err_)
+	}
+	msgRaw := &IOMsgRaw{
+		Action: msg.Action,
+		Data:   data,
+	}
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err_ = enc.Encode(msgRaw); err_ != nil {
+		return nil, errs.New(core.ErrMarshalFail, err_)
+	}
+	return buf.Bytes(), nil
+}
+
+func convertData(data []byte, aesKey string) ([]byte, *errs.Error) {
+	var err *errs.Error
+	data, err = compress(data)
+	if err != nil {
+		return data, err
+	}
+	if aesKey != "" {
+		var err_ error
+		data, err_ = EncryptData(data, aesKey)
+		if err_ != nil {
+			return data, errs.New(core.ErrEncryptFail, err_)
+		}
+	}
+	return data, nil
+}
+
+func deConvertData(compressed []byte, aesKey string) ([]byte, *errs.Error) {
+	if aesKey != "" {
+		var err_ error
+		compressed, err_ = DecryptData(compressed, aesKey)
+		if err_ != nil {
+			return nil, errs.New(core.ErrDecryptFail, err_)
+		}
+	}
+	data, err := deCompress(compressed)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func compress(data []byte) ([]byte, *errs.Error) {
 	var b bytes.Buffer
 	w := zlib.NewWriter(&b)
@@ -383,7 +593,7 @@ func deCompress(compressed []byte) ([]byte, *errs.Error) {
 	// 将解压后的数据复制到 result 中
 	_, err = io.Copy(&result, r)
 	if err != nil {
-		return nil, errs.New(core.ErrIOReadFail, err)
+		return nil, errs.New(core.ErrDeCompressFail, err)
 	}
 
 	return result.Bytes(), nil
@@ -429,7 +639,7 @@ func getErrType(err error) (int, string) {
 
 type ServerIO struct {
 	Addr     string
-	Name     string
+	aesKey   string
 	Conns    []IBanConn
 	Data     map[string]string // Cache data available for remote access 缓存的数据，可供远程端访问
 	DataExp  map[string]int64  // Cache data expiration timestamp, 13 bits 缓存数据的过期时间戳，13位
@@ -440,12 +650,13 @@ var (
 	banServer *ServerIO
 )
 
-func NewBanServer(addr, name string) *ServerIO {
+func NewBanServer(addr, aesKey string) *ServerIO {
 	var server ServerIO
 	server.Addr = addr
-	server.Name = name
+	server.aesKey = aesKey
 	server.Data = map[string]string{}
 	banServer = &server
+	gob.Register(IOMsgRaw{})
 	return &server
 }
 
@@ -455,7 +666,7 @@ func (s *ServerIO) RunForever() *errs.Error {
 		return errs.New(core.ErrNetConnect, err_)
 	}
 	defer ln.Close()
-	log.Info("banio started", zap.String("name", s.Name), zap.String("addr", s.Addr))
+	log.Info("banio started", zap.String("addr", s.Addr))
 	for {
 		conn_, err_ := ln.Accept()
 		if err_ != nil {
@@ -520,7 +731,7 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 			continue
 		}
 		allConns = append(allConns, conn)
-		if conn.HasTag(msg.Action) {
+		if _, ok := conn.GetData(msg.Action); ok {
 			curConns = append(curConns, conn)
 		}
 	}
@@ -528,11 +739,11 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 	if len(curConns) == 0 {
 		return nil
 	}
-	raw, err_ := utils.Marshal(*msg)
-	if err_ != nil {
-		return errs.New(core.ErrMarshalFail, err_)
+	raw, err := msg.Marshal()
+	if err != nil {
+		return err
 	}
-	compressed, err := compress(raw)
+	compressed, err := convertData(raw, s.aesKey)
 	if err != nil {
 		return err
 	}
@@ -551,11 +762,13 @@ func (s *ServerIO) Broadcast(msg *IOMsg) *errs.Error {
 func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 	res := &BanConn{
 		Conn:      conn,
-		Tags:      map[string]bool{},
+		Data:      map[string]interface{}{},
 		Listens:   map[string]ConnCB{},
+		waits:     make(map[string]chan []byte),
 		RefreshMS: btime.TimeMS(),
 		Ready:     true,
 		Remote:    conn.RemoteAddr().String(),
+		aesKey:    s.aesKey,
 	}
 	res.Listens["onGetVal"] = func(action string, data []byte) {
 		var key string
@@ -565,10 +778,7 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 			return
 		}
 		val := s.GetVal(key)
-		err := res.WriteMsg(&IOMsg{Action: "onGetValRes", Data: &IOKeyVal{
-			Key: key,
-			Val: val,
-		}})
+		err := res.SendWaitRes(key, []byte(val))
 		if err != nil {
 			log.Error("write val res fail", zap.Error(err))
 		}
@@ -591,39 +801,27 @@ func (s *ServerIO) WrapConn(conn net.Conn) *BanConn {
 
 type ClientIO struct {
 	BanConn
-	Addr  string
-	waits map[string]chan string
+	Addr string
 }
 
-func NewClientIO(addr string) (*ClientIO, *errs.Error) {
+func NewClientIO(addr, aesKey string) (*ClientIO, *errs.Error) {
 	conn, err_ := net.Dial("tcp", addr)
 	if err_ != nil {
 		return nil, errs.New(core.ErrNetConnect, err_)
 	}
+	gob.Register(IOMsgRaw{})
 	res := &ClientIO{
 		Addr: addr,
 		BanConn: BanConn{
 			Conn:      conn,
-			Tags:      map[string]bool{},
+			Data:      map[string]interface{}{},
 			Remote:    conn.RemoteAddr().String(),
 			Listens:   map[string]ConnCB{},
+			waits:     make(map[string]chan []byte),
 			RefreshMS: btime.TimeMS(),
 			Ready:     true,
+			aesKey:    aesKey,
 		},
-		waits: map[string]chan string{},
-	}
-	res.Listens["onGetValRes"] = func(_ string, data []byte) {
-		var val IOKeyVal
-		err := utils.Unmarshal(data, &val, utils.JsonNumDefault)
-		if err != nil {
-			log.Error("onGetValRes unmarshal fail", zap.String("raw", string(data)), zap.Error(err))
-		} else {
-			out, ok := res.waits[val.Key]
-			if !ok {
-				return
-			}
-			out <- val.Val
-		}
 	}
 	res.initListens()
 	// This is only responsible for connection, no initialization required, leave it to connect for initialization
@@ -656,26 +854,23 @@ const (
 )
 
 func (c *ClientIO) GetVal(key string, timeout int) (string, *errs.Error) {
+	c.SetWait(key, 1)
 	err := c.WriteMsg(&IOMsg{
 		Action: "onGetVal",
 		Data:   key,
 	})
 	if err != nil {
+		c.CloseWaitChan(key)
 		return "", err
 	}
 	if timeout == 0 {
 		timeout = readTimeout
 	}
-	out := make(chan string)
-	c.waits[key] = out
-	var res string
-	select {
-	case res = <-out:
-	case <-time.After(time.Second * time.Duration(timeout)):
-		close(out)
-		delete(c.waits, key)
+	res, err := c.WaitResult(key, time.Second*time.Duration(timeout))
+	if err != nil {
+		return "", err
 	}
-	return res, nil
+	return string(res), nil
 }
 
 func (c *ClientIO) SetVal(args *KeyValExpire) *errs.Error {

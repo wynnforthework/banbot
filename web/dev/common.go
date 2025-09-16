@@ -455,7 +455,7 @@ func collectBtTask(rootDir, relPath string) (*ormu.Task, error) {
 	d["leverage"] = cfg.Leverage
 	walletTot := float64(0)
 	for code, amt := range cfg.WalletAmounts {
-		walletTot += core.GetPriceSafe(code) * amt
+		walletTot += core.GetPriceSafe(code, "") * amt
 	}
 	d["walletAmount"] = walletTot
 	d["stakeAmount"] = cfg.StakeAmount

@@ -60,7 +60,7 @@ func (t *Trader) FeedKline(bar *orm.InfoKline) *errs.Error {
 	barExpired := delaySecs >= max(60, tfSecs/2)
 	if barExpired {
 		if core.LiveMode && !bar.IsWarmUp {
-			log.Warn(fmt.Sprintf("%s/%s delay %v s, open order is disabled", bar.Symbol, bar.TimeFrame, delaySecs))
+			log.Warn(fmt.Sprintf("%s/%s delay %v s, open order disabled for this K-line", bar.Symbol, bar.TimeFrame, delaySecs))
 		} else {
 			barExpired = false
 		}
@@ -170,9 +170,33 @@ func (t *Trader) onAccountKline(account string, env *ta.BarEnv, bar *orm.InfoKli
 	// 此处不应允许开平仓或更新止盈止损等，否则订单的TimeFrame会出现歧义
 	for _, job := range infoJobs {
 		job.IsWarmUp = isWarmup
+		num1, num2 := strat.GetJobInOutNum(job)
 		job.Strat.OnInfoBar(job, env, bar.Symbol, bar.TimeFrame)
+		strat.CheckJobInOutNum(job, "OnInfoBar", num1, num2)
 		if job.Strat.BatchInfo && job.Strat.OnBatchInfos != nil {
 			AddBatchJob(account, bar.TimeFrame, job, env)
+		}
+	}
+	if env.VNum > 1000 && !isWarmup {
+		// Series过多，检查是否有内存泄露
+		keyAt := "first_hit_at"
+		keyNum := "first_hit_vnum"
+		if cacheVal, ok := env.Data[keyAt]; ok {
+			firstAt, _ := cacheVal.(int)
+			firstNum, _ := env.Data[keyNum].(int)
+			if env.BarNum-firstAt > 10 {
+				if env.VNum-firstNum > 0 {
+					// 相比第一次有Series异常新增
+					addNum := env.VNum - firstNum
+					addFor := env.BarNum - firstAt
+					errMsg := "series too many (total %v), new add %v in %v bars, try replace `NewSeries` with `Series.To`"
+					core.BotRunning = false
+					return errs.NewMsg(errs.CodeRunTime, errMsg, env.VNum, addNum, addFor)
+				}
+			}
+		} else {
+			env.Data[keyAt] = env.BarNum
+			env.Data[keyNum] = env.VNum
 		}
 	}
 	return nil

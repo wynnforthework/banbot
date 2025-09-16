@@ -269,6 +269,7 @@
     "load": "Load",
     "any_status": "Any Status",
     "pos_opened": "Opened",
+    "filled": "Filled",
     "closed": "Closed",
     "symbol": "Symbol",
     "symbols": "Symbols",
@@ -884,5 +885,9 @@
     "percentage_change": "Percentage Change",
     "collateral": "Collateral",
     "liquidation_price": "Liquidation Price",
-    "isolated": "Isolated Mode"
+    "isolated": "Isolated Mode",
+    "market_spot": "Spot",
+    "market_linear": "USD-M Futures",
+    "market_inverse": "Coin-M Futures",
+    "market_option": "Options"
 }

@@ -4,12 +4,14 @@
     values = $bindable([]),
     items = [],
     allowAny = false,
-    placeholder = 'input ...'
+    placeholder = 'input ...',
+    size = 'medium'
   }: {
     values: string[],
     items: string[],
     allowAny?: boolean,
-    placeholder?: string
+    placeholder?: string,
+    size?: 'small' | 'medium' | 'large'
   } = $props();
 
   let inputValue = $state('');
@@ -24,7 +26,6 @@
   
   let selectedIndex = $state(-1);
   let showSuggestions = $state(false);
-  let inputRef: HTMLInputElement;
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'ArrowDown') {
@@ -41,6 +42,29 @@
         addTag(inputValue.trim());
       }
     }
+  }
+
+  function handlePaste(event: ClipboardEvent) {
+    event.preventDefault();
+    const pastedText = event.clipboardData?.getData('text') || '';
+
+    // 使用逗号分割文本
+    const tags = pastedText
+      .split(',')
+      .map(tag => tag.trim())
+      .filter(tag => tag !== ''); // 跳过空字符串
+
+    // 添加所有有效的标签
+    tags.forEach(tag => {
+      if (!values.includes(tag)) {
+        values = [...values, tag];
+      }
+    });
+
+    // 清空输入框
+    inputValue = '';
+    selectedIndex = -1;
+    showSuggestions = false;
   }
 
   function addTag(tag: string) {
@@ -70,31 +94,31 @@
 </script>
 
 <div class="relative w-full">
-  <div class="flex flex-wrap items-center gap-2 px-2 py-3 min-h-12 bg-base-100 rounded-lg border border-base-300 focus-within:border-primary">
+  <div class="flex flex-wrap items-center gap-1 px-2 bg-base-100 rounded-lg border border-base-300 focus-within:border-primary {size === 'small' ? 'py-1 min-h-8' : size === 'medium' ? 'py-1.5 min-h-10' : 'py-2 min-h-12 gap-2'}">
     {#each values as tag}
-      <div class="badge badge-outline badge-lg gap-1 pr-0">
+      <div class="badge badge-outline bg-primary-content/70 gap-1 pr-0 {size === 'small' ? 'text-xs' : size === 'medium' ? 'text-sm' : 'badge-lg'}">
         {tag}
         <button class="btn btn-ghost btn-xs px-1.5 py-0" onclick={() => removeTag(tag)}>×</button>
       </div>
     {/each}
     
     <input
-      bind:this={inputRef}
       type="text"
-      class="flex-1 min-w-[120px] bg-transparent border-none focus:outline-none"
+      class="flex-1 min-w-[120px] bg-transparent border-none focus:outline-none {size === 'small' ? 'text-xs' : size === 'medium' ? 'text-sm' : ''}"
       bind:value={inputValue}
       onkeydown={handleKeydown}
       onfocus={handleFocus}
       onblur={handleBlur}
+      onpaste={handlePaste}
       placeholder={placeholder}
     />
   </div>
 
   {#if showSuggestions && (suggestions.length > 0 || (allowAny && inputValue))}
     <div class="absolute z-50 w-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300">
-      <ul class="menu w-full p-0">
+      <ul class="menu p-0 w-full">
         {#each suggestions as suggestion, index}
-          <li>
+          <li class="w-full">
             <button
               class="px-4 py-2 hover:bg-base-200 {index === selectedIndex ? 'bg-base-200' : ''}"
               onmousedown={() => addTag(suggestion)}
@@ -105,7 +129,7 @@
           </li>
         {/each}
         {#if allowAny && inputValue && !suggestions.includes(inputValue)}
-          <li>
+          <li class="w-full">
             <button
               class="px-4 py-2 hover:bg-base-200 {selectedIndex === suggestions.length ? 'bg-base-200' : ''}"
               onmousedown={() => addTag(inputValue)}

@@ -48,8 +48,8 @@ var (
 	NewNumInSim   int  // 撮合时创建新订单的数量
 
 	ConcurNum = 2 // The maximum number of K-line tasks to be downloaded at the same time. If it is too high, a 429 current limit will occur. 最大同时下载K线任务数，过大会出现429限流
-	Version   = "v0.2.21"
-	UIVersion = "v0.2.21"
+	Version   = "v0.2.23-beta.1"
+	UIVersion = "v0.2.22"
 	SysLang   string // language code for current system 当前系统语言设置
 	LogFile   string
 	DevDbPath string
@@ -106,6 +106,7 @@ const (
 const (
 	ExitTagUnknown     = "unknown"
 	ExitTagCancel      = "cancel"
+	ExitTagHedgeOff    = "hedge_off"
 	ExitTagBotStop     = "bot_stop"
 	ExitTagForceExit   = "force_exit"
 	ExitTagNoMatch     = "no_match"
@@ -127,7 +128,8 @@ const (
 
 var (
 	barPrices      = make(map[string]float64) // Latest price of each coin from bar, only for backtesting etc. The key can be a trading pair or a coin code 来自bar的每个币的最新价格，仅用于回测等。键可以是交易对，也可以是币的code
-	prices         = make(map[string]float64) // The latest order book price of the trading pair is only used for real-time simulation or real trading. The key can be a trading pair or a coin code 交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
+	bidPrices      = make(map[string]float64) // The latest order book price of the trading pair is only used for real-time simulation or real trading. The key can be a trading pair or a coin code 交易对的最新订单簿价格，仅用于实时模拟或实盘。键可以是交易对，也可以是币的code
+	askPrices      = make(map[string]float64)
 	lockPrices     deadlock.RWMutex
 	lockBarPrices  deadlock.RWMutex
 	TfPairHitsLock deadlock.RWMutex
@@ -137,9 +139,9 @@ var (
 )
 
 var (
-	OrderTypeEnums = []string{"", banexg.OdTypeMarket, banexg.OdTypeLimit, banexg.OdTypeStopLoss,
+	OrderTypeEnums = []string{"", banexg.OdTypeMarket, banexg.OdTypeLimit, banexg.OdTypeLimitMaker, banexg.OdTypeStopLoss,
 		banexg.OdTypeStopLossLimit, banexg.OdTypeTakeProfit, banexg.OdTypeTakeProfitLimit,
-		banexg.OdTypeStop, banexg.OdTypeLimitMaker}
+		banexg.OdTypeStop}
 	WsSubMap = map[string]bool{
 		WsSubKLine: true,
 		WsSubDepth: true,
@@ -160,6 +162,14 @@ var OdTypeMap = map[int]string{
 	OrderTypeLimit:      "limit",
 	OrderTypeLimitMaker: "limit_maker",
 }
+
+const (
+	OdChgNew       = iota // New order 新订单
+	OdChgEnter            // Create an entry order 创建入场订单
+	OdChgEnterFill        // Order entry completed 订单入场完成
+	OdChgExit             // Order request to exit  订单请求退出
+	OdChgExitFill         // Order exit completed 订单退出完成
+)
 
 const (
 	AdjNone   = 1

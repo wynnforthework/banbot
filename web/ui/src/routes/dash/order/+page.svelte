@@ -214,7 +214,7 @@
     if (rsp.code !== 200) {
       alerts.error(m.update_failed({msg: rsp.msg ?? ''}));
     } else {
-      alerts.success(m.updated_orders({num: rsp.num}));
+      alerts.success(m.updated_orders({num: rsp.num ?? 0}));
       await loadData(currentPage);
     }
   }
@@ -488,77 +488,79 @@
 {/if}
 
 <Modal title={m.open_order()} bind:show={showOpenOrder} width={800} buttons={[]}>
-  <div class="space-y-4 p-4">
-    <fieldset class="fieldset">
-      <label class="label" for="pair">{m.pair()}</label>
-      <input id="pair" type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.enter_symbol_placeholder()} bind:value={openOd.pair} />
-    </fieldset>
-
-    <fieldset class="fieldset">
-      <label class="label">{m.side()}</label>
-      <div class="flex gap-4 flex-1">
-        <label class="label cursor-pointer">
-          <input type="radio" class="radio" bind:group={openOd.side} value="long" />
-          <span class="ml-2">{m.long()}</span>
-        </label>
-        <label class="label cursor-pointer">
-          <input type="radio" class="radio" bind:group={openOd.side} value="short" />
-          <span class="ml-2">{m.short()}</span>
-        </label>
-      </div>
-    </fieldset>
-
-    <fieldset class="fieldset">
-      <label class="label">{m.order_type()}</label>
-      <div class="flex gap-4 flex-1">
-        <label class="label cursor-pointer">
-          <input type="radio" class="radio" bind:group={openOd.orderType} value="market" />
-          <span class="ml-2">{m.market_order()}</span>
-        </label>
-        <label class="label cursor-pointer">
-          <input type="radio" class="radio" bind:group={openOd.orderType} value="limit" />
-          <span class="ml-2">{m.limit_order()}</span>
-        </label>
-      </div>
-    </fieldset>
-
-    {#if openOd.orderType === 'limit'}
+  <div class="p-4">
+    <div class="grid grid-cols-2 gap-4">
       <fieldset class="fieldset">
-        <label class="label" for="price">{m.price()}</label>
-        <input id="price" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.price} step="0.00000001" />
+        <label class="label" for="pair">{m.pair()}</label>
+        <input id="pair" type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.enter_symbol_placeholder()} bind:value={openOd.pair} />
       </fieldset>
 
       <fieldset class="fieldset">
-        <label class="label" for="stopLossPrice">{m.stop_loss_price()}</label>
-        <input id="stopLossPrice" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.stopLossPrice} step="0.00000001" />
+        <label class="label">{m.side()}</label>
+        <div class="flex gap-4 flex-1">
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.side} value="long" />
+            <span class="ml-2">{m.long()}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.side} value="short" />
+            <span class="ml-2">{m.short()}</span>
+          </label>
+        </div>
       </fieldset>
-    {/if}
 
-    <fieldset class="fieldset">
-      <label class="label" for="enterCost">{m.enter_cost()}</label>
-      <div class="input-group">
-        <input id="enterCost" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.enterCost} step="0.00000001" />
-        <span class="input-group-addon">{getQuoteCode(openOd.pair)}</span>
-      </div>
-    </fieldset>
+      <fieldset class="fieldset col-span-2">
+        <label class="label">{m.order_type()}</label>
+        <div class="flex gap-4 flex-1">
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.orderType} value="market" />
+            <span class="ml-2">{m.market_order()}</span>
+          </label>
+          <label class="label cursor-pointer">
+            <input type="radio" class="radio" bind:group={openOd.orderType} value="limit" />
+            <span class="ml-2">{m.limit_order()}</span>
+          </label>
+        </div>
+      </fieldset>
 
-    <fieldset class="fieldset">
-      <label class="label" for="enterTag">{m.enter_tag()}</label>
-      <input id="enterTag" type="text" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.enterTag} />
-    </fieldset>
+      {#if openOd.orderType === 'limit'}
+        <fieldset class="fieldset">
+          <label class="label" for="price">{m.price()}</label>
+          <input id="price" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.price} step="0.00000001" />
+        </fieldset>
 
-    <fieldset class="fieldset">
-      <label class="label" for="leverage">{m.leverage()}</label>
-      <input id="leverage" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.leverage} min="1" max="200" step="1" />
-    </fieldset>
+        <fieldset class="fieldset">
+          <label class="label" for="stopLossPrice">{m.stop_loss_price()}</label>
+          <input id="stopLossPrice" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.stopLossPrice} step="0.00000001" />
+        </fieldset>
+      {/if}
 
-    <fieldset class="fieldset">
-      <label class="label" for="strategy">{m.strategy()}</label>
-      <input id="strategy" type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.enter_strategy_placeholder()} bind:value={openOd.strategy} />
-    </fieldset>
+      <fieldset class="fieldset">
+        <label class="label" for="enterCost">{m.enter_cost()}</label>
+        <div class="input-group">
+          <input id="enterCost" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.enterCost} step="0.00000001" />
+          <span class="input-group-addon">{getQuoteCode(openOd.pair)}</span>
+        </div>
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label" for="enterTag">{m.enter_tag()}</label>
+        <input id="enterTag" type="text" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.enterTag} />
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label" for="leverage">{m.leverage()}</label>
+        <input id="leverage" type="number" class="input input-sm focus:outline-none text-sm font-mono" bind:value={openOd.leverage} min="1" max="200" step="1" />
+      </fieldset>
+
+      <fieldset class="fieldset">
+        <label class="label" for="strategy">{m.strategy()}</label>
+        <input id="strategy" type="text" class="input input-sm focus:outline-none text-sm font-mono" placeholder={m.enter_strategy_placeholder()} bind:value={openOd.strategy} />
+      </fieldset>
+    </div>
 
     <div class="flex justify-end mt-4">
-      <button class="btn btn-sm bg-primary/90 hover:bg-primary text-primary-content border-none" disabled={!openOd.pair || !openOd.enterCost} onclick={doOpenOrder}>
+      <button class="btn btn-sm btn-primary border-none" disabled={!openOd.pair || !openOd.enterCost} onclick={doOpenOrder}>
         {#if openingOd}
           <span class="loading loading-spinner"></span>
         {/if}
