@@ -393,10 +393,6 @@ func (o *OrderMgr) enterOrder(sess *ormo.Queries, exs *orm.ExSymbol, tf string, 
 		odSide = banexg.OdSideSell
 	}
 	price := core.GetPrice(exs.Symbol, odSide)
-	if (price > req.Stop) != req.Short {
-		// 立即触发，置为0
-		req.Stop = 0
-	}
 	curTimeMS := btime.TimeMS()
 	taskId := ormo.GetTaskID(o.Account)
 	od := &ormo.InOutOrder{
@@ -446,20 +442,26 @@ func (o *OrderMgr) enterOrder(sess *ormo.Queries, exs *orm.ExSymbol, tf string, 
 	}
 	od.SetInfo(ormo.OdInfoLegalCost, req.LegalCost)
 	if req.StopLoss > 0 {
-		od.SetStopLoss(&ormo.ExitTrigger{
+		err := od.SetStopLoss(&ormo.ExitTrigger{
 			Price: req.StopLoss,
 			Limit: req.StopLossLimit,
 			Rate:  req.StopLossRate,
 			Tag:   req.StopLossTag,
 		})
+		if err != nil {
+			return od, err
+		}
 	}
 	if req.TakeProfit > 0 {
-		od.SetTakeProfit(&ormo.ExitTrigger{
+		err := od.SetTakeProfit(&ormo.ExitTrigger{
 			Price: req.TakeProfit,
 			Limit: req.TakeProfitLimit,
 			Rate:  req.TakeProfitRate,
 			Tag:   req.TakeProfitTag,
 		})
+		if err != nil {
+			return od, err
+		}
 	}
 	if req.ClientID != "" {
 		od.SetInfo(ormo.OdInfoClientID, req.ClientID)
@@ -617,7 +619,10 @@ func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.E
 				// reset TakeProfit for remaining orders
 				// 剩余订单重置TakeProfit
 				for _, odr := range matches[i:] {
-					odr.SetTakeProfit(nil)
+					err = odr.SetTakeProfit(nil)
+					if err != nil {
+						return result, err
+					}
 					_, err = o.postOrderExit(sess, odr)
 					if err != nil {
 						return result, err
@@ -640,12 +645,15 @@ func (o *OrderMgr) ExitOpenOrders(sess *ormo.Queries, pairs string, req *strat.E
 		q := req.Clone()
 		q.ExitRate = min(1, exitAmount/od.Enter.Amount)
 		if isTakeProfit && od.Status >= ormo.InOutStatusPartEnter {
-			od.SetTakeProfit(&ormo.ExitTrigger{
+			err = od.SetTakeProfit(&ormo.ExitTrigger{
 				Price: q.Limit,
 				Limit: q.Limit,
 				Rate:  q.ExitRate,
 				Tag:   q.Tag,
 			})
+			if err != nil {
+				return result, err
+			}
 			part, err = o.postOrderExit(sess, od)
 		} else {
 			part, err = o.exitOrder(sess, od, q)
@@ -680,7 +688,7 @@ func (o *OrderMgr) ExitOrder(sess *ormo.Queries, od *ormo.InOutOrder, req *strat
 		if price > 0 && (req.Limit-price)*float64(req.Dirt) > 0 {
 			// It is a valid limit order, set to take profit
 			// 是有效的限价出场单，设置到止盈中
-			od.SetTakeProfit(&ormo.ExitTrigger{
+			_ = od.SetTakeProfit(&ormo.ExitTrigger{
 				Price: req.Limit,
 				Rate:  req.ExitRate,
 				Tag:   req.Tag,
