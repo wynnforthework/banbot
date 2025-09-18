@@ -3,7 +3,10 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/md5"
+	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -548,4 +551,64 @@ func ReadScanner(out io.ReadCloser) *bufio.Scanner {
 	buf := make([]byte, 1024*1024)
 	scanner.Buffer(buf, 1024*1024)
 	return scanner
+}
+
+// EncryptData encrypts data using AES-GCM with the provided key
+// Key should be 16, 24 or 32 bytes for AES-128, AES-192 or AES-256
+func EncryptData(data []byte, keyStr string) ([]byte, error) {
+	key, _ := hex.DecodeString(keyStr)
+	// Create AES cipher
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	// Create GCM mode
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	// Generate nonce
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	// Encrypt data
+	ciphertext := gcm.Seal(nonce, nonce, data, nil)
+	return ciphertext, nil
+}
+
+// DecryptData decrypts data using AES-GCM with the provided key
+// Key should be 16, 24 or 32 bytes for AES-128, AES-192 or AES-256
+func DecryptData(data []byte, keyStr string) ([]byte, error) {
+	key, _ := hex.DecodeString(keyStr)
+	// Create AES cipher
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	// Create GCM mode
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	// Extract nonce and ciphertext
+	nonceSize := gcm.NonceSize()
+	if len(data) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+
+	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+
+	// Decrypt data
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt: %w", err)
+	}
+
+	return plaintext, nil
 }

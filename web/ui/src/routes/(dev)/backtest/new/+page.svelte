@@ -82,24 +82,27 @@
 
     // 可以同时开始多个，后端会逐个启动执行
     const configs: Record<string, string> = {};
+    const paths: string[] = [];
     for (const key in tabs) {
       if (tabs.hasOwnProperty(key)) {
         configs[`@${key}`] = tabs[key];
+        paths.push(`@${key}`);
       }
     }
     const rsp = await postApi('/dev/run_backtest', {
       separate: separateStrat,
       configs: configs,
+      paths: paths,
       dupMode: dupMode
     });
-    if (rsp.code === 400 && rsp.msg === "[-18] already_exist") {
+    if (rsp.code >= 400 && rsp.msg && rsp.msg.indexOf("already_exist") >= 0) {
       showDuplicate = true;
       return;
     }
 
     if (rsp.code === 200) {
       alerts.success(m.add_bt_ok());
-      goto(localizeHref('/backtest'));
+      await goto(localizeHref('/backtest'));
     } else {
       console.error('run backtest fail', rsp);
       alerts.error(rsp.msg || "run backtest fail");

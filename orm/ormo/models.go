@@ -44,6 +44,7 @@ type IOrder struct {
 	Short       bool    `json:"short"`
 	Status      int64   `json:"status"`
 	EnterTag    string  `json:"enter_tag"`
+	Stop        float64 `json:"stop"`
 	InitPrice   float64 `json:"init_price"`
 	QuoteCost   float64 `json:"quote_cost"`
 	ExitTag     string  `json:"exit_tag"`

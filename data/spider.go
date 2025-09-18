@@ -244,10 +244,10 @@ func (s *LiveSpider) monitorSubscriptions() {
 			}
 
 			// Check Price subscriptions for contract markets
-			if miner.exchange.IsContract(miner.Market) && !miner.IsWatchPrice && curMS > retryWaits.NextRetry("watchPrices") {
-				log.Info("Recovering Price subscription", zap.String("miner", key))
-				miner.watchPrices()
-			}
+			//if miner.exchange.IsContract(miner.Market) && !miner.IsWatchPrice && curMS > retryWaits.NextRetry("watchPrices") {
+			//	log.Info("Recovering Price subscription", zap.String("miner", key))
+			//	miner.watchPrices()
+			//}
 		}
 	}
 }
@@ -608,15 +608,13 @@ func (m *Miner) watchKLines(pairs []string) {
 					cache[val.Symbol] = append(arr, &val.Kline)
 				}
 			}
-			if tfSecs < 60 {
-				// 对于现货，无全市场价格推送，从kline获取发送
-				err = m.spider.Broadcast(&utils.IOMsg{
-					Action: pricePrefix,
-					Data:   prices,
-				})
-				if err != nil {
-					log.Error("broadCast price fail", zap.String("key", pricePrefix), zap.Error(err))
-				}
+			// 使用k线的最新价格（MarkPrice偏差略大）
+			err = m.spider.Broadcast(&utils.IOMsg{
+				Action: pricePrefix,
+				Data:   prices,
+			})
+			if err != nil {
+				log.Error("broadCast price fail", zap.String("key", pricePrefix), zap.Error(err))
 			}
 			for key, arr := range cache {
 				handleSubKLines(key, arr)
@@ -747,7 +745,7 @@ func (m *Miner) startLoopKLines() {
 }
 
 func RunSpider(addr string) *errs.Error {
-	server := utils.NewBanServer(addr, "spider")
+	server := utils.NewBanServer(addr, "")
 	Spider = &LiveSpider{
 		ServerIO: server,
 		miners:   map[string]*Miner{},
@@ -781,10 +779,10 @@ func (s *LiveSpider) getMiner(exgName, market string) *Miner {
 			panic(err)
 		}
 		miner.init()
-		err = miner.SubPairs("price")
-		if err != nil {
-			log.Error("sub prices fail", zap.Error(err))
-		}
+		//err = miner.SubPairs("price")
+		//if err != nil {
+		//	log.Error("sub prices fail", zap.Error(err))
+		//}
 		s.miners[key] = miner
 		log.Info("start miner for", zap.String("e", exgName), zap.String("m", market))
 	}

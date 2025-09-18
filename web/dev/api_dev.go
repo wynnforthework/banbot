@@ -605,6 +605,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 	type RunBtArgs struct {
 		Separate bool              `json:"separate"`
 		Configs  map[string]string `json:"configs" validate:"required"`
+		Paths    []string          `json:"paths"`
 		DupMode  string            `json:"dupMode"`
 	}
 
@@ -613,17 +614,9 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		return err
 	}
 
-	// 创建临时文件存储配置
-	tmpFile, err := os.CreateTemp(os.TempDir(), "tmp_cfg_*.yml")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-
 	// 写入配置内容
 	var realPath string
-	var paths []string
+	var err error
 	for path, text := range args.Configs {
 		if strings.TrimSpace(text) == "" {
 			continue
@@ -636,23 +629,18 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		if err2 != nil {
 			return err2
 		}
+	}
+	var paths []string
+	for _, path := range args.Paths {
+		realPath, err = parsePath(path)
+		if err != nil {
+			return err
+		}
 		paths = append(paths, realPath)
 	}
-	skips := []string{"name", "env", "webhook", "rpc_channels", "api_server"}
-	content, err := config.MergeConfigPaths(paths, skips...)
-	if err != nil {
-		return err
-	}
-	if _, err = tmpFile.WriteString(content); err != nil {
-		return err
-	}
-	tmpFile.Close()
 
 	// 加载并验证配置
-	cfg, err2 := config.GetConfig(&config.CmdArgs{
-		Configs:   []string{tmpPath},
-		NoDefault: true,
-	}, false)
+	cfg, err2 := config.GetConfig(&config.CmdArgs{Configs: paths, NoDefault: true}, false)
 	if err2 != nil {
 		return err2
 	}
@@ -717,13 +705,13 @@ func handleRunBacktest(c *fiber.Ctx) error {
 		}
 		backupPath := ""
 		if args.DupMode == "" {
-			return errs.NewMsg(errs.CodeParamRequired, "already_exist")
+			return fmt.Errorf("already_exist")
 		} else if args.DupMode == "backup" {
 			backupPath = hashVal + "_bak"
 			if old != nil {
 				backupPath = hashVal + "_" + strconv.FormatInt(old.ID, 10)
 			}
-			realPath := config.ParsePath(fmt.Sprintf("$backtest/%s", backupPath))
+			realPath = config.ParsePath(fmt.Sprintf("$backtest/%s", backupPath))
 			err = utils.CopyDir(absPath, realPath)
 			if err != nil {
 				return err
@@ -739,7 +727,7 @@ func handleRunBacktest(c *fiber.Ctx) error {
 			}
 		}
 	}
-	if err = os.WriteFile(cfgPath, []byte(content), 0644); err != nil {
+	if err = os.WriteFile(cfgPath, cfgData, 0644); err != nil {
 		return err
 	}
 
@@ -863,15 +851,17 @@ func getBtDetail(c *fiber.Ctx) error {
 // getBtOrders 获取回测订单
 func getBtOrders(c *fiber.Ctx) error {
 	type OrderArgs struct {
-		TaskID   int64  `query:"task_id" validate:"required"`
-		Page     int    `query:"page"`
-		PageSize int    `query:"page_size"`
-		Symbol   string `query:"symbol"`
-		Strategy string `query:"strategy"`
-		EnterTag string `query:"enter_tag"`
-		ExitTag  string `query:"exit_tag"`
-		StartMS  int64  `query:"start_ms"`
-		EndMS    int64  `query:"end_ms"`
+		TaskID    int64  `query:"task_id" validate:"required"`
+		Page      int    `query:"page"`
+		PageSize  int    `query:"page_size"`
+		Symbol    string `query:"symbol"`
+		Strategy  string `query:"strategy"`
+		EnterTag  string `query:"enter_tag"`
+		ExitTag   string `query:"exit_tag"`
+		StartMS   int64  `query:"start_ms"`
+		EndMS     int64  `query:"end_ms"`
+		SortField string `query:"sort_field"`
+		SortOrder string `query:"sort_order"`
 	}
 	var args = new(OrderArgs)
 	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
@@ -918,13 +908,120 @@ func getBtOrders(c *fiber.Ctx) error {
 		if args.ExitTag != "" && od.ExitTag != args.ExitTag {
 			continue
 		}
+		// 时间筛选逻辑：EnterAt < endTime && ExitAt > startTime
 		if args.StartMS > 0 && od.ExitAt < args.StartMS {
 			continue
 		}
-		if args.EndMS > 0 && od.ExitAt > args.EndMS {
+		if args.EndMS > 0 && od.EnterAt > args.EndMS {
 			continue
 		}
 		orders = append(orders, od)
+	}
+
+	// 排序处理
+	if args.SortField != "" {
+		sort.Slice(orders, func(i, j int) bool {
+			var less bool
+			switch args.SortField {
+			case "symbol":
+				less = orders[i].Symbol < orders[j].Symbol
+			case "direction":
+				less = !orders[i].Short && orders[j].Short // long < short
+			case "leverage":
+				less = orders[i].Leverage < orders[j].Leverage
+			case "enter_at":
+				less = orders[i].EnterAt < orders[j].EnterAt
+			case "enter_tag":
+				less = orders[i].EnterTag < orders[j].EnterTag
+			case "enter_price":
+				enterPriceI := float64(0)
+				enterPriceJ := float64(0)
+				if orders[i].Enter != nil {
+					if orders[i].Enter.Average > 0 {
+						enterPriceI = orders[i].Enter.Average
+					} else {
+						enterPriceI = orders[i].Enter.Price
+					}
+				}
+				if orders[j].Enter != nil {
+					if orders[j].Enter.Average > 0 {
+						enterPriceJ = orders[j].Enter.Average
+					} else {
+						enterPriceJ = orders[j].Enter.Price
+					}
+				}
+				less = enterPriceI < enterPriceJ
+			case "enter_amount":
+				enterAmountI := float64(0)
+				enterAmountJ := float64(0)
+				if orders[i].Enter != nil {
+					if orders[i].Enter.Filled > 0 {
+						enterAmountI = orders[i].Enter.Filled
+					} else {
+						enterAmountI = orders[i].Enter.Amount
+					}
+				}
+				if orders[j].Enter != nil {
+					if orders[j].Enter.Filled > 0 {
+						enterAmountJ = orders[j].Enter.Filled
+					} else {
+						enterAmountJ = orders[j].Enter.Amount
+					}
+				}
+				less = enterAmountI < enterAmountJ
+			case "exit_at":
+				less = orders[i].ExitAt < orders[j].ExitAt
+			case "exit_tag":
+				less = orders[i].ExitTag < orders[j].ExitTag
+			case "exit_price":
+				exitPriceI := float64(0)
+				exitPriceJ := float64(0)
+				if orders[i].Exit != nil {
+					if orders[i].Exit.Average > 0 {
+						exitPriceI = orders[i].Exit.Average
+					} else {
+						exitPriceI = orders[i].Exit.Price
+					}
+				}
+				if orders[j].Exit != nil {
+					if orders[j].Exit.Average > 0 {
+						exitPriceJ = orders[j].Exit.Average
+					} else {
+						exitPriceJ = orders[j].Exit.Price
+					}
+				}
+				less = exitPriceI < exitPriceJ
+			case "exit_amount":
+				exitAmountI := float64(0)
+				exitAmountJ := float64(0)
+				if orders[i].Exit != nil {
+					if orders[i].Exit.Filled > 0 {
+						exitAmountI = orders[i].Exit.Filled
+					} else {
+						exitAmountI = orders[i].Exit.Amount
+					}
+				}
+				if orders[j].Exit != nil {
+					if orders[j].Exit.Filled > 0 {
+						exitAmountJ = orders[j].Exit.Filled
+					} else {
+						exitAmountJ = orders[j].Exit.Amount
+					}
+				}
+				less = exitAmountI < exitAmountJ
+			case "profit":
+				less = orders[i].Profit < orders[j].Profit
+			default:
+				// 默认按时间排序
+				less = orders[i].EnterAt < orders[j].EnterAt
+			}
+
+			// 如果是降序，反转结果
+			if args.SortOrder == "desc" {
+				return !less
+			}
+			return less
+		})
 	}
 
 	total := len(orders)
@@ -1137,8 +1234,8 @@ func getBtStratText(c *fiber.Ctx) error {
 // GetSymbolsHandler 获取交易品种列表
 func GetSymbolsHandler(c *fiber.Ctx) error {
 	type SymbolArgs struct {
-		Exchange string `query:"exchange" validate:"required"`
-		Market   string `query:"market" validate:"required"`
+		Exchange string `query:"exchange"`
+		Market   string `query:"market"`
 		Symbol   string `query:"symbol"`
 		Settle   string `query:"settle"`
 		Limit    int    `query:"limit"`
@@ -1149,6 +1246,12 @@ func GetSymbolsHandler(c *fiber.Ctx) error {
 	var args = new(SymbolArgs)
 	if err := base.VerifyArg(c, args, base.ArgQuery); err != nil {
 		return err
+	}
+	if strings.TrimSpace(args.Exchange) == "" {
+		args.Exchange = core.ExgName
+	}
+	if strings.TrimSpace(args.Market) == "" {
+		args.Market = core.Market
 	}
 
 	if _, ok := exg.AllowExgIds[args.Exchange]; !ok && args.Exchange != "" {
@@ -1226,14 +1329,18 @@ func GetSymbolsHandler(c *fiber.Ctx) error {
 			dataMap[exs.Symbol] = exs.ID
 		}
 		return c.JSON(fiber.Map{
-			"total": total,
-			"data":  dataMap,
+			"total":    total,
+			"data":     dataMap,
+			"exchange": args.Exchange,
+			"market":   args.Market,
 		})
 	}
 
 	return c.JSON(fiber.Map{
-		"total": total,
-		"data":  filtered,
+		"total":    total,
+		"data":     filtered,
+		"exchange": args.Exchange,
+		"market":   args.Market,
 	})
 }
 

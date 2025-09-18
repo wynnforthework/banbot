@@ -178,7 +178,7 @@ func InitOdSubs() {
 	var subStgys = map[string]*strat.TradeStrat{}
 	for _, items := range strat.PairStrats {
 		for stgName, stagy := range items {
-			if stagy.OnOrderChange != nil {
+			if stagy.OnOrderChange != nil || stagy.HedgeOff {
 				subStgys[stgName] = stagy
 			}
 		}
@@ -205,7 +205,19 @@ func InitOdSubs() {
 			}
 			job, _ := its[od.Strategy]
 			if job != nil {
-				stgy.OnOrderChange(job, od, evt)
+				if stgy.HedgeOff && evt == strat.OdChgEnterFill {
+					// 策略为单向持仓，成交时尝试关闭另一侧订单
+					closeSideOrders(job, !od.Short)
+				}
+				if stgy.OnOrderChange != nil {
+					if evt == strat.OdChgExitFill {
+						openOds, lock := ormo.GetOpenODs(acc)
+						lock.Lock()
+						job.UpdateOrders(utils.ValsOfMap(openOds))
+						lock.Unlock()
+					}
+					stgy.OnOrderChange(job, od, evt)
+				}
 				if len(job.Entrys) > 0 || len(job.Exits) > 0 {
 					_, _, err := GetOdMgr(acc).ProcessOrders(nil, job)
 					if err != nil {
@@ -214,6 +226,25 @@ func InitOdSubs() {
 				}
 			}
 		})
+	}
+}
+
+func closeSideOrders(s *strat.StratJob, isShort bool) {
+	var closeList = s.LongOrders
+	if isShort {
+		closeList = s.ShortOrders
+	}
+	if len(closeList) > 0 {
+		for _, o := range closeList {
+			if o.Status >= ormo.InOutStatusPartEnter && o.Status <= ormo.InOutStatusPartExit {
+				_ = s.CloseOrders(&strat.ExitReq{
+					Tag:     core.ExitTagHedgeOff,
+					OrderID: o.ID,
+					Force:   true,
+					Log:     true,
+				})
+			}
+		}
 	}
 }
 
@@ -288,6 +319,9 @@ func TryFireBatches(currMS int64, isWarmUp bool) int {
 				infoJobs[task.Symbol] = task
 			}
 		}
+		if stgy == nil {
+			continue
+		}
 		arr := strings.Split(key, "_")
 		timeframe, account := arr[0], arr[1]
 		openOds, lock := ormo.GetOpenODs(account)
@@ -299,7 +333,20 @@ func TryFireBatches(currMS int64, isWarmUp bool) int {
 			job.InitBar(allOrders)
 		}
 		if len(infoJobs) > 0 {
+			num1, num2 := 0, 0
+			for _, j := range infoJobs {
+				num1 += len(j.Job.Entrys)
+				num2 += len(j.Job.Exits)
+			}
 			stgy.OnBatchInfos(timeframe, infoJobs)
+			num3, num4 := 0, 0
+			for _, j := range infoJobs {
+				num3 += len(j.Job.Entrys)
+				num4 += len(j.Job.Exits)
+			}
+			if num3 > num1 || num4 > num2 {
+				log.Warn("Open/Close order in OnBatchInfos not support, please call `biz.GetOdMgr(s.Account).ProcessOrders(nil, s)` manually")
+			}
 		}
 		if len(mainJobs) > 0 {
 			// Check all batch tasks at this time and decide which ones to enter or exit

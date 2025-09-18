@@ -4,7 +4,7 @@
   import type { ExSymbol } from '$lib/dev/common';
   import * as m from '$lib/paraglide/messages.js';
   import DrawerDataTools from '$lib/dev/DrawerDataTools.svelte';
-  import { exchanges, markets } from '$lib/common';
+  import { exchanges, getMarkets } from '$lib/common';
   import {curTZ, fmtDateStr} from '$lib/dateutil';
   import { pagination } from '$lib/Snippets.svelte';
   import {localizeHref} from "$lib/paraglide/runtime";
@@ -14,6 +14,8 @@
   let totalCount = $state(0);
   let currentPage = $state(1);
   let pageSize = $state(20);
+
+  let marketOptions = getMarkets();
 
   // 工具抽屉状态
   let isDrawerOpen = $state(false);
@@ -35,6 +37,8 @@
     });
     symbols = rsp.data;
     totalCount = rsp.total;
+    selectedExchange = rsp.exchange || "";
+    selectedMarket = rsp.market || "";
   }
 
   // 应用筛选
@@ -83,8 +87,8 @@
                 onchange={applyFilters}
             >
                 <option value="">{m.all_markets()}</option>
-                {#each markets as market}
-                    <option value={market}>{market}</option>
+                {#each marketOptions as market}
+                    <option value={market.value}>{market.title}</option>
                 {/each}
             </select>
 

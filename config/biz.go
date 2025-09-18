@@ -174,6 +174,7 @@ func ParseConfig(path string) (*Config, *errs.Error) {
 
 func ParseYmlConfig(fileData []byte, path string) (*Config, *errs.Error) {
 	var res Config
+	fileData = []byte(os.ExpandEnv(string(fileData)))
 	var unpak map[string]interface{}
 	err := yaml.Unmarshal(fileData, &unpak)
 	if err != nil {
@@ -276,6 +277,9 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	AccountPullSecs = c.AccountPullSecs
 	if AccountPullSecs == 0 {
 		AccountPullSecs = 60
+	}
+	if c.Exchange == nil {
+		return errs.NewMsg(core.ErrBadConfig, "exchange in yaml is required")
 	}
 	core.ExgName = c.Exchange.Name
 	core.Market = c.MarketType

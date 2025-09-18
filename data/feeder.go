@@ -181,7 +181,9 @@ func (f *Feeder) SubTfs(timeFrames []string, delOther bool) []string {
 	if maxTfSecs >= 3600 {
 		// 使用1h及以上周期数据，额外添加1h的loader
 		// 当使用DBKlineFeeder时，如果最小周期是1h，应将f.hour置为nil
-		f.hour = NewTfKlineLoader(f.ExSymbol, "1h")
+		if f.hour == nil {
+			f.hour = NewTfKlineLoader(f.ExSymbol, "1h")
+		}
 	} else {
 		f.hour = nil
 	}

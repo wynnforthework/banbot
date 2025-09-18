@@ -269,7 +269,8 @@
   "load": "加载",
   "any_status": "不限状态",
   "pos_opened": "已开仓",
-  "closed": "平仓",
+  "filled": "已成交",
+  "closed": "已退出",
   "symbol": "品种",
   "symbols": "品种",
   "start_date": "开始日期",
@@ -895,5 +896,9 @@
   "percentage_change": "百分比变化",
   "collateral": "抵押品",
   "liquidation_price": "清算价格",
-  "isolated": "逐仓模式"
+  "isolated": "逐仓模式",
+  "market_spot": "现货",
+  "market_linear": "U本位合约",
+  "market_inverse": "币本位合约",
+  "market_option": "期权"
 }

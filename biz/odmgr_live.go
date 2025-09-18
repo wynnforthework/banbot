@@ -613,7 +613,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 				}
 				openOds = utils.RemoveFromArr(openOds, iod, 1)
 			} else if fillAmt < odAmt*0.99 {
-				price := core.GetPrice(pair)
+				price := core.GetPrice(pair, "")
 				holdCost := odAmt * price
 				fillPct := math.Round(fillAmt * 100 / odAmt)
 				log.Error("position not match", zap.String("acc", o.Account),
@@ -624,7 +624,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 	}
 	if config.TakeOverStrat == "" {
 		if longPosAmt > AmtDust || shortPosAmt > AmtDust {
-			price := core.GetPrice(pair)
+			price := core.GetPrice(pair, "")
 			longCost := math.Round(longPosAmt*price*100) / 100
 			shortCost := math.Round(shortPosAmt*price*100) / 100
 			if longCost > 1 {
@@ -645,7 +645,7 @@ func (o *LiveOrderMgr) syncPairOrders(pair, defTF string, longPos, shortPos *ban
 					}
 				}
 				log.Error("unknown short position", zap.String("acc", o.Account), zap.String("pair", pair),
-					zap.Float64("shortAmt", longPosAmt), zap.Strings("local", shortOds))
+					zap.Float64("shortAmt", shortPosAmt), zap.Strings("local", shortOds))
 			}
 		}
 		return openOds, nil
@@ -965,7 +965,7 @@ func (o *LiveOrderMgr) ProcessOrders(sess *ormo.Queries, job *strat.StratJob) ([
 }
 
 func (o *LiveOrderMgr) EditOrder(od *ormo.InOutOrder, action string) {
-	if action == ormo.OdActionLimitEnter && isFarEnter(od) {
+	if isFarEnter(od) {
 		ormo.AddTriggerOd(o.Account, od)
 	} else {
 		o.queue <- &OdQItem{
@@ -1480,7 +1480,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 				}
 			}
 		}
-		realPrice := core.GetPrice(od.Symbol)
+		realPrice := core.GetPrice(od.Symbol, od.Enter.Side)
 		// The market price should be used to calculate the quantity here, because the input price may be very different from the market price
 		// 这里应使用市价计算数量，因传入价格可能和市价相差很大
 		od.Enter.Amount, err = exg.PrecAmount(exg.Default, od.Symbol, od.QuoteCost/realPrice)
@@ -1646,6 +1646,10 @@ func (o *LiveOrderMgr) submitExgOrder(od *ormo.InOutOrder, isEnter bool) *errs.E
 		if od.Short {
 			params[banexg.ParamPositionSide] = "SHORT"
 		}
+	}
+	if isEnter && od.Stop > 0 {
+		// 设置触发价格
+		params[banexg.ParamTriggerPrice] = od.Stop
 	}
 	res, err := exchange.CreateOrder(od.Symbol, subOd.OrderType, side, amount, price, params)
 	if err != nil {
@@ -1918,31 +1922,40 @@ func getPairMinsVol(pair string, num int) (float64, float64, *errs.Error) {
 }
 
 func isFarEnter(od *ormo.InOutOrder) bool {
-	if od.Status > ormo.InOutStatusPartEnter || od.Enter.Price == 0 ||
-		!strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit) {
-		// 跳过已完全入场，或者非限价单
+	if od.Status > ormo.InOutStatusPartEnter {
+		// 跳过已完全入场
+		return false
+	}
+	isLimit := od.Enter.Price > 0 && strings.Contains(od.Enter.OrderType, banexg.OdTypeLimit)
+	if !isLimit && od.Stop <= 0 {
+		// 跳过非限价单、非触发单
 		return false
 	}
 	stopAfter := od.GetInfoInt64(ormo.OdInfoStopAfter)
 	if stopAfter == 0 || stopAfter <= btime.TimeMS() {
 		return false
 	}
-	return isFarLimit(od.Enter)
+	if od.Stop > 0 {
+		// 检查触发价格是否耗时较长
+		side := banexg.OdSideSell
+		if od.Short {
+			// 触发价格方向与订单入场方向相反
+			side = banexg.OdSideBuy
+		}
+		return isFarLimitTrigger(od.Symbol, side, od.Stop)
+	}
+	return isFarLimitTrigger(od.Symbol, od.Enter.Side, od.Enter.Price)
 }
 
 /*
 Determine whether an order is a limit order that is difficult to execute for a long time
 判断一个订单是否是长时间难以成交的限价单
 */
-func isFarLimit(od *ormo.ExOrder) bool {
-	if od.Price == 0 || !strings.Contains(od.OrderType, banexg.OdTypeLimit) {
-		// 非限价单，或没有指定价格，会很快成交
-		return false
-	}
-	secs, rate, err := getSecsByLimit(od.Symbol, od.Side, od.Price)
+func isFarLimitTrigger(pair, side string, price float64) bool {
+	secs, rate, err := getSecsByLimit(pair, side, price)
 	if err != nil {
-		log.Error("getSecsByLimit for isFarLimit fail", zap.String("pair", od.Symbol),
-			zap.String("side", od.Side), zap.Float64("price", od.Price), zap.Error(err))
+		log.Error("getSecsByLimit for isFarLimitTrigger fail", zap.String("pair", pair),
+			zap.String("side", side), zap.Float64("price", price), zap.Error(err))
 		return false
 	}
 	if secs < config.PutLimitSecs && rate >= 0.8 {

@@ -172,6 +172,7 @@ func (q *EnterReq) Clone() *EnterReq {
 		Short:           q.Short,
 		OrderType:       q.OrderType,
 		Limit:           q.Limit,
+		Stop:            q.Stop,
 		CostRate:        q.CostRate,
 		LegalCost:       q.LegalCost,
 		Leverage:        q.Leverage,
@@ -224,6 +225,9 @@ func (q *EnterReq) GetZapFields(s *StratJob, fields ...zap.Field) []zap.Field {
 	}
 	if q.Limit != 0 {
 		fields = append(fields, zap.Float64("limit", q.Limit))
+	}
+	if q.Stop != 0 {
+		fields = append(fields, zap.Float64("trigger", q.Stop))
 	}
 	if q.CostRate > 0 && q.CostRate < 1 {
 		fields = append(fields, zap.Float64("costRate", q.CostRate))
@@ -324,6 +328,26 @@ func (q *ExitReq) GetZapFields(s *StratJob, fields ...zap.Field) []zap.Field {
 	return fields
 }
 
+func (s *StratJob) UpdateOrders(curOrders []*ormo.InOutOrder) {
+	s.LongOrders = nil
+	s.ShortOrders = nil
+	enteredNum := 0
+	for _, od := range curOrders {
+		if od.Symbol == s.Symbol.Symbol && od.Timeframe == s.TimeFrame && od.Strategy == s.Strat.Name {
+			if od.Status >= ormo.InOutStatusPartEnter && od.Status <= ormo.InOutStatusPartExit {
+				enteredNum += 1
+			}
+			if od.Short {
+				s.ShortOrders = append(s.ShortOrders, od)
+			} else {
+				s.LongOrders = append(s.LongOrders, od)
+			}
+		}
+	}
+	s.OrderNum = len(s.LongOrders) + len(s.ShortOrders)
+	s.EnteredNum = enteredNum
+}
+
 func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 	s.CheckMS = btime.TimeMS()
 	s.LastBarMS = s.Env.TimeStop
@@ -332,23 +356,7 @@ func (s *StratJob) InitBar(curOrders []*ormo.InOutOrder) {
 		s.ShortOrders = nil
 	} else if s.OrderNum > 0 || core.LiveMode {
 		// 针对实盘，重启后OrderNum状态重置，本地未平仓订单无法更新到StratJob中，这里每次都检查
-		s.LongOrders = nil
-		s.ShortOrders = nil
-		enteredNum := 0
-		for _, od := range curOrders {
-			if od.Symbol == s.Symbol.Symbol && od.Timeframe == s.TimeFrame && od.Strategy == s.Strat.Name {
-				if od.Status >= ormo.InOutStatusPartEnter && od.Status <= ormo.InOutStatusPartExit {
-					enteredNum += 1
-				}
-				if od.Short {
-					s.ShortOrders = append(s.ShortOrders, od)
-				} else {
-					s.LongOrders = append(s.LongOrders, od)
-				}
-			}
-		}
-		s.OrderNum = len(s.LongOrders) + len(s.ShortOrders)
-		s.EnteredNum = enteredNum
+		s.UpdateOrders(curOrders)
 	}
 	if core.LiveMode && !s.IsWarmUp {
 		// print warning before clear
@@ -777,5 +785,19 @@ func PrintStratGroups() {
 			text := core.GroupByPairQuotes(disables, true)
 			log.Info("group disable jobs by strat_tf", zap.String("acc", acc), zap.String("res", "\n"+text))
 		}
+	}
+}
+
+func GetJobInOutNum(job *StratJob) (int, int) {
+	return len(job.Entrys), len(job.Exits)
+}
+
+func CheckJobInOutNum(job *StratJob, tag string, inNum, outNum int) {
+	msg := "not support, please call `biz.GetOdMgr(s.Account).ProcessOrders(nil, s)` manually"
+	if len(job.Entrys) > inNum {
+		log.Warn("OpenOrder "+msg, zap.String("method", tag))
+	}
+	if len(job.Exits) > outNum {
+		log.Warn("CloseOrder "+msg, zap.String("method", tag))
 	}
 }

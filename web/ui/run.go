@@ -52,7 +52,7 @@ func downNewUI(errMsg, uiDistDir, verPath string) error {
 	downUrl := strings.Replace(downUrlTpl, "{tag}", core.UIVersion, 1)
 	if core.SysLang == "zh-CN" {
 		// 对简体中文的环境，使用gitee下载，避免访问外网可能失败
-		downUrl = strings.Replace(downUrl, "gitee", "github", 1)
+		downUrl = strings.Replace(downUrl, "github", "gitee", 1)
 	}
 	log.Info(errMsg+", downloading", zap.String("url", downUrl))
 
@@ -74,6 +74,7 @@ func downNewUI(errMsg, uiDistDir, verPath string) error {
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == 404 && !strings.Contains(downUrl, "github") {
 			// 非github下载404，尝试从github下载
+			downUrl = strings.Replace(downUrl, "gitee", "github", 1)
 			log.Warn("download 404, retry from github")
 			resp, err = http.Get(downUrl)
 			if err != nil {

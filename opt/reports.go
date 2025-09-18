@@ -74,6 +74,7 @@ type BTResult struct {
 	FinWithdraw     float64        `json:"finWithdraw"`
 	SharpeRatio     float64        `json:"sharpeRatio"`
 	SortinoRatio    float64        `json:"sortinoRatio"`
+	CalcDiff        float64        `json:"calcDiff"`
 }
 
 type PlotData struct {
@@ -126,7 +127,9 @@ func (r *BTResult) printBtResult() {
 	r.Collect()
 	log.Info("BackTest Reports:\n" + r.cmdReports(ormo.HistODs))
 	log.Info("Saved", zap.String("at", r.OutDir))
-
+	if r.CalcDiff > 0.01 {
+		log.Error("TotInvestment + TotProfit != FinalBalance, may be bug, please report on github")
+	}
 	r.dumpBtFiles()
 }
 
@@ -246,6 +249,7 @@ func (r *BTResult) Collect() {
 	} else {
 		r.SharpeRatio, r.SortinoRatio = sharpe, sortino
 	}
+	r.CalcDiff = math.Abs((r.FinBalance-r.TotProfit)/r.TotalInvest - 1)
 }
 
 func (r *BTResult) textMetrics(orders []*ormo.InOutOrder) string {
@@ -579,7 +583,7 @@ func CalcMeasureByOrders(ods []*ormo.InOutOrder) (float64, float64, *errs.Error)
 	}
 	initStake := float64(0)
 	for key, val := range config.WalletAmounts {
-		initStake += val * core.GetPriceSafe(key)
+		initStake += val * core.GetPriceSafe(key, "")
 	}
 	tf := "1d"
 	tfSecs := utils2.TFToSecs(tf)
@@ -1345,7 +1349,7 @@ func calcBtResult(odList []*ormo.InOutOrder, funds map[string]float64, outDir st
 				break
 			}
 		}
-		core.SetPrices(prices)
+		core.SetPrices(prices, "")
 		// 更新当前持仓订单
 		lock.Lock()
 		openList := utils2.ValsOfMap(openOds)
@@ -1424,6 +1428,9 @@ func calcBtResult(odList []*ormo.InOutOrder, funds map[string]float64, outDir st
 		btRes.dumpBtFiles()
 		log.Info("Saved", zap.String("at", outDir))
 	}
+	if btRes.CalcDiff > 0.01 {
+		log.Error("TotInvestment + TotProfit != FinalBalance, may be bug, please report on github")
+	}
 	return btRes, nil
 }
 
@@ -1478,6 +1485,9 @@ func SampleOdNums(odList []*ormo.InOutOrder, num int) ([]int, int64, int64) {
 		maxTimeMS = max(od.RealExitMS(), maxTimeMS)
 	}
 	gapMS := (maxTimeMS - minTimeMS) / int64(num)
+	if gapMS == 0 {
+		return make([]int, num), 0, 0
+	}
 	for _, od := range odList {
 		startIdx := int((od.RealEnterMS() - minTimeMS) / gapMS)
 		endPos := len(nums)
