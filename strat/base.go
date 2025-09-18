@@ -20,6 +20,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// IsTradingDisabledByExternal 外部交易禁用检查函数（由外部服务如Telegram Bot设置）
+var IsTradingDisabledByExternal func(account string) bool
+
 /*
 ******************************  Membership methods of TradeStrat 成员方法  ***********************************
  */
@@ -145,6 +148,20 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 		}
 		AddAccFailOpen(s.Account, FailOpenBadDirtOrLimit)
 		return errs.NewMsg(errs.CodeParamInvalid, "open order disabled")
+	}
+	
+	// 检查是否被外部禁用了交易（如Telegram Bot）
+	if IsTradingDisabledByExternal != nil && IsTradingDisabledByExternal(s.Account) {
+		if isLiveMode {
+			log.Warn("trading disabled by external service",
+				zap.String("strategy", s.Strat.Name),
+				zap.String("account", s.Account),
+				zap.String("pair", symbol),
+				zap.String("tag", req.Tag),
+				zap.Int("dir", dirType))
+		}
+		AddAccFailOpen(s.Account, FailOpenBadDirtOrLimit)
+		return errs.NewMsg(errs.CodeParamInvalid, "trading disabled by external service")
 	}
 	if math.IsNaN(req.Limit+req.Amount+req.Leverage+req.CostRate+req.LegalCost) ||
 		math.IsNaN(req.StopLoss+req.StopLossVal+req.StopLossLimit+req.StopLossRate) ||
