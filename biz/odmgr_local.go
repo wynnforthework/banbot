@@ -188,7 +188,8 @@ func (o *LocalOrderMgr) fillPendingOrders(orders []*ormo.InOutOrder, bar *orm.In
 		if exOrder.Enter && od.Stop > 0 && bar != nil {
 			// 使用触发价格，enterOrder中已判断有效性
 			trigPrice := od.Stop
-			if !odIsBuy && trigPrice < bar.Low || odIsBuy && trigPrice > bar.High {
+			if trigPrice < bar.Low || trigPrice > bar.High {
+				// 不处于bar的范围，无法触发
 				continue
 			}
 			price = trigPrice
@@ -468,9 +469,9 @@ func (o *LocalOrderMgr) tryFillTriggers(od *ormo.InOutOrder, bar *banexg.Kline) 
 		// 部分退出
 		part := o.CutOrder(od, amtRate, 0)
 		if sl != nil && sl.Hit {
-			od.SetStopLoss(nil)
+			_ = od.SetStopLoss(nil)
 		} else {
-			od.SetTakeProfit(nil)
+			_ = od.SetTakeProfit(nil)
 		}
 		err := od.Save(nil)
 		if err != nil {

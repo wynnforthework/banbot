@@ -88,13 +88,14 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 			}
 		}
 		for _, exs := range exsList {
-			if holdNum >= stgyMaxNum {
+			if holdNum >= stgyMaxNum || len(oldAddPairs) >= stgyMaxNum {
 				break
 			}
 			var pairAdded bool
 			if oldAllowOpen {
 				_, pairAdded = oldAddPairs[exs.Symbol]
 			}
+			oldAddPairs[exs.Symbol] = true
 			curStgy := stgy
 			scores, _ := tfScores[exs.Symbol]
 			tf := curStgy.pickTimeFrame(exs.Symbol, scores)
@@ -534,9 +535,15 @@ func resetJobs() {
 		for _, jobs := range accJobs {
 			for _, job := range jobs {
 				job.InitBar(odList)
-				if job.Strat.OrderOnRotation != "open" {
+				if job.Strat.OrderOnRotation != "open" || job.OrderNum == 0 {
 					job.MaxOpenLong = -1
 					job.MaxOpenShort = -1
+				} else {
+					pair := job.Symbol.Symbol
+					if _, ok := core.PairsMap[pair]; !ok {
+						core.PairsMap[pair] = true
+						core.Pairs = append(core.Pairs, pair)
+					}
 				}
 			}
 		}

@@ -168,10 +168,29 @@ func (s *StratJob) openOrder(req *EnterReq) *errs.Error {
 		req.Limit = enterPrice
 	}
 	if req.Limit > 0 {
+		if req.Stop > 0 {
+			return errs.NewMsg(errs.CodeParamInvalid, "Stop/Limit can not be used together")
+		}
 		if (req.Limit-enterPrice)*dirFlag < 0 {
 			enterPrice = req.Limit
 		} else {
 			req.Limit = 0
+		}
+	}
+	if req.Stop > 0 {
+		if req.Short {
+			if req.Stop > curPrice {
+				// 做空，触发价应低于最新价
+				isLimit = true
+			}
+		} else if req.Stop < curPrice {
+			// 做多：触发价应高于最新价
+			isLimit = true
+		}
+		enterPrice = req.Stop
+		if isLimit {
+			req.Limit = req.Stop
+			req.Stop = 0
 		}
 	}
 	if req.Amount == 0 && req.LegalCost == 0 {
@@ -372,14 +391,20 @@ func (s *StratJob) closeOrders(req *ExitReq) *errs.Error {
 				if req.Limit > curPrice {
 					// 平空买入，价格更高，立刻成交，maker改为限价止损
 					for _, od := range s.ShortOrders {
-						od.SetStopLoss(sl)
+						err := od.SetStopLoss(sl)
+						if err != nil {
+							return err
+						}
 					}
 					return nil
 				}
 			} else if req.Limit < curPrice {
 				// 平多卖出，价格更低，立刻成交，maker改为限价止损
 				for _, od := range s.LongOrders {
-					od.SetStopLoss(sl)
+					err := od.SetStopLoss(sl)
+					if err != nil {
+						return err
+					}
 				}
 				return nil
 			}
@@ -504,7 +529,7 @@ func (s *StratJob) drawDownExit(od *ormo.InOutOrder) *ExitReq {
 	if (spVal-curPrice)*odDirt >= 0 {
 		return &ExitReq{Tag: core.ExitTagDrawDown, OrderID: od.ID}
 	}
-	od.SetStopLoss(&ormo.ExitTrigger{
+	_ = od.SetStopLoss(&ormo.ExitTrigger{
 		Price: spVal,
 		Tag:   core.ExitTagDrawDown,
 	})
@@ -557,6 +582,25 @@ func (s *StratJob) Position(dirt float64, enterTag string) float64 {
 		totalCost += od.HoldCost()
 	}
 	return totalCost / s.Strat.GetStakeAmount(s)
+}
+
+func (s *StratJob) PositionAvgPrice(dirt float64, enterTag string) float64 {
+	var totalCost, totalAmount float64
+	if dirt == core.OdDirtBoth {
+		panic("`dirt` for PositionAvgPrice must be core.OdDirtLong/OdDirtShort")
+	}
+	orders := s.GetOrders(dirt)
+	for _, od := range orders {
+		if enterTag != "" && od.EnterTag != enterTag {
+			continue
+		}
+		totalCost += od.HoldCost()
+		totalAmount += od.HoldAmount()
+	}
+	if totalAmount > 0 {
+		return totalCost / totalAmount
+	}
+	return 0
 }
 
 func (s *StratJob) GetOrders(dirt float64) []*ormo.InOutOrder {
@@ -635,9 +679,9 @@ func (s *StratJob) GetTmpEnv(stamp int64, o, h, l, c, v, i float64) *ta.BarEnv {
 	return e
 }
 
-func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTrigger) {
+func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTrigger) *errs.Error {
 	if s.GetOrderNum(dirt) == 0 {
-		return
+		return nil
 	}
 	if dirt == 0 && len(s.LongOrders) > 0 && len(s.ShortOrders) > 0 {
 		panic(fmt.Sprintf("%v SetAll%s.dirt should be 1/-1 when both long/short orders exists!", s.Strat.Name, key))
@@ -646,9 +690,9 @@ func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTr
 	if args == nil {
 		// 取消所有止盈或止损
 		for _, od := range odList {
-			od.SetExitTrigger(key, nil)
+			_ = od.SetExitTrigger(key, nil)
 		}
-		return
+		return nil
 	}
 	var entOds = make([]*ormo.InOutOrder, 0, len(odList))
 	var position float64
@@ -656,7 +700,10 @@ func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTr
 	for _, od := range odList {
 		if od.Status >= ormo.InOutStatusPartEnter && od.Status <= ormo.InOutStatusPartExit {
 			if setAll {
-				od.SetExitTrigger(key, args)
+				err := od.SetExitTrigger(key, args)
+				if err != nil {
+					return err
+				}
 			} else {
 				entOds = append(entOds, od)
 				position += od.HoldAmount()
@@ -664,7 +711,7 @@ func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTr
 		}
 	}
 	if setAll || len(entOds) == 0 {
-		return
+		return nil
 	}
 	setPos := position * args.Rate
 	for _, od := range entOds {
@@ -673,32 +720,39 @@ func (s *StratJob) setAllExitTrigger(dirt float64, key string, args *ormo.ExitTr
 			continue
 		}
 		if setPos < core.AmtDust {
-			od.SetExitTrigger(key, nil)
+			_ = od.SetExitTrigger(key, nil)
 		} else {
 			if setPos >= size+core.AmtDust {
-				od.SetExitTrigger(key, &ormo.ExitTrigger{
+				err := od.SetExitTrigger(key, &ormo.ExitTrigger{
 					Price: args.Price,
 					Limit: args.Limit,
 					Tag:   args.Tag,
 				})
+				if err != nil {
+					return err
+				}
 				setPos -= size
 			} else {
-				od.SetExitTrigger(key, &ormo.ExitTrigger{
+				err := od.SetExitTrigger(key, &ormo.ExitTrigger{
 					Price: args.Price,
 					Limit: args.Limit,
 					Rate:  setPos / size,
 					Tag:   args.Tag,
 				})
+				if err != nil {
+					return err
+				}
 				setPos = 0
 			}
 		}
 	}
+	return nil
 }
 
-func (s *StratJob) SetAllStopLoss(dirt float64, args *ormo.ExitTrigger) {
-	s.setAllExitTrigger(dirt, ormo.OdInfoStopLoss, args)
+func (s *StratJob) SetAllStopLoss(dirt float64, args *ormo.ExitTrigger) *errs.Error {
+	return s.setAllExitTrigger(dirt, ormo.OdInfoStopLoss, args)
 }
 
-func (s *StratJob) SetAllTakeProfit(dirt float64, args *ormo.ExitTrigger) {
-	s.setAllExitTrigger(dirt, ormo.OdInfoTakeProfit, args)
+func (s *StratJob) SetAllTakeProfit(dirt float64, args *ormo.ExitTrigger) *errs.Error {
+	return s.setAllExitTrigger(dirt, ormo.OdInfoTakeProfit, args)
 }

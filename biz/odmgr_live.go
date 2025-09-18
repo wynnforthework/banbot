@@ -1648,8 +1648,13 @@ func (o *LiveOrderMgr) submitExgOrder(od *ormo.InOutOrder, isEnter bool) *errs.E
 		}
 	}
 	if isEnter && od.Stop > 0 {
-		// 设置触发价格
-		params[banexg.ParamTriggerPrice] = od.Stop
+		// 设置触发价入场价格
+		curPrice := core.GetPrice(od.Symbol, side)
+		if (od.Stop >= curPrice) == (side == banexg.OdSideBuy) {
+			params[banexg.ParamStopLossPrice] = od.Stop
+		} else {
+			params[banexg.ParamTakeProfitPrice] = od.Stop
+		}
 	}
 	res, err := exchange.CreateOrder(od.Symbol, subOd.OrderType, side, amount, price, params)
 	if err != nil {
@@ -2201,7 +2206,7 @@ func (o *LiveOrderMgr) editTriggerOd(od *ormo.InOutOrder, prefix string) {
 				log.Error("cancel old trigger fail", zap.String("key", od.Key()), zap.Error(err))
 			}
 			tg.OrderId = ""
-			od.SetExitTrigger(prefix, nil)
+			_ = od.SetExitTrigger(prefix, nil)
 		}
 		return
 	}

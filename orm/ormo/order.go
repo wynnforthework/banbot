@@ -598,7 +598,10 @@ func (i *InOutOrder) GetInfoText() (string, *errs.Error) {
 	return "", nil
 }
 
-func (i *InOutOrder) SetExitTrigger(key string, args *ExitTrigger) {
+func (i *InOutOrder) SetExitTrigger(key string, args *ExitTrigger) *errs.Error {
+	if key != OdInfoTakeProfit && key != OdInfoStopLoss {
+		return errs.NewMsg(errs.CodeParamInvalid, "invalid key: %v", key)
+	}
 	var empty *TriggerState
 	tg := utils2.GetMapVal(i.Info, key, empty)
 	if args == nil || args.Price == 0 {
@@ -608,9 +611,28 @@ func (i *InOutOrder) SetExitTrigger(key string, args *ExitTrigger) {
 		} else {
 			i.SetInfo(key, nil)
 		}
-		return
+		return nil
 	} else if tg == nil {
 		tg = &TriggerState{}
+	}
+	var isStopLoss = key == OdInfoStopLoss
+	var side string
+	if i.Enter.Side == banexg.OdSideBuy {
+		side = banexg.OdSideSell
+	} else {
+		side = banexg.OdSideBuy
+	}
+	curPrice := core.GetPrice(i.Symbol, side)
+	if isStopLoss == (side == banexg.OdSideSell) {
+		// 触发价低于最新价：平多止损、平空止盈
+		if args.Price > curPrice {
+			return errs.NewMsg(errs.CodeParamInvalid, "%v price must <= latest price for %v", key, side)
+		}
+	} else {
+		// 触发价高于最新价：平多止盈、平空止损
+		if args.Price < curPrice {
+			return errs.NewMsg(errs.CodeParamInvalid, "%v price must >= latest price for %v", key, side)
+		}
 	}
 	var rangeVal float64
 	if args.Limit != 0 {
@@ -629,14 +651,15 @@ func (i *InOutOrder) SetExitTrigger(key string, args *ExitTrigger) {
 	if changed {
 		fireOdEdit(i, key)
 	}
+	return nil
 }
 
-func (i *InOutOrder) SetStopLoss(args *ExitTrigger) {
-	i.SetExitTrigger(OdInfoStopLoss, args)
+func (i *InOutOrder) SetStopLoss(args *ExitTrigger) *errs.Error {
+	return i.SetExitTrigger(OdInfoStopLoss, args)
 }
 
-func (i *InOutOrder) SetTakeProfit(args *ExitTrigger) {
-	i.SetExitTrigger(OdInfoTakeProfit, args)
+func (i *InOutOrder) SetTakeProfit(args *ExitTrigger) *errs.Error {
+	return i.SetExitTrigger(OdInfoTakeProfit, args)
 }
 
 func (i *InOutOrder) GetExitTrigger(key string) *TriggerState {
