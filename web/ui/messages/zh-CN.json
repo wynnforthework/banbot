@@ -639,7 +639,7 @@
   "cfg_spider": "爬虫进程监听的端口和地址",
   "cfg_rpc_channels": "通过RPC发送消息通知的通道",
   "cfg_rpc_name": "rpc的渠道名",
-  "cfg_rpc_type": "rpc类型，支持：wework",
+  "cfg_rpc_type": "rpc类型，支持：wework, email, telegram",
   "cfg_rpc_msg_types": "允许发送的消息类型",
   "cfg_rpc_account": "允许的账户，为空允许所有",
   "cfg_rpc_keyword": "消息过滤关键词",

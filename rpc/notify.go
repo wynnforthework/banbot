@@ -30,7 +30,7 @@ func initWebHooks() *errs.Error {
 		for i, chl := range acc.RPCChannels {
 			chlName := utils.GetMapVal(chl, "name", "")
 			if chlName == "" {
-				return errs.NewMsg(core.ErrBadConfig, "`name` is required in accounts.%s.rpc_channels[%d]", acc, i)
+				return errs.NewMsg(core.ErrBadConfig, "`name` is required in accounts.%s.rpc_channels[%d]", accName, i)
 			}
 			chl["_acc"] = accName
 			if _, ok := chl["accounts"]; !ok {
@@ -59,6 +59,8 @@ func initWebHooks() *errs.Error {
 			channel = NewWeWork(name, item)
 		case "mail", "email":
 			channel = NewEmail(name, item)
+		case "telegram":
+			channel = NewTelegram(name, item)
 		default:
 			return errs.NewMsg(core.ErrBadConfig, "RPCChannel not support: %v", chlType)
 		}

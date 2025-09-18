@@ -1,0 +1,50 @@
+# Telegram Bot 通知配置示例
+# 在主配置文件中的 rpc_channels 节点下添加以下配置
+
+rpc_channels:
+  # Telegram 通知渠道配置
+  telegram_notify:
+    type: telegram                    # 渠道类型，必须为 "telegram"
+    disable: false                    # 是否禁用，默认 false
+    token: "6666666666:AAH-6666666666666666666666666666666666666666"  # 必填：Telegram Bot Token
+    chat_id: "-6666666666666666666666666666666666666666"             # 必填：聊天ID（用户ID或群组ID）
+    msg_types: ["status", "exception", "entry", "exit"]              # 允许发送的消息类型
+    accounts: []                      # 允许的账户，为空允许所有
+    keywords: []                      # 消息过滤关键词，为空不过滤
+    retry_delay: 30                   # 重试间隔（秒）
+    min_intv_secs: 5                  # 最小发送间隔（秒）
+
+  # 也可以为不同账户配置不同的Telegram通知
+  telegram_user1:
+    type: telegram
+    token: "另一个Bot的Token"
+    chat_id: "另一个聊天ID"
+    msg_types: ["entry", "exit"]
+    accounts: ["user1"]               # 仅对 user1 账户生效
+
+# 账户级别的Telegram配置（在accounts下配置）
+accounts:
+  user1:
+    # 其他账户配置...
+    rpc_channels:
+      - name: telegram_notify         # 引用上面定义的通知渠道
+        # 可以覆盖部分配置
+        msg_types: ["exception"]      # 仅发送异常消息
+
+# 如何获取Telegram Bot Token和Chat ID：
+#
+# 1. 获取Bot Token:
+#    - 在Telegram中找到 @BotFather
+#    - 发送 /newbot 创建新机器人
+#    - 按提示设置机器人名称和用户名
+#    - 获得类似 "6666666666:AAH-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 的token
+#
+# 2. 获取Chat ID:
+#    - 个人聊天：添加机器人为好友，发送消息后访问
+#      https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+#      在返回的JSON中找到 chat.id 字段
+#    - 群组聊天：将机器人添加到群组，发送消息后用同样方法获取
+#      群组ID通常是负数，如 -1001234567890
+#
+# 3. 测试配置:
+#    启动banbot后，会自动发送启动消息到配置的Telegram聊天
