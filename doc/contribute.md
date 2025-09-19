@@ -1,6 +1,12 @@
 # 各个go包的依赖关系及公开方法
 [文档](https://www.banbot.site/en-US/api/)
 
+# 代码规范
+* 可使用AI辅助开发并贡献代码，但提pr前必须逐行审查代码，删除不必要、未使用、不规范的文档或代码。
+* 不接受AI生成的大段文档，此代码库中文档应保持精炼；可将示例配置维护到doc/config.yml，将其他文档维护到bandoc（也可发邮件到anyongjin163@163.com）
+* 注意多语言支持，短文本应使用`GetLangMsg`，较长内容应使用`ReadLangFile`；
+* 要合并的提交应保持干净，可使用`git cherry-pick`和`git reset --soft`从最新主分支代码挑选必要的提交，不要包含"Merge xxx"
+
 # 常见问题
 ### 如何进行函数性能测试？（不含IO）
 回测时添加`-cpu-profile`参数，启用性能测试，输出`cpu.profile`到回测目录下。然后执行下面命令可以查看结果
