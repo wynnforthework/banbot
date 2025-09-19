@@ -22,11 +22,16 @@ import (
 type FuncMakeStrat = func(pol *config.RunPolicyConfig) *TradeStrat
 
 var (
-	StratMake = make(map[string]FuncMakeStrat) // 已加载的策略缓存
+	StratMake   = make(map[string]FuncMakeStrat) // 已加载的策略缓存
+	cacheStrats = make(map[string]*TradeStrat)
 )
 
 func New(pol *config.RunPolicyConfig) *TradeStrat {
 	polID := pol.ID()
+	cacheKey := utils.MD5([]byte(pol.ToYaml()))
+	if obj, ok := cacheStrats[cacheKey]; ok {
+		return obj
+	}
 	makeFn, ok := StratMake[pol.Name]
 	var stgy *TradeStrat
 	if ok {
@@ -35,6 +40,7 @@ func New(pol *config.RunPolicyConfig) *TradeStrat {
 		panic("strategy not found: " + pol.Name)
 		// stgy = loadNative(pol.Name)
 	}
+	cacheStrats[cacheKey] = stgy
 	stgy.Name = polID
 	if stgy.MinTfScore == 0 {
 		stgy.MinTfScore = 0.75
