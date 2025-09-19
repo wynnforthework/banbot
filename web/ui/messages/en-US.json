@@ -640,7 +640,7 @@
     "cfg_spider": "Port and address monitored by the spider process",
     "cfg_rpc_channels": "RPC channels for sending message notifications",
     "cfg_rpc_name": "Name of the RPC channel",
-    "cfg_rpc_type": "RPC type, supports: wework",
+    "cfg_rpc_type": "RPC type, supports: wework, email, telegram",
     "cfg_rpc_msg_types": "Allowed message types to send",
     "cfg_rpc_account": "Allowed accounts, allows all if empty",
     "cfg_rpc_keyword": "Message filter keywords",

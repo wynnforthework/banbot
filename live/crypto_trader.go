@@ -53,6 +53,8 @@ func (t *CryptoTrader) Init() *errs.Error {
 	if err != nil {
 		return err
 	}
+	// 初始化 Telegram 订单管理器
+	biz.InitTelegramOrderManager()
 	err = web.StartApi()
 	if err != nil {
 		return err

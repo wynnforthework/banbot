@@ -6,6 +6,7 @@ import (
 	"github.com/banbox/banbot/btime"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +43,7 @@ type webHookItem struct {
 	MinIntvSecs int      `mapstructure:"min_intv_secs"` // 最小发送间隔(秒)
 	Disable     bool     `mapstructure:"disable"`       // 是否禁用
 	ChlType     string   `mapstructure:"type"`          // Channel Type 渠道类型
+	Proxy       string   `mapstructure:"proxy"`         // 代理地址
 }
 
 const (
@@ -202,17 +204,48 @@ func (h *WebHook) doSend() {
 	}
 }
 
-func request(method, url, body string) *banexg.HttpRes {
+// createWebHookClient 为webhook创建支持代理的HTTP客户端
+func createWebHookClient(proxyURL string) *http.Client {
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
+
+	if proxyURL != "" {
+		if proxy, err := url.Parse(proxyURL); err == nil {
+			transport.Proxy = http.ProxyURL(proxy)
+			log.Info("Using proxy for webhook", zap.String("proxy", proxyURL))
+		} else {
+			log.Warn("Invalid proxy URL for webhook", zap.String("proxy", proxyURL), zap.Error(err))
+		}
+	}
+	
+	return &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+}
+
+func request(method, reqURL, body string) *banexg.HttpRes {
+	return requestWithProxy(method, reqURL, body, "")
+}
+
+func requestWithProxy(method, reqURL, body, configProxy string) *banexg.HttpRes {
 	if client == nil {
-		client = &http.Client{}
+		client = createWebHookClient(configProxy)
 	}
 	var reqBody io.Reader
 	if body != "" {
 		reqBody = bytes.NewBufferString(body)
 	}
-	req, err_ := http.NewRequest(method, url, reqBody)
+	req, err_ := http.NewRequest(method, reqURL, reqBody)
 	if err_ != nil {
 		return &banexg.HttpRes{Error: errs.New(core.ErrRunTime, err_)}
+	}
+	// 设置Content-Type头，这对于POST请求很重要
+	if method == "POST" && body != "" {
+		req.Header.Set("Content-Type", "application/json")
 	}
 	return utils2.DoHttp(client, req)
 }
