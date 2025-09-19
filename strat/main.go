@@ -75,16 +75,21 @@ func LoadStratJobs(pairs []string, tfScores map[string]map[string]float64) (map[
 		oldAllowOpen := stgy.OrderOnRotation == "open"
 		oldAddPairs := make(map[string]bool)
 		for acc, accJobs := range AccJobs {
+			codes := make([]string, 0, len(exsList)/2)
 			for _, jobs := range accJobs {
-				for stratId, job := range jobs {
+				if job, ok := jobs[polID]; ok {
 					if job.MaxOpenLong >= 0 || job.MaxOpenShort >= 0 {
 						holdNum += 1
 						oldAddPairs[job.Symbol.Symbol] = true
-						if !accLimits.tryAdd(acc, stratId) {
-							log.Error("old job num exceed limit", zap.String("acc", acc), zap.String("strat", stratId))
+						if !accLimits.tryAdd(acc, polID) {
+							codes = append(codes, job.Symbol.Symbol)
 						}
 					}
 				}
+			}
+			if len(codes) > 0 {
+				log.Error("old job num exceed limit", zap.String("acc", acc), zap.String("strat", polID),
+					zap.Strings("pairs", codes))
 			}
 		}
 		for _, exs := range exsList {
