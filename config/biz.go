@@ -1221,7 +1221,14 @@ func LoadLangMessages() {
 	}
 }
 
-func GetLangMsg(lang, code, defVal string) string {
+func GetLangMsg(code, defVal string) string {
+	return GetLangMsgBy(ShowLangCode, code, defVal)
+}
+
+func GetLangMsgBy(lang, code, defVal string) string {
+	if lang == "" {
+		lang = ShowLangCode
+	}
 	langMap, ok := langMsgs[code]
 	if ok {
 		text, ok := langMap[lang]

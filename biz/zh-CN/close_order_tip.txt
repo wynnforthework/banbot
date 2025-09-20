@@ -1,0 +1,7 @@
+❌ <b>用法错误</b>
+
+请使用: <code>/close [订单ID|all]</code>
+
+示例:
+• <code>/close 123</code> - 平仓指定订单
+• <code>/close all</code> - 平仓所有订单

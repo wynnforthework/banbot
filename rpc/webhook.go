@@ -57,7 +57,8 @@ const (
 )
 
 var (
-	client *http.Client
+	clientMap   = make(map[string]*http.Client)
+	clientMutex sync.RWMutex
 )
 
 type IWebHook interface {
@@ -146,9 +147,6 @@ func (h *WebHook) SendMsg(msgType string, account string, payload map[string]str
 func (h *WebHook) CleanUp() {
 	h.Disable = true
 	h.wg.Wait()
-	if client != nil {
-		client = nil
-	}
 	close(h.Queue)
 }
 
@@ -220,7 +218,7 @@ func createWebHookClient(proxyURL string) *http.Client {
 			log.Warn("Invalid proxy URL for webhook", zap.String("proxy", proxyURL), zap.Error(err))
 		}
 	}
-	
+
 	return &http.Client{
 		Transport: transport,
 		Timeout:   30 * time.Second,
@@ -228,24 +226,30 @@ func createWebHookClient(proxyURL string) *http.Client {
 }
 
 func request(method, reqURL, body string) *banexg.HttpRes {
-	return requestWithProxy(method, reqURL, body, "")
+	client, req, err := prepareRequest(method, reqURL, body, "")
+	if err != nil {
+		return &banexg.HttpRes{Error: errs.New(core.ErrRunTime, err)}
+	}
+	return utils2.DoHttp(client, req)
 }
 
-func requestWithProxy(method, reqURL, body, configProxy string) *banexg.HttpRes {
-	if client == nil {
-		client = createWebHookClient(configProxy)
+func prepareRequest(method, reqURL, body, proxy string) (*http.Client, *http.Request, error) {
+	// 根据proxy获取对应的client
+	clientMutex.RLock()
+	client, exists := clientMap[proxy]
+	if !exists {
+		client = createWebHookClient(proxy)
+		clientMap[proxy] = client
 	}
+	clientMutex.RUnlock()
+
 	var reqBody io.Reader
 	if body != "" {
 		reqBody = bytes.NewBufferString(body)
 	}
 	req, err_ := http.NewRequest(method, reqURL, reqBody)
 	if err_ != nil {
-		return &banexg.HttpRes{Error: errs.New(core.ErrRunTime, err_)}
+		return nil, nil, err_
 	}
-	// 设置Content-Type头，这对于POST请求很重要
-	if method == "POST" && body != "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	return utils2.DoHttp(client, req)
+	return client, req, nil
 }

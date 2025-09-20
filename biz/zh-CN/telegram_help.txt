@@ -1,0 +1,20 @@
+🤖 <b>BanBot Telegram 命令帮助</b>
+
+<b>订单管理:</b>
+• <code>/menu</code> - 显示操作菜单（推荐）
+• <code>/orders</code> - 查看当前订单列表
+• <code>/close [订单ID|all]</code> - 平仓指定订单或所有订单
+
+<b>交易控制:</b>
+• <code>/status</code> - 查看当前交易状态
+• <code>/disable [小时]</code> - 禁止开单(默认1小时)
+• <code>/enable</code> - 重新启用开单
+
+<b>钱包信息:</b>
+• <code>/wallet</code> - 查看钱包总额/可用/未实现盈亏
+
+<b>其他:</b>
+• <code>/help</code> - 显示此帮助信息
+
+💡 <i>提示：使用 /menu 命令可获得更便捷的按钮操作界面</i>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

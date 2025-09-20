@@ -1,0 +1,7 @@
+❌ <b>Usage Error</b>
+
+Please use: <code>/close [OrderID|all]</code>
+
+Examples:
+• <code>/close 123</code> - Close specific order
+• <code>/close all</code> - Close all orders

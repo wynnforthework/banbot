@@ -1192,17 +1192,16 @@ func compareLocalWithExg(posList []*banexg.Position, localAmts, liveAmts map[str
 }
 
 func sendPosCompareReport(matchOpens []string, btMore, liveMore map[string]int64, exgMatch map[string]float64, exgDiff map[string][3]float64) {
-	lang := config.ShowLangCode
-	title := config.Name + " " + config.GetLangMsg(lang, "backtest_regular", "定期回测")
-	liveBadOpen := config.GetLangMsg(lang, "live_bad_open", "实盘误开")
-	liveNoOpen := config.GetLangMsg(lang, "live_no_open", "实盘未开")
-	liveBadPos := config.GetLangMsg(lang, "live_bad_pos", "仓位不符")
+	title := config.Name + " " + config.GetLangMsg("backtest_regular", "定期回测")
+	liveBadOpen := config.GetLangMsg("live_bad_open", "实盘误开")
+	liveNoOpen := config.GetLangMsg("live_no_open", "实盘未开")
+	liveBadPos := config.GetLangMsg("live_bad_pos", "仓位不符")
 	allMatch := true
 	if len(btMore) == 0 && len(liveMore) == 0 && len(exgDiff) == 0 {
-		title += config.GetLangMsg(lang, "normal", "正常")
+		title += config.GetLangMsg("normal", "正常")
 	} else {
 		allMatch = false
-		title += config.GetLangMsg(lang, "abnormal", "异常")
+		title += config.GetLangMsg("abnormal", "异常")
 		title += fmt.Sprintf(", %s: %d %s: %d",
 			liveBadOpen, len(liveMore), liveNoOpen, len(btMore),
 		)
@@ -1219,7 +1218,7 @@ func sendPosCompareReport(matchOpens []string, btMore, liveMore map[string]int64
 	for key, stamp := range btMore {
 		b.WriteString(fmt.Sprintf("\t%s should open at %s\n", key, btime.ToDateStr(stamp, core.DefaultDateFmt)))
 	}
-	liveOpenMatch := config.GetLangMsg(lang, "live_open_match", "开仓匹配")
+	liveOpenMatch := config.GetLangMsg("live_open_match", "开仓匹配")
 	b.WriteString("\n" + liveOpenMatch + ":\n")
 	for _, key := range matchOpens {
 		b.WriteString(fmt.Sprintf("\t%s\n", key))
@@ -1229,7 +1228,7 @@ func sendPosCompareReport(matchOpens []string, btMore, liveMore map[string]int64
 		b.WriteString(fmt.Sprintf("\t%s in exg: %.6f but in local: %.6f, and in live: %.6f\n",
 			key, amts[0], amts[1], amts[2]))
 	}
-	livePosMatch := config.GetLangMsg(lang, "live_pos_match", "交易所持仓匹配")
+	livePosMatch := config.GetLangMsg("live_pos_match", "交易所持仓匹配")
 	b.WriteString("\n" + livePosMatch + ":\n")
 	for key, amt := range exgMatch {
 		b.WriteString(fmt.Sprintf("\t%s with amt: %.6f\n", key, amt))

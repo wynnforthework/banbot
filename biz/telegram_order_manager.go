@@ -24,7 +24,7 @@ func (m *TelegramOrderManager) GetActiveOrders(account string) ([]*rpc.OrderInfo
 		return nil, err
 	}
 	defer conn.Close()
-	
+
 	taskId := ormo.GetTaskID(account)
 	orders, getErr := sess.GetOrders(ormo.GetOrdersArgs{
 		TaskID: taskId,
@@ -44,12 +44,12 @@ func (m *TelegramOrderManager) GetActiveOrders(account string) ([]*rpc.OrderInfo
 			EnterTag: order.EnterTag,
 			Account:  account,
 		}
-		
+
 		if order.Enter != nil {
 			orderInfo.Price = order.Enter.Average
 			orderInfo.Amount = order.Enter.Filled
 		}
-		
+
 		result = append(result, orderInfo)
 	}
 
@@ -102,7 +102,10 @@ func (m *TelegramOrderManager) CloseOrder(account string, orderID int64) error {
 
 	// 执行平仓
 	_, exitErr := mgr.ExitOpenOrders(sess, order.Symbol, exitReq)
-	return exitErr
+	if exitErr != nil {
+		return exitErr
+	}
+	return nil
 }
 
 // CloseAllOrders 平仓所有订单
@@ -202,12 +205,10 @@ func (e *AccountNotFoundError) Error() string {
 func InitTelegramOrderManager() {
 	orderMgr := NewTelegramOrderManager()
 	rpc.SetOrderManager(orderMgr)
-	
-	// 设置交易禁用检查钩子
-	strat.IsTradingDisabledByExternal = rpc.IsTradingDisabledByTelegram
-    // 注册钱包信息提供者
-    rpc.SetWalletInfoProvider(walletInfoProvider{})
-	
+
+	// 注册钱包信息提供者
+	rpc.SetWalletInfoProvider(walletInfoProvider{})
+
 	log.Info("Telegram order manager initialized")
 }
 
@@ -215,6 +216,6 @@ func InitTelegramOrderManager() {
 type walletInfoProvider struct{}
 
 func (walletInfoProvider) GetSummary(account string) (totalLegal float64, availableLegal float64, unrealizedPOLLegal float64) {
-    w := GetWallets(account)
-    return w.TotalLegal(nil, true), w.AvaLegal(nil), w.UnrealizedPOLLegal(nil)
+	w := GetWallets(account)
+	return w.TotalLegal(nil, true), w.AvaLegal(nil), w.UnrealizedPOLLegal(nil)
 }
