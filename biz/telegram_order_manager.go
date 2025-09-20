@@ -1,6 +1,7 @@
 package biz
 
 import (
+	"fmt"
 	"github.com/banbox/banbot/orm"
 	"github.com/banbox/banbot/orm/ormo"
 	"github.com/banbox/banbot/rpc"
@@ -60,7 +61,7 @@ func (m *TelegramOrderManager) GetActiveOrders(account string) ([]*rpc.OrderInfo
 func (m *TelegramOrderManager) CloseOrder(account string, orderID int64) error {
 	mgr := GetOdMgr(account)
 	if mgr == nil {
-		return &OrderNotFoundError{OrderID: orderID}
+		return fmt.Errorf("account invalid: %v", account)
 	}
 
 	sess, conn, err := ormo.Conn(orm.DbTrades, false)
@@ -90,7 +91,7 @@ func (m *TelegramOrderManager) CloseOrder(account string, orderID int64) error {
 	}
 
 	if order == nil {
-		return &OrderNotFoundError{OrderID: orderID}
+		return fmt.Errorf("order not found: %v", orderID)
 	}
 
 	// 创建平仓请求
@@ -112,7 +113,7 @@ func (m *TelegramOrderManager) CloseOrder(account string, orderID int64) error {
 func (m *TelegramOrderManager) CloseAllOrders(account string) (int, int, error) {
 	mgr := GetOdMgr(account)
 	if mgr == nil {
-		return 0, 0, &AccountNotFoundError{Account: account}
+		return 0, 0, fmt.Errorf("account invalid: %v", account)
 	}
 
 	sess, conn, err := ormo.Conn(orm.DbTrades, false)
@@ -181,24 +182,6 @@ func (m *TelegramOrderManager) GetOrderStats(account string) (longCount, shortCo
 	}
 
 	return longCount, shortCount, nil
-}
-
-// OrderNotFoundError 订单未找到错误
-type OrderNotFoundError struct {
-	OrderID int64
-}
-
-func (e *OrderNotFoundError) Error() string {
-	return "order not found"
-}
-
-// AccountNotFoundError 账户未找到错误
-type AccountNotFoundError struct {
-	Account string
-}
-
-func (e *AccountNotFoundError) Error() string {
-	return "account not found"
 }
 
 // InitTelegramOrderManager 初始化 Telegram 订单管理器

@@ -58,4 +58,4 @@ git push origin --tags
 It is not recommended to replace `encoding/json` with [sonic](https://github.com/bytedance/sonic/issues/574). The binary file will increase by 15M (on Windows)
 
 # TODO
-1. 将策略注入改为接口，以便允许从结构体继承。
+1. telegram bot改为webhook，使用官网中转，无需用户创建机器人
