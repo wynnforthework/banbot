@@ -58,6 +58,10 @@ func GetOpenODs(account string) (map[int64]*InOutOrder, *deadlock.Mutex) {
 	isReload := false
 	mOpenLock.Lock()
 	if core.LiveMode {
+		cfg, ok := config.Accounts[account]
+		if ok && cfg.NoTrade {
+			return make(map[int64]*InOutOrder), &deadlock.Mutex{}
+		}
 		curMS := btime.UTCStamp()
 		stamp, _ := accSyncStamps[account]
 		if curMS-stamp > odSyncIntvMS {
