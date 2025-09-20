@@ -530,10 +530,7 @@ func initLangFile(dataDir, lang string) *errs.Error {
 		return errs.New(errs.CodeIOWriteFail, err_)
 	}
 
-	targetPath := filepath.Join(langDir, "messages.json")
-
-	// 从嵌入数据中读取
-	var sourceData []byte
+	// 获取对应的嵌入文件系统
 	var embedFS embed.FS
 	if lang == "zh-CN" {
 		embedFS = zhCNData
@@ -543,18 +540,55 @@ func initLangFile(dataDir, lang string) *errs.Error {
 		return nil // 不支持的语言，跳过
 	}
 
-	sourceData, err_ = embedFS.ReadFile(path.Join(lang, "messages.json"))
+	// 读取嵌入文件系统中的所有文件
+	entries, err_ := embedFS.ReadDir(lang)
 	if err_ != nil {
-		// 嵌入文件不存在，跳过
 		return errs.New(errs.CodeRunTime, err_)
 	}
 
-	if !utils.Exists(targetPath) {
-		// 直接复制
-		return utils.WriteFile(targetPath, sourceData)
+	// 遍历所有文件
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue // 跳过目录
+		}
+
+		fileName := entry.Name()
+		sourcePath := path.Join(lang, fileName)
+		targetPath := filepath.Join(langDir, fileName)
+
+		// 从嵌入文件系统读取文件内容
+		sourceData, err_ := embedFS.ReadFile(sourcePath)
+		if err_ != nil {
+			log.Warn("failed to read embedded file", zap.String("file", sourcePath), zap.Error(err_))
+			continue
+		}
+
+		// 如果目标文件不存在，直接复制
+		if !utils.Exists(targetPath) {
+			err := utils.WriteFile(targetPath, sourceData)
+			if err != nil {
+				return err
+			}
+			log.Info("copied language file", zap.String("file", targetPath))
+			continue
+		}
+
+		// 对于 messages.json 文件，进行合并更新
+		if fileName == "messages.json" {
+			err := mergeMessagesFile(targetPath, sourceData)
+			if err != nil {
+				return err
+			}
+		}
+		// 对于其他文件（如 .txt 文件），如果已存在则跳过，不覆盖用户的修改
 	}
 
-	// 合并更新
+	return nil
+}
+
+// mergeMessagesFile 合并更新 messages.json 文件
+func mergeMessagesFile(targetPath string, sourceData []byte) *errs.Error {
+	// 读取目标文件
 	targetData, err_ := os.ReadFile(targetPath)
 	if err_ != nil {
 		return errs.New(errs.CodeIOReadFail, err_)
@@ -581,7 +615,11 @@ func initLangFile(dataDir, lang string) *errs.Error {
 		if err_ != nil {
 			return errs.New(errs.CodeMarshalFail, err_)
 		}
-		return utils.WriteFile(targetPath, []byte(newData))
+		err := utils.WriteFile(targetPath, []byte(newData))
+		if err != nil {
+			return err
+		}
+		log.Info("updated messages file", zap.String("file", targetPath))
 	}
 
 	return nil
