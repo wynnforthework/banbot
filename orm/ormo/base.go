@@ -31,7 +31,7 @@ func GetTaskID(account string) int64 {
 	if task != nil {
 		return task.ID
 	}
-	return 0
+	return -1
 }
 
 func GetTask(account string) *BotTask {

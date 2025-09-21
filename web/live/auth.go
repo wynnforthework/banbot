@@ -148,7 +148,7 @@ func postLogin(c *fiber.Ctx) error {
 		var accRoles = make(map[string]string)
 		for acc, role := range u.AccRoles {
 			task := ormo.GetTask(acc)
-			if task != nil {
+			if task != nil && task.StopAt == 0 {
 				accRoles[acc] = role
 			}
 		}

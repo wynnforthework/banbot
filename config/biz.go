@@ -272,7 +272,7 @@ func ApplyConfig(args *CmdArgs, c *Config) *errs.Error {
 	}
 	PutLimitSecs = c.PutLimitSecs
 	if PutLimitSecs == 0 {
-		PutLimitSecs = 120
+		PutLimitSecs = 180
 	}
 	AccountPullSecs = c.AccountPullSecs
 	if AccountPullSecs == 0 {

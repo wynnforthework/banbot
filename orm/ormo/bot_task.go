@@ -33,12 +33,29 @@ func InitTask(showLog bool, outDir string) *errs.Error {
 		return err
 	}
 	defer conn.Close()
+	tasks, err_ := q.ListTasks(context.Background())
+	if err_ != nil {
+		return errs.New(core.ErrDbReadFail, err_)
+	}
 	idList := make([]string, 0, len(config.Accounts))
+	for _, task := range tasks {
+		parts := strings.Split(task.Name, "/")
+		account := parts[len(parts)-1]
+		task.StopAt = btime.UTCStamp()
+		accTasks[account] = task
+		taskIdAccMap[task.ID] = account
+		idList = append(idList, fmt.Sprintf("%s:%v", account, task.ID))
+	}
 	for account := range config.Accounts {
+		if task, ok := accTasks[account]; ok {
+			task.StopAt = 0
+			continue
+		}
 		task, err := q.GetAccTask(account)
 		if err != nil {
 			return err
 		}
+		task.StopAt = 0
 		accTasks[account] = task
 		taskIdAccMap[task.ID] = account
 		idList = append(idList, fmt.Sprintf("%s:%v", account, task.ID))

@@ -1447,19 +1447,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 		return nil
 	}
 	odKey := od.Key()
-	forceDelOd := func(err *errs.Error) {
-		log.Error("del enter order", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
-		sess, conn, err := ormo.Conn(orm.DbTrades, true)
-		if err != nil {
-			log.Error("get db sess fail", zap.String("acc", o.Account), zap.Error(err))
-			return
-		}
-		defer conn.Close()
-		err = sess.DelOrder(od)
-		if err != nil {
-			log.Error("del order fail", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
-		}
-	}
+
 	var err *errs.Error
 	if od.Enter.Amount == 0 {
 		if od.QuoteCost == 0 {
@@ -1467,7 +1455,7 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 			_, err = wallets.EnterOd(od)
 			if err != nil {
 				if err.Code == core.ErrLowFunds || err.Code == core.ErrInvalidCost {
-					forceDelOd(err)
+					o.forceDelOd(od, err)
 					return nil
 				} else {
 					msg := err.Short()
@@ -1485,10 +1473,10 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 		// 这里应使用市价计算数量，因传入价格可能和市价相差很大
 		od.Enter.Amount, err = exg.PrecAmount(exg.Default, od.Symbol, od.QuoteCost/realPrice)
 		if err != nil {
-			forceDelOd(err)
+			o.forceDelOd(od, err)
 			return nil
 		} else if od.Enter.Amount == 0 {
-			forceDelOd(errs.NewMsg(core.ErrRunTime, "amount too small"))
+			o.forceDelOd(od, errs.NewMsg(core.ErrRunTime, "amount too small"))
 			return nil
 		}
 	}
@@ -1503,6 +1491,21 @@ func (o *LiveOrderMgr) execOrderEnter(od *ormo.InOutOrder) *errs.Error {
 		}
 	}
 	return nil
+}
+
+func (o *LiveOrderMgr) forceDelOd(od *ormo.InOutOrder, err *errs.Error) {
+	odKey := od.Key()
+	log.Error("del enter order", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
+	sess, conn, err := ormo.Conn(orm.DbTrades, true)
+	if err != nil {
+		log.Error("get db sess fail", zap.String("acc", o.Account), zap.Error(err))
+		return
+	}
+	defer conn.Close()
+	err = sess.DelOrder(od)
+	if err != nil {
+		log.Error("del order fail", zap.String("acc", o.Account), zap.String("key", odKey), zap.Error(err))
+	}
 }
 
 func (o *LiveOrderMgr) tryExitPendingEnter(od *ormo.InOutOrder) *errs.Error {
@@ -1541,6 +1544,7 @@ func (o *LiveOrderMgr) tryExitPendingEnter(od *ormo.InOutOrder) *errs.Error {
 		}
 		cancelTriggerOds(od)
 		strat.FireOdChange(o.Account, od, strat.OdChgExitFill)
+		o.forceDelOd(od, nil)
 		return nil
 	} else if od.Enter.Status < ormo.OdStatusClosed {
 		od.Enter.Status = ormo.OdStatusClosed

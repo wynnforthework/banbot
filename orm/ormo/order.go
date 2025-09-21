@@ -1104,6 +1104,9 @@ type GetOrdersArgs struct {
 }
 
 func (q *Queries) GetOrders(args GetOrdersArgs) ([]*InOutOrder, *errs.Error) {
+	if args.TaskID < 0 {
+		return nil, nil
+	}
 	var b strings.Builder
 	b.WriteString("select ")
 	b.WriteString(iOrderFields)
